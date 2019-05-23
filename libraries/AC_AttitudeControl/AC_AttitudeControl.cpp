@@ -143,6 +143,10 @@ const AP_Param::GroupInfo AC_AttitudeControl::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("INPUT_TC", 20, AC_AttitudeControl, _input_tc, AC_ATTITUDE_CONTROL_INPUT_TC_DEFAULT),
 
+    // @Group: LOG_
+    // @Path: ../AC_AttitudeControl/DTermBatchSampler.cpp
+    AP_SUBGROUPINFO(batchsampler, "LOG_",  21, AC_AttitudeControl, AC_AttitudeControl::DTermBatchSampler),
+
     AP_GROUPEND
 };
 
@@ -1000,4 +1004,9 @@ float AC_AttitudeControl::max_rate_step_bf_yaw()
     float alpha = get_rate_yaw_pid().get_filt_alpha();
     float alpha_remaining = 1-alpha;
     return 2.0f*_motors.get_throttle_hover()*AC_ATTITUDE_RATE_RP_CONTROLLER_OUT_MAX/((alpha_remaining*alpha_remaining*alpha_remaining*alpha*get_rate_yaw_pid().kD())/_dt + get_rate_yaw_pid().kP());
+}
+
+void AC_AttitudeControl::periodic()
+{
+    batchsampler.periodic();
 }
