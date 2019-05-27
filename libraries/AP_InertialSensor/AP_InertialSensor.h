@@ -400,7 +400,7 @@ private:
 
     // Low Pass filters for gyro and accel
     LowPassFilter2pVector3f _accel_filter[INS_MAX_INSTANCES];
-    LowPassFilter2pVector3f _gyro_filter[INS_MAX_INSTANCES];
+    LowPassFilterVector3f _gyro_filter[INS_MAX_INSTANCES];
     Vector3f _accel_filtered[INS_MAX_INSTANCES];
     Vector3f _gyro_filtered[INS_MAX_INSTANCES];
     bool _new_accel_data[INS_MAX_INSTANCES];
