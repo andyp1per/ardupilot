@@ -43,7 +43,7 @@ const AP_Param::GroupInfo AC_AttitudeControl::DTermBatchSampler::var_info[] = {
 
 
 extern const AP_HAL::HAL& hal;
-void AC_AttitudeControl::DTermBatchSampler::init(float _dt)
+void AC_AttitudeControl::DTermBatchSampler::init(float dt)
 {
     if (_control_mask == 0) {
         return;
@@ -52,7 +52,7 @@ void AC_AttitudeControl::DTermBatchSampler::init(float _dt)
         return;
     }
 
-    multiplier = INT16_MAX/(radians(2000)/_dt);
+    multiplier = INT16_MAX/(radians(2000)/dt);
     _required_count -= _required_count % 32; // round down to nearest multiple of 32
 
     const uint32_t total_allocation = 3*_required_count*sizeof(uint16_t);

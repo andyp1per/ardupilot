@@ -315,7 +315,7 @@ public:
            AP_Param::setup_object_defaults(this, var_info);
         };
 
-        void init(float _dt);
+        void init(float dt);
         void sample(AC_AttitudeControl::DTERM_CONTROL_POINT_TYPE _control_point, uint64_t sample_us, const Vector3f &sample);
 
         // a function called by the main thread at the main loop rate:
