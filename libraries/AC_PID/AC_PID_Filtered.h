@@ -1,13 +1,13 @@
 #pragma once
 
-/// @file	AC_HELI_PID.h
-/// @brief	Helicopter Specific Rate PID algorithm, with EEPROM-backed storage of constants.
+/// @file	AC_PID_Filtered.h
+/// @brief	Multicopter Specific Rate PID algorithm with advanced filtering, with EEPROM-backed storage of constants.
 
 #include <AP_Common/AP_Common.h>
 #include <AP_Param/AP_Param.h>
+#include <AP_Math/AP_Math.h>
 #include <Filter/LowPassFilter.h>
 #include <Filter/NotchFilter.h>
-#include <AP_Logger/AP_Logger.h>
 #include "AC_PID.h"
 
 #define AC_PID_FILT_HZ_DEFAULT  20.0f   // default input filter frequency
@@ -39,18 +39,27 @@ public:
 
     float       get_derivative() const { return _derivative; }
     float       get_raw_derivative() const { return _raw_derivative; }
+    bool        notch_requires_update() const {
+        return !is_equal(notch_center_freq_hz.get(), _last_notch_center_freq_hz) ||
+            !is_equal(notch_bandwidth_hz.get(), _last_notch_bandwidth_hz) ||
+            !is_equal(notch_attenuation_dB.get(), _last_notch_attenuation_dB);
+    }
+    void        notch_update_params();
 
     // parameter var table
     static const struct AP_Param::GroupInfo        var_info[];
 
-    AP_Int8     enable;
-    AP_Float    center_freq_hz;
-    AP_Float    bandwidth_hz;
-    AP_Float    attenuation_dB;
+    AP_Int8     notch_enable;
+    AP_Int16    notch_center_freq_hz;
+    AP_Int16    notch_bandwidth_hz;
+    AP_Float    notch_attenuation_dB;
 
-protected:
+private:
     // internal variables
     float           _raw_input;             // last filtered output value
+    int16_t         _last_notch_center_freq_hz;
+    int16_t         _last_notch_bandwidth_hz;
+    float           _last_notch_attenuation_dB;
 
 private:
     LowPassFilterFloat _pid_filter;

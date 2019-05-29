@@ -1,4 +1,4 @@
-/// @file	AC_PID_Filtered_Filtered.cpp
+/// @file	AC_PID_Filtered.cpp
 /// @brief	Generic PID algorithm
 
 #include <AP_Math/AP_Math.h>
@@ -13,7 +13,7 @@ const AP_Param::GroupInfo AC_PID_Filtered::var_info[] = {
     // @Description: Enable notch filter
     // @Values: 0:Disabled,1:Enabled
     // @User: Advanced
-    AP_GROUPINFO_FLAGS("NTCH", 1, AC_PID_Filtered, enable, 0, AP_PARAM_FLAG_ENABLE),
+    AP_GROUPINFO_FLAGS("NTCH", 1, AC_PID_Filtered, notch_enable, 0, AP_PARAM_FLAG_ENABLE),
 
     // @Param: FREQ
     // @DisplayName: Frequency
@@ -21,7 +21,7 @@ const AP_Param::GroupInfo AC_PID_Filtered::var_info[] = {
     // @Range: 10 200
     // @Units: Hz
     // @User: Advanced
-    AP_GROUPINFO("NTHZ", 2, AC_PID_Filtered, center_freq_hz, 80),
+    AP_GROUPINFO("NTHZ", 2, AC_PID_Filtered, notch_center_freq_hz, 80),
 
     // @Param: BW
     // @DisplayName: Bandwidth
@@ -29,7 +29,7 @@ const AP_Param::GroupInfo AC_PID_Filtered::var_info[] = {
     // @Range: 5 50
     // @Units: Hz
     // @User: Advanced
-    AP_GROUPINFO("NTBW", 3, AC_PID_Filtered, bandwidth_hz, 20),
+    AP_GROUPINFO("NTBW", 3, AC_PID_Filtered, notch_bandwidth_hz, 20),
 
     // @Param: ATT
     // @DisplayName: Attenuation
@@ -37,7 +37,7 @@ const AP_Param::GroupInfo AC_PID_Filtered::var_info[] = {
     // @Range: 5 30
     // @Units: dB
     // @User: Advanced
-    AP_GROUPINFO("NTAT", 4, AC_PID_Filtered, attenuation_dB, 15),
+    AP_GROUPINFO("NTAT", 4, AC_PID_Filtered, notch_attenuation_dB, 15),
     
     AP_GROUPEND
 };
@@ -48,8 +48,16 @@ AC_PID_Filtered::AC_PID_Filtered(float initial_p, float initial_i, float initial
     _raw_input(0.0f)
 {
     AP_Param::setup_object_defaults(this, var_info);
+    notch_update_params();
+}
 
-    _pid_notch_filter.init(1.0/dt, center_freq_hz, bandwidth_hz, attenuation_dB);
+// update the notch parameters
+void AC_PID_Filtered::notch_update_params()
+{
+    _pid_notch_filter.init(1.0/_dt, notch_center_freq_hz, notch_bandwidth_hz, notch_attenuation_dB);
+    _last_notch_center_freq_hz = notch_center_freq_hz;
+    _last_notch_bandwidth_hz = notch_bandwidth_hz;
+    _last_notch_attenuation_dB = notch_attenuation_dB;
 }
 
 // set_dt - set time step in seconds
@@ -58,7 +66,7 @@ void AC_PID_Filtered::set_dt(float dt)
     // set dt and calculate the input filter alpha
     AC_PID::set_dt(dt);
     _pid_filter.set_cutoff_frequency(1.0/dt, _filt_hz);
-    _pid_notch_filter.init(1.0/dt, center_freq_hz, bandwidth_hz, attenuation_dB);
+    notch_update_params();
 }
 
 // filt_hz - set input filter hz
@@ -78,6 +86,12 @@ void AC_PID_Filtered::set_input_filter_all(float input)
         return;
     }
 
+    // update notch parameters if necessary
+    if (notch_requires_update()) {
+        notch_update_params();
+        _flags._reset_filter = true;
+    }
+
     // reset input filter to value received
     if (_flags._reset_filter) {
         _pid_filter.reset();
@@ -89,7 +103,10 @@ void AC_PID_Filtered::set_input_filter_all(float input)
     }
 
     // update filter and calculate derivative
-    const float next_input = _pid_filter.apply(input);
+    float next_input = _pid_filter.apply(input);
+    if (notch_enable.get()==1) {
+        next_input = _pid_notch_filter.apply(next_input);
+    }
     if (_dt > 0.0f) {
         _derivative = (next_input - _input) / _dt;
         _raw_derivative = (input - _raw_input) / _dt;        
@@ -108,6 +125,12 @@ void AC_PID_Filtered::set_input_filter_d(float input)
         return;
     }
 
+    // update notch parameters if necessary
+    if (notch_requires_update()) {
+        notch_update_params();
+        _flags._reset_filter = true;
+    }
+
     // reset input filter to value received
     if (_flags._reset_filter) {
         _flags._reset_filter = false;
@@ -121,6 +144,9 @@ void AC_PID_Filtered::set_input_filter_d(float input)
     if (_dt > 0.0f) {
         _raw_derivative = (input - _input) / _dt;
         _derivative = _pid_filter.apply(_raw_derivative);
+        if (notch_enable.get() == 1) {
+            _derivative = _pid_notch_filter.apply(_derivative);
+       }
     }
 
     _raw_input = input;
