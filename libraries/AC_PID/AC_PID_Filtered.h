@@ -51,7 +51,6 @@ public:
 protected:
     // internal variables
     float           _raw_input;             // last filtered output value
-    float           _raw_derivative;        // last raw input derivative
 
 private:
     LowPassFilterFloat _pid_filter;

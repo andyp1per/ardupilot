@@ -45,8 +45,7 @@ const AP_Param::GroupInfo AC_PID_Filtered::var_info[] = {
 // Constructor
 AC_PID_Filtered::AC_PID_Filtered(float initial_p, float initial_i, float initial_d, float initial_imax, float initial_filt_hz, float dt, float initial_ff) :
     AC_PID(initial_p, initial_i, initial_d, initial_imax, initial_filt_hz, dt, initial_ff),
-    _raw_input(0.0f),
-    _raw_derivative(0.0f)
+    _raw_input(0.0f)
 {
     AP_Param::setup_object_defaults(this, var_info);
 

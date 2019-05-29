@@ -150,7 +150,7 @@ void AC_AttitudeControl::DTermBatchSampler::push_data_to_log()
     if (!isbh_sent && data_read_offset == 0) {
         float sample_rate = 1.0 / _controller._dt;
         if (!dataflash->Log_Write_ISBH(isb_seqnum,
-                                       AP_InertialSensor::DTERM_CONTROL_POINT,
+                                       AP_InertialSensor::IMU_SENSOR_TYPE_GYRO,
                                        control_point,
                                        multiplier,
                                        _required_count,
