@@ -6,7 +6,7 @@
 #include <AP_Common/AP_Common.h>
 #include <AP_Param/AP_Param.h>
 #include <AP_Math/AP_Math.h>
-#include <Filter/LowPassFilter.h>
+#include <Filter/LowPassFilter2p.h>
 #include <Filter/NotchFilter.h>
 #include "AC_PID.h"
 
@@ -62,6 +62,6 @@ private:
     float           _last_notch_attenuation_dB;
 
 private:
-    LowPassFilterFloat _pid_filter;
+    LowPassFilter2pFloat _pid_filter;
     NotchFilterFloat _pid_notch_filter;
 };
