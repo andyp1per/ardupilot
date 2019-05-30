@@ -95,16 +95,17 @@ void AC_PID_Filtered::set_input_filter_all(float input)
     // reset input filter to value received
     if (_flags._reset_filter) {
         _pid_filter.reset();
+        _pid_notch_filter.reset();
         _flags._reset_filter = false;
         _input = input;
         _raw_input = input;
         _derivative = 0.0f;
-        _raw_derivative = 0.0f;        
+        _raw_derivative = 0.0f;
     }
 
     // update filter and calculate derivative
     float next_input = _pid_filter.apply(input);
-    if (notch_enable.get()==1) {
+    if (notch_enable.get()) {
         next_input = _pid_notch_filter.apply(next_input);
     }
     if (_dt > 0.0f) {
@@ -133,18 +134,20 @@ void AC_PID_Filtered::set_input_filter_d(float input)
 
     // reset input filter to value received
     if (_flags._reset_filter) {
+        _pid_filter.reset();
+        _pid_notch_filter.reset();
         _flags._reset_filter = false;
         _input = input;
         _derivative = 0.0f;
-        _raw_input = 0.0f;
-        _raw_derivative = 0.0f;        
+        _raw_input = input;
+        _raw_derivative = 0.0f;
     }
 
     // update filter and calculate derivative
     if (_dt > 0.0f) {
         _raw_derivative = (input - _input) / _dt;
         _derivative = _pid_filter.apply(_raw_derivative);
-        if (notch_enable.get() == 1) {
+        if (notch_enable.get()) {
             _derivative = _pid_notch_filter.apply(_derivative);
        }
     }
