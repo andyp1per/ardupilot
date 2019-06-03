@@ -44,7 +44,7 @@ const AP_Param::GroupInfo AC_PID_Filtered::var_info[] = {
     // @Description: Second Input filter frequency in Hz. Filter is applied before the main filter. For small copters a frequency double that of FILT is a good starting point. This filter can be set at most to half the loop frequency.
     // @Range: 10 200, 0 disables
     // @Units: Hz
-    AP_GROUPINFO("FLT2", 5, AC_PID_Filtered, filt_hz2, 0),
+    AP_GROUPINFO("FLT2", 5, AC_PID_Filtered, filt_hz2, 0.0f),
 
     AP_GROUPEND
 };
