@@ -37,6 +37,12 @@ public:
     // set accessors
     void        filt_hz(const float v);
 
+    // load gain from eeprom
+    virtual void        load_gains();
+
+    // save gain to eeprom
+    virtual void        save_gains();
+
     float       get_derivative() const { return _derivative; }
     float       get_raw_derivative() const { return _raw_derivative; }
     bool        notch_requires_update() const {
@@ -53,6 +59,7 @@ public:
     AP_Int16    notch_center_freq_hz;
     AP_Int16    notch_bandwidth_hz;
     AP_Float    notch_attenuation_dB;
+    AP_Float    filt_hz2;                   // 2nd PID Input filter frequency in Hz
 
 private:
     // internal variables
@@ -62,6 +69,7 @@ private:
     float           _last_notch_attenuation_dB;
 
 private:
-    LowPassFilter2pFloat _pid_filter;
+    LowPassFilterFloat _pid_filter;
+    LowPassFilterFloat _pid_filter2;
     NotchFilterFloat _pid_notch_filter;
 };

@@ -48,10 +48,10 @@ public:
     void        reset_filter() { _flags._reset_filter = true; }
 
     // load gain from eeprom
-    void        load_gains();
+    virtual void        load_gains();
 
     // save gain to eeprom
-    void        save_gains();
+    virtual void        save_gains();
 
     /// operator function call for easy initialisation
     void operator() (float p, float i, float d, float imaxval, float input_filt_hz, float dt, float ffval = 0);
