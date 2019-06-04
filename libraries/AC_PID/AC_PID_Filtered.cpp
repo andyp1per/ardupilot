@@ -8,12 +8,19 @@ const AP_Param::GroupInfo AC_PID_Filtered::var_info[] = {
     // parameters from parent PID
     AP_NESTEDGROUPINFO(AC_PID, 0),
 
+    // @Param: FLT2
+    // @DisplayName: Second PID Input filter frequency in Hz
+    // @Description: Second Input filter frequency in Hz. Filter is applied before the main filter. For small copters a frequency double that of FILT is a good starting point. This filter can be set at most to half the loop frequency.
+    // @Range: 0 200
+    // @Units: Hz
+    AP_GROUPINFO("FLT2", 1, AC_PID_Filtered, filt_hz2, 0.0f),
+
     // @Param: NTCH
     // @DisplayName: Enable
     // @Description: Enable notch filter
     // @Values: 0:Disabled,1:Enabled
     // @User: Advanced
-    AP_GROUPINFO_FLAGS("NTCH", 1, AC_PID_Filtered, notch_enable, 0, AP_PARAM_FLAG_ENABLE),
+    AP_GROUPINFO_FLAGS("NTCH", 2, AC_PID_Filtered, notch_enable, 0, AP_PARAM_FLAG_ENABLE),
 
     // @Param: NTHZ
     // @DisplayName: Frequency
@@ -21,7 +28,7 @@ const AP_Param::GroupInfo AC_PID_Filtered::var_info[] = {
     // @Range: 10 200
     // @Units: Hz
     // @User: Advanced
-    AP_GROUPINFO("NTHZ", 2, AC_PID_Filtered, notch_center_freq_hz, 80),
+    AP_GROUPINFO("NTHZ", 3, AC_PID_Filtered, notch_center_freq_hz, 80),
 
     // @Param: NTBW
     // @DisplayName: Bandwidth
@@ -29,7 +36,7 @@ const AP_Param::GroupInfo AC_PID_Filtered::var_info[] = {
     // @Range: 5 50
     // @Units: Hz
     // @User: Advanced
-    AP_GROUPINFO("NTBW", 3, AC_PID_Filtered, notch_bandwidth_hz, 20),
+    AP_GROUPINFO("NTBW", 4, AC_PID_Filtered, notch_bandwidth_hz, 20),
 
     // @Param: NTAT
     // @DisplayName: Attenuation
@@ -37,14 +44,8 @@ const AP_Param::GroupInfo AC_PID_Filtered::var_info[] = {
     // @Range: 5 30
     // @Units: dB
     // @User: Advanced
-    AP_GROUPINFO("NTAT", 4, AC_PID_Filtered, notch_attenuation_dB, 15),
+    AP_GROUPINFO("NTAT", 5, AC_PID_Filtered, notch_attenuation_dB, 15),
 
-    // @Param: FLT2
-    // @DisplayName: Second PID Input filter frequency in Hz
-    // @Description: Second Input filter frequency in Hz. Filter is applied before the main filter. For small copters a frequency double that of FILT is a good starting point. This filter can be set at most to half the loop frequency.
-    // @Range: 10 200, 0 disables
-    // @Units: Hz
-    AP_GROUPINFO("FLT2", 5, AC_PID_Filtered, filt_hz2, 0.0f),
 
     AP_GROUPEND
 };
