@@ -44,7 +44,6 @@ public:
     virtual void        save_gains();
 
     float       get_derivative() const { return _derivative; }
-    float       get_raw_derivative() const { return _raw_derivative; }
     bool        notch_requires_update() const {
         return !is_equal(notch_center_freq_hz.get(), _last_notch_center_freq_hz) ||
             !is_equal(notch_bandwidth_hz.get(), _last_notch_bandwidth_hz) ||
