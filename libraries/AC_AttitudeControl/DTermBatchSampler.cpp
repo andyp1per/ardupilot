@@ -52,7 +52,8 @@ void AC_AttitudeControl::DTermBatchSampler::init(float dt)
         return;
     }
 
-    multiplier = INT16_MAX/(radians(2000)/dt);
+    // MPU-6000 can measure +/- 2000 deg/s, so multiplier is maximum change in dt
+    multiplier = INT16_MAX/(radians(2000)*dt);
     _required_count -= _required_count % 32; // round down to nearest multiple of 32
 
     const uint32_t total_allocation = 3*_required_count*sizeof(uint16_t);
