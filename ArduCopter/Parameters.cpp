@@ -918,6 +918,14 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("TUNE_MAX", 32, ParametersG2, tuning_max, 0),
 
+    // @Param: TUNE_REL_RANGE
+    // @DisplayName: Tuning relative value range
+    // @Description: Percentage relative tuning range of parameters from the armed value of channel 6. So 100%, indicates roughly 50% variation above and below the current value.
+    // @User: Standard
+    // @Units: %
+    // @Range: 0 1000
+    AP_GROUPINFO("TUNE_REL_RANGE", 33, ParametersG2, tuning_rel_range, 0),
+
     AP_GROUPEND
 };
 

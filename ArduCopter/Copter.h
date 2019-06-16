@@ -522,6 +522,9 @@ private:
     // last valid RC input time
     uint32_t last_radio_update_ms;
 
+    // arming value of CH6
+    uint16_t initial_armed_rc6_radio_in;
+
     // last esc calibration notification update
     uint32_t esc_calibration_notify_update_ms;
 

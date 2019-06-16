@@ -261,6 +261,8 @@ bool AP_Arming_Copter::rc_calibration_checks(bool display_failure)
     copter.ap.pre_arm_rc_check = rc_checks_copter_sub(display_failure, channels)
         & AP_Arming::rc_calibration_checks(display_failure);
 
+    copter.initial_armed_rc6_radio_in = rc().channel(CH_6)->get_radio_in();
+
     return copter.ap.pre_arm_rc_check;
 }
 

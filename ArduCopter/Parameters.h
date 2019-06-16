@@ -586,6 +586,7 @@ public:
 
     AP_Float tuning_min;
     AP_Float tuning_max;
+    AP_Int16 tuning_rel_range;
 };
 
 extern const AP_Param::Info        var_info[];
