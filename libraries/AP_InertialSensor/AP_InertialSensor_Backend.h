@@ -246,6 +246,17 @@ protected:
 
     uint8_t _gyro_notch_enabled(void) const { return _imu._notch_filter.enabled(); }
 
+    // return the dynamic notch filter center in Hz for the sample rate
+    uint16_t _gyro_harmonic_notch_center_freq_hz(void) const { return _imu.get_gyro_harmonic_notch_center_freq_hz(); }
+
+    // return the notch filter bandwidth in Hz for the sample rate
+    uint16_t _gyro_harmonic_notch_bandwidth_hz(void) const { return _imu._harmonic_notch_filter.bandwidth_hz(); }
+
+    // return the notch filter attenuation in dB for the sample rate
+    float _gyro_harmonic_notch_attenuation_dB(void) const { return _imu._harmonic_notch_filter.attenuation_dB(); }
+
+    uint8_t _gyro_harmonic_notch_enabled(void) const { return _imu._harmonic_notch_filter.enabled(); }
+
     // common gyro update function for all backends
     void update_gyro(uint8_t instance);
 
@@ -259,6 +270,11 @@ protected:
     uint16_t _last_notch_bandwidth_hz[INS_MAX_INSTANCES];
     float _last_notch_attenuation_dB[INS_MAX_INSTANCES];
 
+    // support for updating dynamic filter at runtime
+    uint16_t _last_harmonic_notch_center_freq_hz[INS_MAX_INSTANCES];
+    uint16_t _last_harmonic_notch_bandwidth_hz[INS_MAX_INSTANCES];
+    float _last_harmonic_notch_attenuation_dB[INS_MAX_INSTANCES];
+    
     void set_gyro_orientation(uint8_t instance, enum Rotation rotation) {
         _imu._gyro_orientation[instance] = rotation;
     }

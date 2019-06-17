@@ -24,7 +24,7 @@
 #include <AP_Math/AP_Math.h>
 #include <Filter/LowPassFilter2p.h>
 #include <Filter/LowPassFilter.h>
-#include <Filter/NotchFilter.h>
+#include <Filter/HarmonicNotchFilter.h>
 
 class AP_InertialSensor_Backend;
 class AuxiliaryBus;
@@ -202,6 +202,14 @@ public:
     uint8_t get_primary_accel(void) const { return _primary_accel; }
     uint8_t get_primary_gyro(void) const { return _primary_gyro; }
 
+    // Update the dynamic notch frequency
+    void update_harmonic_notch_freq_hz(float scale_factor) {
+        // When disarmed, throttle is zero
+        if (scale_factor > 0) {
+            _calculated_harmonic_notch_freq_hz = MAX(1.0f, _harmonic_notch_filter.center_freq_hz() * scale_factor);
+        }
+    }
+
     // enable HIL mode
     void set_hil_mode(void) { _hil_mode = true; }
 
@@ -210,6 +218,8 @@ public:
 
     // get the accel filter rate in Hz
     uint16_t get_accel_filter_hz(void) const { return _accel_filter_cutoff; }
+
+    uint16_t get_gyro_harmonic_notch_center_freq_hz(void) const { return _calculated_harmonic_notch_freq_hz; }
 
     // indicate which bit in LOG_BITMASK indicates raw logging enabled
     void set_log_raw_bit(uint32_t log_raw_bit) { _log_raw_bit = log_raw_bit; }
@@ -410,6 +420,11 @@ private:
     // optional notch filter on gyro
     NotchFilterParams _notch_filter;
     NotchFilterVector3f _gyro_notch_filter[INS_MAX_INSTANCES];
+
+    // optional dynamic notch filter on gyro
+    HarmonicNotchFilterParams _harmonic_notch_filter;
+    HarmonicNotchFilterVector3f _gyro_harmonic_notch_filter[INS_MAX_INSTANCES];
+    uint16_t _calculated_harmonic_notch_freq_hz;
 
     // Most recent gyro reading
     Vector3f _gyro[INS_MAX_INSTANCES];
