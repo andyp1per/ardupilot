@@ -29,12 +29,17 @@
 template <class T>
 class NotchFilter {
 public:
+    template <class U> friend class HarmonicNotchFilter;
+
     // set parameters
-    void init(float sample_freq_hz, float center_freq_hz, float bandwidth_hz, float attenuation_dB);
+    virtual void init(float sample_freq_hz, float center_freq_hz, float bandwidth_hz, float attenuation_dB);
+    // For use by DynamicNotchFilter
     T apply(const T &sample);
     void reset();
 
 private:
+    void _init(float sample_freq_hz, float center_freq_hz, float A, float Q);
+
     bool initialised;
     float b0, b1, b2, a1, a2, a0_inv;
     T ntchsig, ntchsig1, ntchsig2, signal2, signal1;
@@ -53,7 +58,7 @@ public:
     float attenuation_dB(void) const { return _attenuation_dB; }
     uint8_t enabled(void) const { return _enable; }
     
-private:
+protected:
     AP_Int8 _enable;
     AP_Int16 _center_freq_hz;
     AP_Int16 _bandwidth_hz;
