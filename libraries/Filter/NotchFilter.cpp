@@ -21,10 +21,16 @@
 template <class T>
 void NotchFilter<T>::init(float sample_freq_hz, float center_freq_hz, float bandwidth_hz, float attenuation_dB)
 {
-    float omega = 2.0 * M_PI * center_freq_hz / sample_freq_hz;
     float octaves = log2f(center_freq_hz  / (center_freq_hz - bandwidth_hz/2)) * 2;
     float A = powf(10, -attenuation_dB/40);
     float Q = sqrtf(powf(2, octaves)) / (powf(2,octaves) - 1);
+    _init(sample_freq_hz, center_freq_hz, A, Q);
+}
+
+template <class T>
+void NotchFilter<T>::_init(float sample_freq_hz, float center_freq_hz, float A, float Q)
+{
+    float omega = 2.0 * M_PI * center_freq_hz / sample_freq_hz;
     float alpha = sinf(omega) / (2 * Q/A);
     b0 =  1.0 + alpha*A;
     b1 = -2.0 * cosf(omega);
