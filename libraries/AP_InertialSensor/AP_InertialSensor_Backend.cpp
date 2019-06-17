@@ -226,6 +226,12 @@ void AP_InertialSensor_Backend::_notify_new_gyro_raw_sample(uint8_t instance,
 
         // apply the low pass filter
         _imu._gyro_filtered[instance] = _imu._gyro_filter[instance].apply(gyro);
+
+        // apply the dynamic notch filter
+        if (_gyro_harmonic_notch_enabled()) {
+            _imu._gyro_filtered[instance] = _imu._gyro_harmonic_notch_filter[instance].apply(_imu._gyro_filtered[instance]);
+        }
+
         // apply the notch filter
         if (_gyro_notch_enabled()) {
             _imu._gyro_filtered[instance] = _imu._gyro_notch_filter[instance].apply(_imu._gyro_filtered[instance]);
@@ -233,6 +239,7 @@ void AP_InertialSensor_Backend::_notify_new_gyro_raw_sample(uint8_t instance,
         if (_imu._gyro_filtered[instance].is_nan() || _imu._gyro_filtered[instance].is_inf()) {
             _imu._gyro_filter[instance].reset();
             _imu._gyro_notch_filter[instance].reset();
+            _imu._gyro_harmonic_notch_filter[instance].reset();
         }
         _imu._new_gyro_data[instance] = true;
         _sem->give();
@@ -509,6 +516,20 @@ void AP_InertialSensor_Backend::update_gyro(uint8_t instance)
         _last_notch_center_freq_hz[instance] = _gyro_notch_center_freq_hz();
         _last_notch_bandwidth_hz[instance] = _gyro_notch_bandwidth_hz();
         _last_notch_attenuation_dB[instance] = _gyro_notch_attenuation_dB();
+    }
+
+    // possily update the dynamic notch filter parameters
+    if (_last_harmonic_notch_center_freq_hz[instance] != _gyro_harmonic_notch_center_freq_hz()) {
+        _imu._gyro_harmonic_notch_filter[instance].update(_gyro_harmonic_notch_center_freq_hz());
+        _last_harmonic_notch_center_freq_hz[instance] = _gyro_harmonic_notch_center_freq_hz();
+    } 
+    // possily update the dynamic notch filter parameters
+    if (_last_harmonic_notch_bandwidth_hz[instance] != _gyro_harmonic_notch_bandwidth_hz() ||
+        !is_equal(_last_harmonic_notch_attenuation_dB[instance], _gyro_harmonic_notch_attenuation_dB())) {
+        _imu._gyro_harmonic_notch_filter[instance].init(_gyro_raw_sample_rate(instance), _gyro_harmonic_notch_center_freq_hz(), _gyro_harmonic_notch_bandwidth_hz(), _gyro_harmonic_notch_attenuation_dB());
+        _last_harmonic_notch_center_freq_hz[instance] = _gyro_harmonic_notch_center_freq_hz();
+        _last_harmonic_notch_bandwidth_hz[instance] = _gyro_harmonic_notch_bandwidth_hz();
+        _last_harmonic_notch_attenuation_dB[instance] = _gyro_harmonic_notch_attenuation_dB();
     }
 
     _sem->give();
