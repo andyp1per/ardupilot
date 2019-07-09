@@ -559,14 +559,15 @@ void AC_AttitudeControl::attitude_controller_run_quat()
     Quaternion desired_ang_vel_quat = to_to_from_quat.inverse()*attitude_target_ang_vel_quat*to_to_from_quat;
 
     // Correct the thrust vector and smoothly add feedforward and yaw input
-    if(_thrust_error_angle > AC_ATTITUDE_THRUST_ERROR_ANGLE*2.0f){
+    _feedforward_scalar = 1.0f;
+    if (_thrust_error_angle > AC_ATTITUDE_THRUST_ERROR_ANGLE * 2.0f) {
         _rate_target_ang_vel.z = _ahrs.get_gyro().z;
-    }else if(_thrust_error_angle > AC_ATTITUDE_THRUST_ERROR_ANGLE){
-        float feedforward_scalar = (1.0f - (_thrust_error_angle-AC_ATTITUDE_THRUST_ERROR_ANGLE)/AC_ATTITUDE_THRUST_ERROR_ANGLE);
-        _rate_target_ang_vel.x += desired_ang_vel_quat.q2*feedforward_scalar;
-        _rate_target_ang_vel.y += desired_ang_vel_quat.q3*feedforward_scalar;
+    } else if (_thrust_error_angle > AC_ATTITUDE_THRUST_ERROR_ANGLE) {
+        _feedforward_scalar = (1.0f - (_thrust_error_angle - AC_ATTITUDE_THRUST_ERROR_ANGLE) / AC_ATTITUDE_THRUST_ERROR_ANGLE);
+        _rate_target_ang_vel.x += desired_ang_vel_quat.q2 * _feedforward_scalar;
+        _rate_target_ang_vel.y += desired_ang_vel_quat.q3 * _feedforward_scalar;
         _rate_target_ang_vel.z += desired_ang_vel_quat.q4;
-        _rate_target_ang_vel.z = _ahrs.get_gyro().z*(1.0-feedforward_scalar) + _rate_target_ang_vel.z*feedforward_scalar;
+        _rate_target_ang_vel.z = _ahrs.get_gyro().z * (1.0 - _feedforward_scalar) + _rate_target_ang_vel.z * _feedforward_scalar;
     } else {
         _rate_target_ang_vel.x += desired_ang_vel_quat.q2;
         _rate_target_ang_vel.y += desired_ang_vel_quat.q3;
@@ -881,7 +882,7 @@ float AC_AttitudeControl::rate_target_to_motor_yaw(float rate_actual_rads, float
     }
 
     // Compute output in range -1 ~ +1
-    float output = get_rate_yaw_pid().get_p() + integrator + get_rate_yaw_pid().get_d() + get_rate_yaw_pid().get_ff(rate_target_rads);
+    float output = get_rate_yaw_pid().get_p() + integrator + get_rate_yaw_pid().get_d() + get_rate_yaw_pid().get_ff(rate_target_rads)*_feedforward_scalar;
 
     // Constrain output
     return constrain_float(output, -1.0f, 1.0f);

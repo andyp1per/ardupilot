@@ -406,6 +406,9 @@ protected:
     // mix between throttle and hover throttle for 0 to 1 and ratio above hover throttle for >1
     float               _throttle_rpy_mix;
 
+    // Yaw feed forward percent to allow zero yaw actuator output during extreme roll and pitch corrections
+    float               _feedforward_scalar;
+
     // References to external libraries
     const AP_AHRS_View&  _ahrs;
     const AP_Vehicle::MultiCopter &_aparm;
