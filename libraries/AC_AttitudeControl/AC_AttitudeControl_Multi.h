@@ -60,6 +60,8 @@ public:
     // calculate total body frame throttle required to produce the given earth frame throttle
     float get_throttle_boosted(float throttle_in);
 
+    virtual void set_notch_freq() override;
+
     // set desired throttle vs attitude mixing (actual mix is slewed towards this value over 1~2 seconds)
     //  low values favour pilot/autopilot throttle over attitude control, high values favour attitude control over throttle
     //  has no effect when throttle is above hover throttle
@@ -97,4 +99,6 @@ protected:
     AP_Float              _thr_mix_man;     // throttle vs attitude control prioritisation used when using manual throttle (higher values mean we prioritise attitude control over throttle)
     AP_Float              _thr_mix_min;     // throttle vs attitude control prioritisation used when landing (higher values mean we prioritise attitude control over throttle)
     AP_Float              _thr_mix_max;     // throttle vs attitude control prioritisation used during active flight (higher values mean we prioritise attitude control over throttle)
+    AP_Float              _notch_number;    // Number of notch filters scaled by thrust
+    AP_Float              _notch_thst_ref;  // This is the average thrust that will result in the notch filter frequency not changing.
 };
