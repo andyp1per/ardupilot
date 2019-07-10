@@ -59,8 +59,7 @@ const AP_Param::GroupInfo AP_Scheduler::var_info[] = {
 };
 
 // constructor
-AP_Scheduler::AP_Scheduler(scheduler_fastloop_fn_t fastloop_fn) :
-    _fastloop_fn(fastloop_fn)
+AP_Scheduler::AP_Scheduler(scheduler_fastloop_fn_t fastloop_fn)
 {
     if (_singleton) {
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
@@ -72,11 +71,20 @@ AP_Scheduler::AP_Scheduler(scheduler_fastloop_fn_t fastloop_fn) :
 
     AP_Param::setup_object_defaults(this, var_info);
 
+    init(_loop_rate_hz, fastloop_fn);
+}
+
+void AP_Scheduler::init(uint16_t loop_rate_hz, scheduler_fastloop_fn_t fastloop_fn)
+{
+    _fastloop_fn = fastloop_fn;
+
     // only allow 50 to 2000 Hz
-    if (_loop_rate_hz < 50) {
+    if (loop_rate_hz < 50) {
         _loop_rate_hz.set(50);
-    } else if (_loop_rate_hz > 2000) {
+    } else if (loop_rate_hz > 2000) {
         _loop_rate_hz.set(2000);
+    } else {
+        _loop_rate_hz.set(loop_rate_hz);
     }
     _last_loop_time_s = 1.0 / _loop_rate_hz;
 }

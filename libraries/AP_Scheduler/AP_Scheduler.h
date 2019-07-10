@@ -56,7 +56,7 @@ public:
 
     FUNCTOR_TYPEDEF(scheduler_fastloop_fn_t, void);
 
-    AP_Scheduler(scheduler_fastloop_fn_t fastloop_fn = nullptr);
+    AP_Scheduler(scheduler_fastloop_fn_t fastloop_fn);
 
     /* Do not allow copies */
     AP_Scheduler(const AP_Scheduler &other) = delete;
@@ -145,15 +145,19 @@ public:
     // loop performance monitoring:
     AP::PerfInfo perf_info;
 
-private:
-    // function that is called before anything in the scheduler table:
-    scheduler_fastloop_fn_t _fastloop_fn;
+protected:
+    void init(uint16_t loop_rate_hz, scheduler_fastloop_fn_t fastloop_fn);
+    AP_Scheduler() {}
 
     // used to enable scheduler debugging
     AP_Int8 _debug;
 
     // overall scheduling rate in Hz
     AP_Int16 _loop_rate_hz;
+
+private:
+    // function that is called before anything in the scheduler table:
+    scheduler_fastloop_fn_t _fastloop_fn;
 
     // loop rate in Hz as set at startup
     AP_Int16 _active_loop_rate_hz;
@@ -200,6 +204,7 @@ private:
 
     // bitmask bit which indicates if we should log PERF message
     uint32_t _log_performance_bit;
+
 };
 
 namespace AP {
