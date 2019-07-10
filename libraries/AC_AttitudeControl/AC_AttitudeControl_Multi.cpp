@@ -300,11 +300,8 @@ void AC_AttitudeControl_Multi::parameter_sanity_check()
     }
 }
 
-// Update Alt_Hold angle maximum
-void AC_AttitudeControl_Multi::set_notch_freq()
+// Update dynamic notch filter frequency
+float AC_AttitudeControl_Multi::get_notch_freq_scaling() const
 {
-    for (uint8_t i = 0; i <_notch_number; i++) {
-        // float Notch_Freq = get_default_Notch_Freq(i);
-        // set_Notch_Freq(MAX(1.0f, Notch_Freq * sqrt(_throttle_out/_notch_thst_ref)
-    }
+    return sqrtf(_motors.get_throttle_out()/_notch_thst_ref.get());
 }
