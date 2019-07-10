@@ -1252,6 +1252,8 @@ void Copter::mavlink_delay_cb()
 
     logger.EnableWrites(false);
 
+        gcs().send_text(MAV_SEVERITY_INFO, "Delay CB!");
+
     uint32_t tnow = millis();
     if (tnow - last_1hz > 1000) {
         last_1hz = tnow;

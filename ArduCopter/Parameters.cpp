@@ -588,6 +588,10 @@ const AP_Param::Info Copter::var_info[] = {
     // @Path: ../libraries/AP_Scheduler/AP_Scheduler.cpp
     GOBJECT(scheduler, "SCHED_", AP_Scheduler),
 
+    // @Group: IOSCH_
+    // @Path: ../libraries/AP_Scheduler/AP_SchedulerExt.cpp
+    GOBJECT(io_scheduler, "IOSCH_", AP_SchedulerExt),
+
 #if AC_FENCE == ENABLED
     // @Group: FENCE_
     // @Path: ../libraries/AC_Fence/AC_Fence.cpp

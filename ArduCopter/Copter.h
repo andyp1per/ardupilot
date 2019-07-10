@@ -64,6 +64,7 @@
 #include <AC_WPNav/AC_Circle.h>          // circle navigation library
 #include <AP_Declination/AP_Declination.h>     // ArduPilot Mega Declination Helper Library
 #include <AP_Scheduler/AP_Scheduler.h>       // main loop scheduler
+#include <AP_Scheduler/AP_SchedulerExt.h>       // io loop scheduler
 #include <AP_RCMapper/AP_RCMapper.h>        // RC input mapping library
 #include <AP_Notify/AP_Notify.h>          // Notify library
 #include <AP_BattMonitor/AP_BattMonitor.h>     // Battery monitor library
@@ -252,6 +253,9 @@ private:
 
     // main loop scheduler
     AP_Scheduler scheduler{FUNCTOR_BIND_MEMBER(&Copter::fast_loop, void)};
+
+    // io loop scheduler
+    AP_SchedulerExt io_scheduler{FUNCTOR_BIND_MEMBER(&Copter::io_loop, void)};
 
     // AP_Notify instance
     AP_Notify notify;
@@ -586,6 +590,7 @@ private:
     bool upgrading_frame_params;
 
     static const AP_Scheduler::Task scheduler_tasks[];
+    static const AP_Scheduler::Task io_scheduler_tasks[];
     static const AP_Param::Info var_info[];
     static const struct LogStructure log_structure[];
 
@@ -625,6 +630,8 @@ private:
 
     // ArduCopter.cpp
     void fast_loop();
+    void io_loop();
+    void io_loop_thread();
     void rc_loop();
     void throttle_loop();
     void update_batt_compass(void);

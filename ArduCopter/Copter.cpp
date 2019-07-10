@@ -142,8 +142,7 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK(gpsglitch_check,       10,     50),
     SCHED_TASK(landinggear_update,    10,     75),
     SCHED_TASK(lost_vehicle_check,    10,     50),
-    SCHED_TASK_CLASS(GCS,                  (GCS*)&copter._gcs,          update_receive, 400, 180),
-    SCHED_TASK_CLASS(GCS,                  (GCS*)&copter._gcs,          update_send,    400, 550),
+
 #if MOUNT == ENABLED
     SCHED_TASK_CLASS(AP_Mount,             &copter.camera_mount,        update,          50,  75),
 #endif
@@ -202,6 +201,17 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #endif
 };
 
+/*
+  scheduler table for fast CPUs - all regular tasks apart from the fast_loop()
+  should be listed here, along with how often they should be called (in hz)
+  and the maximum time they are expected to take (in microseconds)
+ */
+const AP_Scheduler::Task Copter::io_scheduler_tasks[] = {
+    SCHED_TASK_CLASS(GCS,                  (GCS*)&copter._gcs,          update_receive, 400, 180),
+    SCHED_TASK_CLASS(GCS,                  (GCS*)&copter._gcs,          update_send,    400, 550),
+};
+
+
 constexpr int8_t Copter::_failsafe_priorities[7];
 
 void Copter::setup()
@@ -216,6 +226,14 @@ void Copter::setup()
 
     // initialise the main loop scheduler
     scheduler.init(&scheduler_tasks[0], ARRAY_SIZE(scheduler_tasks), MASK_LOG_PM);
+    // initialise the IO loop scheduler
+    io_scheduler.init(&io_scheduler_tasks[0], ARRAY_SIZE(io_scheduler_tasks), MASK_LOG_PM);
+    // We are about to start a thread for mavlink, no need for the delay cb anymore
+    //hal.scheduler->register_delay_callback(nullptr, 0);
+
+    if (!hal.scheduler->thread_create(FUNCTOR_BIND_MEMBER(&Copter::io_loop_thread, void), "Copter_IO", 8192, AP_HAL::Scheduler::PRIORITY_IO, 1)) {
+        AP_HAL::panic("Failed to start Copter IO thread");
+    }
 }
 
 void Copter::loop()
@@ -224,6 +242,14 @@ void Copter::loop()
     G_Dt = scheduler.get_last_loop_time_s();
 }
 
+void Copter::io_loop_thread()
+{
+    while (true) {
+        io_scheduler.loop();
+        hal.scheduler->delay_microseconds(50);
+       // mavlink_delay_cb();
+    }
+}
 
 // Main loop - 400hz
 void Copter::fast_loop()
@@ -270,6 +296,11 @@ void Copter::fast_loop()
     if (should_log(MASK_LOG_ANY)) {
         Log_Sensor_Health();
     }
+}
+
+// Main IO loop - 400hz
+void Copter::io_loop()
+{
 }
 
 // rc_loops - reads user input from transmitter/receiver
