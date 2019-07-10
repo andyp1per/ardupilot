@@ -107,6 +107,7 @@ struct PACKED log_Control_Tuning {
     float    terr_alt;
     int16_t  target_climb_rate;
     int16_t  climb_rate;
+    uint16_t dynamic_notch_freq;
 };
 
 // Write a control tuning packet
@@ -146,7 +147,8 @@ void Copter::Log_Write_Control_Tuning()
         rangefinder_alt     : rangefinder_state.alt_cm,
         terr_alt            : terr_alt,
         target_climb_rate   : target_climb_rate_cms,
-        climb_rate          : climb_rate
+        climb_rate          : climb_rate,
+        dynamic_notch_freq  : ins.get_gyro_dynamic_notch_center_freq_hz()
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
@@ -504,7 +506,7 @@ const struct LogStructure Copter::log_structure[] = {
       "OF",   "QBffff",   "TimeUS,Qual,flowX,flowY,bodyX,bodyY", "s-EEEE", "F-0000" },
 #endif
     { LOG_CONTROL_TUNING_MSG, sizeof(log_Control_Tuning),
-      "CTUN", "Qffffffefcfhh", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CRt", "s----mmmmmmnn", "F----00B0BBBB" },
+      "CTUN", "QffffffefcfhhH", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CRt,N", "s----mmmmmmnnz", "F----00B0BBBB-" },
     { LOG_MOTBATT_MSG, sizeof(log_MotBatt),
       "MOTB", "Qffff",  "TimeUS,LiftMax,BatVolt,BatRes,ThLimit", "s-vw-", "F-00-" },
     { LOG_EVENT_MSG, sizeof(log_Event),         
