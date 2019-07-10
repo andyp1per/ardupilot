@@ -163,6 +163,20 @@ const AP_Param::GroupInfo AC_AttitudeControl_Multi::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("THR_MIX_MAN", 6, AC_AttitudeControl_Multi, _thr_mix_man, AC_ATTITUDE_CONTROL_MAN_DEFAULT),
 
+    // @Param: NCH_NUM
+    // @DisplayName: Number of notch filters scaled by thrust
+    // @Description: A setting of 1 results in the first notch filter, 2 will set both notch filters.
+    // @Range: 1 2
+    // @User: Advanced
+    AP_GROUPINFO("NCH_NUM", 7, AC_AttitudeControl_Multi, _notch_number, AC_ATTITUDE_CONTROL_MAN_DEFAULT),
+
+    // @Param: NCH_THR_REF
+    // @DisplayName: Notch filter thrust reference
+    // @Description: This is the average thrust that will result in the notch filter frequency not changing.
+    // @Range: 0.1 0.9
+    // @User: Advanced
+    AP_GROUPINFO("NCH_THR_REF", 8, AC_AttitudeControl_Multi, _notch_thst_ref, AC_ATTITUDE_CONTROL_MAN_DEFAULT),
+
     AP_GROUPEND
 };
 
@@ -283,5 +297,14 @@ void AC_AttitudeControl_Multi::parameter_sanity_check()
     if (_thr_mix_min > _thr_mix_max) {
         _thr_mix_min.set_and_save(AC_ATTITUDE_CONTROL_MIN_DEFAULT);
         _thr_mix_max.set_and_save(AC_ATTITUDE_CONTROL_MAX_DEFAULT);
+    }
+}
+
+// Update Alt_Hold angle maximum
+void AC_AttitudeControl_Multi::set_notch_freq()
+{
+    for (uint8_t i = 0; i <_notch_number; i++) {
+        // float Notch_Freq = get_default_Notch_Freq(i);
+        // set_Notch_Freq(MAX(1.0f, Notch_Freq * sqrt(_throttle_out/_notch_thst_ref)
     }
 }

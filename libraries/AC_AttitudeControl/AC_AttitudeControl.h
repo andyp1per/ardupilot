@@ -236,6 +236,9 @@ public:
     // Return configured tilt angle limit in centidegrees
     float lean_angle_max() const { return _aparm.angle_max; }
 
+    // Return configured tilt angle limit in centidegrees
+    virtual void set_notch_freq() = 0;
+
     // Proportional controller with piecewise sqrt sections to constrain second derivative
     static float sqrt_controller(float error, float p, float second_ord_lim, float dt);
 
