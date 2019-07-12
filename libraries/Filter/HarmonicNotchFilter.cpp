@@ -54,6 +54,7 @@ const AP_Param::GroupInfo HarmonicNotchFilterParams::var_info[] = {
     // @Description: Number of harmonic frequencies to add to the filter. This option takes effect on the next reboot.
     // @Range: 0 2
     // @User: Advanced
+    // @RebootRequired: True
     AP_GROUPINFO("HMNCS", 5, HarmonicNotchFilterParams, _harmonics, 1),
 
     AP_GROUPEND
