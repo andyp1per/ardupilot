@@ -163,19 +163,12 @@ const AP_Param::GroupInfo AC_AttitudeControl_Multi::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("THR_MIX_MAN", 6, AC_AttitudeControl_Multi, _thr_mix_man, AC_ATTITUDE_CONTROL_MAN_DEFAULT),
 
-    // @Param: NCH_NUM
-    // @DisplayName: Number of notch filters scaled by thrust
-    // @Description: A setting of 1 results in the first notch filter, 2 will set both notch filters.
-    // @Range: 1 2
-    // @User: Advanced
-    AP_GROUPINFO("NCH_NUM", 7, AC_AttitudeControl_Multi, _notch_number, AC_ATTITUDE_CONTROL_MAN_DEFAULT),
-
     // @Param: NCH_THR_REF
     // @DisplayName: Notch filter thrust reference
     // @Description: This is the average thrust that will result in the notch filter frequency not changing.
     // @Range: 0.1 0.9
     // @User: Advanced
-    AP_GROUPINFO("NCH_THR_REF", 8, AC_AttitudeControl_Multi, _notch_thst_ref, AC_ATTITUDE_CONTROL_MAN_DEFAULT),
+    AP_GROUPINFO("NCH_THR_REF", 7, AC_AttitudeControl_Multi, _notch_thst_ref, AC_ATTITUDE_CONTROL_MAN_DEFAULT),
 
     AP_GROUPEND
 };
