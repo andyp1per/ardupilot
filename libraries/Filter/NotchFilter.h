@@ -38,7 +38,7 @@ public:
     void reset();
 
 private:
-    void _init(float sample_freq_hz, float center_freq_hz, float A, float Q);
+    void internal_init(float sample_freq_hz, float center_freq_hz, float A, float Q);
 
     bool initialised;
     float b0, b1, b2, a1, a2, a0_inv;
