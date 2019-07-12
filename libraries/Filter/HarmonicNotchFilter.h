@@ -46,7 +46,7 @@ private:
 class HarmonicNotchFilterParams : public NotchFilterParams {
 public:
     HarmonicNotchFilterParams(void);
-    void set_center_freq_hz(uint16_t center_freq_hz) { _center_freq_hz.set(center_freq_hz); }
+    void set_center_freq_hz(uint16_t center_freq) { _center_freq_hz.set(center_freq); }
     uint8_t harmonics(void) const { return _harmonics; }
     static const struct AP_Param::GroupInfo var_info[];
 

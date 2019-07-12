@@ -83,7 +83,7 @@ void HarmonicNotchFilter<T>::init(float _sample_freq_hz, float _center_freq_hz, 
     float Q = sqrtf(powf(2, octaves)) / (powf(2,octaves) - 1.0f);
 
     for (int i=0; i<harmonics+1; i++) {
-        filters[i]._init(sample_freq_hz, _center_freq_hz * (i+1), A, Q);
+        filters[i].internal_init(sample_freq_hz, _center_freq_hz * (i+1), A, Q);
     }
     initialised = true;
 }
@@ -113,7 +113,7 @@ void HarmonicNotchFilter<T>::update(float center_freq_hz)
     float Q = sqrtf(powf(2, octaves)) / (powf(2,octaves) - 1.0f);
 
     for (int i=0; i<harmonics+1; i++) {
-        filters[i]._init(sample_freq_hz, center_freq_hz * (i+1), A, Q);
+        filters[i].internal_init(sample_freq_hz, center_freq_hz * (i+1), A, Q);
     }
 }
 
