@@ -445,15 +445,11 @@ const AP_Param::GroupInfo AP_InertialSensor::var_info[] = {
     // @Values: 1:FirstIMUOnly,3:FirstAndSecondIMU,7:FirstSecondAndThirdIMU,127:AllIMUs
     // @Bitmask: 0:FirstIMU,1:SecondIMU,2:ThirdIMU
     AP_GROUPINFO("ENABLE_MASK",  40, AP_InertialSensor, _enable_mask, 0x7F),
-<<<<<<< HEAD
-    
-=======
 
     // @Group: DNTCH_
     // @Path: ../Filter/HarmonicNotchFilter.cpp
     AP_SUBGROUPINFO(_harmonic_notch_filter, "DNTCH_",  41, AP_InertialSensor, HarmonicNotchFilterParams),
 
->>>>>>> 3d692da4ad... AP_InertialSensor: add harmonic notch filter to gyro filter chain.
     /*
       NOTE: parameter indexes have gaps above. When adding new
       parameters check for conflicts carefully
