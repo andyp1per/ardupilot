@@ -202,7 +202,7 @@ public:
     uint8_t get_primary_accel(void) const { return _primary_accel; }
     uint8_t get_primary_gyro(void) const { return _primary_gyro; }
 
-    // Update the dynamic notch frequency
+    // Update the harmonic notch frequency
     void update_harmonic_notch_freq_hz(float scale_factor) {
         // When disarmed, throttle is zero
         if (scale_factor > 0) {
@@ -421,7 +421,7 @@ private:
     NotchFilterParams _notch_filter;
     NotchFilterVector3f _gyro_notch_filter[INS_MAX_INSTANCES];
 
-    // optional dynamic notch filter on gyro
+    // optional harmonic notch filter on gyro
     HarmonicNotchFilterParams _harmonic_notch_filter;
     HarmonicNotchFilterVector3f _gyro_harmonic_notch_filter[INS_MAX_INSTANCES];
     uint16_t _calculated_harmonic_notch_freq_hz;
