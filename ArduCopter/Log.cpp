@@ -148,7 +148,7 @@ void Copter::Log_Write_Control_Tuning()
         terr_alt            : terr_alt,
         target_climb_rate   : target_climb_rate_cms,
         climb_rate          : climb_rate,
-        dynamic_notch_freq  : ins.get_gyro_dynamic_notch_center_freq_hz()
+        dynamic_notch_freq  : ins.get_gyro_harmonic_notch_center_freq_hz()
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }

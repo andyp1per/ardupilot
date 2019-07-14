@@ -310,8 +310,8 @@ void Copter::startup_INS_ground()
 }
 
 void Copter::update_dynamic_notch() {
-        // Update dynamic notch filter settings
-    ins.update_dynamic_notch_freq_hz(attitude_control->get_notch_freq_scaling(), attitude_control->get_num_scaled_notches());
+    // Update dynamic notch filter settings
+    ins.update_harmonic_notch_freq_hz(attitude_control->get_notch_freq_scaling());
 }
 
 // position_ok - returns true if the horizontal absolute position is ok and home position is set
