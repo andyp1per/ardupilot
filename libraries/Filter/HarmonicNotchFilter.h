@@ -34,8 +34,8 @@ public:
 private:
     NotchFilter<T>*  filters;
     float sample_freq_hz;
-    float bandwidth_hz;
-    float attenuation_dB;
+    float A;
+    float Q;
     uint8_t harmonics;
     bool initialised;
 };

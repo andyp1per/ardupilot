@@ -37,6 +37,13 @@ public:
     T apply(const T &sample);
     void reset();
 
+    // calculate attenuation and quality from provided center frequency and bandwidth
+    static void calculate_A_and_Q(float center_freq_hz, float bandwidth_hz, float attenuation_dB, float& A, float& Q) {
+        const float octaves = log2f(center_freq_hz / (center_freq_hz - bandwidth_hz / 2.0f)) * 2.0f;
+        A = powf(10, -attenuation_dB / 40.0f);
+        Q = sqrtf(powf(2, octaves)) / (powf(2,octaves) - 1.0f);
+    }
+
 private:
     void internal_init(float sample_freq_hz, float center_freq_hz, float A, float Q);
 

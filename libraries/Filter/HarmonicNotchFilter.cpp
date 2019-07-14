@@ -20,7 +20,7 @@ const AP_Param::GroupInfo HarmonicNotchFilterParams::var_info[] = {
 
     // @Param: ENABLE
     // @DisplayName: Enable
-    // @Description: Enable dynamic notch filter
+    // @Description: Enable harmonic notch filter
     // @Values: 0:Disabled,1:Enabled
     // @User: Advanced
     AP_GROUPINFO_FLAGS("ENABLE", 1, HarmonicNotchFilterParams, _enable, 0, AP_PARAM_FLAG_ENABLE),
@@ -35,7 +35,7 @@ const AP_Param::GroupInfo HarmonicNotchFilterParams::var_info[] = {
 
     // @Param: BW
     // @DisplayName: Bandwidth
-    // @Description: Dynamic notch bandwidth in Hz
+    // @Description: Harmonic notch bandwidth in Hz
     // @Range: 5 100
     // @Units: Hz
     // @User: Advanced
@@ -43,7 +43,7 @@ const AP_Param::GroupInfo HarmonicNotchFilterParams::var_info[] = {
 
     // @Param: ATT
     // @DisplayName: Attenuation
-    // @Description: Dynamic notch attenuation in dB
+    // @Description: Harmonic notch attenuation in dB
     // @Range: 5 30
     // @Units: dB
     // @User: Advanced
@@ -65,25 +65,21 @@ const AP_Param::GroupInfo HarmonicNotchFilterParams::var_info[] = {
   initialise filter
  */
 template <class T>
-void HarmonicNotchFilter<T>::init(float _sample_freq_hz, float _center_freq_hz, float _bandwidth_hz, float _attenuation_dB)
+void HarmonicNotchFilter<T>::init(float _sample_freq_hz, float center_freq_hz, float bandwidth_hz, float attenuation_dB)
 {
     if (filters == nullptr) {
         return;
     }
 
     sample_freq_hz = _sample_freq_hz;
-    bandwidth_hz = _bandwidth_hz;
-    attenuation_dB = _attenuation_dB;
 
     // adjust the center frequency to be in the allowable range
-    _center_freq_hz = constrain_float(_center_freq_hz, _bandwidth_hz / 1.98f, sample_freq_hz * 0.48f);
+    center_freq_hz = constrain_float(center_freq_hz, bandwidth_hz * 0.52f, sample_freq_hz * 0.48f);
 
-    float octaves = log2f(_center_freq_hz  / (_center_freq_hz - bandwidth_hz/2.0f)) * 2.0f;
-    float A = powf(10, -attenuation_dB/40.0f);
-    float Q = sqrtf(powf(2, octaves)) / (powf(2,octaves) - 1.0f);
+    NotchFilter<T>::calculate_A_and_Q(center_freq_hz, bandwidth_hz, attenuation_dB, A, Q);
 
     for (int i=0; i<harmonics+1; i++) {
-        filters[i].internal_init(sample_freq_hz, _center_freq_hz * (i+1), A, Q);
+        filters[i].internal_init(sample_freq_hz, center_freq_hz * (i+1), A, Q);
     }
     initialised = true;
 }
@@ -106,11 +102,7 @@ void HarmonicNotchFilter<T>::update(float center_freq_hz)
     }
 
     // adjust the center frequency to be in the allowable range
-    center_freq_hz = constrain_float(center_freq_hz, bandwidth_hz / 1.98f, sample_freq_hz * 0.48f);
-
-    float octaves = log2f(center_freq_hz  / (center_freq_hz - bandwidth_hz/2.0f)) * 2.0f;
-    float A = powf(10, -attenuation_dB/40.0f);
-    float Q = sqrtf(powf(2, octaves)) / (powf(2,octaves) - 1.0f);
+    center_freq_hz = constrain_float(center_freq_hz, 1.0f, sample_freq_hz * 0.48f);
 
     for (int i=0; i<harmonics+1; i++) {
         filters[i].internal_init(sample_freq_hz, center_freq_hz * (i+1), A, Q);

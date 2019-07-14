@@ -21,9 +21,11 @@
 template <class T>
 void NotchFilter<T>::init(float sample_freq_hz, float center_freq_hz, float bandwidth_hz, float attenuation_dB)
 {
-    float octaves = log2f(center_freq_hz  / (center_freq_hz - bandwidth_hz/2)) * 2;
-    float A = powf(10, -attenuation_dB/40);
-    float Q = sqrtf(powf(2, octaves)) / (powf(2,octaves) - 1);
+    // adjust the center frequency to be in the allowable range
+    center_freq_hz = constrain_float(center_freq_hz, bandwidth_hz * 0.52f, sample_freq_hz * 0.48f);
+
+    float A, Q;
+    calculate_A_and_Q(center_freq_hz, bandwidth_hz, attenuation_dB, A, Q);
     internal_init(sample_freq_hz, center_freq_hz, A, Q);
 }
 
