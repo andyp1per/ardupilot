@@ -214,7 +214,7 @@ public:
     // get the accel filter rate in Hz
     uint16_t get_accel_filter_hz(void) const { return _accel_filter_cutoff; }
 
-    uint16_t get_gyro_harmonic_notch_center_freq_hz(void) const { return _calculated_harmonic_notch_freq_hz[0]; }
+    float get_gyro_harmonic_notch_center_freq_hz(void) const { return _calculated_harmonic_notch_freq_hz[0]; }
 
     // indicate which bit in LOG_BITMASK indicates raw logging enabled
     void set_log_raw_bit(uint32_t log_raw_bit) { _log_raw_bit = log_raw_bit; }
@@ -420,7 +420,7 @@ private:
     HarmonicNotchFilterParams _harmonic_notch_filter;
     HarmonicNotchFilterVector3f _gyro_harmonic_notch_filter[INS_MAX_INSTANCES];
     // the current center frequency for the notch for each backend
-    uint16_t _calculated_harmonic_notch_freq_hz[INS_MAX_INSTANCES];
+    float _calculated_harmonic_notch_freq_hz[INS_MAX_INSTANCES];
 
     // Most recent gyro reading
     Vector3f _gyro[INS_MAX_INSTANCES];
