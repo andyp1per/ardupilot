@@ -82,6 +82,9 @@ public:
 
     // notify of a fifo reset
     void notify_fifo_reset(void);
+
+    // update the harmonic notch frequency for the selected backend
+    void _update_harmonic_notch_freq_hz(uint8_t instance, float scale_factor);
     
     /*
       device driver IDs. These are used to fill in the devtype field
@@ -184,7 +187,7 @@ protected:
 
     // update the sensor rate for FIFO sensors
     void _update_sensor_rate(uint16_t &count, uint32_t &start_us, float &rate_hz) const;
-    
+
     // set accelerometer max absolute offset for calibration
     void _set_accel_max_abs_offset(uint8_t instance, float offset);
 
@@ -247,7 +250,7 @@ protected:
     uint8_t _gyro_notch_enabled(void) const { return _imu._notch_filter.enabled(); }
 
     // return the dynamic notch filter center in Hz for the sample rate
-    uint16_t _gyro_harmonic_notch_center_freq_hz(void) const { return _imu.get_gyro_harmonic_notch_center_freq_hz(); }
+    uint16_t _gyro_harmonic_notch_center_freq_hz(uint8_t instance) const { return _imu._calculated_harmonic_notch_freq_hz[instance]; }
 
     // return the notch filter bandwidth in Hz for the sample rate
     uint16_t _gyro_harmonic_notch_bandwidth_hz(void) const { return _imu._harmonic_notch_filter.bandwidth_hz(); }
