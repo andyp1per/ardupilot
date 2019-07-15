@@ -57,6 +57,21 @@ const AP_Param::GroupInfo HarmonicNotchFilterParams::var_info[] = {
     // @RebootRequired: True
     AP_GROUPINFO("HMNCS", 5, HarmonicNotchFilterParams, _harmonics, 1),
 
+    // @Param: HMNCS
+    // @DisplayName: Harmonics
+    // @Description: Number of harmonic frequencies to add to the filter. This option takes effect on the next reboot.
+    // @Range: 0 2
+    // @User: Advanced
+    // @RebootRequired: True
+    AP_GROUPINFO("REF", 6, HarmonicNotchFilterParams, _reference, 0.0f),
+
+    // @Param: REF
+    // @DisplayName: Reference value
+    // @Description: Reference value associated with the specified frequency to facilitate frequency scaling
+    // @User: Advanced
+    // @RebootRequired: True
+    AP_GROUPINFO("REF", 6, HarmonicNotchFilterParams, _reference, 0.0f),
+
     AP_GROUPEND
 };
 

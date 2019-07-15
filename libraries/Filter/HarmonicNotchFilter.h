@@ -48,10 +48,12 @@ public:
     HarmonicNotchFilterParams(void);
     void set_center_freq_hz(float center_freq) { _center_freq_hz.set(center_freq); }
     uint8_t harmonics(void) const { return _harmonics; }
+    float reference(void) const { return _reference; }
     static const struct AP_Param::GroupInfo var_info[];
 
 private:
     AP_Int8 _harmonics;
+    AP_Float _reference;
 };
 
 typedef HarmonicNotchFilter<float> HarmonicNotchFilterFloat;
