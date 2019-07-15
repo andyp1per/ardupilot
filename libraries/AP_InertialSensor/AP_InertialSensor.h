@@ -216,6 +216,8 @@ public:
 
     float get_gyro_harmonic_notch_center_freq_hz(void) const { return _calculated_harmonic_notch_freq_hz[0]; }
 
+    float get_gyro_harmonic_notch_reference(void) const { return _harmonic_notch_filter.reference(); }
+
     // indicate which bit in LOG_BITMASK indicates raw logging enabled
     void set_log_raw_bit(uint32_t log_raw_bit) { _log_raw_bit = log_raw_bit; }
 
