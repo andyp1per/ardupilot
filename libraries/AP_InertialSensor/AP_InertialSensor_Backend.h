@@ -84,7 +84,7 @@ public:
     void notify_fifo_reset(void);
 
     // update the harmonic notch frequency for the selected backend
-    void _update_harmonic_notch_freq_hz(uint8_t instance, float scale_factor);
+    void _update_harmonic_notch_freq_hz(uint8_t instance, float scaled_freq);
     
     /*
       device driver IDs. These are used to fill in the devtype field
