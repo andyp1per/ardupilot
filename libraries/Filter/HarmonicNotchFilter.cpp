@@ -51,8 +51,8 @@ const AP_Param::GroupInfo HarmonicNotchFilterParams::var_info[] = {
 
     // @Param: HMNCS
     // @DisplayName: Harmonics
-    // @Description: Bitmask of harmonic frequencies to add to the filter. This option takes effect on the next reboot.
-    // @Range: 0 127
+    // @Description: Bitmask of harmonic frequencies to add to the filter fundamental frequency. This option takes effect on the next reboot.
+    // @Bitmask: 0:2nd harmonic,1:3rd harmonic,2:4th harmonic,3:5th hamronic,0:6th harmonic,0:7th harmonic,0:8th harmonic
     // @User: Advanced
     // @RebootRequired: True
     AP_GROUPINFO("HMNCS", 5, HarmonicNotchFilterParams, _harmonics, 1),
@@ -159,7 +159,7 @@ void HarmonicNotchFilter<T>::reset()
  */
 HarmonicNotchFilterParams::HarmonicNotchFilterParams(void)
 {
-    AP_Param::setup_object_defaults(this, var_info);    
+    AP_Param::setup_object_defaults(this, var_info);
 }
 
 /* 
