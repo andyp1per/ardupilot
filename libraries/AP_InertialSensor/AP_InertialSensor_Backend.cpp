@@ -561,14 +561,14 @@ void AP_InertialSensor_Backend::update_accel(uint8_t instance)
     _sem->give();
 }
 
-void AP_InertialSensor_Backend::_update_harmonic_notch_freq_hz(uint8_t instance, float scale_factor)
+void AP_InertialSensor_Backend::_update_harmonic_notch_freq_hz(uint8_t instance, float scaled_freq)
 {
     if (!_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
         return;
     }
 
     // Update the harmonic notch frequency
-    _imu._calculated_harmonic_notch_freq_hz[instance] = MAX(1.0f, _imu._harmonic_notch_filter.center_freq_hz() * scale_factor);
+    _imu._calculated_harmonic_notch_freq_hz[instance] = scaled_freq;
 
     _sem->give();
 }

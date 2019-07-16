@@ -1757,11 +1757,11 @@ void AP_InertialSensor::acal_update()
 }
 
 // Update the harmonic notch frequency
-void AP_InertialSensor::update_harmonic_notch_freq_hz(float scale_factor) {
+void AP_InertialSensor::update_harmonic_notch_freq_hz(float scaled_freq) {
     // When disarmed, throttle is zero
-    if (scale_factor > 0) {
+    if (scaled_freq > 0) {
         for (uint8_t i=0; i<_backend_count; i++) {
-            _backends[i]->_update_harmonic_notch_freq_hz(i, scale_factor);
+            _backends[i]->_update_harmonic_notch_freq_hz(i, scaled_freq);
         }
     }
 }

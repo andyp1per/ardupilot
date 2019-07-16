@@ -203,7 +203,7 @@ public:
     uint8_t get_primary_gyro(void) const { return _primary_gyro; }
 
     // Update the harmonic notch frequency
-    void update_harmonic_notch_freq_hz(float scale_factor);
+    void update_harmonic_notch_freq_hz(float scaled_freq);
 
     // enable HIL mode
     void set_hil_mode(void) { _hil_mode = true; }
@@ -214,8 +214,13 @@ public:
     // get the accel filter rate in Hz
     uint16_t get_accel_filter_hz(void) const { return _accel_filter_cutoff; }
 
+    // harmonic notch current center frequency from IMU 1
     float get_gyro_harmonic_notch_center_freq_hz(void) const { return _calculated_harmonic_notch_freq_hz[0]; }
 
+    // harmonic notch reference center frequency
+    float get_gyro_harmonic_notch_reference_freq_hz(void) const { return _harmonic_notch_filter.center_freq_hz(); }
+
+    // harmonic notch reference scale factor
     float get_gyro_harmonic_notch_reference(void) const { return _harmonic_notch_filter.reference(); }
 
     // indicate which bit in LOG_BITMASK indicates raw logging enabled
