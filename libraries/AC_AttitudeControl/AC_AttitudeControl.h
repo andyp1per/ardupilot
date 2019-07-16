@@ -236,8 +236,8 @@ public:
     // Return configured tilt angle limit in centidegrees
     float lean_angle_max() const { return _aparm.angle_max; }
 
-    // Calculate the dynamic notch filter frequency scaling on motor rpm
-    virtual float get_notch_freq_scaling(float ref) const { return 1.0f; };
+    // calculate the dynamic notch filter frequency scaled on motor rpm
+    virtual float get_notch_freq_scaled(float ref_freq, float ref) const { return ref_freq; };
 
     // Proportional controller with piecewise sqrt sections to constrain second derivative
     static float sqrt_controller(float error, float p, float second_ord_lim, float dt);

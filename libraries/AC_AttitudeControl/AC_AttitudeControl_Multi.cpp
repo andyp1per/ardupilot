@@ -287,7 +287,7 @@ void AC_AttitudeControl_Multi::parameter_sanity_check()
 }
 
 // Update dynamic notch filter frequency
-float AC_AttitudeControl_Multi::get_notch_freq_scaling(float ref) const
+float AC_AttitudeControl_Multi::get_notch_freq_scaled(float ref_freq, float ref) const
 {
-    return sqrtf(_motors.get_throttle_out()/ref);
+    return ref_freq * MAX(1.0f, ref_freq * sqrtf(_motors.get_throttle_out() / ref));
 }
