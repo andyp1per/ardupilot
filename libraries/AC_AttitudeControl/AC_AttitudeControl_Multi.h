@@ -60,8 +60,8 @@ public:
     // calculate total body frame throttle required to produce the given earth frame throttle
     float get_throttle_boosted(float throttle_in);
 
-    // Calculate the dynamic notch filter frequency scaling on motor rpm
-    virtual float get_notch_freq_scaling(float ref) const override;
+    // calculate the harmonic notch filter frequency scaled on motor rpm
+    virtual float get_notch_freq_scaled(float ref_freq, float ref) const override;
 
     // set desired throttle vs attitude mixing (actual mix is slewed towards this value over 1~2 seconds)
     //  low values favour pilot/autopilot throttle over attitude control, high values favour attitude control over throttle
