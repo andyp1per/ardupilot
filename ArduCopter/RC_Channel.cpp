@@ -79,6 +79,7 @@ void RC_Channel_Copter::init_aux_function(const aux_func_t ch_option, const aux_
     case AUX_FUNC::WINCH_ENABLE:
     case AUX_FUNC::STANDBY:
     case AUX_FUNC::SURFACE_TRACKING:
+    case AUX_FUNC::GYRO_FFT:
         do_aux_function(ch_option, ch_flag);
         break;
     // the following functions do not need to be initialised:
@@ -571,6 +572,22 @@ void RC_Channel_Copter::do_aux_function(const aux_func_t ch_option, const aux_sw
                 copter.surface_tracking.set_state(Copter::SurfaceTracking::SurfaceTrackingState::SURFACE_TRACKING_CEILING);
                 break;
             }
+            break;
+            
+        case AUX_FUNC::GYRO_FFT:
+#if GYROFFT_ENABLED == ENABLED
+            switch (ch_flag) {
+                case HIGH:
+                    copter.gyro_fft.set_analysis_enabled(true);
+                    break;
+                case MIDDLE:
+                    // nothing
+                    break;
+                case LOW:
+                    copter.gyro_fft.set_analysis_enabled(false);
+                    break;
+            }
+#endif
             break;
 
     default:

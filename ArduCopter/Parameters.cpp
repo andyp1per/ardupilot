@@ -947,6 +947,12 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("FS_VIBE_ENABLE", 35, ParametersG2, fs_vibe_enabled, 1),
 
+#if GYROFFT_ENABLED == ENABLED
+    // @Group: FFT_
+    // @Path: ../libraries/AP_GyroFFT/AP_GyroFFT.cpp
+    AP_SUBGROUPPTR(gyro_fft_ptr, "FFT_",  36, ParametersG2, AP_GyroFFT),
+#endif
+
     AP_GROUPEND
 };
 
@@ -1032,6 +1038,9 @@ ParametersG2::ParametersG2(void)
 #endif
 #if MODE_SYSTEMID_ENABLED == ENABLED
     ,mode_systemid_ptr(&copter.mode_systemid)
+#endif
+#if GYROFFT_ENABLED == ENABLED
+    ,gyro_fft_ptr(&copter.gyro_fft)
 #endif
 {
     AP_Param::setup_object_defaults(this, var_info);
