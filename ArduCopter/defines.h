@@ -303,6 +303,7 @@ enum LoggingParameters {
      LOG_OPTFLOW_MSG,
      LOG_EVENT_MSG,
      LOG_ERROR_MSG,
+     LOG_FILTER_TUNING_MSG,
      LOG_DATA_INT16_MSG,
      LOG_DATA_UINT16_MSG,
      LOG_DATA_INT32_MSG,

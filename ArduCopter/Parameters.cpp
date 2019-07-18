@@ -985,6 +985,9 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @Path: ../libraries/AP_Follow/AP_Follow.cpp
     AP_SUBGROUPINFO(follow, "FOLL", 27, ParametersG2, AP_Follow),
 #endif
+    // @Group: FFT_
+    // @Path: autotune_fft.cpp
+    AP_SUBGROUPPTR(autotune_fft_ptr, "FFT_",  28, ParametersG2, autotune_fft),
 
     AP_GROUPEND
 };
@@ -1013,6 +1016,7 @@ ParametersG2::ParametersG2(void)
 #if MODE_FOLLOW_ENABLED == ENABLED
     ,follow()
 #endif
+    ,autotune_fft_ptr(&copter.autotunefft)
 {
     AP_Param::setup_object_defaults(this, var_info);
 }

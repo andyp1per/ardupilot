@@ -182,6 +182,7 @@ void Copter::init_ardupilot()
     attitude_control->parameter_sanity_check();
     pos_control->set_dt(scheduler.get_loop_period_s());
 
+
     // init the optical flow sensor
     init_optflow();
 
@@ -260,6 +261,14 @@ void Copter::init_ardupilot()
     init_aux_switches();
 
     startup_INS_ground();
+
+    autotunefft.init(scheduler.get_loop_period_us(), ins);
+
+#ifdef ENABLE_SCRIPTING
+    if (!g2.scripting.init()) {
+        gcs().send_text(MAV_SEVERITY_ERROR, "Scripting failed to start");
+    }
+#endif // ENABLE_SCRIPTING
 
     // set landed flags
     set_land_complete(true);
