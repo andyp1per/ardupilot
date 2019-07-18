@@ -955,6 +955,7 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("FS_OPTIONS", 36, ParametersG2, fs_options, 0),
 
+<<<<<<< HEAD
 #if MODE_AUTOROTATE_ENABLED == ENABLED
     // @Group: AROT_
     // @Path: ../libraries/AC_Autorotation/AC_Autorotation.cpp
@@ -963,6 +964,14 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
 
 
 
+=======
+#if GYROFFT_ENABLED == ENABLED
+    // @Group: FFT_
+    // @Path: ../libraries/AP_GyroFFT/AP_GyroFFT.cpp
+    AP_SUBGROUPPTR(gyro_fft_ptr, "FFT_",  37, ParametersG2, AP_GyroFFT),
+#endif
+
+>>>>>>> ArduCopter: port betaflight in-flight fft analysis to arducopter and expose as a log message
     AP_GROUPEND
 };
 
@@ -1051,6 +1060,9 @@ ParametersG2::ParametersG2(void)
 #endif
 #if MODE_AUTOROTATE_ENABLED == ENABLED
     ,arot(copter.inertial_nav)
+#endif
+#if GYROFFT_ENABLED == ENABLED
+    ,gyro_fft_ptr(&copter.gyro_fft)
 #endif
 {
     AP_Param::setup_object_defaults(this, var_info);

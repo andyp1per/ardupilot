@@ -66,6 +66,7 @@
 #include <AP_SmartRTL/AP_SmartRTL.h>
 #include <AP_TempCalibration/AP_TempCalibration.h>
 #include <AC_AutoTune/AC_AutoTune.h>
+#include <AP_GyroFFT/AP_GyroFFT.h>
 #include <AP_Common/AP_FWVersion.h>
 
 // Configuration
@@ -209,6 +210,7 @@ public:
     friend class RC_Channels_Copter;
 
     friend class AutoTune;
+    friend class GyroFFT;
 
     friend class Mode;
     friend class ModeAcro;
@@ -782,6 +784,9 @@ private:
 
     // Log.cpp
     void Log_Write_Control_Tuning();
+#if GYROFFT_ENABLED == ENABLED
+    void Log_Write_Filter_Tuning();
+#endif
     void Log_Write_Performance();
     void Log_Write_Attitude();
     void Log_Write_EKF_POS();
@@ -934,6 +939,9 @@ private:
 #if AUTOTUNE_ENABLED == ENABLED
     AutoTune autotune;
     ModeAutoTune mode_autotune;
+#endif
+#if GYROFFT_ENABLED == ENABLED
+    AP_GyroFFT gyro_fft;
 #endif
 #if MODE_BRAKE_ENABLED == ENABLED
     ModeBrake mode_brake;

@@ -158,6 +158,8 @@ enum DevOptions {
 //  Logging parameters
 enum LoggingParameters {
      LOG_CONTROL_TUNING_MSG,
+     LOG_FILTER_TUNING_MSG,
+     LOG_FILTER_TUNING2_MSG,
      LOG_DATA_INT16_MSG,
      LOG_DATA_UINT16_MSG,
      LOG_DATA_INT32_MSG,
@@ -178,6 +180,7 @@ enum HarmonicNotchDynamicMode {
     HarmonicNotch_UpdateThrottle,
     HarmonicNotch_UpdateRPM,
     HarmonicNotch_UpdateBLHeli,
+    HarmonicNotch_UpdateGyroFFT,
 };
 
 #define MASK_LOG_ATTITUDE_FAST          (1<<0)

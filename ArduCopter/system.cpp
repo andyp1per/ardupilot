@@ -158,6 +158,7 @@ void Copter::init_ardupilot()
     attitude_control->parameter_sanity_check();
     pos_control->set_dt(scheduler.get_loop_period_s());
 
+
     // init the optical flow sensor
     init_optflow();
 
@@ -229,6 +230,10 @@ void Copter::init_ardupilot()
 
     startup_INS_ground();
 
+#if GYROFFT_ENABLED == ENABLED
+    gyro_fft.init(scheduler.get_loop_period_us(), ins);
+#endif
+
 #ifdef ENABLE_SCRIPTING
     g2.scripting.init();
 #endif // ENABLE_SCRIPTING
@@ -288,7 +293,7 @@ void Copter::update_dynamic_notch()
     const float ref_freq = ins.get_gyro_harmonic_notch_center_freq_hz();
     const float ref = ins.get_gyro_harmonic_notch_reference();
 
-    if (is_zero(ref)) {
+    if (is_zero(ref) || ins.get_gyro_harmonic_notch_tracking_mode() <= 0) {
         ins.update_harmonic_notch_freq_hz(ref_freq);
         return;
     }
@@ -312,6 +317,12 @@ void Copter::update_dynamic_notch()
 #ifdef HAVE_AP_BLHELI_SUPPORT
         case HarmonicNotch_UpdateBLHeli: // BLHeli based tracking
             ins.update_harmonic_notch_freq_hz(MAX(ref_freq, AP_BLHeli::get_singleton()->get_average_motor_frequency_hz() * ref));
+            break;
+#endif
+#if GYROFFT_ENABLED == ENABLED
+        case HarmonicNotch_UpdateGyroFFT: // FFT based tracking
+            // set the harmonic notch filter frequency scaled on measured frequency
+            ins.update_harmonic_notch_freq_hz(gyro_fft.get_weighted_noise_center_freq_hz());
             break;
 #endif
         case HarmonicNotch_Fixed: // static

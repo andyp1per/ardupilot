@@ -593,6 +593,10 @@ public:
     void *autotune_ptr;
 #endif
 
+#if GYROFFT_ENABLED == ENABLED
+    void *gyro_fft_ptr;
+#endif
+
 #ifdef ENABLE_SCRIPTING
     AP_Scripting scripting;
 #endif // ENABLE_SCRIPTING
