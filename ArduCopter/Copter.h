@@ -92,6 +92,7 @@
 #include "GCS_Copter.h"
 #include "AP_Rally.h"           // Rally point library
 #include "AP_Arming.h"
+#include "autotune_fft.h"
 
 // libraries which are dependent on #defines in defines.h and/or config.h
 #if BEACON_ENABLED == ENABLED
@@ -793,6 +794,7 @@ private:
     // Log.cpp
     void Log_Write_Optflow();
     void Log_Write_Control_Tuning();
+    void Log_Write_Filter_Tuning();
     void Log_Write_Performance();
     void Log_Write_Attitude();
     void Log_Write_EKF_POS();
@@ -961,6 +963,7 @@ private:
 #if AUTOTUNE_ENABLED == ENABLED
     ModeAutoTune mode_autotune;
 #endif
+    autotune_fft autotunefft;
 #if MODE_BRAKE_ENABLED == ENABLED
     ModeBrake mode_brake;
 #endif

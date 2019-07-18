@@ -488,6 +488,32 @@ void Copter::Log_Write_GuidedTarget(uint8_t target_type, const Vector3f& pos_tar
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
 
+struct PACKED log_Filter_Tuning {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    float    throttle_out;
+    float    throttle_hover;
+    float    motor_peak_fft_x;
+    float    motor_peak_fft_y;
+    float    motor_peak_fft_z;
+};
+
+// Write a filter tuning packet
+void Copter::Log_Write_Filter_Tuning()
+{
+    struct log_Filter_Tuning pkt = {
+        LOG_PACKET_HEADER_INIT(LOG_FILTER_TUNING_MSG),
+        time_us             : AP_HAL::micros64(),
+        throttle_out        : motors->get_throttle(),
+        throttle_hover      : motors->get_throttle_hover(),
+        motor_peak_fft_x    : autotunefft.get_motor_peak().x,
+        motor_peak_fft_y    : autotunefft.get_motor_peak().y,
+        motor_peak_fft_z    : autotunefft.get_motor_peak().z
+    };
+    logger.WriteBlock(&pkt, sizeof(pkt));
+}
+
+
 // type and unit information can be found in
 // libraries/DataFlash/Logstructure.h; search for "log_Units" for
 // units and "Format characters" for field type information
@@ -507,6 +533,8 @@ const struct LogStructure Copter::log_structure[] = {
 #endif
     { LOG_CONTROL_TUNING_MSG, sizeof(log_Control_Tuning),
       "CTUN", "Qffffffefcfhhf", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CRt,N", "s----mmmmmmnnz", "F----00B0BBBB-" },
+    { LOG_FILTER_TUNING_MSG, sizeof(log_Filter_Tuning),
+      "FTUN", "Qfffff", "TimeUS,ThO,ThH,MotPeakX,MotPeakY,MotPeakZ", "s--zzz", "F-----" },  
     { LOG_MOTBATT_MSG, sizeof(log_MotBatt),
       "MOTB", "Qffff",  "TimeUS,LiftMax,BatVolt,BatRes,ThLimit", "s-vw-", "F-00-" },
     { LOG_EVENT_MSG, sizeof(log_Event),         
