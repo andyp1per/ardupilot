@@ -158,6 +158,8 @@ enum DevOptions {
 //  Logging parameters
 enum LoggingParameters {
      LOG_CONTROL_TUNING_MSG,
+     LOG_FILTER_TUNING_MSG,
+     LOG_FILTER_TUNING2_MSG,
      LOG_DATA_INT16_MSG,
      LOG_DATA_UINT16_MSG,
      LOG_DATA_INT32_MSG,

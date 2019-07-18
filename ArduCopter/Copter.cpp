@@ -118,6 +118,9 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK(update_altitude,       10,    100),
     SCHED_TASK(run_nav_updates,       50,    100),
     SCHED_TASK(update_throttle_hover,100,     90),
+#if GYROFFT_ENABLED == ENABLED
+    SCHED_TASK_CLASS(AP_GyroFFT,           &copter.gyro_fft,            update,         400,  FFT_UPDATE_BUDGET_MICROS),
+#endif
 #if MODE_SMARTRTL_ENABLED == ENABLED
     SCHED_TASK_CLASS(ModeSmartRTL, &copter.mode_smartrtl,       save_position,    3, 100),
 #endif
@@ -161,6 +164,7 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK_CLASS(AP_Logger,      &copter.logger,           periodic_tasks, 400, 300),
 #endif
     SCHED_TASK_CLASS(AP_InertialSensor,    &copter.ins,                 periodic,       400,  50),
+
     SCHED_TASK_CLASS(AP_Scheduler,         &copter.scheduler,           update_logging, 0.1,  75),
 #if RPM_ENABLED == ENABLED
     SCHED_TASK(rpm_update,            40,    200),
@@ -206,6 +210,9 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #endif
 #if OSD_ENABLED == ENABLED
     SCHED_TASK(publish_osd_info, 1, 10),
+#endif
+#if GYROFFT_ENABLED == ENABLED
+    SCHED_TASK_CLASS(AP_GyroFFT,           &copter.gyro_fft,            update_parameters,1, 50),
 #endif
 };
 
@@ -277,6 +284,9 @@ void Copter::fast_loop()
     if (should_log(MASK_LOG_ANY)) {
         Log_Sensor_Health();
     }
+#if GYROFFT_ENABLED == ENABLED
+    gyro_fft.sample_gyros();
+#endif
 }
 
 // rc_loops - reads user input from transmitter/receiver
@@ -577,6 +587,9 @@ void Copter::update_altitude()
 
     if (should_log(MASK_LOG_CTUN)) {
         Log_Write_Control_Tuning();
+#if GYROFFT_ENABLED == ENABLED
+        Log_Write_Filter_Tuning();
+#endif
     }
 }
 

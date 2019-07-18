@@ -157,6 +157,7 @@ void Copter::init_ardupilot()
     attitude_control->parameter_sanity_check();
     pos_control->set_dt(scheduler.get_loop_period_s());
 
+
     // init the optical flow sensor
     init_optflow();
 
@@ -228,6 +229,10 @@ void Copter::init_ardupilot()
 
     startup_INS_ground();
 
+#if GYROFFT_ENABLED == ENABLED
+    gyro_fft.init(scheduler.get_loop_period_us(), ins);
+#endif
+
 #ifdef ENABLE_SCRIPTING
     if (!g2.scripting.init()) {
         gcs().send_text(MAV_SEVERITY_ERROR, "Scripting failed to start");
@@ -289,7 +294,7 @@ void Copter::update_dynamic_notch()
     const float ref_freq = ins.get_gyro_harmonic_notch_center_freq_hz();
     const float ref = ins.get_gyro_harmonic_notch_reference();
 
-    if (is_zero(ref)) {
+    if (is_zero(ref) || ins.get_gyro_harmonic_notch_tracking_mode() <= 0) {
         ins.update_harmonic_notch_freq_hz(ref_freq);
         return;
     }
@@ -302,6 +307,11 @@ void Copter::update_dynamic_notch()
         } else {
             ins.update_harmonic_notch_freq_hz(ref_freq);
         }
+#endif
+#if GYROFFT_ENABLED == ENABLED
+    } else if (ins.get_gyro_harmonic_notch_tracking_mode() > 1) {
+        // set the harmonic notch filter frequency scaled on measured frequency
+        ins.update_harmonic_notch_freq_hz(gyro_fft.get_weighted_noise_center_freq_hz());
 #endif
     } else {
         // set the harmonic notch filter frequency approximately scaled on motor rpm implied by throttle

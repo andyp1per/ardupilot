@@ -111,6 +111,13 @@ bool AP_Arming_Copter::ins_checks(bool display_failure)
             check_failed(ARMING_CHECK_INS, display_failure, "EKF attitude is bad");
             ret = false;
         }
+#if GYROFFT_ENABLED == ENABLED
+        // Check that the noise analyser works
+        if (!copter.gyro_fft.calibration_check()) {
+            check_failed(ARMING_CHECK_INS, display_failure, "FFT self-test failed");
+            ret = false;
+        };
+#endif
     }
 
     return ret;
