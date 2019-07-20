@@ -3440,6 +3440,7 @@ class AutoTestCopter(AutoTest):
         self.reboot_sitl()
 
         self.set_parameter("SIM_GYR_RND", 10)
+
         self.takeoff(10, mode="LOITER")
 
         self.change_mode("ALT_HOLD")
@@ -3451,6 +3452,54 @@ class AutoTestCopter(AutoTest):
         self.set_rc(2, 1500)
 
         self.do_RTL()
+
+    def fly_gyro_fft(self):
+        # basic gyro sample rate test
+        self.progress("Flying with gyro FFT - Gyro sample rate")
+        # enabling FFT will also enable the arming check, self-testing the functionality
+        self.set_parameter("FFT_ENABLE", 1)
+        # make sure the self-test will run
+        log_disarmed = self.get_parameter("LOG_DISARMED")
+        self.set_parameter("LOG_DISARMED", 0)
+        self.reboot_sitl()
+
+        self.set_parameter("SIM_GYR_RND", 10)
+
+        self.takeoff(10, mode="LOITER")
+
+        self.change_mode("ALT_HOLD")
+        # fly fast forrest!
+        self.set_rc(3, 1900)
+        self.set_rc(2, 1200)
+        self.wait_groundspeed(5, 1000)
+        self.set_rc(3, 1500)
+        self.set_rc(2, 1500)
+
+        self.do_RTL()
+
+        # loop sample rate test with larger window
+        self.progress("Flying with gyro FFT - Fast loop rate")
+        self.set_parameter("FFT_WINDOW_SIZE", 64)
+        self.set_parameter("FFT_WINDOW_OLAP", 0.75)
+        self.set_parameter("FFT_SAMPLE_MODE", 1)
+        self.reboot_sitl()
+
+        self.set_parameter("SIM_GYR_RND", 10)
+        self.takeoff(10, mode="LOITER")
+
+        self.change_mode("ALT_HOLD")
+        # fly fast forrest!
+        self.set_rc(3, 1900)
+        self.set_rc(2, 1200)
+        self.wait_groundspeed(5, 1000)
+        self.set_rc(3, 1500)
+        self.set_rc(2, 1500)
+
+        self.do_RTL()
+        # reset
+        self.set_parameter("FFT_ENABLE", 0)
+        self.set_parameter("LOG_DISARMED", log_disarmed)
+        self.reboot_sitl()
 
     def test_onboard_compass_calibration(self, timeout=240):
         twist_x = 2.1
@@ -4213,6 +4262,10 @@ class AutoTestCopter(AutoTest):
             ("DynamicNotches",
              "Fly Dynamic Notches",
              self.fly_dynamic_notches),
+             
+            ("GyroFFT",
+             "Fly Gyro FFT",
+             self.fly_gyro_fft),
 
             ("LogDownLoad",
              "Log download",
