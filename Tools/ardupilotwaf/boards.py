@@ -477,6 +477,7 @@ class chibios(Board):
             '--specs=nano.specs',
             '-specs=nosys.specs',
             '-DCHIBIOS_BOARD_NAME="%s"' % self.name,
+            '-D__USE_CMSIS',
         ]
         env.CXXFLAGS += env.CFLAGS + [
             '-fno-rtti',
@@ -512,6 +513,7 @@ class chibios(Board):
             '-L%s' % env.BUILDROOT,
             '-L%s' % cfg.srcnode.make_node('modules/ChibiOS/os/common/startup/ARMCMx/compilers/GCC/ld/').abspath(),
             '-L%s' % cfg.srcnode.make_node('libraries/AP_HAL_ChibiOS/hwdef/common/').abspath(),
+            '-L%s' % cfg.srcnode.make_node('modules/CMSIS_5/CMSIS/DSP/Lib/GCC/').abspath(),
             '-Wl,--gc-sections,--no-warn-mismatch,--library-path=/ld,--script=ldscript.ld,--defsym=__process_stack_size__=%s,--defsym=__main_stack_size__=%s' % (cfg.env.PROCESS_STACK, cfg.env.MAIN_STACK)
         ]
 
@@ -536,6 +538,10 @@ class chibios(Board):
 
         env.GIT_SUBMODULES += [
             'ChibiOS',
+        ]
+
+        env.INCLUDES += [
+            cfg.srcnode.find_dir('modules/CMSIS_5/CMSIS/DSP/Include').abspath()
         ]
 
         try:
