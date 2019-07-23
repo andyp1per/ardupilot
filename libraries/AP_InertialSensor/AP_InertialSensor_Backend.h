@@ -250,7 +250,7 @@ protected:
     uint8_t _gyro_notch_enabled(void) const { return _imu._notch_filter.enabled(); }
 
     // return the dynamic notch filter center in Hz for the sample rate
-    float _gyro_harmonic_notch_center_freq_hz(uint8_t instance) const { return _imu._calculated_harmonic_notch_freq_hz[instance]; }
+    float _gyro_harmonic_notch_center_freq_hz() const { return _imu._calculated_harmonic_notch_freq_hz; }
 
     // return the notch filter bandwidth in Hz for the sample rate
     float _gyro_harmonic_notch_bandwidth_hz(void) const { return _imu._harmonic_notch_filter.bandwidth_hz(); }

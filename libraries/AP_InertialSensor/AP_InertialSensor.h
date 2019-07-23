@@ -215,7 +215,7 @@ public:
     uint16_t get_accel_filter_hz(void) const { return _accel_filter_cutoff; }
 
     // harmonic notch current center frequency from IMU 1
-    float get_gyro_harmonic_notch_center_freq_hz(void) const { return _calculated_harmonic_notch_freq_hz[0]; }
+    float get_gyro_harmonic_notch_center_freq_hz(void) const { return _calculated_harmonic_notch_freq_hz; }
 
     // harmonic notch reference center frequency
     float get_gyro_harmonic_notch_reference_freq_hz(void) const { return _harmonic_notch_filter.center_freq_hz(); }
@@ -426,8 +426,8 @@ private:
     // optional harmonic notch filter on gyro
     HarmonicNotchFilterParams _harmonic_notch_filter;
     HarmonicNotchFilterVector3f _gyro_harmonic_notch_filter[INS_MAX_INSTANCES];
-    // the current center frequency for the notch for each backend
-    float _calculated_harmonic_notch_freq_hz[INS_MAX_INSTANCES];
+    // the current center frequency for the notch
+    float _calculated_harmonic_notch_freq_hz;
 
     // Most recent gyro reading
     Vector3f _gyro[INS_MAX_INSTANCES];

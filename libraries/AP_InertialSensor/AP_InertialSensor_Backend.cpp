@@ -518,15 +518,15 @@ void AP_InertialSensor_Backend::update_gyro(uint8_t instance)
         _last_notch_attenuation_dB[instance] = _gyro_notch_attenuation_dB();
     }
     // possily update the harmonic notch filter parameters
-    if (!is_equal(_last_harmonic_notch_center_freq_hz[instance], _gyro_harmonic_notch_center_freq_hz(instance))) {
-        _imu._gyro_harmonic_notch_filter[instance].update(_gyro_harmonic_notch_center_freq_hz(instance));
-        _last_harmonic_notch_center_freq_hz[instance] = _gyro_harmonic_notch_center_freq_hz(instance);
+    if (!is_equal(_last_harmonic_notch_center_freq_hz[instance], _gyro_harmonic_notch_center_freq_hz())) {
+        _imu._gyro_harmonic_notch_filter[instance].update(_gyro_harmonic_notch_center_freq_hz());
+        _last_harmonic_notch_center_freq_hz[instance] = _gyro_harmonic_notch_center_freq_hz();
     } 
     // possily update the harmonic notch filter parameters
     if (!is_equal(_last_harmonic_notch_bandwidth_hz[instance], _gyro_harmonic_notch_bandwidth_hz()) ||
         !is_equal(_last_harmonic_notch_attenuation_dB[instance], _gyro_harmonic_notch_attenuation_dB())) {
-        _imu._gyro_harmonic_notch_filter[instance].init(_gyro_raw_sample_rate(instance), _gyro_harmonic_notch_center_freq_hz(instance), _gyro_harmonic_notch_bandwidth_hz(), _gyro_harmonic_notch_attenuation_dB());
-        _last_harmonic_notch_center_freq_hz[instance] = _gyro_harmonic_notch_center_freq_hz(instance);
+        _imu._gyro_harmonic_notch_filter[instance].init(_gyro_raw_sample_rate(instance), _gyro_harmonic_notch_center_freq_hz(), _gyro_harmonic_notch_bandwidth_hz(), _gyro_harmonic_notch_attenuation_dB());
+        _last_harmonic_notch_center_freq_hz[instance] = _gyro_harmonic_notch_center_freq_hz();
         _last_harmonic_notch_bandwidth_hz[instance] = _gyro_harmonic_notch_bandwidth_hz();
         _last_harmonic_notch_attenuation_dB[instance] = _gyro_harmonic_notch_attenuation_dB();
     }
@@ -557,18 +557,6 @@ void AP_InertialSensor_Backend::update_accel(uint8_t instance)
         _imu._accel_filter[instance].set_cutoff_frequency(_accel_raw_sample_rate(instance), _accel_filter_cutoff());
         _last_accel_filter_hz[instance] = _accel_filter_cutoff();
     }
-
-    _sem->give();
-}
-
-void AP_InertialSensor_Backend::_update_harmonic_notch_freq_hz(uint8_t instance, float scaled_freq)
-{
-    if (!_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
-        return;
-    }
-
-    // Update the harmonic notch frequency
-    _imu._calculated_harmonic_notch_freq_hz[instance] = scaled_freq;
 
     _sem->give();
 }

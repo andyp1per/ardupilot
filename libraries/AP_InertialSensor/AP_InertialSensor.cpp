@@ -470,9 +470,7 @@ AP_InertialSensor::AP_InertialSensor() :
     AP_Param::setup_object_defaults(this, var_info);
 
     // This is not user configurable, but start with the configured default.
-    for (uint8_t i=0; i<INS_MAX_INSTANCES; i++) {
-        _calculated_harmonic_notch_freq_hz[i] = _harmonic_notch_filter.center_freq_hz();
-    }
+    _calculated_harmonic_notch_freq_hz = _harmonic_notch_filter.center_freq_hz();
 
     for (uint8_t i=0; i<INS_MAX_INSTANCES; i++) {
         _gyro_cal_ok[i] = true;
@@ -1760,12 +1758,9 @@ void AP_InertialSensor::acal_update()
 void AP_InertialSensor::update_harmonic_notch_freq_hz(float scaled_freq) {
     // When disarmed, throttle is zero
     if (scaled_freq > 0) {
-        for (uint8_t i=0; i<_backend_count; i++) {
-            _backends[i]->_update_harmonic_notch_freq_hz(i, scaled_freq);
-        }
+        _calculated_harmonic_notch_freq_hz = scaled_freq;
     }
 }
-
 
 /*
     set and save accelerometer bias along with trim calculation
