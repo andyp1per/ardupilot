@@ -14,6 +14,8 @@
 #define INS_MAX_INSTANCES 3
 #define INS_MAX_BACKENDS  6
 #define INS_VIBRATION_CHECK_INSTANCES 2
+#define XYZ_AXIS_COUNT    3
+typedef float* GyroWindow;
 
 #define DEFAULT_IMU_LOG_BAT_MASK 0
 
@@ -147,6 +149,16 @@ public:
     // get observed sensor rates, including any internal sampling multiplier
     uint16_t get_gyro_rate_hz(uint8_t instance) const { return uint16_t(_gyro_raw_sample_rates[instance] * _gyro_over_sampling[instance]); }
     uint16_t get_accel_rate_hz(uint8_t instance) const { return uint16_t(_accel_raw_sample_rates[instance] * _accel_over_sampling[instance]); }
+
+    // FFT support access
+    const Vector3f     &get_filtered_gyro(void) const { return _gyro_raw[_primary_gyro]; }
+    GyroWindow  get_filtered_gyro_window(uint8_t instance, uint8_t axis) const { return _gyro_window[instance][axis]; }
+    GyroWindow  get_filtered_gyro_window(uint8_t axis) const { return get_filtered_gyro_window(_primary_gyro, axis); }
+    uint16_t  get_filtered_gyro_window_index(void) const { return get_filtered_gyro_window_index(_primary_gyro); }
+    uint16_t  get_filtered_gyro_window_index(uint8_t instance) const { return _circular_buffer_idx[instance]; }
+    uint16_t get_raw_gyro_rate_hz() const { return get_raw_gyro_rate_hz(_primary_gyro); }
+    uint16_t get_raw_gyro_rate_hz(uint8_t instance) const { return _gyro_raw_sample_rates[_primary_gyro]; }
+    bool set_gyro_window_size(uint16_t size);
 
     // get accel offsets in m/s/s
     const Vector3f &get_accel_offsets(uint8_t i) const { return _accel_offset[i]; }
@@ -420,6 +432,13 @@ private:
     LowPassFilter2pVector3f _gyro_filter[INS_MAX_INSTANCES];
     Vector3f _accel_filtered[INS_MAX_INSTANCES];
     Vector3f _gyro_filtered[INS_MAX_INSTANCES];
+    // Thread-safe public version of _last_raw_gyro
+    Vector3f _gyro_raw[INS_MAX_INSTANCES];
+    // circular buffer of gyro data for frequency analysis
+    uint16_t _circular_buffer_idx[INS_MAX_INSTANCES];
+    GyroWindow _gyro_window[INS_MAX_INSTANCES][XYZ_AXIS_COUNT];
+    uint16_t _gyro_window_size;
+
     bool _new_accel_data[INS_MAX_INSTANCES];
     bool _new_gyro_data[INS_MAX_INSTANCES];
 
