@@ -414,7 +414,8 @@ class chibios(Board):
         ]
 
         env.INCLUDES += [
-            cfg.srcnode.find_dir('modules/CMSIS_5/CMSIS/DSP/Include').abspath()
+            cfg.srcnode.find_dir('modules/CMSIS_5/CMSIS/DSP/Include').abspath(),
+            cfg.srcnode.find_dir('modules/CMSIS_5/CMSIS/Core/Include').abspath()
         ]
 
         try:
