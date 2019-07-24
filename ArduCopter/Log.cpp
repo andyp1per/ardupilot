@@ -107,7 +107,6 @@ struct PACKED log_Control_Tuning {
     float    terr_alt;
     int16_t  target_climb_rate;
     int16_t  climb_rate;
-    float    dynamic_notch_freq;
 };
 
 // Write a control tuning packet
@@ -147,8 +146,7 @@ void Copter::Log_Write_Control_Tuning()
         rangefinder_alt     : rangefinder_state.alt_cm,
         terr_alt            : terr_alt,
         target_climb_rate   : target_climb_rate_cms,
-        climb_rate          : climb_rate,
-        dynamic_notch_freq  : ins.get_gyro_harmonic_notch_center_freq_hz()
+        climb_rate          : climb_rate
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
@@ -496,6 +494,7 @@ struct PACKED log_Filter_Tuning {
     float    motor_peak_fft_x;
     float    motor_peak_fft_y;
     float    motor_peak_fft_z;
+    float    dynamic_notch_freq;
 };
 
 // Write a filter tuning packet
@@ -504,11 +503,12 @@ void Copter::Log_Write_Filter_Tuning()
     struct log_Filter_Tuning pkt = {
         LOG_PACKET_HEADER_INIT(LOG_FILTER_TUNING_MSG),
         time_us             : AP_HAL::micros64(),
-        throttle_out        : motors->get_throttle(),
+        throttle_out        : motors->get_throttle_out(),
         throttle_hover      : motors->get_throttle_hover(),
         motor_peak_fft_x    : autotunefft.get_motor_peak().x,
         motor_peak_fft_y    : autotunefft.get_motor_peak().y,
-        motor_peak_fft_z    : autotunefft.get_motor_peak().z
+        motor_peak_fft_z    : autotunefft.get_motor_peak().z,
+        dynamic_notch_freq  : ins.get_gyro_harmonic_notch_center_freq_hz()
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
@@ -532,9 +532,9 @@ const struct LogStructure Copter::log_structure[] = {
       "OF",   "QBffff",   "TimeUS,Qual,flowX,flowY,bodyX,bodyY", "s-EEEE", "F-0000" },
 #endif
     { LOG_CONTROL_TUNING_MSG, sizeof(log_Control_Tuning),
-      "CTUN", "Qffffffefcfhhf", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CRt,N", "s----mmmmmmnnz", "F----00B0BBBB-" },
+      "CTUN", "Qffffffefcfhh", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CR", "s----mmmmmmnn", "F----00B0BBBB" },
     { LOG_FILTER_TUNING_MSG, sizeof(log_Filter_Tuning),
-      "FTUN", "Qfffff", "TimeUS,ThO,ThH,MotPeakX,MotPeakY,MotPeakZ", "s--zzz", "F-----" },  
+      "FTUN", "Qffffff", "TimeUS,ThO,ThH,MotPeakX,MotPeakY,MotPeakZ,DNtch", "s--zzzz", "F------" },  
     { LOG_MOTBATT_MSG, sizeof(log_MotBatt),
       "MOTB", "Qffff",  "TimeUS,LiftMax,BatVolt,BatRes,ThLimit", "s-vw-", "F-00-" },
     { LOG_EVENT_MSG, sizeof(log_Event),         
@@ -584,6 +584,7 @@ void Copter::log_init(void)
 #else // LOGGING_ENABLED
 
 void Copter::Log_Write_Control_Tuning() {}
+void Copter::Log_Write_Filter_Tuning() {}
 void Copter::Log_Write_Performance() {}
 void Copter::Log_Write_Attitude(void) {}
 void Copter::Log_Write_EKF_POS() {}

@@ -574,6 +574,7 @@ void Copter::update_altitude()
     // write altitude info to dataflash logs
     if (should_log(MASK_LOG_CTUN)) {
         Log_Write_Control_Tuning();
+        Log_Write_Filter_Tuning();
     }
 }
 
