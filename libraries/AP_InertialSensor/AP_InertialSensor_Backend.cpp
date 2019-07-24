@@ -499,6 +499,7 @@ void AP_InertialSensor_Backend::update_gyro(uint8_t instance)
     }
     if (_imu._new_gyro_data[instance]) {
         _publish_gyro(instance, _imu._gyro_filtered[instance]);
+        _imu._raw_gyro[instance] = _imu._last_raw_gyro[instance];
         _imu._new_gyro_data[instance] = false;
     }
 
