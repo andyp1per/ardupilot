@@ -63,7 +63,6 @@ private:
     uint8_t sampleCount;
     uint8_t maxSampleCount;
     float maxSampleCountRcp;
-    Vector3f oversampledGyroAccumulator;
 
     // downsampled gyro data circular buffer for frequency analysis
     uint8_t circularBufferIdx;
@@ -81,6 +80,7 @@ private:
 
     uint16_t centerFreq[XYZ_AXIS_COUNT];
     uint16_t prevCenterFreq[XYZ_AXIS_COUNT];
+    LowPassFilter2pFloat detectedFrequencyFilter[XYZ_AXIS_COUNT];
 
     AP_Int16 fftSamplingRateHz;
     float fftResolution;

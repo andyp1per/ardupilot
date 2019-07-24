@@ -150,7 +150,7 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #endif
     SCHED_TASK_CLASS(AP_InertialSensor,    &copter.ins,                 periodic,       400,  50),
     SCHED_TASK_CLASS(autotune_fft,         &copter.autotunefft,         periodic,       400, 100),
-    SCHED_TASK_CLASS(autotune_fft,         &copter.autotunefft,         analyse,        100, 100),    
+    SCHED_TASK_CLASS(autotune_fft,         &copter.autotunefft,         analyse,        400, 100),    
     SCHED_TASK_CLASS(AP_Scheduler,         &copter.scheduler,           update_logging, 0.1,  75),
 #if RPM_ENABLED == ENABLED
     SCHED_TASK(rpm_update,            10,    200),
