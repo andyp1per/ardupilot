@@ -80,7 +80,7 @@ void autotune_fft::init(uint32_t targetLooptimeUs, AP_InertialSensor& ins)
     // otherwise we need to calculate a FFT sample frequency to ensure we get 3 samples (gyro loops < 4K)
     const int gyroLoopRateHz = lrintf((1.0f / targetLooptimeUs) * 1e6f);
 
-    fftSamplingRateHz = MIN((gyroLoopRateHz / 3), fftSamplingRateHz);
+    fftSamplingRateHz = MIN(gyroLoopRateHz, fftSamplingRateHz);
 
     fftResolution = (float)fftSamplingRateHz / FFT_WINDOW_SIZE;
 
@@ -109,31 +109,26 @@ void autotune_fft::periodic()
 
 void autotune_fft::analyse_init(uint32_t targetLooptimeUs)
 {
-    // initialise even if FEATURE_DYNAMIC_FILTER not set, since it may be set later
-    // *** can this next line be removed ??? ***
-    //data_analyse_init(targetLooptimeUs);
-
-    const uint16_t samplingFrequency = 1000000 / targetLooptimeUs;
-    maxSampleCount = samplingFrequency / fftSamplingRateHz;
-    maxSampleCountRcp = 1.f / maxSampleCount;
 #if CONFIG_HAL_BOARD != HAL_BOARD_SITL
     arm_rfft_fast_init_f32(&fftInstance, FFT_WINDOW_SIZE);
 #endif
-    //    recalculation of filters takes 4 calls per axis => each filter gets updated every DYN_NOTCH_CALC_TICKS calls
-    //    at 4khz gyro loop rate this means 4khz / 4 / 3 = 333Hz => update every 3ms
-    //    for gyro rate > 16kHz, we have update frequency of 1kHz => 1ms
-    //const float looptime = MAX(1000000u / fftSamplingRateHz, targetLooptimeUs * DYN_NOTCH_CALC_TICKS);
     for (uint8_t axis = 0; axis < XYZ_AXIS_COUNT; axis++)
     {
         // any init value
         centerFreq[axis] = dynNotchMaxCtrHz;
         prevCenterFreq[axis] = dynNotchMaxCtrHz;
+        detectedFrequencyFilter[axis].set_cutoff_frequency(fftSamplingRateHz, DYN_NOTCH_SMOOTH_FREQ_HZ);
     }
 }
 
 void autotune_fft::push_sample(const Vector3f& sample)
 {
-    oversampledGyroAccumulator += sample;
+    //  fast sampling means that the raw gyro values have already been averaged over 8 samples
+    downsampledGyroData[circularBufferIdx] = sample;
+    circularBufferIdx = (circularBufferIdx + 1) % FFT_WINDOW_SIZE;
+
+    // We need DYN_NOTCH_CALC_TICKS tick to update all axis with newly sampled value
+    updateTicks = DYN_NOTCH_CALC_TICKS;
 }
 
 /*
@@ -143,28 +138,6 @@ void autotune_fft::analyse()
 {
     if (!_enable) {
         return;
-    }
-    // samples should have been pushed by `gyroDataAnalysePush`
-    // if gyro sampling is > 1kHz, accumulate multiple samples
-    sampleCount++;
-
-    // this runs at 1kHz
-    if (sampleCount == maxSampleCount)
-    {
-        sampleCount = 0;
-
-        // calculate mean value of accumulated samples
-        for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++)
-        {
-            Vector3f sample = oversampledGyroAccumulator * maxSampleCountRcp;
-            downsampledGyroData[circularBufferIdx] = sample;
-            oversampledGyroAccumulator.zero();
-        }
-
-        circularBufferIdx = (circularBufferIdx + 1) % FFT_WINDOW_SIZE;
-
-        // We need DYN_NOTCH_CALC_TICKS tick to update all axis with newly sampled value
-        updateTicks = DYN_NOTCH_CALC_TICKS;
     }
 
     // calculate FFT and update filters
@@ -263,7 +236,7 @@ void autotune_fft::analyse_update()
         uint8_t binStart = 0;
         uint8_t binMax = 0;
         //for bins after initial decline, identify start bin and max bin
-        for (int i = fftStartBin; i < FFT_BIN_COUNT; i++)
+        for (uint8_t i = fftStartBin; i < FFT_BIN_COUNT; i++)
         {
             if (fftIncreased || (fftData[i] > fftData[i - 1]))
             {
@@ -298,7 +271,6 @@ void autotune_fft::analyse_update()
             }
         }
         // accumulate lower shoulder
-
         for (int i = binMax; i > binStart + 1; i--)
         {
             if (fftData[i] > fftData[i - 1])
@@ -327,13 +299,9 @@ void autotune_fft::analyse_update()
             weightedCenterFreq = prevCenterFreq[updateAxis];
         }
         weightedCenterFreq = MAX(weightedCenterFreq, (float)dynNotchMinHz);
-        //centerFreq = biquadFilterApply(&detectedFrequencyFilter[updateAxis], centerFreq);
+        weightedCenterFreq = detectedFrequencyFilter[updateAxis].apply(weightedCenterFreq);
         prevCenterFreq[updateAxis] = centerFreq[updateAxis];
         centerFreq[updateAxis] = weightedCenterFreq;
-
-        //if(calculateThrottlePercentAbs() > DYN_NOTCH_OSD_MIN_THROTTLE) {
-        //    dynNotchMaxFFT = MAX(dynNotchMaxFFT, centerFreq[updateAxis]);
-        //}
 
         break;
     }
