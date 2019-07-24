@@ -97,7 +97,7 @@ public:
     ///
     const Vector3f     &get_gyro(uint8_t i) const { return _gyro[i]; }
     const Vector3f     &get_gyro(void) const { return get_gyro(_primary_gyro); }
-    const Vector3f     &get_raw_gyro(void) const { return _last_raw_gyro[_primary_gyro]; }
+    const Vector3f     &get_raw_gyro(void) const { return _raw_gyro[_primary_gyro]; }
 
     // set gyro offsets in radians/sec
     const Vector3f &get_gyro_offsets(uint8_t i) const { return _gyro_offset[i]; }
@@ -440,6 +440,8 @@ private:
     Vector3f _delta_angle_acc[INS_MAX_INSTANCES];
     Vector3f _last_delta_angle[INS_MAX_INSTANCES];
     Vector3f _last_raw_gyro[INS_MAX_INSTANCES];
+    // Thread-safe public version of _last_raw_gyro
+    Vector3f _raw_gyro[INS_MAX_INSTANCES];
 
     // bitmask indicating if a sensor is doing sensor-rate sampling:
     uint8_t _accel_sensor_rate_sampling_enabled;
