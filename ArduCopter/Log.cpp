@@ -510,7 +510,7 @@ void Copter::Log_Write_Filter_Tuning()
         motor_peak_fft_y    : autotunefft.get_motor_peak().y,
         motor_peak_fft_z    : autotunefft.get_motor_peak().z
     };
-    logger.WriteBlock(&pkt, sizeof(pkt));
+    DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
 
 
