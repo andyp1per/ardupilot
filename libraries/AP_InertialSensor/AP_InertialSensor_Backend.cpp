@@ -227,22 +227,24 @@ void AP_InertialSensor_Backend::_notify_new_gyro_raw_sample(uint8_t instance,
         // apply the low pass filter
         _imu._gyro_filtered[instance] = _imu._gyro_filter[instance].apply(gyro);
 
+        // apply the notch filter
+        if (_gyro_notch_enabled()) {
+            _imu._gyro_filtered[instance] = _imu._gyro_notch_filter[instance].apply(_imu._gyro_filtered[instance]);
+        }
+
+        // Capture the filtered gyro value before any dynamic filtering is applied
+        _imu._last_gyro_static_filtered[instance] = _imu._gyro_filtered[instance];
+
         // apply the harmonic notch filter
         if (_gyro_harmonic_notch_enabled()) {
             _imu._gyro_filtered[instance] = _imu._gyro_harmonic_notch_filter[instance].apply(_imu._gyro_filtered[instance]);
         }
 
-        // apply the notch filter
-        if (_gyro_notch_enabled()) {
-            _imu._gyro_filtered[instance] = _imu._gyro_notch_filter[instance].apply(_imu._gyro_filtered[instance]);
-        }
         if (_imu._gyro_filtered[instance].is_nan() || _imu._gyro_filtered[instance].is_inf()) {
             _imu._gyro_filter[instance].reset();
             _imu._gyro_notch_filter[instance].reset();
             _imu._gyro_harmonic_notch_filter[instance].reset();
         }
-        // Capture the filtered gyro value before any dynamic filtering is applied
-        _imu._last_gyro_static_filtered[instance] = _imu._gyro_filtered[instance];
         _imu._new_gyro_data[instance] = true;
         _sem->give();
     }
