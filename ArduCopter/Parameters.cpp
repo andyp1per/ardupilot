@@ -987,7 +987,7 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
 #endif
     // @Group: FFT_
     // @Path: autotune_fft.cpp
-    AP_SUBGROUPPTR(analyse_noise_ptr, "FFT_",  28, ParametersG2, autotune_fft),
+    AP_SUBGROUPPTR(analyse_noise_ptr, "FFT_",  28, ParametersG2, Analyse_Noise),
 
     AP_GROUPEND
 };
