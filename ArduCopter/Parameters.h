@@ -586,7 +586,7 @@ public:
     // follow
     AP_Follow follow;
 #endif
-    void *autotune_fft_ptr;
+    void *analyse_noise_ptr;
 };
 
 extern const AP_Param::Info        var_info[];

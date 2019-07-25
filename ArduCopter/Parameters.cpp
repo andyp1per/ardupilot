@@ -987,7 +987,7 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
 #endif
     // @Group: FFT_
     // @Path: autotune_fft.cpp
-    AP_SUBGROUPPTR(autotune_fft_ptr, "FFT_",  28, ParametersG2, autotune_fft),
+    AP_SUBGROUPPTR(analyse_noise_ptr, "FFT_",  28, ParametersG2, autotune_fft),
 
     AP_GROUPEND
 };
@@ -1016,7 +1016,7 @@ ParametersG2::ParametersG2(void)
 #if MODE_FOLLOW_ENABLED == ENABLED
     ,follow()
 #endif
-    ,autotune_fft_ptr(&copter.autotunefft)
+    ,analyse_noise_ptr(&copter.analyse_noise)
 {
     AP_Param::setup_object_defaults(this, var_info);
 }

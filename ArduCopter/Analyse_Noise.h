@@ -33,25 +33,17 @@
 #define DYN_NOTCH_RANGE_HZ_MEDIUM 1333
 #define DYN_NOTCH_RANGE_HZ_LOW 1000
 
-class autotune_fft
+class Analyse_Noise
 {
 public:
-    autotune_fft();
+    Analyse_Noise();
 
-    enum
-    {
-        DYN_NOTCH_RANGE_HIGH = 0,
-        DYN_NOTCH_RANGE_MEDIUM,
-        DYN_NOTCH_RANGE_LOW,
-        DYN_NOTCH_RANGE_AUTO
-    };
-
-    void init(uint32_t targetLooptime, AP_InertialSensor& ins);
+    void init(uint32_t target_looptime, AP_InertialSensor& ins);
     void push_sample(const Vector3f& sample);
     void analyse();
     void analyse_update();
-    void analyse_init(uint32_t targetLooptimeUs);
-    Vector3f get_motor_peak() const { return Vector3f(centerFreq[0], centerFreq[1], centerFreq[2]);}
+    void analyse_init(uint32_t target_looptime_us);
+    Vector3f get_noise_center_freq_hz() const { return _center_freq_hz; }
 
     // a function called by the main thread at the main loop rate:
     void periodic();
@@ -59,39 +51,34 @@ public:
     static const struct AP_Param::GroupInfo var_info[];
 
 private:
-    // accumulator for oversampled data => no aliasing and less noise
-    uint8_t sampleCount;
-    uint8_t maxSampleCount;
-    float maxSampleCountRcp;
-
     // downsampled gyro data circular buffer for frequency analysis
-    uint8_t circularBufferIdx;
-    Vector3f downsampledGyroData[FFT_WINDOW_SIZE];
+    uint8_t _circular_buffer_idx;
+    Vector3f _downsampled_gyro_data[FFT_WINDOW_SIZE];
 
     // update state machine step information
-    uint8_t updateTicks;
-    uint8_t updateStep;
-    uint8_t updateAxis;
+    uint8_t _update_ticks;
+    uint8_t _update_step;
+    uint8_t _update_axis;
 #if CONFIG_HAL_BOARD != HAL_BOARD_SITL
-    arm_rfft_fast_instance_f32 fftInstance;
+    arm_rfft_fast_instance_f32 _fft_instance;
 #endif
-    float fftData[FFT_WINDOW_SIZE];
-    float rfftData[FFT_WINDOW_SIZE];
+    float _fft_data[FFT_WINDOW_SIZE];
+#if CONFIG_HAL_BOARD != HAL_BOARD_SITL
+    float _rfft_data[FFT_WINDOW_SIZE];
+#endif
 
-    uint16_t centerFreq[XYZ_AXIS_COUNT];
-    uint16_t prevCenterFreq[XYZ_AXIS_COUNT];
-    LowPassFilter2pFloat detectedFrequencyFilter[XYZ_AXIS_COUNT];
+    Vector3f _center_freq_hz;
+    Vector3f _prev_center_freq_hz;
+    LowPassFilter2pFloat _detected_frequency_filter[XYZ_AXIS_COUNT];
 
-    AP_Int16 fftSamplingRateHz;
-    float fftResolution;
-    uint8_t fftStartBin;
-    uint16_t dynNotchMaxCtrHz;
-    uint8_t dynamicFilterRange;
-    AP_Int16 dynNotchMinHz;
-    uint16_t dynNotchMaxFFT;
+    AP_Int16 _fft_sampling_rate_hz;
+    float _fft_resolution;
+    uint8_t _fft_start_bin;
+    uint16_t _dyn_notch_max_ctr_hz;
+    AP_Int16 _dyn_notch_min_hz;
     AP_Int8 _enable;
     AP_InertialSensor* _ins;
 
     // Hanning window, see https://en.wikipedia.org/wiki/Window_function#Hann_.28Hanning.29_window
-    float hanningWindow[FFT_WINDOW_SIZE];
+    float _hanning_window[FFT_WINDOW_SIZE];
 };
