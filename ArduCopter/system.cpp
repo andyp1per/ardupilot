@@ -262,7 +262,7 @@ void Copter::init_ardupilot()
 
     startup_INS_ground();
 
-    autotunefft.init(scheduler.get_loop_period_us(), ins);
+    analyse_noise.init(scheduler.get_loop_period_us(), ins);
 
 #ifdef ENABLE_SCRIPTING
     if (!g2.scripting.init()) {

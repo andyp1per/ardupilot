@@ -505,9 +505,9 @@ void Copter::Log_Write_Filter_Tuning()
         time_us             : AP_HAL::micros64(),
         throttle_out        : motors->get_throttle_out(),
         throttle_hover      : motors->get_throttle_hover(),
-        motor_peak_fft_x    : autotunefft.get_motor_peak().x,
-        motor_peak_fft_y    : autotunefft.get_motor_peak().y,
-        motor_peak_fft_z    : autotunefft.get_motor_peak().z,
+        motor_peak_fft_x    : analyse_noise.get_noise_center_freq_hz().x,
+        motor_peak_fft_y    : analyse_noise.get_noise_center_freq_hz().y,
+        motor_peak_fft_z    : analyse_noise.get_noise_center_freq_hz().z
         dynamic_notch_freq  : ins.get_gyro_harmonic_notch_center_freq_hz()
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
