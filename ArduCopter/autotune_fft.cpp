@@ -104,7 +104,7 @@ void autotune_fft::periodic()
     if (!_enable) {
         return;
     }
-    push_sample(_ins->get_raw_gyro());
+    push_sample(_ins->get_filtered_gyro());
 }
 
 void autotune_fft::analyse_init(uint32_t targetLooptimeUs)
