@@ -115,7 +115,9 @@ void Analyse_Noise::analyse_init(uint32_t target_looptime_us)
 void Analyse_Noise::push_sample(const Vector3f& sample)
 {
     //  fast sampling means that the raw gyro values have already been averaged over 8 samples
-    _downsampled_gyro_data[_circular_buffer_idx] = sample;
+    _downsampled_gyro_data[0][_circular_buffer_idx] = sample.x;
+    _downsampled_gyro_data[1][_circular_buffer_idx] = sample.y;
+    _downsampled_gyro_data[2][_circular_buffer_idx] = sample.z;
     _circular_buffer_idx = (_circular_buffer_idx + 1) % FFT_WINDOW_SIZE;
 
     // We need DYN_NOTCH_CALC_TICKS tick to update all axis with newly sampled value

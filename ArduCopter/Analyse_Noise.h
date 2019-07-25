@@ -53,7 +53,7 @@ public:
 private:
     // downsampled gyro data circular buffer for frequency analysis
     uint8_t _circular_buffer_idx;
-    Vector3f _downsampled_gyro_data[FFT_WINDOW_SIZE];
+    float _downsampled_gyro_data[XYZ_AXIS_COUNT][FFT_WINDOW_SIZE];
 
     // update state machine step information
     uint8_t _update_ticks;
