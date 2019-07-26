@@ -20,8 +20,6 @@
 #include <AP_Param/AP_Param.h>
 #include "NotchFilter.h"
 
-#define HNF_MAX_FILTERS 8
-
 template <class T>
 class HarmonicNotchFilter {
 public:
@@ -31,6 +29,7 @@ public:
     T apply(const T &sample);
     void reset();
     void update(float center_freq_hz);
+    ~HarmonicNotchFilter();
 
 private:
     NotchFilter<T>*  _filters;
@@ -58,6 +57,5 @@ private:
     AP_Float _reference;
 };
 
-typedef HarmonicNotchFilter<float> HarmonicNotchFilterFloat;
 typedef HarmonicNotchFilter<Vector3f> HarmonicNotchFilterVector3f;
 
