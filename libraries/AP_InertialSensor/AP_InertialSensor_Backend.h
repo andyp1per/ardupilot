@@ -83,9 +83,6 @@ public:
     // notify of a fifo reset
     void notify_fifo_reset(void);
 
-    // update the harmonic notch frequency for the selected backend
-    void _update_harmonic_notch_freq_hz(uint8_t instance, float scaled_freq);
-    
     /*
       device driver IDs. These are used to fill in the devtype field
       of the device ID, which shows up as INS*ID* parameters to
@@ -249,13 +246,13 @@ protected:
 
     uint8_t _gyro_notch_enabled(void) const { return _imu._notch_filter.enabled(); }
 
-    // return the dynamic notch filter center in Hz for the sample rate
+    // return the harmonic notch filter center in Hz for the sample rate
     float _gyro_harmonic_notch_center_freq_hz() const { return _imu._calculated_harmonic_notch_freq_hz; }
 
-    // return the notch filter bandwidth in Hz for the sample rate
+    // return the harmonic notch filter bandwidth in Hz for the sample rate
     float _gyro_harmonic_notch_bandwidth_hz(void) const { return _imu._harmonic_notch_filter.bandwidth_hz(); }
 
-    // return the notch filter attenuation in dB for the sample rate
+    // return the harmonic notch filter attenuation in dB for the sample rate
     float _gyro_harmonic_notch_attenuation_dB(void) const { return _imu._harmonic_notch_filter.attenuation_dB(); }
 
     uint8_t _gyro_harmonic_notch_enabled(void) const { return _imu._harmonic_notch_filter.enabled(); }
@@ -267,16 +264,16 @@ protected:
     void update_accel(uint8_t instance);
 
     // support for updating filter at runtime
-    uint16_t _last_accel_filter_hz[INS_MAX_INSTANCES];
-    uint16_t _last_gyro_filter_hz[INS_MAX_INSTANCES];
-    float _last_notch_center_freq_hz[INS_MAX_INSTANCES];
-    float _last_notch_bandwidth_hz[INS_MAX_INSTANCES];
-    float _last_notch_attenuation_dB[INS_MAX_INSTANCES];
+    uint16_t _last_accel_filter_hz;
+    uint16_t _last_gyro_filter_hz;
+    float _last_notch_center_freq_hz;
+    float _last_notch_bandwidth_hz;
+    float _last_notch_attenuation_dB;
 
-    // support for updating dynamic filter at runtime
-    float _last_harmonic_notch_center_freq_hz[INS_MAX_INSTANCES];
-    float _last_harmonic_notch_bandwidth_hz[INS_MAX_INSTANCES];
-    float _last_harmonic_notch_attenuation_dB[INS_MAX_INSTANCES];
+    // support for updating harmonic filter at runtime
+    float _last_harmonic_notch_center_freq_hz;
+    float _last_harmonic_notch_bandwidth_hz;
+    float _last_harmonic_notch_attenuation_dB;
     
     void set_gyro_orientation(uint8_t instance, enum Rotation rotation) {
         _imu._gyro_orientation[instance] = rotation;
