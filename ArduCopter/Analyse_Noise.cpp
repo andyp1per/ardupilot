@@ -231,39 +231,9 @@ void Analyse_Noise::analyse_update()
                 }
             }
         }
-        // accumulate fft_sum and fft_weighted_sum from peak bin, and shoulder bins either side of peak
-        float cubed_data = _fft_data[bin_max] * _fft_data[bin_max] * _fft_data[bin_max];
-        float fft_sum = cubed_data;
-        float fft_weighted_sum = cubed_data * (bin_max + 1);
-        // accumulate upper shoulder
-        for (int i = bin_max; i < FFT_BIN_COUNT - 1; i++) {
-            if (_fft_data[i] > _fft_data[i + 1]) {
-                cubed_data = _fft_data[i] * _fft_data[i] * _fft_data[i];
-                fft_sum += cubed_data;
-                fft_weighted_sum += cubed_data * (i + 1);
-            } else {
-                break;
-            }
-        }
-        // accumulate lower shoulder
-        for (int i = bin_max; i > bin_start + 1; i--) {
-            if (_fft_data[i] > _fft_data[i - 1]) {
-                cubed_data = _fft_data[i] * _fft_data[i] * _fft_data[i];
-                fft_sum += cubed_data;
-                fft_weighted_sum += cubed_data * (i + 1);
-            } else {
-                break;
-            }
-        }
-        // get weighted center of relevant frequency range (this way we have a better resolution than 31.25Hz)
-        float weighted_center_freq_hz = _dyn_notch_max_ctr_hz;
-        float fft_mean_index = 0;
-        // idx was shifted by 1 to start at 1, not 0
-        if (fft_sum > 0) {
-            fft_mean_index = (fft_weighted_sum / fft_sum) - 1;
-            // the index points at the center frequency of each bin so index 0 is actually 16.125Hz
-            weighted_center_freq_hz = fft_mean_index * _fft_resolution;
-        } else {
+        float weighted_center_freq_hz = calculate_weighted_center_freq(bin_start, bin_max);
+
+        if (weighted_center_freq_hz <=0) {
             weighted_center_freq_hz = _prev_center_freq_hz[_update_axis];
         }
         weighted_center_freq_hz = MAX(weighted_center_freq_hz, (float)_dyn_notch_min_hz);
@@ -299,4 +269,44 @@ void Analyse_Noise::analyse_update()
     }
 
     _update_step = (_update_step + 1) % STEP_COUNT;
+}
+
+float Analyse_Noise::calculate_weighted_center_freq(uint8_t bin_start, uint8_t bin_max)
+{
+    // accumulate fft_sum and fft_weighted_sum from peak bin, and shoulder bins either side of peak
+    float cubed_data = _fft_data[bin_max] * _fft_data[bin_max] * _fft_data[bin_max];
+    float fft_sum = cubed_data;
+    float fft_weighted_sum = cubed_data * (bin_max + 1);
+    // accumulate upper shoulder
+    for (int i = bin_max; i < FFT_BIN_COUNT - 1; i++) {
+        if (_fft_data[i] > _fft_data[i + 1]) {
+            cubed_data = _fft_data[i] * _fft_data[i] * _fft_data[i];
+            fft_sum += cubed_data;
+            fft_weighted_sum += cubed_data * (i + 1);
+        }
+        else {
+            break;
+        }
+    }
+    // accumulate lower shoulder
+    for (int i = bin_max; i > bin_start + 1; i--) {
+        if (_fft_data[i] > _fft_data[i - 1]) {
+            cubed_data = _fft_data[i] * _fft_data[i] * _fft_data[i];
+            fft_sum += cubed_data;
+            fft_weighted_sum += cubed_data * (i + 1);
+        }
+        else {
+            break;
+        }
+    }
+    // get weighted center of relevant frequency range (this way we have a better resolution than 31.25Hz)
+    float weighted_center_freq_hz = 0;
+    float fft_mean_index = 0;
+    // idx was shifted by 1 to start at 1, not 0
+    if (fft_sum > 0) {
+        fft_mean_index = (fft_weighted_sum / fft_sum) - 1;
+        // the index points at the center frequency of each bin so index 0 is actually 16.125Hz
+        weighted_center_freq_hz = fft_mean_index * _fft_resolution;
+    }
+    return weighted_center_freq_hz;
 }
