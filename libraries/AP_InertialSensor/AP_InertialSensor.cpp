@@ -446,9 +446,9 @@ const AP_Param::GroupInfo AP_InertialSensor::var_info[] = {
     // @Bitmask: 0:FirstIMU,1:SecondIMU,2:ThirdIMU
     AP_GROUPINFO("ENABLE_MASK",  40, AP_InertialSensor, _enable_mask, 0x7F),
 
-    // @Group: DNTCH_
+    // @Group: HNTCH_
     // @Path: ../Filter/HarmonicNotchFilter.cpp
-    AP_SUBGROUPINFO(_harmonic_notch_filter, "DNTCH_",  41, AP_InertialSensor, HarmonicNotchFilterParams),
+    AP_SUBGROUPINFO(_harmonic_notch_filter, "HNTCH_",  41, AP_InertialSensor, HarmonicNotchFilterParams),
 
     /*
       NOTE: parameter indexes have gaps above. When adding new
@@ -469,13 +469,9 @@ AP_InertialSensor::AP_InertialSensor() :
     _s_instance = this;
     AP_Param::setup_object_defaults(this, var_info);
 
-    // This is not user configurable, but start with the configured default.
-    _calculated_harmonic_notch_freq_hz = _harmonic_notch_filter.center_freq_hz();
-
     for (uint8_t i=0; i<INS_MAX_INSTANCES; i++) {
         _gyro_cal_ok[i] = true;
         _accel_max_abs_offsets[i] = 3.5f;
-        _gyro_harmonic_notch_filter[i].create(_harmonic_notch_filter.harmonics());
     }
     for (uint8_t i=0; i<INS_VIBRATION_CHECK_INSTANCES; i++) {
         _accel_vibe_floor_filter[i].set_cutoff_frequency(AP_INERTIAL_SENSOR_ACCEL_VIBE_FLOOR_FILT_HZ);
@@ -656,6 +652,15 @@ AP_InertialSensor::init(uint16_t sample_rate)
 
     // initialise IMU batch logging
     batchsampler.init();
+
+    // the center frequency of the harmonic notch is always taken from the calculated value so that it can be updated
+    // dynamically, the calculated value is always some multiple of the configured center frequency, so start with the
+    // configured value
+    _calculated_harmonic_notch_freq_hz = _harmonic_notch_filter.center_freq_hz();
+
+    for (uint8_t i=0; i<get_gyro_count(); i++) {
+        _gyro_harmonic_notch_filter[i].create(_harmonic_notch_filter.harmonics());
+    }
 }
 
 bool AP_InertialSensor::_add_backend(AP_InertialSensor_Backend *backend)
@@ -1771,7 +1776,7 @@ void AP_InertialSensor::acal_update()
 // Update the harmonic notch frequency
 void AP_InertialSensor::update_harmonic_notch_freq_hz(float scaled_freq) {
     // When disarmed, throttle is zero
-    if (scaled_freq > 0) {
+    if (is_positive(scaled_freq)) {
         _calculated_harmonic_notch_freq_hz = scaled_freq;
     }
 }

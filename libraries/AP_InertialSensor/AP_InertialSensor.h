@@ -24,6 +24,7 @@
 #include <AP_Math/AP_Math.h>
 #include <Filter/LowPassFilter2p.h>
 #include <Filter/LowPassFilter.h>
+#include <Filter/NotchFilter.h>
 #include <Filter/HarmonicNotchFilter.h>
 
 class AP_InertialSensor_Backend;
@@ -215,11 +216,11 @@ public:
     // get the accel filter rate in Hz
     uint16_t get_accel_filter_hz(void) const { return _accel_filter_cutoff; }
 
-    // harmonic notch current center frequency from IMU 1
-    float get_gyro_harmonic_notch_center_freq_hz(void) const { return _calculated_harmonic_notch_freq_hz; }
+    // harmonic notch current center frequency
+    float get_gyro_dynamic_notch_center_freq_hz(void) const { return _calculated_harmonic_notch_freq_hz; }
 
     // harmonic notch reference center frequency
-    float get_gyro_harmonic_notch_reference_freq_hz(void) const { return _harmonic_notch_filter.center_freq_hz(); }
+    float get_gyro_harmonic_notch_center_freq_hz(void) const { return _harmonic_notch_filter.center_freq_hz(); }
 
     // harmonic notch reference scale factor
     float get_gyro_harmonic_notch_reference(void) const { return _harmonic_notch_filter.reference(); }
