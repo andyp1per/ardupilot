@@ -51,6 +51,7 @@ public:
     static const struct AP_Param::GroupInfo var_info[];
 
 private:
+    float calculate_weighted_center_freq(uint8_t bin_start, uint8_t bin_max);
     // downsampled gyro data circular buffer for frequency analysis
     uint8_t _circular_buffer_idx;
     float _downsampled_gyro_data[XYZ_AXIS_COUNT][FFT_WINDOW_SIZE];
