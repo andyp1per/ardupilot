@@ -46,7 +46,7 @@ public:
     Vector3f get_noise_center_freq_hz() const { return _center_freq_hz; }
 
     // a function called by the main thread at the main loop rate:
-    void periodic();
+    void sample_gyros();
 
     static const struct AP_Param::GroupInfo var_info[];
 

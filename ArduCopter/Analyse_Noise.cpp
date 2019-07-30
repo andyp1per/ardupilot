@@ -91,7 +91,7 @@ void Analyse_Noise::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
 }
 
 // a function called by the main thread at the main loop rate:
-void Analyse_Noise::periodic()
+void Analyse_Noise::sample_gyros()
 {
     if (!_enable) {
         return;
