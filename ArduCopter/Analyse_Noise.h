@@ -27,11 +27,8 @@
 #endif
 
 // max for F3 targets
-#define FFT_WINDOW_SIZE 32
+#define FFT_WINDOW_SIZE 64
 #define XYZ_AXIS_COUNT 3
-#define DYN_NOTCH_RANGE_HZ_HIGH 2000
-#define DYN_NOTCH_RANGE_HZ_MEDIUM 1333
-#define DYN_NOTCH_RANGE_HZ_LOW 1000
 
 class Analyse_Noise
 {
@@ -44,6 +41,9 @@ public:
     void analyse_update();
     void analyse_init(uint32_t target_looptime_us);
     Vector3f get_noise_center_freq_hz() const { return _center_freq_hz; }
+    uint8_t get_arm_max_bin() const { return _arm_max_bin; }
+    uint8_t get_max_bin() const { return _max_bin; }
+    float get_max_bin_energy() const { return _max_bin_energy; }
 
     // a function called by the main thread at the main loop rate:
     void sample_gyros();
@@ -60,6 +60,9 @@ private:
     uint8_t _update_ticks;
     uint8_t _update_step;
     uint8_t _update_axis;
+    uint8_t _arm_max_bin;
+    uint8_t _max_bin;
+    float _max_bin_energy;
 #if CONFIG_HAL_BOARD != HAL_BOARD_SITL
     arm_rfft_fast_instance_f32 _fft_instance;
 #endif
