@@ -67,6 +67,9 @@ const AP_Param::GroupInfo Analyse_Noise::var_info[] = {
 // we need 4 steps for each axis
 #define DYN_NOTCH_CALC_TICKS (XYZ_AXIS_COUNT * 2)
 
+#define SQRT_2_3 0.816496580927726f
+#define SQRT_6 2.449489742783178f
+
 Analyse_Noise::Analyse_Noise()
 {
     AP_Param::setup_object_defaults(this, var_info);
@@ -216,9 +219,8 @@ void Analyse_Noise::analyse_update()
     }
     case STEP_CALC_FREQUENCIES: {
         bool fft_increased = false;
-        float data_max = 0;
+        uint32_t bin_max = 0;
         uint8_t bin_start = 0;
-        uint8_t bin_max = 0;
         //for bins after initial decline, identify start bin and max bin
         for (uint8_t i = _fft_start_bin; i < FFT_BIN_COUNT; i++) {
             if (fft_increased || (_fft_data[i] > _fft_data[i - 1])) {
@@ -226,25 +228,21 @@ void Analyse_Noise::analyse_update()
                     bin_start = i; // first up-step bin
                     fft_increased = true;
                 }
-                if (_fft_data[i] > data_max) {
-                    data_max = _fft_data[i];
-                    bin_max = i; // tallest bin
-                }
             }
         }
 
         float maxValue = 0;
-        uint32_t maxIndex = 0;
-        arm_max_f32(_fft_data + _fft_start_bin, FFT_BIN_COUNT - _fft_start_bin, &maxValue, &maxIndex);
+        arm_max_f32(_fft_data + _fft_start_bin, FFT_BIN_COUNT - _fft_start_bin, &maxValue, &bin_max);
 
-        _max_bin = bin_max;
-        _arm_max_bin = maxIndex + _fft_start_bin;
-        _max_bin_energy = maxValue;
+        bin_max += _fft_start_bin;
+        _center_freq_energy[_update_axis] = maxValue;
 
         float weighted_center_freq_hz = 0;
 
         if (_fft_data[bin_max] > 0) {
             weighted_center_freq_hz = calculate_weighted_center_freq(bin_start, bin_max);
+            _simple_center_freq_hz[_update_axis] = calculate_simple_center_freq(bin_start, bin_max);
+            _quinns_center_freq_hz[_update_axis] = calculate_quinns_second_estimator_center_freq(bin_max);
         }
         else {
             weighted_center_freq_hz = _prev_center_freq_hz[_update_axis];
@@ -318,14 +316,8 @@ float Analyse_Noise::calculate_weighted_center_freq(uint8_t bin_start, uint8_t b
     float fft_mean_index = 0;
     // idx was shifted by 1 to start at 1, not 0
     fft_mean_index = (fft_weighted_sum / fft_sum) - 1;
-    // Constrain the result to actually be in the tallest bin.
-    if (fft_mean_index < bin_max || fft_mean_index > bin_max + 1) {
-        return calculate_simple_center_freq(bin_start, bin_max);
-    }
-    else {
-        // the index points at the center frequency of each bin so index 0 is actually 16.125Hz
-        return fft_mean_index * _fft_resolution;
-    }
+    // the index points at the center frequency of each bin so index 0 is actually 16.125Hz
+    return fft_mean_index * _fft_resolution;
 }
 
 // Interpolate center frequency using simple center of bin
@@ -360,8 +352,8 @@ float Analyse_Noise::calculate_quinns_second_estimator_center_freq(uint8_t bin_m
 float Analyse_Noise::tau(float x)
 {
     float p1 = logf(3 * powf(x, 2.0f) + 6.0f * x + 1.0f);
-    float part1 = x + 1 - sqrtf(2.0f / 3.0f);
-    float part2 = x + 1 + sqrtf(2.0f / 3.0f);
+    float part1 = x + 1 - SQRT_2_3;
+    float part2 = x + 1 + SQRT_2_3;
     float p2 = logf(part1 / part2);
-    return (1.0f / 4.0f * p1 - sqrtf(6.0f) / 24.0f * p2);
+    return (1.0f / 4.0f * p1 - SQRT_6 / 24.0f * p2);
 }
