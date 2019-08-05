@@ -41,9 +41,9 @@ public:
     void analyse_update();
     void analyse_init(uint32_t target_looptime_us);
     Vector3f get_noise_center_freq_hz() const { return _center_freq_hz; }
-    uint8_t get_arm_max_bin() const { return _arm_max_bin; }
-    uint8_t get_max_bin() const { return _max_bin; }
-    float get_max_bin_energy() const { return _max_bin_energy; }
+    Vector3f get_simple_center_freq_hz() const { return _simple_center_freq_hz; }
+    Vector3f get_quinns_center_freq_hz() const { return _quinns_center_freq_hz; }
+    Vector3f get_center_freq_energy() const { return _center_freq_energy; }
 
     // a function called by the main thread at the main loop rate:
     void sample_gyros();
@@ -63,9 +63,7 @@ private:
     uint8_t _update_ticks;
     uint8_t _update_step;
     uint8_t _update_axis;
-    uint8_t _arm_max_bin;
-    uint8_t _max_bin;
-    float _max_bin_energy;
+    Vector3f _center_freq_energy;
 #if CONFIG_HAL_BOARD != HAL_BOARD_SITL
     arm_rfft_fast_instance_f32 _fft_instance;
 #endif
@@ -75,6 +73,8 @@ private:
 #endif
 
     Vector3f _center_freq_hz;
+    Vector3f _simple_center_freq_hz;
+    Vector3f _quinns_center_freq_hz;
     Vector3f _prev_center_freq_hz;
     LowPassFilter2pFloat _detected_frequency_filter[XYZ_AXIS_COUNT];
 
