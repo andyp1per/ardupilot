@@ -91,7 +91,7 @@ void Analyse_Noise::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
     analyse_init(target_looptime_us);
 }
 
-// a function called by the main thread at the main loop rate:
+// A function called by the main thread at the main loop rate:
 void Analyse_Noise::sample_gyros()
 {
     if (!_enable) {
@@ -113,6 +113,7 @@ void Analyse_Noise::analyse_init(uint32_t target_looptime_us)
     }
 }
 
+// Collect gyro data, to be analysed in analyse function
 void Analyse_Noise::push_sample(const Vector3f& sample)
 {
     // fast sampling means that the raw gyro values have already been averaged over 8 samples
@@ -125,9 +126,7 @@ void Analyse_Noise::push_sample(const Vector3f& sample)
     _update_ticks = DYN_NOTCH_CALC_TICKS;
 }
 
-/*
- * Collect gyro data, to be analysed in gyroDataAnalyseUpdate function
- */
+// Analyse gyro data
 void Analyse_Noise::analyse()
 {
     if (!_enable) {
@@ -151,10 +150,8 @@ extern "C" {
 }
 #endif
 
-/*
- * Analyse last gyro data from the last FFT_WINDOW_SIZE.
- * This is a state-machine version of arm_rfft_fast_f32() such that each step can be processed separately as required.
- */
+// Analyse last gyro data from the last FFT_WINDOW_SIZE 
+// This is a state-machine version of arm_rfft_fast_f32() such that each step can be processed separately as required.
 void Analyse_Noise::analyse_update()
 {
     enum {
@@ -244,9 +241,12 @@ void Analyse_Noise::analyse_update()
         _arm_max_bin = maxIndex + _fft_start_bin;
         _max_bin_energy = maxValue;
 
-        float weighted_center_freq_hz = calculate_weighted_center_freq(bin_start, bin_max);
+        float weighted_center_freq_hz = 0;
 
-        if (weighted_center_freq_hz <=0) {
+        if (_fft_data[bin_max] > 0) {
+            weighted_center_freq_hz = calculate_weighted_center_freq(bin_start, bin_max);
+        }
+        else {
             weighted_center_freq_hz = _prev_center_freq_hz[_update_axis];
         }
         weighted_center_freq_hz = MAX(weighted_center_freq_hz, (float)_dyn_notch_min_hz);
@@ -315,13 +315,53 @@ float Analyse_Noise::calculate_weighted_center_freq(uint8_t bin_start, uint8_t b
         }
     }
     // get weighted center of relevant frequency range (this way we have a better resolution than 31.25Hz)
-    float weighted_center_freq_hz = 0;
     float fft_mean_index = 0;
     // idx was shifted by 1 to start at 1, not 0
-    if (fft_sum > 0) {
-        fft_mean_index = (fft_weighted_sum / fft_sum) - 1;
+    fft_mean_index = (fft_weighted_sum / fft_sum) - 1;
+    // Constrain the result to actually be in the tallest bin.
+    if (fft_mean_index < bin_max || fft_mean_index > bin_max + 1) {
+        return calculate_simple_center_freq(bin_start, bin_max);
+    }
+    else {
         // the index points at the center frequency of each bin so index 0 is actually 16.125Hz
-        weighted_center_freq_hz = fft_mean_index * _fft_resolution;
+        return fft_mean_index * _fft_resolution;
+    }
+}
+
+// Interpolate center frequency using simple center of bin
+float Analyse_Noise::calculate_simple_center_freq(uint8_t bin_start, uint8_t bin_max)
+{
+    float weighted_center_freq_hz = 0;
+    // idx was shifted by 1 to start at 1, not 0
+    if (_fft_data[bin_max] > 0) {
+        // the index points at the center frequency of each bin so index 0 is actually 16.125Hz
+        weighted_center_freq_hz = bin_max * _fft_resolution + _fft_resolution / 2.0f;
     }
     return weighted_center_freq_hz;
+}
+
+// Interpolate center frequency using https://dspguru.com/dsp/howtos/how-to-interpolate-fft-peak/
+float Analyse_Noise::calculate_quinns_second_estimator_center_freq(uint8_t bin_max)
+{
+    uint8_t k = bin_max;
+    float divider = powf(_fft_data[k], 2.0);
+    float ap = (_fft_data[k + 1] * _fft_data[k]) / divider;
+    float dp = -ap / (1.0f - ap);
+    float am = (_fft_data[k - 1] * _fft_data[k]) / divider;
+
+    float dm = am / (1.0f - am);
+    float d = (dp + dm) / 2.0f + tau(dp * dp) - tau(dm * dm);
+
+    float adjustedBinLocation = (float)k + d;
+    return adjustedBinLocation * _fft_resolution;
+}
+
+// Helper function used for Quinn's frequency estimation
+float Analyse_Noise::tau(float x)
+{
+    float p1 = logf(3 * powf(x, 2.0f) + 6.0f * x + 1.0f);
+    float part1 = x + 1 - sqrtf(2.0f / 3.0f);
+    float part2 = x + 1 + sqrtf(2.0f / 3.0f);
+    float p2 = logf(part1 / part2);
+    return (1.0f / 4.0f * p1 - sqrtf(6.0f) / 24.0f * p2);
 }
