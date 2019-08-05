@@ -52,7 +52,7 @@ public:
 
 private:
     float calculate_weighted_center_freq(uint8_t bin_start, uint8_t bin_max);
-    float calculate_simple_center_freq(uint8_t bin_start, uint8_t bin_max);
+    float calculate_simple_center_freq(uint8_t bin_max);
     float calculate_quinns_second_estimator_center_freq(uint8_t bin_max);
     float tau(float x);
     // downsampled gyro data circular buffer for frequency analysis

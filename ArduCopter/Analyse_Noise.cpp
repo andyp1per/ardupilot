@@ -68,7 +68,7 @@ const AP_Param::GroupInfo Analyse_Noise::var_info[] = {
 #define DYN_NOTCH_CALC_TICKS (XYZ_AXIS_COUNT * 2)
 
 #define SQRT_2_3 0.816496580927726f
-#define SQRT_6 2.449489742783178f
+#define SQRT_6   2.449489742783178f
 
 Analyse_Noise::Analyse_Noise()
 {
@@ -241,7 +241,7 @@ void Analyse_Noise::analyse_update()
 
         if (_fft_data[bin_max] > 0) {
             weighted_center_freq_hz = calculate_weighted_center_freq(bin_start, bin_max);
-            _simple_center_freq_hz[_update_axis] = calculate_simple_center_freq(bin_start, bin_max);
+            _simple_center_freq_hz[_update_axis] = calculate_simple_center_freq(bin_max);
             _quinns_center_freq_hz[_update_axis] = calculate_quinns_second_estimator_center_freq(bin_max);
         }
         else {
@@ -321,7 +321,7 @@ float Analyse_Noise::calculate_weighted_center_freq(uint8_t bin_start, uint8_t b
 }
 
 // Interpolate center frequency using simple center of bin
-float Analyse_Noise::calculate_simple_center_freq(uint8_t bin_start, uint8_t bin_max)
+float Analyse_Noise::calculate_simple_center_freq(uint8_t bin_max)
 {
     float weighted_center_freq_hz = 0;
     // idx was shifted by 1 to start at 1, not 0
@@ -333,19 +333,18 @@ float Analyse_Noise::calculate_simple_center_freq(uint8_t bin_start, uint8_t bin
 }
 
 // Interpolate center frequency using https://dspguru.com/dsp/howtos/how-to-interpolate-fft-peak/
-float Analyse_Noise::calculate_quinns_second_estimator_center_freq(uint8_t bin_max)
+float Analyse_Noise::calculate_quinns_second_estimator_center_freq(uint8_t k)
 {
-    uint8_t k = bin_max;
-    float divider = powf(_fft_data[k], 2.0);
-    float ap = (_fft_data[k + 1] * _fft_data[k]) / divider;
+    float ap = _fft_data[k + 1] / _fft_data[k];
     float dp = -ap / (1.0f - ap);
-    float am = (_fft_data[k - 1] * _fft_data[k]) / divider;
 
+    float am = _fft_data[k - 1] / _fft_data[k];
     float dm = am / (1.0f - am);
-    float d = (dp + dm) / 2.0f + tau(dp * dp) - tau(dm * dm);
 
-    float adjustedBinLocation = (float)k + d;
-    return adjustedBinLocation * _fft_resolution;
+    float d = (dp + dm) / 2.0f + tau(dp * dp) - tau(dm * dm);
+    d = constrain_float(d, -0.5f, 0.5f);
+    // -0.5 < d < 0.5 which is the fraction of the sample spacing about the center element
+    return ((float)k +0.5f + d) * _fft_resolution;
 }
 
 // Helper function used for Quinn's frequency estimation
@@ -355,5 +354,5 @@ float Analyse_Noise::tau(float x)
     float part1 = x + 1 - SQRT_2_3;
     float part2 = x + 1 + SQRT_2_3;
     float p2 = logf(part1 / part2);
-    return (1.0f / 4.0f * p1 - SQRT_6 / 24.0f * p2);
+    return ((1.0f / 4.0f) * p1 - (SQRT_6 / 24.0f) * p2);
 }
