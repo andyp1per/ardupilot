@@ -212,7 +212,12 @@ void Analyse_Noise::analyse_update()
     case STEP_ARM_CMPLX_MAG_F32: {
         // 8us
 #if CONFIG_HAL_BOARD != HAL_BOARD_SITL
-        arm_cmplx_mag_f32(_rfft_data, _fft_data, FFT_BIN_COUNT);
+        // General case for the magnitudes - see https://stackoverflow.com/questions/42299932/dsp-libraries-rfft-strange-results
+        // The frequency of each of those frequency components are given by k*fs/N
+        arm_cmplx_mag_f32(_rfft_data+2, _fft_data+1, FFT_BIN_COUNT - 1);
+        // Handle special cases
+        _fft_data[0]          = _rfft_data[0];
+        _fft_data[FFT_BIN_COUNT] = _rfft_data[1];
 #endif
         _update_step++;
         FALLTHROUGH;
@@ -324,10 +329,10 @@ float Analyse_Noise::calculate_weighted_center_freq(uint8_t bin_start, uint8_t b
 float Analyse_Noise::calculate_simple_center_freq(uint8_t bin_max)
 {
     float weighted_center_freq_hz = 0;
-    // idx was shifted by 1 to start at 1, not 0
+    // The frequency of each of those frequency components are given by k*fs/N, so first bin is DC.
     if (_fft_data[bin_max] > 0) {
-        // the index points at the center frequency of each bin so index 0 is actually 16.125Hz
-        weighted_center_freq_hz = bin_max * _fft_resolution + _fft_resolution / 2.0f;
+        // the index points at the center frequency of each bin so index 1 is actually 1 * 800 / 64 = 12.5Hz
+        weighted_center_freq_hz = (bin_max + 1) * _fft_resolution;
     }
     return weighted_center_freq_hz;
 }
@@ -342,9 +347,10 @@ float Analyse_Noise::calculate_quinns_second_estimator_center_freq(uint8_t k)
     float dm = am / (1.0f - am);
 
     float d = (dp + dm) / 2.0f + tau(dp * dp) - tau(dm * dm);
+    // When the side lobes are very close in magnitude to center d increases dramatically
     d = constrain_float(d, -0.5f, 0.5f);
     // -0.5 < d < 0.5 which is the fraction of the sample spacing about the center element
-    return ((float)k +0.5f + d) * _fft_resolution;
+    return ((float)k + 1.0f + d) * _fft_resolution;
 }
 
 // Helper function used for Quinn's frequency estimation
