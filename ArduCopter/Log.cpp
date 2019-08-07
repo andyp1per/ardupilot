@@ -537,7 +537,7 @@ const struct LogStructure Copter::log_structure[] = {
 #endif
     { LOG_CONTROL_TUNING_MSG, sizeof(log_Control_Tuning),
       "CTUN", "Qffffffefcfhh", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CR", "s----mmmmmmnn", "F----00B0BBBB" },
-    { LOG_FILTER_TUNING_MSG, sizeof(log_Filter_Tuning), 
+    { LOG_FILTER_TUNING_MSG, sizeof(log_Filter_Tuning),
       "FTUN", "QffffffBf", "TimeUS,ThO,ThH,MotPeakX,MotPeakY,MotPeakZ,BinE,Bin,DNtch", "s--zzz--z", "F--------" },
     { LOG_MOTBATT_MSG, sizeof(log_MotBatt),
       "MOTB", "Qffff",  "TimeUS,LiftMax,BatVolt,BatRes,ThLimit", "s-vw-", "F-00-" },
