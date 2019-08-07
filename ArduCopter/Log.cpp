@@ -494,8 +494,6 @@ struct PACKED log_Filter_Tuning {
     float    motor_peak_fft_x;
     float    motor_peak_fft_y;
     float    motor_peak_fft_z;
-    float    motor_peak_simple_fft_z;
-    float    motor_peak_quinns_fft_z;
     float    motor_peak_energy;
     float    dynamic_notch_freq;
 };
@@ -511,9 +509,7 @@ void Copter::Log_Write_Filter_Tuning()
         motor_peak_fft_x    : analyse_noise.get_noise_center_freq_hz().x,
         motor_peak_fft_y    : analyse_noise.get_noise_center_freq_hz().y,
         motor_peak_fft_z    : analyse_noise.get_noise_center_freq_hz().z,
-        motor_peak_simple_fft_z    : analyse_noise.get_simple_center_freq_hz().z,
-        motor_peak_quinns_fft_z    : analyse_noise.get_quinns_center_freq_hz().z,
-        motor_peak_energy      : analyse_noise.get_center_freq_energy().z,
+        motor_peak_energy   : analyse_noise.get_center_freq_energy().z,
         dynamic_notch_freq  : ins.get_gyro_dynamic_notch_center_freq_hz()
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
@@ -540,7 +536,7 @@ const struct LogStructure Copter::log_structure[] = {
     { LOG_CONTROL_TUNING_MSG, sizeof(log_Control_Tuning),
       "CTUN", "Qffffffefcfhh", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CR", "s----mmmmmmnn", "F----00B0BBBB" },
     { LOG_FILTER_TUNING_MSG, sizeof(log_Filter_Tuning),
-      "FTUN", "Qfffffffff", "TimeUS,ThO,ThH,MotPeakX,MotPeakY,MotPeakZ,MPSZ,MPQZ,BE,DNtch", "s--zzzz", "F------" },  
+      "FTUN", "Qfffffff", "TimeUS,ThO,ThH,MotPeakX,MotPeakY,MotPeakZ,BinE,DNtch", "s--zz", "F----" },  
     { LOG_MOTBATT_MSG, sizeof(log_MotBatt),
       "MOTB", "Qffff",  "TimeUS,LiftMax,BatVolt,BatRes,ThLimit", "s-vw-", "F-00-" },
     { LOG_EVENT_MSG, sizeof(log_Event),         
