@@ -363,6 +363,7 @@ class chibios(Board):
             '-mfloat-abi=hard',
             '-DCHIBIOS_BOARD_NAME="%s"' % self.name,
             '-DARM_MATH_CM4',
+            '-D__USE_CMSIS',
         ]
 
         if sys.platform == 'cygwin':
