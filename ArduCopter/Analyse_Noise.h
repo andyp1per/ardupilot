@@ -27,7 +27,7 @@
 #endif
 
 // max for F3 targets
-#define FFT_WINDOW_SIZE 64
+#define FFT_WINDOW_SIZE 32
 #define XYZ_AXIS_COUNT 3
 
 class Analyse_Noise
@@ -41,8 +41,6 @@ public:
     void analyse_update();
     void analyse_init(uint32_t target_looptime_us);
     Vector3f get_noise_center_freq_hz() const { return _center_freq_hz; }
-    Vector3f get_simple_center_freq_hz() const { return _simple_center_freq_hz; }
-    Vector3f get_quinns_center_freq_hz() const { return _quinns_center_freq_hz; }
     Vector3f get_center_freq_energy() const { return _center_freq_energy; }
 
     // a function called by the main thread at the main loop rate:
@@ -51,7 +49,6 @@ public:
     static const struct AP_Param::GroupInfo var_info[];
 
 private:
-    float calculate_weighted_center_freq(uint8_t bin_start, uint8_t bin_max);
     float calculate_simple_center_freq(uint8_t bin_max);
     float calculate_quinns_second_estimator_center_freq(uint8_t bin_max);
     float tau(float x);
@@ -73,9 +70,8 @@ private:
 #endif
 
     Vector3f _center_freq_hz;
-    Vector3f _simple_center_freq_hz;
-    Vector3f _quinns_center_freq_hz;
     Vector3f _prev_center_freq_hz;
+    float _multiplier;
     LowPassFilter2pFloat _detected_frequency_filter[XYZ_AXIS_COUNT];
 
     AP_Int16 _fft_sampling_rate_hz;

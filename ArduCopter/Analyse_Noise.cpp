@@ -56,10 +56,13 @@ const AP_Param::GroupInfo Analyse_Noise::var_info[] = {
 };
 
 // The FFT splits the frequency domain into an number of bins
-// A sampling frequency of 1000 and max frequency of 500 at a window size of 32 gives 16 frequency bins each 31.25Hz wide
-// Eg [0,31), [31,62), [62,93) etc
-// For a loop rate of 800Hz, 16 bins each 25Hz wide
-// Eg [0,25), [25,50), [50,75), [75,100)
+// A sampling frequency of 1000 and max frequency (Nyquist) of 500 at a window size of 32 gives 15 frequency bins each 31.25Hz wide
+// The first bin is used to store the DC and Nyquist values combined.
+// Eg [DC/Nyquist], [0,31), [31,62), [62,93) etc
+// For a loop rate of 800Hz, 15 bins each 25Hz wide
+// Eg [DC/Nyquist], [0,25), [25,50), [50,75), [75,100)
+// For a loop rate of 800Hz, window size of 64 give 31 bins each 12.5Hz wide
+// Eg [DC/Nyquist], [0,12), [12,25 [25,37), [37,50)
 // NB  FFT_WINDOW_SIZE is set to 32 in Analyse_Noise.h
 #define FFT_BIN_COUNT (FFT_WINDOW_SIZE / 2)
 // smoothing frequency for FFT centre frequency
@@ -72,20 +75,19 @@ const AP_Param::GroupInfo Analyse_Noise::var_info[] = {
 
 Analyse_Noise::Analyse_Noise()
 {
+    _multiplier = INT16_MAX/radians(2000);
     AP_Param::setup_object_defaults(this, var_info);
 }
 
 void Analyse_Noise::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
 {
     _ins = &ins;
-    // If we get at least 3 samples then use the default FFT sample frequency
-    // otherwise we need to calculate a FFT sample frequency to ensure we get 3 samples (gyro loops < 4K)
     const uint16_t gyro_loop_rate_hz = lrintf((1.0f / target_looptime_us) * 1e6f);
 
     _fft_sampling_rate_hz = MIN(gyro_loop_rate_hz, _fft_sampling_rate_hz);
     _fft_resolution = (float)_fft_sampling_rate_hz / FFT_WINDOW_SIZE;
-    _fft_start_bin = _dyn_notch_min_hz / lrintf(_fft_resolution);
-    _dyn_notch_max_ctr_hz = _fft_sampling_rate_hz / 2; //Nyquist
+    _fft_start_bin = (_dyn_notch_min_hz / lrintf(_fft_resolution)) + 1; // first bin is DC/Nyquist
+    _dyn_notch_max_ctr_hz = _fft_sampling_rate_hz / 2; // Nyquist
 
     for (uint8_t i = 0; i < FFT_WINDOW_SIZE; i++) {
         _hanning_window[i] = (0.5f - 0.5f * cosf(2 * M_PI * i / (FFT_WINDOW_SIZE - 1)));
@@ -120,9 +122,9 @@ void Analyse_Noise::analyse_init(uint32_t target_looptime_us)
 void Analyse_Noise::push_sample(const Vector3f& sample)
 {
     // fast sampling means that the raw gyro values have already been averaged over 8 samples
-    _downsampled_gyro_data[0][_circular_buffer_idx] = sample.x;
-    _downsampled_gyro_data[1][_circular_buffer_idx] = sample.y;
-    _downsampled_gyro_data[2][_circular_buffer_idx] = sample.z;
+    _downsampled_gyro_data[0][_circular_buffer_idx] = sample.x * _multiplier;
+    _downsampled_gyro_data[1][_circular_buffer_idx] = sample.y * _multiplier;
+    _downsampled_gyro_data[2][_circular_buffer_idx] = sample.z * _multiplier;
     _circular_buffer_idx = (_circular_buffer_idx + 1) % FFT_WINDOW_SIZE;
 
     // We need DYN_NOTCH_CALC_TICKS tick to update all axis with newly sampled value
@@ -169,6 +171,7 @@ void Analyse_Noise::analyse_update()
     };
 #if CONFIG_HAL_BOARD != HAL_BOARD_SITL
     arm_cfft_instance_f32 *Sint = &(_fft_instance.Sint);
+    Sint->fftLen = _fft_instance.fftLenRFFT / 2;
 #endif
 
     switch (_update_step) {
@@ -176,14 +179,17 @@ void Analyse_Noise::analyse_update()
 #if CONFIG_HAL_BOARD != HAL_BOARD_SITL
         switch (FFT_BIN_COUNT) {
         case 16:
+        case 128:
             // 16us
             arm_cfft_radix8by2_f32(Sint, _fft_data);
             break;
         case 32:
+        case 256:
             // 35us
             arm_cfft_radix8by4_f32(Sint, _fft_data);
             break;
         case 64:
+        case 512:
             // 70us
             arm_radix8_butterfly_f32(_fft_data, FFT_BIN_COUNT, Sint->pTwiddle, 1);
             break;
@@ -214,40 +220,25 @@ void Analyse_Noise::analyse_update()
 #if CONFIG_HAL_BOARD != HAL_BOARD_SITL
         // General case for the magnitudes - see https://stackoverflow.com/questions/42299932/dsp-libraries-rfft-strange-results
         // The frequency of each of those frequency components are given by k*fs/N
-        arm_cmplx_mag_f32(_rfft_data+2, _fft_data+1, FFT_BIN_COUNT - 1);
-        // Handle special cases
-        _fft_data[0]          = _rfft_data[0];
-        _fft_data[FFT_BIN_COUNT] = _rfft_data[1];
+        arm_cmplx_mag_f32(_rfft_data + 2, _fft_data + 1, FFT_BIN_COUNT-1);
+        _fft_data[0] = _rfft_data[0]; // DC
+        _fft_data[FFT_BIN_COUNT] = _rfft_data[1]; // Nyquist
+        _fft_data[FFT_BIN_COUNT + 1] = 0; // So that interpolation works correctly
 #endif
         _update_step++;
         FALLTHROUGH;
     }
     case STEP_CALC_FREQUENCIES: {
-        bool fft_increased = false;
-        uint32_t bin_max = 0;
-        uint8_t bin_start = 0;
-        //for bins after initial decline, identify start bin and max bin
-        for (uint8_t i = _fft_start_bin; i < FFT_BIN_COUNT; i++) {
-            if (fft_increased || (_fft_data[i] > _fft_data[i - 1])) {
-                if (!fft_increased) {
-                    bin_start = i; // first up-step bin
-                    fft_increased = true;
-                }
-            }
-        }
-
         float maxValue = 0;
-        arm_max_f32(_fft_data + _fft_start_bin, FFT_BIN_COUNT - _fft_start_bin, &maxValue, &bin_max);
-
+        uint32_t bin_max = 0;
+        arm_max_f32(_fft_data + _fft_start_bin, (FFT_BIN_COUNT + 1) - _fft_start_bin, &maxValue, &bin_max);
         bin_max += _fft_start_bin;
         _center_freq_energy[_update_axis] = maxValue;
 
         float weighted_center_freq_hz = 0;
 
         if (_fft_data[bin_max] > 0) {
-            weighted_center_freq_hz = calculate_weighted_center_freq(bin_start, bin_max);
-            _simple_center_freq_hz[_update_axis] = calculate_simple_center_freq(bin_max);
-            _quinns_center_freq_hz[_update_axis] = calculate_quinns_second_estimator_center_freq(bin_max);
+            weighted_center_freq_hz = calculate_quinns_second_estimator_center_freq(bin_max);
         }
         else {
             weighted_center_freq_hz = _prev_center_freq_hz[_update_axis];
@@ -262,12 +253,6 @@ void Analyse_Noise::analyse_update()
         // break;
     }
     case STEP_UPDATE_FILTERS: {
-        // 7us
-        // calculate cutoffFreq and notch Q, update notch filter  =1.8+((A2-150)*0.004)
-        if (!is_equal(_prev_center_freq_hz[_update_axis], _center_freq_hz[_update_axis])) {
-            //
-        }
-
         _update_axis = (_update_axis + 1) % XYZ_AXIS_COUNT;
         _update_step++;
         FALLTHROUGH;
@@ -289,42 +274,6 @@ void Analyse_Noise::analyse_update()
     _update_step = (_update_step + 1) % STEP_COUNT;
 }
 
-float Analyse_Noise::calculate_weighted_center_freq(uint8_t bin_start, uint8_t bin_max)
-{
-    // accumulate fft_sum and fft_weighted_sum from peak bin, and shoulder bins either side of peak
-    float cubed_data = _fft_data[bin_max] * _fft_data[bin_max] * _fft_data[bin_max];
-    float fft_sum = cubed_data;
-    float fft_weighted_sum = cubed_data * (bin_max + 1);
-    // accumulate upper shoulder
-    for (uint8_t i = bin_max; i < FFT_BIN_COUNT - 1; i++) {
-        if (_fft_data[i] > _fft_data[i + 1]) {
-            cubed_data = _fft_data[i] * _fft_data[i] * _fft_data[i];
-            fft_sum += cubed_data;
-            fft_weighted_sum += cubed_data * (i + 1);
-        }
-        else {
-            break;
-        }
-    }
-    // accumulate lower shoulder
-    for (uint8_t i = bin_max; i > bin_start + 1; i--) {
-        if (_fft_data[i] > _fft_data[i - 1]) {
-            cubed_data = _fft_data[i] * _fft_data[i] * _fft_data[i];
-            fft_sum += cubed_data;
-            fft_weighted_sum += cubed_data * (i + 1);
-        }
-        else {
-            break;
-        }
-    }
-    // get weighted center of relevant frequency range (this way we have a better resolution than 31.25Hz)
-    float fft_mean_index = 0;
-    // idx was shifted by 1 to start at 1, not 0
-    fft_mean_index = (fft_weighted_sum / fft_sum) - 1;
-    // the index points at the center frequency of each bin so index 0 is actually 16.125Hz
-    return fft_mean_index * _fft_resolution;
-}
-
 // Interpolate center frequency using simple center of bin
 float Analyse_Noise::calculate_simple_center_freq(uint8_t bin_max)
 {
@@ -332,7 +281,7 @@ float Analyse_Noise::calculate_simple_center_freq(uint8_t bin_max)
     // The frequency of each of those frequency components are given by k*fs/N, so first bin is DC.
     if (_fft_data[bin_max] > 0) {
         // the index points at the center frequency of each bin so index 1 is actually 1 * 800 / 64 = 12.5Hz
-        weighted_center_freq_hz = (bin_max + 1) * _fft_resolution;
+        weighted_center_freq_hz = (bin_max - 0.5f) * _fft_resolution;
     }
     return weighted_center_freq_hz;
 }
@@ -350,15 +299,15 @@ float Analyse_Noise::calculate_quinns_second_estimator_center_freq(uint8_t k)
     // When the side lobes are very close in magnitude to center d increases dramatically
     d = constrain_float(d, -0.5f, 0.5f);
     // -0.5 < d < 0.5 which is the fraction of the sample spacing about the center element
-    return ((float)k + 1.0f + d) * _fft_resolution;
+    return (((float)k - 0.5f) + d) * _fft_resolution;
 }
 
 // Helper function used for Quinn's frequency estimation
 float Analyse_Noise::tau(float x)
 {
-    float p1 = logf(3 * powf(x, 2.0f) + 6.0f * x + 1.0f);
-    float part1 = x + 1 - SQRT_2_3;
-    float part2 = x + 1 + SQRT_2_3;
+    float p1 = logf(3.0f * powf(x, 2.0f) + 6.0f * x + 1.0f);
+    float part1 = x + 1.0f - SQRT_2_3;
+    float part2 = x + 1.0f + SQRT_2_3;
     float p2 = logf(part1 / part2);
-    return ((1.0f / 4.0f) * p1 - (SQRT_6 / 24.0f) * p2);
+    return (0.25f * p1 - (SQRT_6 / 24.0f) * p2);
 }
