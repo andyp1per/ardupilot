@@ -127,6 +127,11 @@ bool AP_Arming_Copter::ins_checks(bool display_failure)
             check_failed(ARMING_CHECK_INS, display_failure, "gyros still settling");
             ret = false;
         }
+        // Check that the noise analyser works
+        if (!copter.analyse_noise.calibration_check()) {
+            check_failed(ARMING_CHECK_INS, display_failure, "FFT self-test failed");
+            ret = false;
+        };
     }
 
     return ret;
