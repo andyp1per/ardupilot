@@ -274,6 +274,9 @@ protected:
     float _last_harmonic_notch_center_freq_hz;
     float _last_harmonic_notch_bandwidth_hz;
     float _last_harmonic_notch_attenuation_dB;
+
+    uint16_t _last_circular_buffer_idx;
+    Vector3f _last_gyro_window[FFT_WINDOW_SIZE];
     
     void set_gyro_orientation(uint8_t instance, enum Rotation rotation) {
         _imu._gyro_orientation[instance] = rotation;
