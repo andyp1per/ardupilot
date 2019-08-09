@@ -147,3 +147,4 @@ RAM_RESERVE_START 256
 # keep ROMFS uncompressed as we don't have enough RAM
 # to uncompress the bootloader at runtime
 env ROMFS_UNCOMPRESSED True
+define HAL_WITH_DSP FALSE
