@@ -43,6 +43,7 @@ HAL_Empty::HAL_Empty() :
         &utilInstance,
         &opticalFlowDriver,
         &flashDriver,
+        nullptr,
     _member(new EmptyPrivateMember(123))
 {}
 
