@@ -486,6 +486,7 @@ void Copter::Log_Write_GuidedTarget(uint8_t target_type, const Vector3f& pos_tar
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
 
+#if GYROFFT_ENABLED == ENABLED
 struct PACKED log_Filter_Tuning {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -507,16 +508,16 @@ void Copter::Log_Write_Filter_Tuning()
         time_us             : AP_HAL::micros64(),
         throttle_out        : motors->get_throttle_out(),
         throttle_hover      : motors->get_throttle_hover(),
-        motor_peak_fft_x    : analyse_noise.get_noise_center_freq_hz().x,
-        motor_peak_fft_y    : analyse_noise.get_noise_center_freq_hz().y,
-        motor_peak_fft_z    : analyse_noise.get_noise_center_freq_hz().z,
-        motor_peak_energy   : analyse_noise.get_center_freq_energy().z,
-        motor_peak_bin      : analyse_noise.get_center_freq_bin().z,
+        motor_peak_fft_x    : gyro_fft.get_noise_center_freq_hz().x,
+        motor_peak_fft_y    : gyro_fft.get_noise_center_freq_hz().y,
+        motor_peak_fft_z    : gyro_fft.get_noise_center_freq_hz().z,
+        motor_peak_energy   : gyro_fft.get_center_freq_energy().z,
+        motor_peak_bin      : gyro_fft.get_center_freq_bin().z,
         dynamic_notch_freq  : ins.get_gyro_dynamic_notch_center_freq_hz()
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
-
+#endif
 
 // type and unit information can be found in
 // libraries/DataFlash/Logstructure.h; search for "log_Units" for
@@ -537,8 +538,10 @@ const struct LogStructure Copter::log_structure[] = {
 #endif
     { LOG_CONTROL_TUNING_MSG, sizeof(log_Control_Tuning),
       "CTUN", "Qffffffefcfhh", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CR", "s----mmmmmmnn", "F----00B0BBBB" },
+#if GYROFFT_ENABLED == ENABLED
     { LOG_FILTER_TUNING_MSG, sizeof(log_Filter_Tuning),
       "FTUN", "QffffffBf", "TimeUS,ThO,ThH,MotPeakX,MotPeakY,MotPeakZ,BinE,Bin,DNtch", "s--zzz--z", "F--------" },
+#endif
     { LOG_MOTBATT_MSG, sizeof(log_MotBatt),
       "MOTB", "Qffff",  "TimeUS,LiftMax,BatVolt,BatRes,ThLimit", "s-vw-", "F-00-" },
     { LOG_EVENT_MSG, sizeof(log_Event),         

@@ -985,9 +985,11 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @Path: ../libraries/AP_Follow/AP_Follow.cpp
     AP_SUBGROUPINFO(follow, "FOLL", 27, ParametersG2, AP_Follow),
 #endif
+#if GYROFFT_ENABLED == ENABLED
     // @Group: FFT_
-    // @Path: autotune_fft.cpp
-    AP_SUBGROUPPTR(analyse_noise_ptr, "FFT_",  28, ParametersG2, Analyse_Noise),
+    // @Path: ../libraries/AP_GyroFFT/AP_GyroFFT.cpp
+    AP_SUBGROUPPTR(gyro_fft_ptr, "FFT_",  28, ParametersG2, AP_GyroFFT),
+#endif
 
     AP_GROUPEND
 };
@@ -1016,7 +1018,9 @@ ParametersG2::ParametersG2(void)
 #if MODE_FOLLOW_ENABLED == ENABLED
     ,follow()
 #endif
-    ,analyse_noise_ptr(&copter.analyse_noise)
+#if GYROFFT_ENABLED == ENABLED
+    ,gyro_fft_ptr(&copter.gyro_fft)
+#endif
 {
     AP_Param::setup_object_defaults(this, var_info);
 }

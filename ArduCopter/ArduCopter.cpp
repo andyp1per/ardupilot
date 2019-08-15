@@ -149,7 +149,9 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK_CLASS(DataFlash_Class,      &copter.DataFlash,           periodic_tasks, 400, 300),
 #endif
     SCHED_TASK_CLASS(AP_InertialSensor,    &copter.ins,                 periodic,       400,  50),
-    SCHED_TASK_CLASS(Analyse_Noise,        &copter.analyse_noise,       analyse,        400,  100),
+#if GYROFFT_ENABLED == ENABLED
+    SCHED_TASK_CLASS(AP_GyroFFT,           &copter.gyro_fft,            update,         400, 100),
+#endif
     SCHED_TASK_CLASS(AP_Scheduler,         &copter.scheduler,           update_logging, 0.1,  75),
 #if RPM_ENABLED == ENABLED
     SCHED_TASK(rpm_update,            10,    200),
@@ -262,7 +264,9 @@ void Copter::fast_loop()
         Log_Sensor_Health();
     }
 
-    analyse_noise.sample_gyros();
+#if GYROFFT_ENABLED == ENABLED
+    gyro_fft.sample_gyros();
+#endif
 }
 
 // rc_loops - reads user input from transmitter/receiver

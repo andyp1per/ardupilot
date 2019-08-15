@@ -43,6 +43,7 @@
 //#define MODE_SPORT_ENABLED DISABLED               // disable sport mode support
 //#define MODE_THROW_ENABLED    DISABLED            // disable throw mode support
 //#define DEVO_TELEM_ENABLED DISABLED               // disable DEVO telemetry, if you don't use Walkera RX-707 (or newer) receivers
+//#define GYROFFT_ENABLED       DISABLED            // disable in-flight noise FFT analysis
 
 
 // features below are disabled by default on all boards
