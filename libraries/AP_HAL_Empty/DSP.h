@@ -21,5 +21,5 @@
 class Empty::DSP : public AP_HAL::DSP {
 public:
     virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate) override { return nullptr; };
-    virtual uint16_t fft_analyse(FFTWindowState* state, const FFTSampleWindow* samples, uint16_t buffer_index, uint16_t start_bin) override { return 0; };
+    virtual uint16_t fft_analyse(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t start_bin) override { return 0; };
 };
