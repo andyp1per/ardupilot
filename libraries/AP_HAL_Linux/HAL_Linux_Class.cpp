@@ -210,6 +210,7 @@ static OpticalFlow_Onboard opticalFlow;
 static Empty::OpticalFlow opticalFlow;
 #endif
 
+static Empty::DSP dspDriver;
 static Empty::Flash flashDriver;
 
 HAL_Linux::HAL_Linux() :
@@ -234,6 +235,7 @@ HAL_Linux::HAL_Linux() :
         &utilInstance,
         &opticalFlow,
         &flashDriver,
+        &dspDriver,
         nullptr)
 {}
 
