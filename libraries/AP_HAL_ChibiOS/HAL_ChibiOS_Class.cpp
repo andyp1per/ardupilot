@@ -84,7 +84,12 @@ static Empty::RCOutput rcoutDriver;
 static ChibiOS::Scheduler schedulerInstance;
 static ChibiOS::Util utilInstance;
 static Empty::OpticalFlow opticalFlowDriver;
+
+#if HAL_WITH_DSP
 static ChibiOS::DSP dspDriver;
+#else
+static Empty::DSP dspDriver;
+#endif
 
 #ifndef HAL_NO_FLASH_SUPPORT
 static ChibiOS::Flash flashDriver;
