@@ -25,9 +25,9 @@ DSP::FFTWindowState::FFTWindowState(uint16_t window_size, uint16_t sample_rate, 
     : _update_steps(update_steps),
     _window_size(window_size),
     _bin_count(window_size / 2), 
-    _bin_resolution((float)sample_rate / _bin_count)
+    _bin_resolution((float)sample_rate / (float)window_size)
 {
-    _freq_bins = new float[(uint16_t)_bin_count + 1]; // includes DC ad Nyquist components
+    _freq_bins = new float[window_size]; // includes DC ad Nyquist components
 }
 
 DSP::FFTWindowState::~FFTWindowState() 
