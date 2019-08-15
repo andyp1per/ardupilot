@@ -25,7 +25,7 @@
  */
 #include <stdint.h>
 #include <GCS_MAVLink/GCS.h>
-#include <AP_Logger/AP_Logger.h>
+#include <DataFlash/DataFlash.h>
 #include "Analyse_Noise.h"
 
 // table of user settable parameters
@@ -420,7 +420,7 @@ bool Analyse_Noise::calibration_check() {
         return false;
     }
 
-    if (AP_Logger::get_singleton()->log_while_disarmed()) {
+    if (DataFlash_Class::instance()->log_while_disarmed()) {
         return true;
     }
 
