@@ -586,7 +586,9 @@ public:
     // follow
     AP_Follow follow;
 #endif
-    void *analyse_noise_ptr;
+#if GYROFFT_ENABLED == ENABLED
+    void *gyro_fft_ptr;
+#endif
 };
 
 extern const AP_Param::Info        var_info[];

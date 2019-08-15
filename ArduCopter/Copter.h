@@ -83,6 +83,7 @@
 #include <AP_Arming/AP_Arming.h>
 #include <AP_SmartRTL/AP_SmartRTL.h>
 #include <AP_TempCalibration/AP_TempCalibration.h>
+#include <AP_GyroFFT/AP_GyroFFT.h>
 
 // Configuration
 #include "defines.h"
@@ -92,7 +93,6 @@
 #include "GCS_Copter.h"
 #include "AP_Rally.h"           // Rally point library
 #include "AP_Arming.h"
-#include "Analyse_Noise.h"
 
 // libraries which are dependent on #defines in defines.h and/or config.h
 #if BEACON_ENABLED == ENABLED
@@ -794,7 +794,9 @@ private:
     // Log.cpp
     void Log_Write_Optflow();
     void Log_Write_Control_Tuning();
+#if GYROFFT_ENABLED == ENABLED
     void Log_Write_Filter_Tuning();
+#endif
     void Log_Write_Performance();
     void Log_Write_Attitude();
     void Log_Write_EKF_POS();
@@ -963,7 +965,9 @@ private:
 #if AUTOTUNE_ENABLED == ENABLED
     ModeAutoTune mode_autotune;
 #endif
-    Analyse_Noise analyse_noise;
+#if GYROFFT_ENABLED == ENABLED
+    AP_GyroFFT gyro_fft;
+#endif
 #if MODE_BRAKE_ENABLED == ENABLED
     ModeBrake mode_brake;
 #endif

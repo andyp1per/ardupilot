@@ -262,7 +262,9 @@ void Copter::init_ardupilot()
 
     startup_INS_ground();
 
-    analyse_noise.init(scheduler.get_loop_period_us(), ins);
+#if GYROFFT_ENABLED == ENABLED
+    gyro_fft.init(scheduler.get_loop_period_us(), ins);
+#endif
 
 #ifdef ENABLE_SCRIPTING
     if (!g2.scripting.init()) {
