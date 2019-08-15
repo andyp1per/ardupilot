@@ -438,6 +438,30 @@ def write_mcu_config(f):
 
     lib = get_mcu_lib(mcu_type)
     build_info = lib.build
+
+    if mcu_series == "STM32F100":
+        cortex = "cortex-m3"        
+        env_vars['CPU_FLAGS'] = ["-mcpu=%s" % cortex]
+        env_vars['MCU'] = cortex
+        build_info['MCU'] = cortex
+    elif mcu_series.startswith("STM32F7"):
+        cortex = "cortex-m7"
+        env_vars['CPU_FLAGS'] = [ "-mcpu=%s" % cortex, "-mfpu=fpv4-sp-d16", "-mfloat-abi=hard"]
+        env_vars['MCU'] = cortex
+        build_info['MCU'] = cortex
+        if not args.bootloader:
+            env_vars['CPU_FLAGS'].append('-u_printf_float')
+            env_vars['CPU_FLAGS'].append('-DARM_MATH_CM7')
+            build_info['ENV_UDEFS'] = "-DCHPRINTF_USE_FLOAT=1"
+    else:
+        cortex = "cortex-m4"
+        env_vars['CPU_FLAGS'] = [ "-mcpu=%s" % cortex, "-mfpu=fpv4-sp-d16", "-mfloat-abi=hard"]
+        env_vars['MCU'] = cortex
+        build_info['MCU'] = cortex
+        if not args.bootloader:
+            env_vars['CPU_FLAGS'].append('-u_printf_float')
+            env_vars['CPU_FLAGS'].append('-DARM_MATH_CM4')
+            build_info['ENV_UDEFS'] = "-DCHPRINTF_USE_FLOAT=1"
     # setup build variables
     for v in build_info.keys():
         build_flags.append('%s=%s' % (v, build_info[v]))
