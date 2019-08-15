@@ -27,15 +27,23 @@ public:
     typedef float* FFTSampleWindow;
     class FFTWindowState {
     public:
+        // number of cycles to complete a FFT
         const uint8_t _update_steps;
+        // frequency width of a FFT bin
         const float _bin_resolution;
+        // number of FFT bins
         const uint16_t _bin_count;
+        // size of the FFT window
         const uint16_t _window_size;
+        // FFT data
         float* _freq_bins;
-        ~FFTWindowState();
+        virtual void reset() = 0;
+        virtual ~FFTWindowState();
         FFTWindowState(uint16_t window_size, uint16_t sample_rate, uint8_t update_steps);
     };
+    // initialise an FFT instance
     virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate) = 0;
-    virtual uint16_t fft_analyse(FFTWindowState* state, const FFTSampleWindow* samples, uint16_t buffer_index, uint16_t start_bin) = 0;
+    // perform one step of an FFT analysis
+    virtual uint16_t fft_analyse(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t start_bin) = 0;
 private:
 };

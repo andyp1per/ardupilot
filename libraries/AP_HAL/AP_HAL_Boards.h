@@ -232,6 +232,10 @@
 #define HAL_MINIMIZE_FEATURES       0
 #endif
 
+#ifndef HAL_WITH_DSP
+#define HAL_WITH_DSP !HAL_MINIMIZE_FEATURES
+#endif
+
 #ifndef HAL_OS_FATFS_IO
 #define HAL_OS_FATFS_IO 0
 #endif
