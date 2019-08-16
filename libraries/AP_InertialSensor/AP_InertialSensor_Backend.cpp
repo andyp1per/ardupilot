@@ -234,8 +234,8 @@ void AP_InertialSensor_Backend::_notify_new_gyro_raw_sample(uint8_t instance,
 
         // Capture the filtered gyro value before any dynamic filtering is applied
         _imu._last_gyro_static_filtered[instance] = _imu._gyro_filtered[instance];
-        _last_gyro_window[_last_circular_buffer_idx] = _imu._gyro_filtered[instance] * _imu._gyro_raw_sampling_multiplier[instance];
-        _last_circular_buffer_idx = (_last_circular_buffer_idx + 1) % FFT_WINDOW_SIZE;
+        _last_gyro_window[_num_gyro_samples++] = _imu._gyro_filtered[instance] * _imu._gyro_raw_sampling_multiplier[instance];
+        _num_gyro_samples = _num_gyro_samples % INS_MAX_GYRO_WINDOW_SAMPLES; // protect against overrun
 
         // apply the harmonic notch filter
         if (_gyro_harmonic_notch_enabled()) {
@@ -506,14 +506,18 @@ void AP_InertialSensor_Backend::update_gyro(uint8_t instance)
     }
     if (_imu._new_gyro_data[instance]) {
         _publish_gyro(instance, _imu._gyro_filtered[instance]);
-        uint8_t idx = _imu._circular_buffer_idx[instance];
-        while (idx != _last_circular_buffer_idx) {
-            _imu._gyro_window[instance][0][idx] = _last_gyro_window[idx].x;
-            _imu._gyro_window[instance][1][idx] = _last_gyro_window[idx].y;
-            _imu._gyro_window[instance][2][idx] = _last_gyro_window[idx].z;
-            idx = (idx + 1) % FFT_WINDOW_SIZE;
+        // copy the gyro samples from the backend to the frontend window
+        if (_imu._gyro_window_size > 0) {
+            uint8_t idx = _imu._circular_buffer_idx[instance]; 
+            for (uint8_t i = 0; i < _num_gyro_samples; i++) {
+                _imu._gyro_window[instance][0][idx] = _last_gyro_window[i].x;
+                _imu._gyro_window[instance][1][idx] = _last_gyro_window[i].y;
+                _imu._gyro_window[instance][2][idx] = _last_gyro_window[i].z;
+                idx = (idx + 1) % _imu._gyro_window_size;
+            }
+            _num_gyro_samples = 0;
+            _imu._circular_buffer_idx[instance] = idx;
         }
-        _imu._circular_buffer_idx[instance] = idx;
         _imu._gyro_static_filtered[instance] = _imu._last_gyro_static_filtered[instance];
         _imu._new_gyro_data[instance] = false;
     }
