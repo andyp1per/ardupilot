@@ -234,6 +234,8 @@ void AP_InertialSensor_Backend::_notify_new_gyro_raw_sample(uint8_t instance,
 
         // Capture the filtered gyro value before any dynamic filtering is applied
         _imu._last_gyro_static_filtered[instance] = _imu._gyro_filtered[instance];
+        _last_gyro_window[_last_circular_buffer_idx] = _imu._gyro_filtered[instance] * _imu._gyro_raw_sampling_multiplier[instance];
+        _last_circular_buffer_idx = (_last_circular_buffer_idx + 1) % FFT_WINDOW_SIZE;
 
         // apply the harmonic notch filter
         if (_gyro_harmonic_notch_enabled()) {
@@ -245,10 +247,6 @@ void AP_InertialSensor_Backend::_notify_new_gyro_raw_sample(uint8_t instance,
             _imu._gyro_notch_filter[instance].reset();
             _imu._gyro_harmonic_notch_filter[instance].reset();
         }
-        // Capture the filtered gyro value before any dynamic filtering is applied
-        _imu._last_gyro_static_filtered[instance] = _imu._gyro_filtered[instance];
-        _last_gyro_window[_last_circular_buffer_idx] = _imu._gyro_filtered[instance] * _imu._gyro_raw_sampling_multiplier[instance];
-        _last_circular_buffer_idx = (_last_circular_buffer_idx + 1) % FFT_WINDOW_SIZE;
 
         _imu._new_gyro_data[instance] = true;
         _sem->give();
