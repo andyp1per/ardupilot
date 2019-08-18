@@ -439,12 +439,7 @@ def write_mcu_config(f):
     lib = get_mcu_lib(mcu_type)
     build_info = lib.build
 
-    if mcu_series == "STM32F100":
-        cortex = "cortex-m3"        
-        env_vars['CPU_FLAGS'] = ["-mcpu=%s" % cortex]
-        env_vars['MCU'] = cortex
-        build_info['MCU'] = cortex
-    elif mcu_series.startswith("STM32F7"):
+    if mcu_type.startswith("STM32F7"):
         cortex = "cortex-m7"
         env_vars['CPU_FLAGS'] = [ "-mcpu=%s" % cortex, "-mfpu=fpv4-sp-d16", "-mfloat-abi=hard"]
         env_vars['MCU'] = cortex
