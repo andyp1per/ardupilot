@@ -17,7 +17,7 @@
 
 #include "AP_GyroFFT.h"
 #include <GCS_MAVLink/GCS.h>
-#include <AP_Logger/AP_Logger.h>
+#include <DataFlash/DataFlash.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -310,7 +310,7 @@ bool AP_GyroFFT::calibration_check() {
     }
 
     // larger windows make the the self-test run too long, triggering the watchdog
-    if (AP_Logger::get_singleton()->log_while_disarmed() || _window_size > FFT_DEFAULT_WINDOW_SIZE) {
+    if (DataFlash_Class::instance()->log_while_disarmed() || _window_size > FFT_DEFAULT_WINDOW_SIZE) {
         return true;
     }
 
