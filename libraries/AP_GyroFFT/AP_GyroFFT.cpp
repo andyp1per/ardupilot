@@ -61,7 +61,7 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
 
     // @Param: WINDOW_SIZE
     // @DisplayName: FFT window size
-    // @Description: Size of window to be used in FFT calculations. Takes effect on reboot. Must be a power of 2 and between 32 and 1024. 128 is not supported. Larger windows give greater frequency resolution but consume more CPU time and may not be appropriate for all vehicles.
+    // @Description: Size of window to be used in FFT calculations. Takes effect on reboot. Must be a power of 2 and between 32 and 1024. Larger windows give greater frequency resolution but consume more CPU time and may not be appropriate for all vehicles.
     // @Range: 32 1024
     // @User: Advanced
     // @RebootRequired: True
@@ -108,10 +108,6 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
     // check that we support the window size requested and it is a power of 2
     _window_size = 1 << lrintf(log2f(_window_size.get()));
     _window_size = constrain_int16(_window_size, 32, 1024);
-    // special case, 128 causes problems
-    if (_window_size == 128) {
-        _window_size = 64;
-    }
 
     // determine the FFT sample rate based on the gyro rate, loop rate and configuration
     if (_sample_mode == 0) {
@@ -214,9 +210,6 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
     // output at approx 1hz
    if (_output_count % (400 / _state->_update_steps) == 0)
    {
-        const uint32_t total_allocation = (4 + XYZ_AXIS_COUNT * INS_MAX_INSTANCES) * _window_size * sizeof(float);
-        gcs().send_text(MAV_SEVERITY_WARNING, "HAL: alloc %u bytes for DSP (free=%u)", (unsigned int)total_allocation, (unsigned int)hal.util->available_memory());
-
         gcs().send_text(MAV_SEVERITY_WARNING, "FFT: e:%.1f, b:%u, f:%.1f, r:%.1f",
                         _state->_freq_bins[max_bin], max_bin, _center_freq_hz[_update_axis], _ref_energy[_update_axis]);
         gcs().send_text(MAV_SEVERITY_WARNING, "[%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f]",
