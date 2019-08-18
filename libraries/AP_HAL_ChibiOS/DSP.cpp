@@ -191,20 +191,21 @@ void DSP::step_arm_cfft_f32(FFTWindowStateARM* fft)
     switch (fft->_bin_count) {
     case 16: // window 32
         // 16us (BF)
-        // 5us F7
+        //  5us F7,  7us F4
     case 128: // window 256
-        // 37us F7
+        // 37us F7, 81us F4
         arm_cfft_radix8by2_f32(Sint, fft->_freq_bins);
         break;
     case 32: // window 64
         // 35us (BF)
-        // 10us F7
+        // 10us F7,  24us F4
     case 256: // window 512
-        // 66us F7
+        // 66us F7, 174us F4
         arm_cfft_radix8by4_f32(Sint, fft->_freq_bins);
         break;
-    case 64: // This does not work - seems to take too long, or hangs
+    case 64: // window 128
         // 70us BF
+        // 21us F7, 34us F4
     case 512: // window 1024
         // 152us F7
         arm_radix8_butterfly_f32(fft->_freq_bins, fft->_bin_count, Sint->pTwiddle, 1);
@@ -219,11 +220,12 @@ void DSP::step_bitreversal(FFTWindowStateARM* fft)
 {
     TIMER_START(_bitreversal_timer);
     // 6us (BF)
-    // 2us 32 F7
-    // 3us 64 F7
-    // 10us 256 F7
-    // 22us 512 F7
-    // 42us 1024 F7
+    // 32   -  2us F7,  3us F4
+    // 64   -  3us F7,  6us F4
+    // 128  -  4us F7,  9us F4
+    // 256  - 10us F7, 20us F4
+    // 512  - 22us F7, 54us F4
+    // 1024 - 42us F7
     arm_bitreversal_32((uint32_t *)fft->_freq_bins, fft->_fft_instance.Sint.bitRevLength, fft->_fft_instance.Sint.pBitRevTable);
 
     TIMER_END(_bitreversal_timer);
@@ -234,11 +236,12 @@ void DSP::step_stage_rfft_f32(FFTWindowStateARM* fft)
 {
     TIMER_START(_stage_rfft_f32_timer);
     // 14us (BF)
-    // 2us 32 F7
-    // 5us 64 F7
-    // 21us 256 F7
-    // 35us 512 F7
-    // 76us 1024 F7
+    // 32   -  2us F7,  5us F4
+    // 64   -  5us F7, 16us F4
+    // 128  - 17us F7, 26us F4
+    // 256  - 21us F7, 70us F4
+    // 512  - 35us F7, 71us F4
+    // 1024 - 76us F7
     // this does not work in place => _freq_bins AND _rfft_data needed
     stage_rfft_f32(&fft->_fft_instance, fft->_freq_bins, fft->_rfft_data);
 
@@ -250,11 +253,12 @@ void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft)
 {
     TIMER_START(_arm_cmplx_mag_f32_timer);
     // 8us (BF)
-    // 4us 32 F7
-    // 7us 64 F7
-    // 29us 256 F7
-    // 55us 512 F7
-    // 131us 1024 F7
+    // 32   -   4us F7,  5us F4
+    // 64   -   7us F7, 13us F4
+    // 128  -  14us F7, 17us F4
+    // 256  -  29us F7, 28us F4
+    // 512  -  55us F7, 93us F4
+    // 1024 - 131us F7
     // General case for the magnitudes - see https://stackoverflow.com/questions/42299932/dsp-libraries-rfft-strange-results
     // The frequency of each of those frequency components are given by k*fs/N
     arm_cmplx_mag_f32(&fft->_rfft_data[2], &fft->_freq_bins[1], fft->_bin_count - 1);
@@ -290,7 +294,12 @@ uint16_t DSP::step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin)
 DSP::FFTWindowStateARM::FFTWindowStateARM(uint16_t window_size, uint16_t sample_rate, uint8_t update_steps)
     : AP_HAL::DSP::FFTWindowState::FFTWindowState(window_size, sample_rate, update_steps)
 {
-    arm_rfft_fast_init_f32(&_fft_instance, _window_size);
+    if (window_size == 128) { // This is not set correctly in the official 5.6.0
+        arm_rfft_128_fast_init_f32(&_fft_instance);
+    }
+    else {
+        arm_rfft_fast_init_f32(&_fft_instance, _window_size);
+    }
 
     _rfft_data = new float[_window_size];
     _hanning_window = new float[_window_size];
