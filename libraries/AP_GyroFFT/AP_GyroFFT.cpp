@@ -339,7 +339,7 @@ float AP_GyroFFT::self_test_bin_frequencies() {
 
 // perform FFT analysis of a single sine wave at the selected frequency
 float AP_GyroFFT::self_test(float frequency) {
-    static GyroWindow test_window;
+    static GyroWindow test_window = new float[_state->_window_size];
     for(uint16_t i = 0; i < _state->_window_size; i++) {
         test_window[i]= sinf(2.0f * M_PI * frequency * i / _fft_sampling_rate_hz) * 2000.0f;
     }
