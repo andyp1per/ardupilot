@@ -37,8 +37,16 @@ using namespace ChibiOS;
 #endif
 
 #define TICK_CYCLE 10
+#define SQRT_2_3 0.816496580927726f
+#define SQRT_6   2.449489742783178f
 
-AP_HAL::DSP::FFTWindowState* DSP::fft_init(uint16_t window_size, uint16_t sample_rate) 
+// The algorithms originally came from betaflight but are now substantially based on https://holometer.fnal.gov/GH_FFT.pdf
+// "Spectrum and spectral density estimation by the Discrete Fourier transform (DFT),
+// including a comprehensive list of window functions and some new flat-top windows." - Heinzel et. al
+// which is the best description of STFT processes that I have found. The betaflight implementation should not be used as a reference.
+// [HEINZ] references to equations and sections below refer to this paper.
+
+AP_HAL::DSP::FFTWindowState* DSP::fft_init(uint16_t window_size, uint16_t sample_rate)
 {
     uint8_t update_steps = 0;
     switch (window_size) {
@@ -261,10 +269,10 @@ void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft)
     // 1024 - 131us F7
     // General case for the magnitudes - see https://stackoverflow.com/questions/42299932/dsp-libraries-rfft-strange-results
     // The frequency of each of those frequency components are given by k*fs/N
+
     arm_cmplx_mag_f32(&fft->_rfft_data[2], &fft->_freq_bins[1], fft->_bin_count - 1);
     fft->_freq_bins[0] = abs(fft->_rfft_data[0]);               // DC
     fft->_freq_bins[fft->_bin_count] = abs(fft->_rfft_data[1]); // Nyquist
-    fft->_freq_bins[fft->_bin_count + 1] = 0;                   // So that interpolation works correctly
 
     TIMER_END(_arm_cmplx_mag_f32_timer);
     fft->_update_step++;
@@ -277,6 +285,10 @@ uint16_t DSP::step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin)
 
     arm_max_f32(&fft->_freq_bins[start_bin], (fft->_bin_count + 1) - start_bin, &max_value, &bin_max);
     bin_max += start_bin;
+    // It turns out that Jain is pretty good and works with only magnitudes, but Candan is significantly better
+    // if you have access to the complex values and Quinn is a little better still. Quinn is computationally 
+    // more expensive, but compared to the overall FFT cost seems worth it.
+    fft->_max_bin_freq = (bin_max + calculate_quinns_second_estimator(fft, bin_max)) * fft->_bin_resolution;
 
 #ifdef DEBUG_FFT
     _output_count++;
@@ -289,6 +301,67 @@ uint16_t DSP::step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin)
     fft->_update_step++;
 
     return bin_max;
+}
+
+// Interpolate center frequency using http://users.metu.edu.tr/ccandan//pub_dir/FineDopplerEst_IEEE_SPL_June2011.pdf
+float DSP::calculate_candans_estimator(FFTWindowStateARM* fft, uint8_t k_max)
+{
+    if (k_max <= 1 || k_max == fft->_bin_count) {
+        return 0.0f;
+    }
+
+    const uint16_t k_m1 = (k_max - 1) * 2;
+    const uint16_t k_p1 = (k_max + 1) * 2;
+    const uint16_t k = k_max * 2;
+
+    const float npr = fft->_rfft_data[k_m1] - fft->_rfft_data[k_p1];
+    const float npc = fft->_rfft_data[k_m1 + 1] - fft->_rfft_data[k_p1 + 1];
+    const float dpr = 2.0f * fft->_rfft_data[k] - fft->_rfft_data[k_m1] - fft->_rfft_data[k_p1];
+    const float dpc = 2.0f * fft->_rfft_data[k + 1] - fft->_rfft_data[k_m1 + 1] - fft->_rfft_data[k_p1 + 1];
+
+    const float realn = npr * dpr + npc * dpc;
+    const float reald = dpr * dpr + dpc * dpc;
+
+    const float piN = M_PI / 32.0f;
+
+    float d = (tanf(piN) / piN) * (realn / reald);
+
+    // -0.5 < d < 0.5 which is the fraction of the sample spacing about the center element
+    return d;
+}
+
+// Interpolate center frequency using https://dspguru.com/dsp/howtos/how-to-interpolate-fft-peak/
+float DSP::calculate_quinns_second_estimator(FFTWindowStateARM* fft, uint8_t k_max)
+{
+    if (k_max <= 1 || k_max == fft->_bin_count) {
+        return 0.0f;
+    }
+
+    const uint16_t k_m1 = (k_max - 1) * 2;
+    const uint16_t k_p1 = (k_max + 1) * 2;
+    const uint16_t k = k_max * 2;
+
+    float divider = fft->_rfft_data[k] * fft->_rfft_data[k] + fft->_rfft_data[k+1] * fft->_rfft_data[k+1];
+    float ap = (fft->_rfft_data[k_p1] * fft->_rfft_data[k] + fft->_rfft_data[k_p1 + 1] * fft->_rfft_data[k+1]) / divider;
+    float am = (fft->_rfft_data[k_m1] * fft->_rfft_data[k] + fft->_rfft_data[k_m1 + 1] * fft->_rfft_data[k + 1]) / divider;
+
+    const float dp = -ap / (1.0f - ap);
+    const float dm = am / (1.0f - am);
+
+    float d = (dp + dm) / 2.0f + tau(dp * dp) - tau(dm * dm);
+
+    // -0.5 < d < 0.5 which is the fraction of the sample spacing about the center element
+    return d;
+}
+
+// Helper function used for Quinn's frequency estimation
+float DSP::tau(float x)
+{
+    float p1 = logf(3.0f * powf(x, 2.0f) + 6.0f * x + 1.0f);
+    float part1 = x + 1.0f - SQRT_2_3;
+    float part2 = x + 1.0f + SQRT_2_3;
+    float p2 = logf(part1 / part2);
+    return (0.25f * p1 - (SQRT_6 / 24.0f) * p2);
 }
 
 DSP::FFTWindowStateARM::FFTWindowStateARM(uint16_t window_size, uint16_t sample_rate, uint8_t update_steps)
@@ -304,6 +377,7 @@ DSP::FFTWindowStateARM::FFTWindowStateARM(uint16_t window_size, uint16_t sample_
     _rfft_data = new float[_window_size];
     _hanning_window = new float[_window_size];
 
+    // https://holometer.fnal.gov/GH_FFT.pdf - equation 19
     for (uint16_t i = 0; i < _window_size; i++) {
         _hanning_window[i] = (0.5f - 0.5f * cosf(2 * M_PI * i / (_window_size - 1)));
     }
