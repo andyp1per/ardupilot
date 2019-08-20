@@ -41,14 +41,16 @@ using namespace ChibiOS;
 #define SQRT_2_3 0.816496580927726f
 #define SQRT_6   2.449489742783178f
 
-// The algorithms originally came from betaflight but are now substantially modified based on theory and experiment
+// The algorithms originally came from betaflight but are now substantially modified based on theory and experiment.
 // https://holometer.fnal.gov/GH_FFT.pdf "Spectrum and spectral density estimation by the Discrete Fourier transform (DFT),
 // including a comprehensive list of window functions and some new flat-top windows." - Heinzel et. al is a great reference
 // for understanding the underlying theory although we do not use spectral density here since time resolution is equally
 // important as frequency resolution
 
+// initialize the FFT state machine
 AP_HAL::DSP::FFTWindowState* DSP::fft_init(uint16_t window_size, uint16_t sample_rate)
 {
+    // determine how many steps based on window size
     uint8_t update_steps = 0;
     switch (window_size) {
     case 32:
@@ -67,16 +69,8 @@ AP_HAL::DSP::FFTWindowState* DSP::fft_init(uint16_t window_size, uint16_t sample
     return new DSP::FFTWindowStateARM(window_size, sample_rate, update_steps);
 }
 
-extern "C" {
-    void stage_rfft_f32(arm_rfft_fast_instance_f32 *S, float32_t *p, float32_t *pOut);
-    void arm_cfft_radix8by2_f32(arm_cfft_instance_f32 *S, float32_t *p1);
-    void arm_cfft_radix8by4_f32(arm_cfft_instance_f32 *S, float32_t *p1);
-    void arm_radix8_butterfly_f32(float32_t *pSrc, uint16_t fftLen, const float32_t *pCoef, uint16_t twidCoefModifier);
-    void arm_bitreversal_32(uint32_t *pSrc, const uint16_t bitRevLen, const uint16_t *pBitRevTable);
-}
-
 // Analyse FFT data contained in samples and return it in state->_freq_bins
-// This is a state-machine version of arm_rfft_fast_f32() such that each step can be processed separately as required
+// This is a state-machine version of CMSIS arm_rfft_fast_f32() such that each step can be processed separately as required
 // The number of cycles to reach a solution is based upon the window size as larger windows mean longer step times
 // Experimentally derived values are given as comments in the steps, differences between MCUs may mean more individual steps are required
 uint16_t DSP::fft_analyse(AP_HAL::DSP::FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t start_bin)
@@ -84,27 +78,52 @@ uint16_t DSP::fft_analyse(AP_HAL::DSP::FFTWindowState* state, const float* sampl
     FFTWindowStateARM* fft = (FFTWindowStateARM*)state;
     uint16_t bin_max = 0;
 
-    switch (fft->_window_size) {
-    case 32:
-        // 2 steps
-        bin_max = fft_analyse_window128(fft, samples, buffer_index, start_bin);
+    switch (fft->_update_steps) {
+    case 2:
+        bin_max = fft_analyse_window_2step(fft, samples, buffer_index, start_bin);
         break;
-    case 64:
-    case 128:
-        // 3 steps
-        bin_max = fft_analyse_window128(fft, samples, buffer_index, start_bin);
+    case 3:
+        bin_max = fft_analyse_window_3step(fft, samples, buffer_index, start_bin);
         break;
-    case 256:
-    case 512:
-    case 1024:
-        // 6 steps
-        bin_max = fft_analyse_window256(fft, samples, buffer_index, start_bin);
+    case 6:
+    default:
+        bin_max = fft_analyse_window_6step(fft, samples, buffer_index, start_bin);
         break;
     }
     return bin_max;
 }
 
-uint16_t DSP::fft_analyse_window32(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin)
+// create an instance of the FFT state machine
+DSP::FFTWindowStateARM::FFTWindowStateARM(uint16_t window_size, uint16_t sample_rate, uint8_t update_steps)
+    : AP_HAL::DSP::FFTWindowState::FFTWindowState(window_size, sample_rate, update_steps)
+{
+    // initialize the ARM data structure
+    if (window_size == 128) { // This is not set correctly in the official CMSIS 5.6.0
+        arm_rfft_128_fast_init_f32(&_fft_instance);
+    }
+    else {
+        arm_rfft_fast_init_f32(&_fft_instance, _window_size);
+    }
+
+    // allocate workspace
+    _rfft_data = new float[_window_size];
+    _hanning_window = new float[_window_size];
+
+    // create the Hanning window
+    // https://holometer.fnal.gov/GH_FFT.pdf - equation 19
+    for (uint16_t i = 0; i < _window_size; i++) {
+        _hanning_window[i] = (0.5f - 0.5f * cosf(2 * M_PI * i / (_window_size - 1)));
+    }
+}
+
+DSP::FFTWindowStateARM::~FFTWindowStateARM()
+{
+    delete[] _rfft_data;
+    delete[] _hanning_window;
+}
+
+// 2 step FFT analysis for short windows and fast processors
+uint16_t DSP::fft_analyse_window_2step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin)
 {
     uint32_t bin_max = 0;
 
@@ -125,7 +144,8 @@ uint16_t DSP::fft_analyse_window32(FFTWindowStateARM* fft, const float* samples,
     return bin_max;
 }
 
-uint16_t DSP::fft_analyse_window128(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin)
+// 3 step FFT analysis for longer windows and slower processors
+uint16_t DSP::fft_analyse_window_3step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin)
 {
     uint32_t bin_max = 0;
 
@@ -148,7 +168,8 @@ uint16_t DSP::fft_analyse_window128(FFTWindowStateARM* fft, const float* samples
     return bin_max;
 }
 
-uint16_t DSP::fft_analyse_window256(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin)
+// 6 step FFT analysis for the largest windows and slowest processors
+uint16_t DSP::fft_analyse_window_6step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin)
 {
     uint32_t bin_max = 0;
 
@@ -177,6 +198,15 @@ uint16_t DSP::fft_analyse_window256(FFTWindowStateARM* fft, const float* samples
     return bin_max;
 }
 
+extern "C" {
+    void stage_rfft_f32(arm_rfft_fast_instance_f32 *S, float32_t *p, float32_t *pOut);
+    void arm_cfft_radix8by2_f32(arm_cfft_instance_f32 *S, float32_t *p1);
+    void arm_cfft_radix8by4_f32(arm_cfft_instance_f32 *S, float32_t *p1);
+    void arm_radix8_butterfly_f32(float32_t *pSrc, uint16_t fftLen, const float32_t *pCoef, uint16_t twidCoefModifier);
+    void arm_bitreversal_32(uint32_t *pSrc, const uint16_t bitRevLen, const uint16_t *pBitRevTable);
+}
+
+// step 1: filter the incoming samples through a Hanning window
 void DSP::step_hanning(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index)
 {
     // 5us
@@ -190,6 +220,7 @@ void DSP::step_hanning(FFTWindowStateARM* fft, const float* samples, uint16_t bu
     fft->_update_step++;
 }
 
+// step 2: guts of complex fft processing
 void DSP::step_arm_cfft_f32(FFTWindowStateARM* fft)
 {
     arm_cfft_instance_f32 *Sint = &(fft->_fft_instance.Sint);
@@ -225,6 +256,7 @@ void DSP::step_arm_cfft_f32(FFTWindowStateARM* fft)
     fft->_update_step++;
 }
 
+// step 3: reverse the bits of the output
 void DSP::step_bitreversal(FFTWindowStateARM* fft)
 {
     TIMER_START(_bitreversal_timer);
@@ -241,6 +273,7 @@ void DSP::step_bitreversal(FFTWindowStateARM* fft)
     fft->_update_step++;
 }
 
+// step 4: convert from complex to real data
 void DSP::step_stage_rfft_f32(FFTWindowStateARM* fft)
 {
     TIMER_START(_stage_rfft_f32_timer);
@@ -258,6 +291,7 @@ void DSP::step_stage_rfft_f32(FFTWindowStateARM* fft)
     fft->_update_step++;
 }
 
+// step 5: find the magnitudes of the complex data
 void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft)
 {
     TIMER_START(_arm_cmplx_mag_f32_timer);
@@ -279,6 +313,7 @@ void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft)
     fft->_update_step++;
 }
     
+// step 6: find the bin with the highest energy and interpolate the required frequency
 uint16_t DSP::step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin)
 {
     TIMER_START(_step_calc_frequencies);
@@ -370,30 +405,6 @@ float DSP::tau(float x)
     return (0.25f * p1 - (SQRT_6 / 24.0f) * p2);
 }
 
-DSP::FFTWindowStateARM::FFTWindowStateARM(uint16_t window_size, uint16_t sample_rate, uint8_t update_steps)
-    : AP_HAL::DSP::FFTWindowState::FFTWindowState(window_size, sample_rate, update_steps)
-{
-    if (window_size == 128) { // This is not set correctly in the official 5.6.0
-        arm_rfft_128_fast_init_f32(&_fft_instance);
-    }
-    else {
-        arm_rfft_fast_init_f32(&_fft_instance, _window_size);
-    }
-
-    _rfft_data = new float[_window_size];
-    _hanning_window = new float[_window_size];
-
-    // https://holometer.fnal.gov/GH_FFT.pdf - equation 19
-    for (uint16_t i = 0; i < _window_size; i++) {
-        _hanning_window[i] = (0.5f - 0.5f * cosf(2 * M_PI * i / (_window_size - 1)));
-    }
-}
-
-DSP::FFTWindowStateARM::~FFTWindowStateARM()
-{
-    delete[] _rfft_data;
-    delete[] _hanning_window;
-}
 
 #ifdef DEBUG_FFT
  void DSP::StepTimer::time(uint32_t start) 

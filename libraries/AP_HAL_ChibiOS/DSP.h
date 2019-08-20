@@ -28,9 +28,12 @@
 // ChibiOS implementation of FFT analysis to run on STM32 processors
 class ChibiOS::DSP : public AP_HAL::DSP {
 public:
+    // initialise an FFT instance
     virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate) override;
+    // perform one step of an FFT analysis
     virtual uint16_t fft_analyse(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t start_bin) override;
 
+    // the stages of the FFT state machine
     enum {
         STEP_HANNING,
         STEP_ARM_CFFT_F32,
@@ -41,36 +44,44 @@ public:
         STEP_COUNT
     };
 
-public:
+    // STM32-based FFT state
     class FFTWindowStateARM : public AP_HAL::DSP::FFTWindowState {
         friend class ChibiOS::DSP;
 
     protected:
-        ~FFTWindowStateARM();
         FFTWindowStateARM(uint16_t window_size, uint16_t sample_rate, uint8_t update_steps);
+        ~FFTWindowStateARM();
+        // reset the state to the first step
         virtual void reset() override { _update_step = STEP_HANNING; }
 
     private:
-       // update state machine step information
+       // current update state machine step
         uint8_t _update_step = STEP_HANNING;
+        // underlying CMSIS data structure for FFT analysis
         arm_rfft_fast_instance_f32 _fft_instance;
+        // intermediate real FFT data
         float* _rfft_data;
-        // Hanning window, see https://en.wikipedia.org/wiki/Window_function#Hann_.28Hanning.29_window
+        // Hanning window for incoming samples, see https://en.wikipedia.org/wiki/Window_function#Hann_.28Hanning.29_window
         float* _hanning_window;  
     };
 
 private:
-    uint16_t fft_analyse_window32(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin);
-    uint16_t fft_analyse_window128(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin);
-    uint16_t fft_analyse_window256(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin);
-
+    // 2 step FFT analysis for short windows and fast processors
+    uint16_t fft_analyse_window_2step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin);
+    // 3 step FFT analysis for longer windows and slower processors
+    uint16_t fft_analyse_window_3step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin);
+    // 6 step FFT analysis for the largest windows and slowest processors
+    uint16_t fft_analyse_window_6step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin);
+    // following are the six independent steps for calculating an FFT
     void step_hanning(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index);
     void step_arm_cfft_f32(FFTWindowStateARM* fft);
     void step_bitreversal(FFTWindowStateARM* fft);
     void step_stage_rfft_f32(FFTWindowStateARM* fft);
     void step_arm_cmplx_mag_f32(FFTWindowStateARM* fft);
     uint16_t step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin);
+    // candan's frequency interpolator
     float calculate_candans_estimator(FFTWindowStateARM* fft, uint8_t k);
+    // quinn's frequency interpolator
     float calculate_quinns_second_estimator(FFTWindowStateARM* fft, uint8_t k);
     float tau(float x);
 
