@@ -37,6 +37,11 @@ public:
         const uint16_t _window_size;
         // FFT data
         float* _freq_bins;
+        // Estimate of FFT oeak frequency
+        float _max_bin_freq;
+        // ratio of standard deviation to average of the maximum bin yielding an estimate of how noisy the peak is
+        float _noise_estimate;
+
         virtual void reset() = 0;
         virtual ~FFTWindowState();
         FFTWindowState(uint16_t window_size, uint16_t sample_rate, uint8_t update_steps);
