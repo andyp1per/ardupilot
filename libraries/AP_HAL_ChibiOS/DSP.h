@@ -70,6 +70,9 @@ private:
     void step_stage_rfft_f32(FFTWindowStateARM* fft);
     void step_arm_cmplx_mag_f32(FFTWindowStateARM* fft);
     uint16_t step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin);
+    float calculate_candans_estimator(FFTWindowStateARM* fft, uint8_t k);
+    float calculate_quinns_second_estimator(FFTWindowStateARM* fft, uint8_t k);
+    float tau(float x);
 
 #ifdef DEBUG_FFT
     class StepTimer {
