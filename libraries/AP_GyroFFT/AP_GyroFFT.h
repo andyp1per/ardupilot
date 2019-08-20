@@ -37,10 +37,9 @@ public:
 
     // cycle through the FFT steps
     void update();
-    void calculate_noise(uint16_t bin_max);
 
     // get the detected noise frequency filtered at 50Hz
-    Vector3f get_noise_center_freq_hz() const { return _center_freq_hz_filtered; }
+    Vector3f get_noise_center_freq_hz() const { return _center_freq_hz; }
     Vector3f get_center_freq_energy() const { return _center_freq_energy; }
     Vector3<uint8_t> get_center_freq_bin() const { return _center_freq_bin; }
 
@@ -52,10 +51,11 @@ public:
     static AP_GyroFFT *get_singleton() { return _singleton; }
 
 private:
+    void calculate_noise(uint16_t bin_max);
+    void update_ref_energy();
     //  interpolate between frequency bins using various methods
     float calculate_simple_center_freq(uint8_t bin_max);
     float calculate_jains_estimator_center_freq(uint8_t k);
-    float calculate_quinns_second_estimator_center_freq(uint8_t bin_max);
     float tau(float x);
     float self_test_bin_frequencies();
     float self_test(float frequency);
@@ -65,20 +65,22 @@ private:
     // downsampled gyro data circular buffer for frequency analysis
     uint16_t _circular_buffer_idx;
     uint8_t _sample_count;
+    // number of sampeles needed before a new frame can be processed
+    uint16_t _samples_per_frame;
     float* _downsampled_gyro_data[XYZ_AXIS_COUNT];
     Vector3f _oversampled_gyro_accum;
 
     // update state machine step information
     uint8_t _update_axis;
+    // the number of cycles required to have a proper noise reference
+    uint8_t _noise_cycles;
     uint32_t _output_count;
     Vector3f _center_freq_energy;
     // noise base of the gyros
     Vector3f _ref_energy;
     // detected noise frequency
-    Vector3f _center_freq_hz_filtered;
     Vector3f _center_freq_hz;
     float _multiplier;
-    LowPassFilter2pFloat _detected_frequency_filter[XYZ_AXIS_COUNT];
 
     uint16_t _fft_sampling_rate_hz;
     uint8_t _fft_start_bin;
@@ -86,6 +88,7 @@ private:
     AP_Int16 _fft_min_hz;
     AP_Int16 _fft_max_hz;
     AP_Int16 _window_size;
+    AP_Float _window_overlap;
     AP_Int8 _enable;
     AP_Int8 _sample_mode;
     AP_InertialSensor* _ins;
