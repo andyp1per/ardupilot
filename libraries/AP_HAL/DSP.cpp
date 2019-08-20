@@ -14,6 +14,8 @@
  * 
  * Code by Andy Piper
  */
+
+#include <AP_Math/AP_Math.h>
 #include "AP_HAL.h"
 #include "DSP.h"
 
@@ -21,7 +23,7 @@ using namespace AP_HAL;
 
 extern const AP_HAL::HAL &hal;
 
-DSP::FFTWindowState::FFTWindowState(uint16_t window_size, uint16_t sample_rate, uint8_t update_steps) 
+DSP::FFTWindowState::FFTWindowState(uint16_t window_size, uint16_t sample_rate, uint8_t update_steps)
     : _update_steps(update_steps),
     _window_size(window_size),
     _bin_count(window_size / 2), 
