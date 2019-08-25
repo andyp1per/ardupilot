@@ -20,6 +20,7 @@
 #if HAL_WITH_DSP
 
 #include <AP_HAL/AP_HAL.h>
+#include <AP_Math/AP_Math.h>
 #include "DSP.h"
 #ifdef DEBUG_FFT
 #include <GCS_MAVLink/GCS.h>
@@ -40,11 +41,11 @@ using namespace ChibiOS;
 #define SQRT_2_3 0.816496580927726f
 #define SQRT_6   2.449489742783178f
 
-// The algorithms originally came from betaflight but are now substantially based on https://holometer.fnal.gov/GH_FFT.pdf
-// "Spectrum and spectral density estimation by the Discrete Fourier transform (DFT),
-// including a comprehensive list of window functions and some new flat-top windows." - Heinzel et. al
-// which is the best description of STFT processes that I have found. The betaflight implementation should not be used as a reference.
-// [HEINZ] references to equations and sections below refer to this paper.
+// The algorithms originally came from betaflight but are now substantially modified based on theory and experiment
+// https://holometer.fnal.gov/GH_FFT.pdf "Spectrum and spectral density estimation by the Discrete Fourier transform (DFT),
+// including a comprehensive list of window functions and some new flat-top windows." - Heinzel et. al is a great reference
+// for understanding the underlying theory although we do not use spectral density here since time resolution is equally
+// important as frequency resolution
 
 AP_HAL::DSP::FFTWindowState* DSP::fft_init(uint16_t window_size, uint16_t sample_rate)
 {
@@ -304,6 +305,7 @@ uint16_t DSP::step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin)
 }
 
 // Interpolate center frequency using http://users.metu.edu.tr/ccandan//pub_dir/FineDopplerEst_IEEE_SPL_June2011.pdf
+// This is slightly less accurate than Quinn, but much cheaper to calculate
 float DSP::calculate_candans_estimator(FFTWindowStateARM* fft, uint8_t k_max)
 {
     if (k_max <= 1 || k_max == fft->_bin_count) {
@@ -327,7 +329,7 @@ float DSP::calculate_candans_estimator(FFTWindowStateARM* fft, uint8_t k_max)
     float d = (tanf(piN) / piN) * (realn / reald);
 
     // -0.5 < d < 0.5 which is the fraction of the sample spacing about the center element
-    return d;
+    return constrain_float(d, -0.5f, 0.5f);
 }
 
 // Interpolate center frequency using https://dspguru.com/dsp/howtos/how-to-interpolate-fft-peak/
@@ -351,7 +353,7 @@ float DSP::calculate_quinns_second_estimator(FFTWindowStateARM* fft, uint8_t k_m
     float d = (dp + dm) / 2.0f + tau(dp * dp) - tau(dm * dm);
 
     // -0.5 < d < 0.5 which is the fraction of the sample spacing about the center element
-    return d;
+    return constrain_float(d, -0.5f, 0.5f);
 }
 
 // Helper function used for Quinn's frequency estimation
