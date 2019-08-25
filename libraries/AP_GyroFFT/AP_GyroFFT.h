@@ -80,10 +80,12 @@ private:
     Vector3f _ref_energy;
     // detected noise frequency
     Vector3f _center_freq_hz;
+    Vector3f _prev_center_freq_hz;
     float _multiplier;
 
     uint16_t _fft_sampling_rate_hz;
     uint8_t _fft_start_bin;
+    uint8_t _noise_needs_calibration : 3;
     Vector3<uint8_t> _center_freq_bin;
     AP_Int16 _fft_min_hz;
     AP_Int16 _fft_max_hz;

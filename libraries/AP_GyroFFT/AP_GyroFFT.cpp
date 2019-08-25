@@ -95,6 +95,7 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
 AP_GyroFFT::AP_GyroFFT()
 {
     _multiplier = 2000.0f / radians(2000); // scale from radian gyro output back to degrees
+    _noise_needs_calibration = 0x07;
     AP_Param::setup_object_defaults(this, var_info);
 
     if (_singleton != nullptr) {
@@ -211,12 +212,16 @@ void AP_GyroFFT::update()
 
 // calculate noise frequencies from FFT data provided by the HAL subsystem
 void AP_GyroFFT::update_ref_energy() {
+    if (!_noise_needs_calibration) {
+        return;
+    }
     // baseline the noise floor by averaging all the bins, this avoids detecting noise as a signal
     if (_noise_cycles == 0 && is_zero(_ref_energy[_update_axis])) {
         for (uint8_t i = 1; i < _state->_bin_count; i++) {
-            _ref_energy[_update_axis] +=  _state->_freq_bins[i];
+            _ref_energy[_update_axis] += _state->_freq_bins[i];
         }
         _ref_energy[_update_axis] = _ref_energy[_update_axis] * 100.0f / (_state->_bin_count - 1);
+        _noise_needs_calibration &= ~(1 << _update_axis);
     }
     else if (_noise_cycles > 0) {
         _noise_cycles--;
@@ -231,14 +236,22 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
 
     float weighted_center_freq_hz = 0;
 
-    // if the bin energy is above the noise threshold then record it
+    // if the bin energy is above the noise threshold then we have a signal
     if (_state->_freq_bins[max_bin] > _ref_energy[_update_axis]) {
-        weighted_center_freq_hz = _state->_max_bin_freq;
+        weighted_center_freq_hz = MAX(_state->_max_bin_freq, (float)_fft_min_hz);
+        _prev_center_freq_hz[_update_axis] = _center_freq_hz[_update_axis];
     }
+    // if we failed to find a signal, but the last cycle had one then use that
+    else if (_center_freq_hz[_update_axis] > _fft_min_hz
+        && _prev_center_freq_hz[_update_axis] > 0.0f) {
+        weighted_center_freq_hz = _center_freq_hz[_update_axis];
+        _prev_center_freq_hz[_update_axis] = 0.0f;
+    }
+    // we failed to find a signal for more than two cycles
     else {
         weighted_center_freq_hz = _fft_min_hz;
+        _prev_center_freq_hz[_update_axis] = _center_freq_hz[_update_axis];
     }
-    weighted_center_freq_hz = MAX(weighted_center_freq_hz, (float)_fft_min_hz);
     _center_freq_hz[_update_axis] = weighted_center_freq_hz;
 
 #ifdef DEBUG_FFT
@@ -303,14 +316,14 @@ bool AP_GyroFFT::calibration_check() {
     }
 
     // larger windows make the the self-test run too long, triggering the watchdog
-    if (DataFlash_Class::instance()->log_while_disarmed() || _window_size > FFT_DEFAULT_WINDOW_SIZE * 2) {
+    if (DataFlash_Class::instance()->log_while_disarmed()
+        || _window_size > FFT_DEFAULT_WINDOW_SIZE * 2
+        || _noise_needs_calibration) {
         return true;
     }
 
     const Vector3f ref_energy = _ref_energy;
-
     float max_divergence = self_test_bin_frequencies();
-
     _ref_energy = ref_energy;
 
     if (max_divergence > _state->_bin_resolution / 2) {
