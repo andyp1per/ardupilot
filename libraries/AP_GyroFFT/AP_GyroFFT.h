@@ -46,6 +46,7 @@ public:
     // a function called by the main thread at the main loop rate:
     void sample_gyros();
     bool calibration_check();
+    AP_Int8 _track_mode;
 
     static const struct AP_Param::GroupInfo var_info[];
     static AP_GyroFFT *get_singleton() { return _singleton; }
