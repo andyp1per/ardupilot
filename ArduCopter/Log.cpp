@@ -492,12 +492,14 @@ struct PACKED log_Filter_Tuning {
     uint64_t time_us;
     float    throttle_out;
     float    throttle_hover;
+    float    motor_peak_fft_avg;
     float    motor_peak_fft_x;
     float    motor_peak_fft_y;
     float    motor_peak_fft_z;
     float    motor_peak_energy;
     uint8_t  motor_peak_bin;
     float    dynamic_notch_freq;
+    float    throttle_notch_freq;
 };
 
 // Write a filter tuning packet
@@ -508,12 +510,14 @@ void Copter::Log_Write_Filter_Tuning()
         time_us             : AP_HAL::micros64(),
         throttle_out        : motors->get_throttle_out(),
         throttle_hover      : motors->get_throttle_hover(),
+        motor_peak_fft_avg  : (gyro_fft.get_noise_center_freq_hz().x + gyro_fft.get_noise_center_freq_hz().y + gyro_fft.get_noise_center_freq_hz().z)/3.0f,
         motor_peak_fft_x    : gyro_fft.get_noise_center_freq_hz().x,
         motor_peak_fft_y    : gyro_fft.get_noise_center_freq_hz().y,
         motor_peak_fft_z    : gyro_fft.get_noise_center_freq_hz().z,
         motor_peak_energy   : gyro_fft.get_center_freq_energy().z,
         motor_peak_bin      : gyro_fft.get_center_freq_bin().z,
-        dynamic_notch_freq  : ins.get_gyro_dynamic_notch_center_freq_hz()
+        dynamic_notch_freq  : ins.get_gyro_dynamic_notch_center_freq_hz(),
+        throttle_notch_freq : attitude_control->get_notch_freq_scaled(ins.get_gyro_harmonic_notch_center_freq_hz(), ins.get_gyro_harmonic_notch_reference())
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
@@ -540,7 +544,7 @@ const struct LogStructure Copter::log_structure[] = {
       "CTUN", "Qffffffefcfhh", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CR", "s----mmmmmmnn", "F----00B0BBBB" },
 #if GYROFFT_ENABLED == ENABLED
     { LOG_FILTER_TUNING_MSG, sizeof(log_Filter_Tuning),
-      "FTUN", "QffffffBf", "TimeUS,ThO,ThH,MotPeakX,MotPeakY,MotPeakZ,BinE,Bin,DNtch", "s--zzz--z", "F--------" },
+      "FTUN", "QffffffffBf", "TimeUS,ThO,ThH,MotPkAvg,MotPkX,MotPkY,MotPkZ,BinE,Bin,DNtch,ThF", "s--zzzz--zz", "F----------" },
 #endif
     { LOG_MOTBATT_MSG, sizeof(log_MotBatt),
       "MOTB", "Qffff",  "TimeUS,LiftMax,BatVolt,BatRes,ThLimit", "s-vw-", "F-00-" },
