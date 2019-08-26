@@ -96,6 +96,8 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
 
 #define SQRT_2_3 0.816496580927726f
 #define SQRT_6   2.449489742783178f
+// Maximum tolerated number of cycles with missing signal
+#define FFT_MAX_MISSED_UPDATES 3
 
 //#define DEBUG_FFT
 
@@ -240,9 +242,18 @@ void AP_GyroFFT::update_ref_energy() {
     }
 }
 
+// Return an average center frequency weighted by bin energy
 float AP_GyroFFT::get_weighted_noise_center_freq_hz() const
 {
-    return _center_freq_hz_filtered * _center_freq_energy / (_center_freq_energy.x + _center_freq_energy.y + _center_freq_energy.z);
+    if (!_center_freq_energy.is_nan()
+        && !is_zero(_center_freq_energy.x)
+        && !is_zero(_center_freq_energy.y)
+        && !is_zero(_center_freq_energy.z)) {
+        return _center_freq_hz_filtered * _center_freq_energy / (_center_freq_energy.x + _center_freq_energy.y + _center_freq_energy.z);
+    }
+    else {
+        return (_center_freq_hz_filtered.x + _center_freq_hz_filtered.y + _center_freq_hz_filtered.z) / 3.0f;
+    }
 }
 
 // calculate noise frequencies from FFT data provided by the HAL subsystem
@@ -253,34 +264,33 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
     float weighted_center_freq_hz = 0;
 
     // if the bin energy is above the noise threshold then we have a signal
-    if (_state->_freq_bins[max_bin] > _ref_energy[_update_axis]) {
+    if (!isnan(_state->_freq_bins[max_bin]) && _state->_freq_bins[max_bin] > _ref_energy[_update_axis]) {
+        _center_freq_energy[_update_axis] =_state->_freq_bins[max_bin];
         weighted_center_freq_hz = MAX(_state->_max_bin_freq, (float)_fft_min_hz);
-        _prev_center_freq_hz[_update_axis] = _center_freq_hz[_update_axis];
-        _center_freq_energy[_update_axis] = _state->_freq_bins[max_bin];
+        _center_freq_hz[_update_axis] = weighted_center_freq_hz;
+        _missed_cycles = 0;
     }
-    // if we failed to find a signal, but the last cycle had one then use that
-    else if (_center_freq_hz[_update_axis] > _fft_min_hz
-        && _prev_center_freq_hz[_update_axis] > 0.0f) {
+    // if we failed to find a signal, carry on using the previous reading
+    else if (_missed_cycles++ < FFT_MAX_MISSED_UPDATES) {
         weighted_center_freq_hz = _center_freq_hz[_update_axis];
-        _prev_center_freq_hz[_update_axis] = 0.0f;
-        // leave energy from last time
+        // Keep the previous center frequency and energy
     }
-    // we failed to find a signal for more than two cycles
+    // we failed to find a signal for more than FFT_MAX_MISSED_UPDATES cycles
     else {
         weighted_center_freq_hz = _fft_min_hz;
-        _prev_center_freq_hz[_update_axis] = _center_freq_hz[_update_axis];
+        _center_freq_hz[_update_axis] = _fft_min_hz;
         _center_freq_energy[_update_axis] = 0.0f;
     }
-    _center_freq_hz[_update_axis] = weighted_center_freq_hz;
-    _center_freq_hz_filtered[_update_axis] = _center_freq_filter[_update_axis].apply(_center_freq_hz[_update_axis]);
+
+    _center_freq_hz_filtered[_update_axis] = _center_freq_filter[_update_axis].apply(weighted_center_freq_hz);
 
 #ifdef DEBUG_FFT
     _output_count++;
     // output at approx 1hz
    if (_output_count % (400 / _state->_update_steps) == 0)
    {
-        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: e:%.1f, b:%u, f:%.1f, r:%.1f, dest:%.1f",
-                        _state->_freq_bins[max_bin], max_bin, _center_freq_hz[_update_axis], _ref_energy[_update_axis], _state->_max_bin_freq);
+        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: e:%.1f, b:%u, f:%.1f, fr:%.1f, r:%.1f, d:%.1f",
+                        _state->_freq_bins[max_bin], max_bin, _center_freq_hz_filtered[_update_axis], _center_freq_hz[_update_axis], _ref_energy[_update_axis], _state->_max_bin_freq);
         gcs().send_text(MAV_SEVERITY_WARNING, "[%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f]",
                         _state->_freq_bins[0], _state->_freq_bins[1], _state->_freq_bins[2], _state->_freq_bins[3], _state->_freq_bins[4], _state->_freq_bins[5], _state->_freq_bins[6], _state->_freq_bins[7],
                         _state->_freq_bins[8], _state->_freq_bins[9], _state->_freq_bins[10], _state->_freq_bins[11], _state->_freq_bins[12], _state->_freq_bins[13], _state->_freq_bins[14], _state->_freq_bins[15]);

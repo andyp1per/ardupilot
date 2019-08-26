@@ -38,9 +38,11 @@ public:
     // cycle through the FFT steps
     void update();
 
-    // get the detected noise frequency filtered at 50Hz
+    // get the detected noise frequency filtered at 1/3 the update rate
     Vector3f get_noise_center_freq_hz() const { return _center_freq_hz_filtered; }
+    Vector3f get_noise_ref_energy() const { return _ref_energy; }
     float get_weighted_noise_center_freq_hz() const;
+    Vector3f get_raw_noise_center_freq_hz() const { return _center_freq_hz; }
     Vector3f get_center_freq_energy() const { return _center_freq_energy; }
     Vector3<uint8_t> get_center_freq_bin() const { return _center_freq_bin; }
 
@@ -85,11 +87,11 @@ private:
     // detected noise frequency
     Vector3f _center_freq_hz;
     Vector3f _center_freq_hz_filtered;
-    Vector3f _prev_center_freq_hz;
     float _multiplier;
 
     uint16_t _fft_sampling_rate_hz;
     uint8_t _fft_start_bin;
+    uint8_t _missed_cycles;
     uint8_t _noise_needs_calibration : 3;
     Vector3<uint8_t> _center_freq_bin;
     AP_Int16 _fft_min_hz;
