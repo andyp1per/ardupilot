@@ -496,10 +496,23 @@ struct PACKED log_Filter_Tuning {
     float    motor_peak_fft_x;
     float    motor_peak_fft_y;
     float    motor_peak_fft_z;
-    float    motor_peak_energy;
-    uint8_t  motor_peak_bin;
     float    dynamic_notch_freq;
     float    throttle_notch_freq;
+    float    raw_motor_peak_fft_x;
+    float    raw_motor_peak_fft_y;
+    float    raw_motor_peak_fft_z;
+};
+
+struct PACKED log_Filter_Tuning2 {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    float    motor_peak_energy_x;
+    float    motor_peak_energy_y;
+    float    motor_peak_energy_z;
+    float    motor_noise_ref_x;
+    float    motor_noise_ref_y;
+    float    motor_noise_ref_z;
+    uint8_t  motor_peak_bin;
 };
 
 // Write a filter tuning packet
@@ -514,12 +527,25 @@ void Copter::Log_Write_Filter_Tuning()
         motor_peak_fft_x    : gyro_fft.get_noise_center_freq_hz().x,
         motor_peak_fft_y    : gyro_fft.get_noise_center_freq_hz().y,
         motor_peak_fft_z    : gyro_fft.get_noise_center_freq_hz().z,
-        motor_peak_energy   : gyro_fft.get_center_freq_energy().z,
-        motor_peak_bin      : gyro_fft.get_center_freq_bin().z,
         dynamic_notch_freq  : ins.get_gyro_dynamic_notch_center_freq_hz(),
-        throttle_notch_freq : attitude_control->get_notch_freq_scaled(ins.get_gyro_harmonic_notch_center_freq_hz(), ins.get_gyro_harmonic_notch_reference())
+        throttle_notch_freq : attitude_control->get_notch_freq_scaled(ins.get_gyro_harmonic_notch_center_freq_hz(), ins.get_gyro_harmonic_notch_reference()),
+        raw_motor_peak_fft_x: gyro_fft.get_raw_noise_center_freq_hz().x,
+        raw_motor_peak_fft_y: gyro_fft.get_raw_noise_center_freq_hz().y,
+        raw_motor_peak_fft_z: gyro_fft.get_raw_noise_center_freq_hz().z
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
+    struct log_Filter_Tuning2 pkt2 = {
+        LOG_PACKET_HEADER_INIT(LOG_FILTER_TUNING_MSG2),
+        time_us             : AP_HAL::micros64(),
+        motor_peak_energy_x : gyro_fft.get_center_freq_energy().x,
+        motor_peak_energy_y : gyro_fft.get_center_freq_energy().y,
+        motor_peak_energy_z : gyro_fft.get_center_freq_energy().z,
+        motor_noise_ref_x   : gyro_fft.get_noise_ref_energy().x,
+        motor_noise_ref_y   : gyro_fft.get_noise_ref_energy().y,
+        motor_noise_ref_z   : gyro_fft.get_noise_ref_energy().z,
+        motor_peak_bin      : gyro_fft.get_center_freq_bin().z
+    };
+    DataFlash.WriteBlock(&pkt2, sizeof(pkt2));
 }
 #endif
 
@@ -544,7 +570,9 @@ const struct LogStructure Copter::log_structure[] = {
       "CTUN", "Qffffffefcfhh", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CR", "s----mmmmmmnn", "F----00B0BBBB" },
 #if GYROFFT_ENABLED == ENABLED
     { LOG_FILTER_TUNING_MSG, sizeof(log_Filter_Tuning),
-      "FTUN", "QfffffffBff", "TimeUS,ThO,ThH,MotPkAvg,MotPkX,MotPkY,MotPkZ,BinE,Bin,DNtch,ThF", "s--zzzz--zz", "F----------" },
+      "FTUN", "Qffffffff", "TimeUS,ThO,ThH,PkAvg,PkX,PkY,PkZ,DnF,ThF,RwPkX,RwPkY,RwPkZ", "s--zzzzzzzzz", "F-----------" },
+    { LOG_FILTER_TUNING_MSG2, sizeof(log_Filter_Tuning2),
+      "FTU2", "QffffffB", "TimeUS,EnX,EnY,EnZ,RfX,RfY,RfZ,Bin", "s-------", "F-------" },
 #endif
     { LOG_MOTBATT_MSG, sizeof(log_MotBatt),
       "MOTB", "Qffff",  "TimeUS,LiftMax,BatVolt,BatRes,ThLimit", "s-vw-", "F-00-" },
