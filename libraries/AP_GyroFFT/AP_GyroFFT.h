@@ -39,7 +39,8 @@ public:
     void update();
 
     // get the detected noise frequency filtered at 50Hz
-    Vector3f get_noise_center_freq_hz() const { return _center_freq_hz; }
+    Vector3f get_noise_center_freq_hz() const { return _center_freq_hz_filtered; }
+    float get_weighted_noise_center_freq_hz() const;
     Vector3f get_center_freq_energy() const { return _center_freq_energy; }
     Vector3<uint8_t> get_center_freq_bin() const { return _center_freq_bin; }
 
@@ -77,10 +78,13 @@ private:
     uint8_t _noise_cycles;
     uint32_t _output_count;
     Vector3f _center_freq_energy;
+    // Smoothing filter on the output
+    LowPassFilter2pFloat _center_freq_filter[XYZ_AXIS_COUNT];
     // noise base of the gyros
     Vector3f _ref_energy;
     // detected noise frequency
     Vector3f _center_freq_hz;
+    Vector3f _center_freq_hz_filtered;
     Vector3f _prev_center_freq_hz;
     float _multiplier;
 

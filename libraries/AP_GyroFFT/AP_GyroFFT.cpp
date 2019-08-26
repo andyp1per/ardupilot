@@ -151,9 +151,14 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
 
     _fft_start_bin = MAX(lrintf((float)_fft_min_hz.get() / _state->_bin_resolution), 1);
 
+    // The update rate for the output
+    const float output_rate = _fft_sampling_rate_hz / _window_overlap;
     // establish suitable defaults
     for (uint8_t axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
         _center_freq_hz[axis] = _fft_min_hz;
+        _center_freq_hz_filtered[axis] = _fft_min_hz;
+        // Calculate low-pass filter characteristics based on overlap size
+        _center_freq_filter[axis].set_cutoff_frequency(output_rate, output_rate / 3.0f);
     }
 
     // the number of cycles required to have a proper noise reference
@@ -235,6 +240,11 @@ void AP_GyroFFT::update_ref_energy() {
     }
 }
 
+float AP_GyroFFT::get_weighted_noise_center_freq_hz() const
+{
+    return _center_freq_hz_filtered * _center_freq_energy / (_center_freq_energy.x + _center_freq_energy.y + _center_freq_energy.z);
+}
+
 // calculate noise frequencies from FFT data provided by the HAL subsystem
 void AP_GyroFFT::calculate_noise(uint16_t max_bin)
 {
@@ -260,6 +270,7 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
         _prev_center_freq_hz[_update_axis] = _center_freq_hz[_update_axis];
     }
     _center_freq_hz[_update_axis] = weighted_center_freq_hz;
+    _center_freq_hz_filtered[_update_axis] = _center_freq_filter[_update_axis].apply(_center_freq_hz[_update_axis]);
 
 #ifdef DEBUG_FFT
     _output_count++;
