@@ -248,7 +248,6 @@ float AP_GyroFFT::get_weighted_noise_center_freq_hz() const
 // calculate noise frequencies from FFT data provided by the HAL subsystem
 void AP_GyroFFT::calculate_noise(uint16_t max_bin)
 {
-    _center_freq_energy[_update_axis] = _state->_freq_bins[max_bin];
     _center_freq_bin[_update_axis] = max_bin;
 
     float weighted_center_freq_hz = 0;
@@ -257,17 +256,20 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
     if (_state->_freq_bins[max_bin] > _ref_energy[_update_axis]) {
         weighted_center_freq_hz = MAX(_state->_max_bin_freq, (float)_fft_min_hz);
         _prev_center_freq_hz[_update_axis] = _center_freq_hz[_update_axis];
+        _center_freq_energy[_update_axis] = _state->_freq_bins[max_bin];
     }
     // if we failed to find a signal, but the last cycle had one then use that
     else if (_center_freq_hz[_update_axis] > _fft_min_hz
         && _prev_center_freq_hz[_update_axis] > 0.0f) {
         weighted_center_freq_hz = _center_freq_hz[_update_axis];
         _prev_center_freq_hz[_update_axis] = 0.0f;
+        // leave energy from last time
     }
     // we failed to find a signal for more than two cycles
     else {
         weighted_center_freq_hz = _fft_min_hz;
         _prev_center_freq_hz[_update_axis] = _center_freq_hz[_update_axis];
+        _center_freq_energy[_update_axis] = 0.0f;
     }
     _center_freq_hz[_update_axis] = weighted_center_freq_hz;
     _center_freq_hz_filtered[_update_axis] = _center_freq_filter[_update_axis].apply(_center_freq_hz[_update_axis]);
