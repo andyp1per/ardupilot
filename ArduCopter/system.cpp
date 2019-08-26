@@ -324,8 +324,12 @@ void Copter::update_dynamic_notch() {
     // Update dynamic notch filter settings
     Vector3f fft_center_freq = gyro_fft.get_noise_center_freq_hz();
     //float avg_freq = (fft_center_freq.x + fft_center_freq.y + fft_center_freq.z) / 3.0f;
-    ins.update_harmonic_notch_freq_hz(fft_center_freq.z);
-    //ins.update_harmonic_notch_freq_hz(attitude_control->get_notch_freq_scaled(ins.get_gyro_harmonic_notch_center_freq_hz(), ins.get_gyro_harmonic_notch_reference()));
+    if (gyro_fft._track_mode > 0) {
+        ins.update_harmonic_notch_freq_hz(fft_center_freq.z);
+    }
+    else {
+        ins.update_harmonic_notch_freq_hz(attitude_control->get_notch_freq_scaled(ins.get_gyro_harmonic_notch_center_freq_hz(), ins.get_gyro_harmonic_notch_reference()));
+    }
 }
 
 // position_ok - returns true if the horizontal absolute position is ok and home position is set
