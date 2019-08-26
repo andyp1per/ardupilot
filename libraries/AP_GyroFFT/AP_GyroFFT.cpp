@@ -76,6 +76,13 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
     // @RebootRequired: True
     AP_GROUPINFO("WINDOW_OLAP", 6, AP_GyroFFT, _window_overlap, FFT_DEFAULT_WINDOW_OVERLAP),
 
+    // @Param: TRACK_MODE
+    // @DisplayName: FFT frequency tracking type
+    // @Description: FFT frequency tracking type
+    // @Range: 0 1
+    // @User: Advanced
+    AP_GROUPINFO("TRACK_MODE", 7, AP_GyroFFT, _track_mode, 0),
+
     AP_GROUPEND
 };
 
