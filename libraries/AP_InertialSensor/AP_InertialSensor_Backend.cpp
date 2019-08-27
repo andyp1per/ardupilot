@@ -224,6 +224,10 @@ void AP_InertialSensor_Backend::_notify_new_gyro_raw_sample(uint8_t instance,
         _imu._last_delta_angle[instance] = delta_angle;
         _imu._last_raw_gyro[instance] = gyro;
 
+        // capture gyro window for FFT analysis
+        _last_gyro_window[_num_gyro_samples++] = gyro * _imu._gyro_raw_sampling_multiplier[instance];
+        _num_gyro_samples = _num_gyro_samples % INS_MAX_GYRO_WINDOW_SAMPLES; // protect against overrun
+
         // apply the low pass filter
         _imu._gyro_filtered[instance] = _imu._gyro_filter[instance].apply(gyro);
 
@@ -232,10 +236,10 @@ void AP_InertialSensor_Backend::_notify_new_gyro_raw_sample(uint8_t instance,
             _imu._gyro_filtered[instance] = _imu._gyro_notch_filter[instance].apply(_imu._gyro_filtered[instance]);
         }
 
-        // Capture the filtered gyro value before any dynamic filtering is applied
-        _imu._last_gyro_static_filtered[instance] = _imu._gyro_filtered[instance];
-        _last_gyro_window[_num_gyro_samples++] = _imu._gyro_filtered[instance] * _imu._gyro_raw_sampling_multiplier[instance];
-        _num_gyro_samples = _num_gyro_samples % INS_MAX_GYRO_WINDOW_SAMPLES; // protect against overrun
+        if (_imu._gyro_filtered[instance].is_nan() || _imu._gyro_filtered[instance].is_inf()) {
+            _imu._gyro_filter[instance].reset();
+            _imu._gyro_notch_filter[instance].reset();
+        }
 
         // apply the harmonic notch filter
         if (_gyro_harmonic_notch_enabled()) {
@@ -518,7 +522,7 @@ void AP_InertialSensor_Backend::update_gyro(uint8_t instance)
             _num_gyro_samples = 0;
             _imu._circular_buffer_idx[instance] = idx;
         }
-        _imu._gyro_static_filtered[instance] = _imu._last_gyro_static_filtered[instance];
+        _imu._gyro_raw[instance] = _imu._last_raw_gyro[instance];
         _imu._new_gyro_data[instance] = false;
     }
 

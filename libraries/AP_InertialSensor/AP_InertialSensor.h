@@ -151,7 +151,7 @@ public:
     uint16_t get_accel_rate_hz(uint8_t instance) const { return uint16_t(_accel_raw_sample_rates[instance] * _accel_over_sampling[instance]); }
 
     // FFT support access
-    const Vector3f     &get_filtered_gyro(void) const { return _gyro_static_filtered[_primary_gyro]; }
+    const Vector3f     &get_filtered_gyro(void) const { return _gyro_raw[_primary_gyro]; }
     GyroWindow  get_filtered_gyro_window(uint8_t instance, uint8_t axis) const { return _gyro_window[instance][axis]; }
     GyroWindow  get_filtered_gyro_window(uint8_t axis) const { return get_filtered_gyro_window(_primary_gyro, axis); }
     uint16_t  get_filtered_gyro_window_index(void) const { return get_filtered_gyro_window_index(_primary_gyro); }
@@ -429,9 +429,8 @@ private:
     LowPassFilter2pVector3f _gyro_filter[INS_MAX_INSTANCES];
     Vector3f _accel_filtered[INS_MAX_INSTANCES];
     Vector3f _gyro_filtered[INS_MAX_INSTANCES];
-    Vector3f _last_gyro_static_filtered[INS_MAX_INSTANCES];
-    // Thread-safe public version of _last_gyro_static_filtered
-    Vector3f _gyro_static_filtered[INS_MAX_INSTANCES];
+    // Thread-safe public version of _last_raw_gyro
+    Vector3f _gyro_raw[INS_MAX_INSTANCES];
     // circular buffer of gyro data for frequency analysis
     uint16_t _circular_buffer_idx[INS_MAX_INSTANCES];
     GyroWindow _gyro_window[INS_MAX_INSTANCES][XYZ_AXIS_COUNT];
