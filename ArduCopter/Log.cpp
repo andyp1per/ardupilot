@@ -570,7 +570,7 @@ const struct LogStructure Copter::log_structure[] = {
       "CTUN", "Qffffffefcfhh", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CR", "s----mmmmmmnn", "F----00B0BBBB" },
 #if GYROFFT_ENABLED == ENABLED
     { LOG_FILTER_TUNING_MSG, sizeof(log_Filter_Tuning),
-      "FTUN", "Qffffffff", "TimeUS,ThO,ThH,PkAvg,PkX,PkY,PkZ,DnF,ThF,RwPkX,RwPkY,RwPkZ", "s--zzzzzzzzz", "F-----------" },
+      "FTUN", "Qfffffffffff", "TimeUS,ThO,ThH,PkAvg,PkX,PkY,PkZ,DnF,ThF,RwPkX,RwPkY,RwPkZ", "s--zzzzzzzzz", "F-----------" },
     { LOG_FILTER_TUNING_MSG2, sizeof(log_Filter_Tuning2),
       "FTU2", "QffffffB", "TimeUS,EnX,EnY,EnZ,RfX,RfY,RfZ,Bin", "s-------", "F-------" },
 #endif
