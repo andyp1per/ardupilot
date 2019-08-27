@@ -21,8 +21,9 @@
 
 extern const AP_HAL::HAL& hal;
 
-#define FFT_DEFAULT_WINDOW_SIZE 32
-#define FFT_DEFAULT_WINDOW_OVERLAP 0.5
+#define FFT_DEFAULT_WINDOW_SIZE     32
+#define FFT_DEFAULT_WINDOW_OVERLAP  0.5f
+#define FFT_THR_REF_DEFAULT         0.35f   // the estimated throttle reference, 0 ~ 1
 
 // table of user settable parameters
 const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
@@ -88,7 +89,7 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
     // @Description: FFT learned thrust reference for the hover frequency and FFT minimum frequency.
     // @Range: 0.01 0.9
     // @User: Advanced
-    AP_GROUPINFO("THR_REF", 8, AP_GyroFFT, _throttle_ref, 0.1f),
+    AP_GROUPINFO("THR_REF", 8, AP_GyroFFT, _throttle_ref, FFT_THR_REF_DEFAULT),
 
     // @Param: TRACK_MODE
     // @DisplayName: FFT frequency tracking type
@@ -257,11 +258,18 @@ void AP_GyroFFT::update_ref_energy() {
 }
 
 // update the hover frequency input filter.  should be called at 100hz when in a stable hover
-void AP_GyroFFT::update_freq_hover(float throttle_out)
+void AP_GyroFFT::update_freq_hover(float dt, float throttle_out)
 {
     // we have chosen to constrain the hover frequency to be within the range reachable by the third order expo polynomial.
-    _freq_hover = constrain_float(_freq_hover + (0.1f / 10.1f) * (get_weighted_noise_center_freq_hz() - _freq_hover), _fft_min_hz, _fft_max_hz);
-    _throttle_ref = constrain_float(_throttle_ref + (0.1f / 10.1f) * (throttle_out * powf(_fft_min_hz / _freq_hover, 2.0f) - _throttle_ref), 0.01f, 0.9f);
+    _freq_hover = constrain_float(_freq_hover + (dt / (10.0f + dt)) * (get_weighted_noise_center_freq_hz() - _freq_hover), _fft_min_hz, _fft_max_hz);
+    _throttle_ref = constrain_float(_throttle_ref + (dt / (10.0f + dt)) * (throttle_out * powf((float)_fft_min_hz.get() / _freq_hover, 2.0f) - _throttle_ref), 0.01f, 0.9f);
+}
+
+// save parameters as part of disarming
+void AP_GyroFFT::save_params_on_disarm()
+{
+    _freq_hover.save();
+    _throttle_ref.save();
 }
 
 // Return an average center frequency weighted by bin energy
@@ -269,12 +277,11 @@ float AP_GyroFFT::get_weighted_noise_center_freq_hz() const
 {
     if (!_center_freq_energy.is_nan()
         && !is_zero(_center_freq_energy.x)
-        && !is_zero(_center_freq_energy.y)
-        && !is_zero(_center_freq_energy.z)) {
-        return _center_freq_hz_filtered * _center_freq_energy / (_center_freq_energy.x + _center_freq_energy.y + _center_freq_energy.z);
+        && !is_zero(_center_freq_energy.y)) {
+        return (_center_freq_hz_filtered.x * _center_freq_energy.x + _center_freq_hz_filtered.y * _center_freq_energy.y) / (_center_freq_energy.x + _center_freq_energy.y);
     }
     else {
-        return (_center_freq_hz_filtered.x + _center_freq_hz_filtered.y + _center_freq_hz_filtered.z) / 3.0f;
+        return (_center_freq_hz_filtered.x + _center_freq_hz_filtered.y) / 2.0f;
     }
 }
 
