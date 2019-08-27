@@ -61,7 +61,7 @@ void Copter::update_throttle_hover()
         // Can we set the time constant automatically
         motors->update_throttle_hover(0.01f);
         // Update the learned hover frequency and reference
-        gyro_fft.update_freq_hover(motors->get_throttle_out());
+        gyro_fft.update_freq_hover(0.01f, motors->get_throttle_out());
     }
 #endif
 }
