@@ -50,7 +50,8 @@ public:
     void sample_gyros();
     bool calibration_check();
     AP_Int8 _track_mode;
-    void update_freq_hover(float throttle_out);
+    void update_freq_hover(float dt, float throttle_out);
+    void save_params_on_disarm();
 
     static const struct AP_Param::GroupInfo var_info[];
     static AP_GyroFFT *get_singleton() { return _singleton; }
