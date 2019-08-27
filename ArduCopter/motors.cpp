@@ -269,6 +269,9 @@ void Copter::init_disarm_motors()
     // save auto tuned parameters
     mode_autotune.save_tuning_gains();
 #endif
+#if GYROFFT_ENABLED == ENABLED
+    gyro_fft.save_params_on_disarm();
+#endif
 
     // we are not in the air
     set_land_complete(true);
