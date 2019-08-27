@@ -60,6 +60,8 @@ void Copter::update_throttle_hover()
     if (throttle > 0.0f && abs(climb_rate) < 60 && labs(ahrs.roll_sensor) < 500 && labs(ahrs.pitch_sensor) < 500) {
         // Can we set the time constant automatically
         motors->update_throttle_hover(0.01f);
+        // Update the learned hover frequency and reference
+        gyro_fft.update_freq_hover(motors->get_throttle_out());
     }
 #endif
 }
