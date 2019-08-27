@@ -76,12 +76,26 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
     // @RebootRequired: True
     AP_GROUPINFO("WINDOW_OLAP", 6, AP_GyroFFT, _window_overlap, FFT_DEFAULT_WINDOW_OVERLAP),
 
+    // @Param: FREQ_HOVER
+    // @DisplayName: FFT learned hover frequency
+    // @Description: The learned hover noise frequency
+    // @Range: 0 250
+    // @User: Advanced
+    AP_GROUPINFO("FREQ_HOVER", 7, AP_GyroFFT, _freq_hover, 80.0f),
+
+    // @Param: THR_REF
+    // @DisplayName: FFT learned thrust reference
+    // @Description: FFT learned thrust reference for the hover frequency and FFT minimum frequency.
+    // @Range: 0.01 0.9
+    // @User: Advanced
+    AP_GROUPINFO("THR_REF", 8, AP_GyroFFT, _throttle_ref, 0.1f),
+
     // @Param: TRACK_MODE
     // @DisplayName: FFT frequency tracking type
     // @Description: FFT frequency tracking type
     // @Range: 0 1
     // @User: Advanced
-    AP_GROUPINFO("TRACK_MODE", 7, AP_GyroFFT, _track_mode, 0),
+    AP_GROUPINFO("TRACK_MODE", 9, AP_GyroFFT, _track_mode, 0),
 
     AP_GROUPEND
 };
@@ -240,6 +254,14 @@ void AP_GyroFFT::update_ref_energy() {
     else if (_noise_cycles > 0) {
         _noise_cycles--;
     }
+}
+
+// update the hover frequency input filter.  should be called at 100hz when in a stable hover
+void AP_GyroFFT::update_freq_hover(float throttle_out)
+{
+    // we have chosen to constrain the hover frequency to be within the range reachable by the third order expo polynomial.
+    _freq_hover = constrain_float(_freq_hover + (0.1f / 10.1f) * (get_weighted_noise_center_freq_hz() - _freq_hover), _fft_min_hz, _fft_max_hz);
+    _throttle_ref = constrain_float(_throttle_ref + (0.1f / 10.1f) * (throttle_out * powf(_fft_min_hz / _freq_hover, 2.0f) - _throttle_ref), 0.01f, 0.9f);
 }
 
 // Return an average center frequency weighted by bin energy

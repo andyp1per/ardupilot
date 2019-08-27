@@ -50,6 +50,7 @@ public:
     void sample_gyros();
     bool calibration_check();
     AP_Int8 _track_mode;
+    void update_freq_hover(float throttle_out);
 
     static const struct AP_Param::GroupInfo var_info[];
     static AP_GyroFFT *get_singleton() { return _singleton; }
@@ -100,6 +101,8 @@ private:
     AP_Float _window_overlap;
     AP_Int8 _enable;
     AP_Int8 _sample_mode;
+    AP_Float _throttle_ref; // learned throttle reference for the hover frequency
+    AP_Float _freq_hover;   // learned hover filter frequency
     AP_InertialSensor* _ins;
 
     static AP_GyroFFT *_singleton;
