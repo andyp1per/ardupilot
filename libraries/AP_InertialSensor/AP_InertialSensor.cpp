@@ -670,7 +670,7 @@ AP_InertialSensor::init(uint16_t sample_rate)
     _calculated_harmonic_notch_freq_hz = _harmonic_notch_filter.center_freq_hz();
 
     for (uint8_t i=0; i<get_gyro_count(); i++) {
-        _gyro_harmonic_notch_filter[i].create(_harmonic_notch_filter.harmonics());
+        _gyro_harmonic_notch_filter[i].allocate_filters(_harmonic_notch_filter.harmonics());
         // initialise default settings, these will be subsequently changed in AP_InertialSensor_Backend::update_gyro()
         _gyro_harmonic_notch_filter[i].init(_gyro_raw_sample_rates[i], _calculated_harmonic_notch_freq_hz,
              _harmonic_notch_filter.bandwidth_hz(), _harmonic_notch_filter.attenuation_dB());
@@ -1775,7 +1775,7 @@ void AP_InertialSensor::acal_update()
 
 // Update the harmonic notch frequency
 void AP_InertialSensor::update_harmonic_notch_freq_hz(float scaled_freq) {
-    // When disarmed, throttle is zero
+    // protect against zero as the scaled frequency
     if (is_positive(scaled_freq)) {
         _calculated_harmonic_notch_freq_hz = scaled_freq;
     }
