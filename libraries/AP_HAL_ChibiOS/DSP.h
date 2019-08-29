@@ -89,6 +89,7 @@ private:
     StepTimer _bitreversal_timer;
     StepTimer _stage_rfft_f32_timer;
     StepTimer _arm_cmplx_mag_f32_timer;
+    StepTimer _step_calc_frequencies;
 #endif
 };
 
