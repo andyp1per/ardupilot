@@ -170,7 +170,7 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
     _fft_start_bin = MAX(lrintf((float)_fft_min_hz.get() / _state->_bin_resolution), 1);
 
     // The update rate for the output
-    const float output_rate = _fft_sampling_rate_hz / _window_overlap;
+    const float output_rate = _fft_sampling_rate_hz / _samples_per_frame;
     // establish suitable defaults
     for (uint8_t axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
         _center_freq_hz[axis] = _fft_min_hz;
