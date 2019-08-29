@@ -52,9 +52,9 @@ AP_HAL::DSP::FFTWindowState* DSP::fft_init(uint16_t window_size, uint16_t sample
     uint8_t update_steps = 0;
     switch (window_size) {
     case 32:
-    case 64:
         update_steps = 2;
         break;
+    case 64:
     case 128:
         update_steps = 3;
         break;
@@ -86,10 +86,10 @@ uint16_t DSP::fft_analyse(AP_HAL::DSP::FFTWindowState* state, const float* sampl
 
     switch (fft->_window_size) {
     case 32:
-    case 64:
         // 2 steps
-        bin_max = fft_analyse_window32(fft, samples, buffer_index, start_bin);
+        bin_max = fft_analyse_window128(fft, samples, buffer_index, start_bin);
         break;
+    case 64:
     case 128:
         // 3 steps
         bin_max = fft_analyse_window128(fft, samples, buffer_index, start_bin);
@@ -137,9 +137,9 @@ uint16_t DSP::fft_analyse_window128(FFTWindowStateARM* fft, const float* samples
     case STEP_BITREVERSAL:
         step_bitreversal(fft);
         step_stage_rfft_f32(fft);
-        break;
-    case STEP_ARM_CMPLX_MAG_F32:
         step_arm_cmplx_mag_f32(fft);
+        break;
+    case STEP_CALC_FREQUENCIES:
         bin_max = step_calc_frequencies(fft, start_bin);
         break;
     }
@@ -281,6 +281,8 @@ void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft)
     
 uint16_t DSP::step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin)
 {
+    TIMER_START(_step_calc_frequencies);
+
     float max_value = 0;
     uint32_t bin_max = 0;
 
@@ -291,12 +293,14 @@ uint16_t DSP::step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin)
     // more expensive, but compared to the overall FFT cost seems worth it.
     fft->_max_bin_freq = (bin_max + calculate_quinns_second_estimator(fft, bin_max)) * fft->_bin_resolution;
 
+    TIMER_END(_step_calc_frequencies);
+
 #ifdef DEBUG_FFT
     _output_count++;
     // outputs at approx 1hz
     if (_output_count % (400 / fft->_update_steps) == 0) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: t1:%luus, t2:%luus, t3:%luus, t4:%luus",
-                        _arm_cfft_f32_timer._timer_avg, _bitreversal_timer._timer_avg, _stage_rfft_f32_timer._timer_avg, _arm_cmplx_mag_f32_timer._timer_avg);
+        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: t1:%luus, t2:%luus, t3:%luus, t4:%luus, t5:%luus",
+                        _arm_cfft_f32_timer._timer_avg, _bitreversal_timer._timer_avg, _stage_rfft_f32_timer._timer_avg, _arm_cmplx_mag_f32_timer._timer_avg, _step_calc_frequencies._timer_avg);
     }
 #endif
     fft->_update_step++;
