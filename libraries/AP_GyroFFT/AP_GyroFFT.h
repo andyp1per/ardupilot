@@ -22,7 +22,10 @@
 #include <AP_Math/AP_Math.h>
 #include <AP_InertialSensor/AP_InertialSensor.h>
 
-#define XYZ_AXIS_COUNT 3
+#define XYZ_AXIS_COUNT              3
+#define FFT_UPDATE_BUDGET_MICROS    175 // the budgeted update period
+//#define DEBUG_FFT
+//#define DEBUG_FFT_TIMING
 
 class AP_GyroFFT
 {
@@ -52,6 +55,9 @@ public:
     AP_Int8 _track_mode;
     void update_freq_hover(float dt, float throttle_out);
     void save_params_on_disarm();
+    // the average cycle time where the budget was not met
+    uint32_t get_total_overrun_cycles() const { return _overrun_cycles; }
+    uint32_t get_average_overrun() const { return _overrun_total / _overrun_cycles; }
 
     static const struct AP_Param::GroupInfo var_info[];
     static AP_GyroFFT *get_singleton() { return _singleton; }
@@ -70,7 +76,7 @@ private:
 
     // downsampled gyro data circular buffer for frequency analysis
     uint16_t _circular_buffer_idx;
-    uint8_t _sample_count;
+    uint16_t _sample_count;
     // number of sampeles needed before a new frame can be processed
     uint16_t _samples_per_frame;
     float* _downsampled_gyro_data[XYZ_AXIS_COUNT];
@@ -80,7 +86,6 @@ private:
     uint8_t _update_axis;
     // the number of cycles required to have a proper noise reference
     uint8_t _noise_cycles;
-    uint32_t _output_count;
     Vector3f _center_freq_energy;
     // Smoothing filter on the output
     LowPassFilter2pFloat _center_freq_filter[XYZ_AXIS_COUNT];
@@ -90,10 +95,14 @@ private:
     Vector3f _center_freq_hz;
     Vector3f _center_freq_hz_filtered;
     float _multiplier;
+    // performance counters
+    uint32_t _overrun_cycles;
+    uint32_t _overrun_total;
+    uint32_t _overrun_max;
 
     uint16_t _fft_sampling_rate_hz;
     uint8_t _fft_start_bin;
-    uint8_t _missed_cycles;
+    uint8_t _missed_cycles; // number of cycles without a detected signal
     uint8_t _noise_needs_calibration : 3;
     Vector3<uint8_t> _center_freq_bin;
     AP_Int16 _fft_min_hz;
@@ -105,6 +114,9 @@ private:
     AP_Float _throttle_ref; // learned throttle reference for the hover frequency
     AP_Float _freq_hover;   // learned hover filter frequency
     AP_InertialSensor* _ins;
+#if defined(DEBUG_FFT) || defined(DEBUG_FFT_TIMING)
+    uint32_t _output_count;
+#endif
 
     static AP_GyroFFT *_singleton;
 };

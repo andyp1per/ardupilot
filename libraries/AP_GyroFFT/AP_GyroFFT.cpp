@@ -63,8 +63,8 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
 
     // @Param: WINDOW_SIZE
     // @DisplayName: FFT window size
-    // @Description: Size of window to be used in FFT calculations. Takes effect on reboot. Must be a power of 2 and between 32 and 1024. Larger windows give greater frequency resolution but poorer time resolution, consume more CPU time and may not be appropriate for all vehicles. Time and frequency resolution are given by the sample-rate / window-size.
-    // @Range: 32 1024
+    // @Description: Size of window to be used in FFT calculations. Takes effect on reboot. Must be a power of 2 and between 32 and 256. Larger windows give greater frequency resolution but poorer time resolution, consume more CPU time and may not be appropriate for all vehicles. Time and frequency resolution are given by the sample-rate / window-size. Windows of 256 are only really recommended for F7 class boards.
+    // @Range: 32 256
     // @User: Advanced
     // @RebootRequired: True
     AP_GROUPINFO("WINDOW_SIZE", 5, AP_GyroFFT, _window_size, FFT_DEFAULT_WINDOW_SIZE),
@@ -114,8 +114,6 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
 // Maximum tolerated number of cycles with missing signal
 #define FFT_MAX_MISSED_UPDATES 3
 
-//#define DEBUG_FFT
-
 AP_GyroFFT::AP_GyroFFT()
 {
     _multiplier = 2000.0f / radians(2000); // scale from radian gyro output back to degrees
@@ -132,16 +130,18 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
 {
     _ins = &ins;
 
-    // check that we have enough memory for the window size requested
-    const uint32_t total_allocation = (2 + XYZ_AXIS_COUNT * INS_MAX_INSTANCES) * _window_size * sizeof(float)
-        + (_window_size / 2) * 2 * sizeof(float);
-    if (total_allocation > hal.util->available_memory() / 2) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "HAL: requested alloc %u bytes for DSP (free=%u)", (unsigned int)total_allocation, (unsigned int)hal.util->available_memory());
-        _window_size = FFT_DEFAULT_WINDOW_SIZE;
-    }
     // check that we support the window size requested and it is a power of 2
     _window_size = 1 << lrintf(log2f(_window_size.get()));
-    _window_size = constrain_int16(_window_size, 32, 1024);
+    _window_size = constrain_int16(_window_size, 32, 256);
+
+    // check that we have enough memory for the window size requested
+    const uint32_t total_allocation = (3 + XYZ_AXIS_COUNT * INS_MAX_INSTANCES) * _window_size * sizeof(float);
+    if (total_allocation > hal.util->available_memory() / 2) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "AP_GyroFFT: req alloc %u bytes (free=%u)", (unsigned int)total_allocation, (unsigned int)hal.util->available_memory());
+        _window_size = FFT_DEFAULT_WINDOW_SIZE;
+    }
+    // save any changes that were made
+    _window_size.save();
 
     // determine the FFT sample rate based on the gyro rate, loop rate and configuration
     if (_sample_mode == 0) {
@@ -157,6 +157,7 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
 
     // number of samples needed before a new frame can be processed
     _window_overlap = constrain_float(_window_overlap, 0.0f, 0.9f);
+    _window_overlap.save();
     _samples_per_frame = (1.0f - _window_overlap) * _window_size;
     _samples_per_frame = 1 << lrintf(log2f(_samples_per_frame));
  
@@ -221,6 +222,11 @@ void AP_GyroFFT::update()
     }
 
     if (_sample_count >= _samples_per_frame) {
+#if defined(DEBUG_FFT) || defined(DEBUG_FFT_TIMING)
+        _output_count++;
+#endif
+        uint32_t now = AP_HAL::micros();
+
         // calculate FFT and update filters
         uint16_t bin_max = 0;
         if (_sample_mode) {
@@ -236,6 +242,19 @@ void AP_GyroFFT::update()
             update_ref_energy();
             calculate_noise(bin_max);
         }
+
+        uint32_t time_taken = AP_HAL::micros() - now;
+
+        if (time_taken > FFT_UPDATE_BUDGET_MICROS) {
+            _overrun_cycles++;
+            _overrun_total += time_taken;
+            _overrun_max = MAX(_overrun_max, time_taken);
+        }
+#ifdef DEBUG_FFT_TIMING
+        if (_output_count % (400 / _state->_update_steps) == 0 && _overrun_total > 0) {
+            gcs().send_text(MAV_SEVERITY_WARNING, "FFT: oruns:%lu, orunvag:%lu", get_total_overrun_cycles(), get_average_overrun());
+        }
+#endif
     }
 }
 
@@ -314,7 +333,6 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
     _center_freq_hz_filtered[_update_axis] = _center_freq_filter[_update_axis].apply(weighted_center_freq_hz);
 
 #ifdef DEBUG_FFT
-    _output_count++;
     // output at approx 1hz
    if (_output_count % (400 / _state->_update_steps) == 0)
    {
