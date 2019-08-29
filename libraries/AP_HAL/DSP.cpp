@@ -11,7 +11,7 @@
  *
  * You should have received a copy of the GNU General Public License along
  * with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  * Code by Andy Piper
  */
 
@@ -26,13 +26,14 @@ extern const AP_HAL::HAL &hal;
 DSP::FFTWindowState::FFTWindowState(uint16_t window_size, uint16_t sample_rate, uint8_t update_steps)
     : _update_steps(update_steps),
     _window_size(window_size),
-    _bin_count(window_size / 2), 
+    _bin_count(window_size / 2),
     _bin_resolution((float)sample_rate / (float)window_size)
 {
-    _freq_bins = new float[window_size]; // includes DC ad Nyquist components
+    // includes DC ad Nyquist components and needs to be large enough for intermediate steps
+    _freq_bins = new float[window_size];
 }
 
-DSP::FFTWindowState::~FFTWindowState() 
+DSP::FFTWindowState::~FFTWindowState()
 {
     delete[] _freq_bins;
 }
