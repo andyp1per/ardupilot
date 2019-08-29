@@ -93,7 +93,7 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK(read_aux_switches,     10,     50),
     SCHED_TASK(arm_motors_check,      10,     50),
 #if GYROFFT_ENABLED == ENABLED
-    SCHED_TASK_CLASS(AP_GyroFFT,           &copter.gyro_fft,            update,         400,  50),
+    SCHED_TASK_CLASS(AP_GyroFFT,           &copter.gyro_fft,            update,         400,  FFT_UPDATE_BUDGET_MICROS),
 #endif
 #if TOY_MODE_ENABLED == ENABLED
     SCHED_TASK_CLASS(ToyMode,              &copter.g2.toy_mode,         update,          10,  50),
