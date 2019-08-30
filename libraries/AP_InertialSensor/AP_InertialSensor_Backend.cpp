@@ -229,27 +229,26 @@ void AP_InertialSensor_Backend::_notify_new_gyro_raw_sample(uint8_t instance,
         _num_gyro_samples = _num_gyro_samples % INS_MAX_GYRO_WINDOW_SAMPLES; // protect against overrun
 
         // apply the low pass filter
-        _imu._gyro_filtered[instance] = _imu._gyro_filter[instance].apply(gyro);
+        Vector3f gyro_filtered = _imu._gyro_filter[instance].apply(gyro);
 
         // apply the notch filter
         if (_gyro_notch_enabled()) {
-            _imu._gyro_filtered[instance] = _imu._gyro_notch_filter[instance].apply(_imu._gyro_filtered[instance]);
-        }
-
-        if (_imu._gyro_filtered[instance].is_nan() || _imu._gyro_filtered[instance].is_inf()) {
-            _imu._gyro_filter[instance].reset();
-            _imu._gyro_notch_filter[instance].reset();
+            gyro_filtered = _imu._gyro_notch_filter[instance].apply(gyro_filtered);
         }
 
         // apply the harmonic notch filter
         if (gyro_harmonic_notch_enabled()) {
-            _imu._gyro_filtered[instance] = _imu._gyro_harmonic_notch_filter[instance].apply(_imu._gyro_filtered[instance]);
+            gyro_filtered = _imu._gyro_harmonic_notch_filter[instance].apply(gyro_filtered);
         }
 
-        if (_imu._gyro_filtered[instance].is_nan() || _imu._gyro_filtered[instance].is_inf()) {
+        // if the filtering failed in any way then reset the filters and keep the old value
+        if (gyro_filtered.is_nan() || gyro_filtered.is_inf()) {
             _imu._gyro_filter[instance].reset();
             _imu._gyro_notch_filter[instance].reset();
             _imu._gyro_harmonic_notch_filter[instance].reset();
+        }
+        else {
+            _imu._gyro_filtered[instance] = gyro_filtered;
         }
 
         _imu._new_gyro_data[instance] = true;
