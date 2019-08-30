@@ -87,7 +87,8 @@ HarmonicNotchFilter<T>::~HarmonicNotchFilter() {
 template <class T>
 void HarmonicNotchFilter<T>::init(float sample_freq_hz, float center_freq_hz, float bandwidth_hz, float attenuation_dB)
 {
-    if (_filters == nullptr) {
+    // sanity check the input
+    if (_filters == nullptr || is_zero(sample_freq_hz) || isnan(sample_freq_hz)) {
         return;
     }
 
