@@ -386,7 +386,7 @@ void Copter::twentyfive_hz_logging()
     }
 
     // log IMU data if we're not already logging at the higher rate
-    if (should_log(MASK_LOG_IMU) && !should_log(MASK_LOG_IMU_RAW)) {
+    if (should_log(MASK_LOG_IMU)) {
         DataFlash.Log_Write_IMU();
     }
 #endif
