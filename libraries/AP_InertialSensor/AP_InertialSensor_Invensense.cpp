@@ -489,7 +489,7 @@ bool AP_InertialSensor_Invensense::_accumulate_sensor_rate_sampling(uint8_t *sam
         Vector3f g2 = g * GYRO_SCALE;
         _notify_new_gyro_sensor_rate_sample(_gyro_instance, g2);
 
-        const int16_t overflowValue = 0x7C00;
+        const int16_t overflowValue = 0x7C00; // 1937 dps
         if (g.x > overflowValue || g.x < -overflowValue
             || g.y > overflowValue || g.y < -overflowValue
             || g.z > overflowValue || g.z < -overflowValue) {
