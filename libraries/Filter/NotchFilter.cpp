@@ -43,13 +43,13 @@ template <class T>
 void NotchFilter<T>::init_with_A_and_Q(float sample_freq_hz, float center_freq_hz, float A, float Q)
 {
     float omega = 2.0 * M_PI * center_freq_hz / sample_freq_hz;
-    float alpha = sinf(omega) / (2 * Q/A);
-    b0 =  1.0 + alpha*A;
+    float alpha = sinf(omega) / (2 * Q);
+    b0 =  1.0 + alpha*sq(A);
     b1 = -2.0 * cosf(omega);
-    b2 =  1.0 - alpha*A;
-    a0_inv =  1.0/(1.0 + alpha/A);
+    b2 =  1.0 - alpha*sq(A);
+    a0_inv =  1.0/(1.0 + alpha);
     a1 = -2.0 * cosf(omega);
-    a2 =  1.0 - alpha/A;
+    a2 =  1.0 - alpha;
     initialised = true;
 }
 
