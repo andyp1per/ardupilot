@@ -513,6 +513,7 @@ struct PACKED log_Filter_Tuning2 {
     float    motor_noise_ref_y;
     float    motor_noise_ref_z;
     uint8_t  motor_peak_bin;
+    uint32_t motor_peak_total_overrun_cycles;
 };
 
 // Write a filter tuning packet
@@ -543,7 +544,8 @@ void Copter::Log_Write_Filter_Tuning()
         motor_noise_ref_x   : gyro_fft.get_noise_ref_energy().x,
         motor_noise_ref_y   : gyro_fft.get_noise_ref_energy().y,
         motor_noise_ref_z   : gyro_fft.get_noise_ref_energy().z,
-        motor_peak_bin      : gyro_fft.get_center_freq_bin().z
+        motor_peak_bin      : gyro_fft.get_center_freq_bin().z,
+        motor_peak_total_overrun_cycles : gyro_fft.get_total_overrun_cycles()
     };
     DataFlash.WriteBlock(&pkt2, sizeof(pkt2));
 }
@@ -572,7 +574,7 @@ const struct LogStructure Copter::log_structure[] = {
     { LOG_FILTER_TUNING_MSG, sizeof(log_Filter_Tuning),
       "FTUN", "Qfffffffffff", "TimeUS,ThO,ThH,PkAvg,PkX,PkY,PkZ,DnF,ThF,RwPkX,RwPkY,RwPkZ", "s--zzzzzzzzz", "F-----------" },
     { LOG_FILTER_TUNING_MSG2, sizeof(log_Filter_Tuning2),
-      "FTU2", "QffffffB", "TimeUS,EnX,EnY,EnZ,RfX,RfY,RfZ,Bin", "s-------", "F-------" },
+      "FTU2", "QffffffBI", "TimeUS,EnX,EnY,EnZ,RfX,RfY,RfZ,Bin,Err", "s--------", "F--------" },
 #endif
     { LOG_MOTBATT_MSG, sizeof(log_MotBatt),
       "MOTB", "Qffff",  "TimeUS,LiftMax,BatVolt,BatRes,ThLimit", "s-vw-", "F-00-" },
