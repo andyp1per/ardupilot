@@ -109,7 +109,7 @@ void HarmonicNotchFilter<T>::init(float sample_freq_hz, float center_freq_hz, fl
         const float notch_center = center_freq_hz * (i+1);
         if ((1U<<i) & _harmonics) {
             // only enable the filter if its center frequency is below the nyquist frequency
-            if (center_freq_hz < nyquist_limit) {
+            if (notch_center < nyquist_limit) {
                 _filters[filt].init_with_A_and_Q(sample_freq_hz, notch_center, _A, _Q);
                 _num_enabled_filters++;
             }
@@ -162,7 +162,7 @@ void HarmonicNotchFilter<T>::update(float center_freq_hz)
         const float notch_center = center_freq_hz * (i+1);
         if ((1U<<i) & _harmonics) {
             // only enable the filter if its center frequency is below the nyquist frequency
-            if (center_freq_hz < nyquist_limit) {
+            if (notch_center < nyquist_limit) {
                 _filters[filt].init_with_A_and_Q(_sample_freq_hz, notch_center, _A, _Q);
                 _num_enabled_filters++;
             }
