@@ -23,7 +23,7 @@
 
 #include <arm_math.h>
 
-//#define DEBUG_FFT
+#define DEBUG_FFT   0
 
 // ChibiOS implementation of FFT analysis to run on STM32 processors
 class ChibiOS::DSP : public AP_HAL::DSP {
@@ -57,12 +57,16 @@ public:
     private:
        // current update state machine step
         uint8_t _update_step = STEP_HANNING;
+        // bin with maximum energy
+        uint32_t _max_energy_bin;
         // underlying CMSIS data structure for FFT analysis
         arm_rfft_fast_instance_f32 _fft_instance;
         // intermediate real FFT data
         float* _rfft_data;
         // Hanning window for incoming samples, see https://en.wikipedia.org/wiki/Window_function#Hann_.28Hanning.29_window
-        float* _hanning_window;  
+        float* _hanning_window;
+        // Use in calculating the PS of the signal [Heinz] equations (20) & (21)
+        float _window_scale;
     };
 
 private:
@@ -77,7 +81,7 @@ private:
     void step_arm_cfft_f32(FFTWindowStateARM* fft);
     void step_bitreversal(FFTWindowStateARM* fft);
     void step_stage_rfft_f32(FFTWindowStateARM* fft);
-    void step_arm_cmplx_mag_f32(FFTWindowStateARM* fft);
+    void step_arm_cmplx_mag_f32(FFTWindowStateARM* fft, uint16_t start_bin);
     uint16_t step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin);
     // candan's frequency interpolator
     float calculate_candans_estimator(FFTWindowStateARM* fft, uint8_t k);
@@ -85,7 +89,7 @@ private:
     float calculate_quinns_second_estimator(FFTWindowStateARM* fft, uint8_t k);
     float tau(float x);
 
-#ifdef DEBUG_FFT
+#if DEBUG_FFT
     class StepTimer {
     public:
         uint32_t _timer_total;

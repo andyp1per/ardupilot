@@ -21,15 +21,13 @@
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Math/AP_Math.h>
-#include "DSP.h"
-#ifdef DEBUG_FFT
 #include <GCS_MAVLink/GCS.h>
-#endif
+#include "DSP.h"
 #include <cmath>
 
 using namespace ChibiOS;
 
-#ifdef DEBUG_FFT
+#if DEBUG_FFT
 #define TIMER_START(timer) uint32_t timer##now = AP_HAL::micros()
 #define TIMER_END(timer) timer.time(timer##now)
 #else
@@ -45,7 +43,7 @@ using namespace ChibiOS;
 // https://holometer.fnal.gov/GH_FFT.pdf "Spectrum and spectral density estimation by the Discrete Fourier transform (DFT),
 // including a comprehensive list of window functions and some new flat-top windows." - Heinzel et. al is a great reference
 // for understanding the underlying theory although we do not use spectral density here since time resolution is equally
-// important as frequency resolution
+// important as frequency resolution. Referred to as [Heinz] throughout the code.
 
 // initialize the FFT state machine
 AP_HAL::DSP::FFTWindowState* DSP::fft_init(uint16_t window_size, uint16_t sample_rate)
@@ -66,7 +64,12 @@ AP_HAL::DSP::FFTWindowState* DSP::fft_init(uint16_t window_size, uint16_t sample
         update_steps = 6;
         break;
     }
-    return new DSP::FFTWindowStateARM(window_size, sample_rate, update_steps);
+    DSP::FFTWindowStateARM* fft = new DSP::FFTWindowStateARM(window_size, sample_rate, update_steps);
+    if (fft->_hanning_window == nullptr || fft->_rfft_data == nullptr || fft->_freq_bins == nullptr) {
+        delete fft;
+        return nullptr;
+    }
+    return fft;
 }
 
 // Analyse FFT data contained in samples and return it in state->_freq_bins
@@ -107,13 +110,25 @@ DSP::FFTWindowStateARM::FFTWindowStateARM(uint16_t window_size, uint16_t sample_
 
     // allocate workspace
     _rfft_data = new float[_window_size];
+    if (_rfft_data == nullptr) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for DSP");
+        return;
+    }
+
     _hanning_window = new float[_window_size];
+    if (_hanning_window == nullptr) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for DSP");
+        return;
+    }
 
     // create the Hanning window
     // https://holometer.fnal.gov/GH_FFT.pdf - equation 19
     for (uint16_t i = 0; i < _window_size; i++) {
-        _hanning_window[i] = (0.5f - 0.5f * cosf(2 * M_PI * i / (_window_size - 1)));
+        _hanning_window[i] = (0.5f - 0.5f * cosf(2.0f * M_PI * i / (float)_window_size));
+        _window_scale += _hanning_window[i];
     }
+    // Calculate the inverse of the Effective Noise Bandwidth
+    _window_scale = 2.0f / sq(_window_scale);
 }
 
 DSP::FFTWindowStateARM::~FFTWindowStateARM()
@@ -135,7 +150,7 @@ uint16_t DSP::fft_analyse_window_2step(FFTWindowStateARM* fft, const float* samp
     case STEP_BITREVERSAL:
         step_bitreversal(fft);
         step_stage_rfft_f32(fft);
-        step_arm_cmplx_mag_f32(fft);
+        step_arm_cmplx_mag_f32(fft, start_bin);
         bin_max = step_calc_frequencies(fft, start_bin);
         break;
     }
@@ -157,7 +172,7 @@ uint16_t DSP::fft_analyse_window_3step(FFTWindowStateARM* fft, const float* samp
     case STEP_BITREVERSAL:
         step_bitreversal(fft);
         step_stage_rfft_f32(fft);
-        step_arm_cmplx_mag_f32(fft);
+        step_arm_cmplx_mag_f32(fft, start_bin);
         break;
     case STEP_CALC_FREQUENCIES:
         bin_max = step_calc_frequencies(fft, start_bin);
@@ -187,7 +202,7 @@ uint16_t DSP::fft_analyse_window_6step(FFTWindowStateARM* fft, const float* samp
         step_stage_rfft_f32(fft);
         break;
     case STEP_ARM_CMPLX_MAG_F32:
-        step_arm_cmplx_mag_f32(fft);
+        step_arm_cmplx_mag_f32(fft, start_bin);
         break;
     case STEP_CALC_FREQUENCIES:
         bin_max = step_calc_frequencies(fft, start_bin);
@@ -292,7 +307,7 @@ void DSP::step_stage_rfft_f32(FFTWindowStateARM* fft)
 }
 
 // step 5: find the magnitudes of the complex data
-void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft)
+void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft, uint16_t start_bin)
 {
     TIMER_START(_arm_cmplx_mag_f32_timer);
     // 8us (BF)
@@ -305,9 +320,16 @@ void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft)
     // General case for the magnitudes - see https://stackoverflow.com/questions/42299932/dsp-libraries-rfft-strange-results
     // The frequency of each of those frequency components are given by k*fs/N
 
-    arm_cmplx_mag_f32(&fft->_rfft_data[2], &fft->_freq_bins[1], fft->_bin_count - 1);
-    fft->_freq_bins[0] = abs(fft->_rfft_data[0]);               // DC
-    fft->_freq_bins[fft->_bin_count] = abs(fft->_rfft_data[1]); // Nyquist
+    arm_cmplx_mag_squared_f32(&fft->_rfft_data[2], &fft->_freq_bins[1], fft->_bin_count - 1);
+    fft->_freq_bins[0] = sq(fft->_rfft_data[0]);               // DC
+    fft->_freq_bins[fft->_bin_count] = sq(fft->_rfft_data[1]); // Nyquist
+    // find the maximum power in the range we are interested in
+    float max_value = 0;
+    uint16_t bin_range = (fft->_bin_count + 1) - start_bin;
+    arm_max_f32(&fft->_freq_bins[start_bin], bin_range, &max_value, &fft->_max_energy_bin);
+    fft->_max_energy_bin += start_bin;
+    // scale the power to account for the input window
+    arm_scale_f32(fft->_freq_bins, fft->_window_scale, fft->_freq_bins, fft->_bin_count);
 
     TIMER_END(_arm_cmplx_mag_f32_timer);
     fft->_update_step++;
@@ -318,29 +340,29 @@ uint16_t DSP::step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin)
 {
     TIMER_START(_step_calc_frequencies);
 
-    float max_value = 0;
-    uint32_t bin_max = 0;
-
-    arm_max_f32(&fft->_freq_bins[start_bin], (fft->_bin_count + 1) - start_bin, &max_value, &bin_max);
-    bin_max += start_bin;
-    // It turns out that Jain is pretty good and works with only magnitudes, but Candan is significantly better
-    // if you have access to the complex values and Quinn is a little better still. Quinn is computationally 
-    // more expensive, but compared to the overall FFT cost seems worth it.
-    fft->_max_bin_freq = (bin_max + calculate_quinns_second_estimator(fft, bin_max)) * fft->_bin_resolution;
+    if (is_zero(fft->_freq_bins[fft->_max_energy_bin])) {
+        fft->_max_bin_freq = start_bin * fft->_bin_resolution;
+    }
+    else {
+        // It turns out that Jain is pretty good and works with only magnitudes, but Candan is significantly better
+        // if you have access to the complex values and Quinn is a little better still. Quinn is computationally 
+        // more expensive, but compared to the overall FFT cost seems worth it.
+        fft->_max_bin_freq = (fft->_max_energy_bin + calculate_quinns_second_estimator(fft, fft->_max_energy_bin)) * fft->_bin_resolution;
+    }
 
     TIMER_END(_step_calc_frequencies);
 
-#ifdef DEBUG_FFT
+#if DEBUG_FFT
     _output_count++;
     // outputs at approx 1hz
     if (_output_count % (400 / fft->_update_steps) == 0) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: t1:%luus, t2:%luus, t3:%luus, t4:%luus, t5:%luus",
-                        _arm_cfft_f32_timer._timer_avg, _bitreversal_timer._timer_avg, _stage_rfft_f32_timer._timer_avg, _arm_cmplx_mag_f32_timer._timer_avg, _step_calc_frequencies._timer_avg);
+        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: en:%.4f t1:%luus, t2:%luus, t3:%luus, t4:%luus, t5:%luus",
+                        fft->_window_scale, _arm_cfft_f32_timer._timer_avg, _bitreversal_timer._timer_avg, _stage_rfft_f32_timer._timer_avg, _arm_cmplx_mag_f32_timer._timer_avg, _step_calc_frequencies._timer_avg);
     }
 #endif
     fft->_update_step++;
 
-    return bin_max;
+    return fft->_max_energy_bin;
 }
 
 // Interpolate center frequency using http://users.metu.edu.tr/ccandan//pub_dir/FineDopplerEst_IEEE_SPL_June2011.pdf
@@ -398,7 +420,7 @@ float DSP::calculate_quinns_second_estimator(FFTWindowStateARM* fft, uint8_t k_m
 // Helper function used for Quinn's frequency estimation
 float DSP::tau(float x)
 {
-    float p1 = logf(3.0f * powf(x, 2.0f) + 6.0f * x + 1.0f);
+    float p1 = logf(3.0f * sq(x) + 6.0f * x + 1.0f);
     float part1 = x + 1.0f - SQRT_2_3;
     float part2 = x + 1.0f + SQRT_2_3;
     float p2 = logf(part1 / part2);
@@ -406,7 +428,7 @@ float DSP::tau(float x)
 }
 
 
-#ifdef DEBUG_FFT
+#if DEBUG_FFT
  void DSP::StepTimer::time(uint32_t start) 
  {
     _timer_total += (AP_HAL::micros() - start);
