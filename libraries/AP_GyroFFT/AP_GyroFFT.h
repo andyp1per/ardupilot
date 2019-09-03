@@ -24,8 +24,8 @@
 
 #define XYZ_AXIS_COUNT              3
 #define FFT_UPDATE_BUDGET_MICROS    175 // the budgeted update period
-//#define DEBUG_FFT
-//#define DEBUG_FFT_TIMING
+#define DEBUG_FFT                   0
+#define DEBUG_FFT_TIMING            0
 
 // a library that leverages the HAL DSP support to perform FFT analysis on gyro samples
 class AP_GyroFFT
@@ -52,8 +52,8 @@ public:
 
     // detected peak frequency filtered at 1/3 the update rate
     Vector3f get_noise_center_freq_hz() const { return _center_freq_hz_filtered; }
-    // energy of the background noise
-    Vector3f get_noise_ref_energy() const { return _ref_energy; }
+    // energy of the background noise at the detected center frequency
+    Vector3f get_noise_signal_to_noise_db() const { return _center_snr; }
     // detected peak frequency weighted by energy
     float get_weighted_noise_center_freq_hz() const;
     // detected peak frequency
@@ -77,7 +77,7 @@ private:
     // calculate the peak noise frequency
     void calculate_noise(uint16_t bin_max);
     // update the estimation of the background noise energy
-    void update_ref_energy();
+    void update_ref_energy(uint16_t bin_max);
     // interpolate between frequency bins using simple method
     float calculate_simple_center_freq(uint8_t bin_max);
     // interpolate between frequency bins using jains method
@@ -106,6 +106,10 @@ private:
     uint8_t _update_axis;
     // the number of cycles required to have a proper noise reference
     uint8_t _noise_cycles;
+    // number of cycles over which to generate noise ensemble averages
+    uint8_t _noise_calibration_cycles[XYZ_AXIS_COUNT];
+    // axes that still require noise calibration
+    uint8_t _noise_needs_calibration : 3;
 
     // energy of the detected peak frequency
     Vector3f _center_freq_energy;
@@ -115,8 +119,10 @@ private:
     Vector3<uint8_t> _center_freq_bin;
     // filtered version of the peak frequency
     Vector3f _center_freq_hz_filtered;
+    // signal to noise ratio of PSD at the detected centre frequency
+    Vector3f _center_snr;
     // noise base of the gyros
-    Vector3f _ref_energy;
+    Vector3f*_ref_energy;
     // smoothing filter on the output
     LowPassFilter2pFloat _center_freq_filter[XYZ_AXIS_COUNT];
 
@@ -131,8 +137,7 @@ private:
     uint8_t _fft_start_bin;
     // number of cycles without a detected signal
     uint8_t _missed_cycles; 
-    // axes that still require noise calibration
-    uint8_t _noise_needs_calibration : 3;
+
     // minimum frequency of the detection window
     AP_Int16 _fft_min_hz;
     // maximum frequency of the detection window
@@ -148,8 +153,10 @@ private:
     AP_Float _throttle_ref;
     // learned hover filter frequency
     AP_Float _freq_hover;
+    // SNR Threshold
+    AP_Float _snr_threshold;
     AP_InertialSensor* _ins;
-#if defined(DEBUG_FFT) || defined(DEBUG_FFT_TIMING)
+#if DEBUG_FFT || DEBUG_FFT_TIMING
     uint32_t _output_count;
 #endif
 

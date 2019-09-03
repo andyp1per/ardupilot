@@ -24,6 +24,7 @@ extern const AP_HAL::HAL& hal;
 #define FFT_DEFAULT_WINDOW_SIZE     32
 #define FFT_DEFAULT_WINDOW_OVERLAP  0.5f
 #define FFT_THR_REF_DEFAULT         0.35f   // the estimated throttle reference, 0 ~ 1
+#define FFT_SNR_DEFAULT            10.0f
 
 // table of user settable parameters
 const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
@@ -91,12 +92,19 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("THR_REF", 8, AP_GyroFFT, _throttle_ref, FFT_THR_REF_DEFAULT),
 
+    // @Param: SNR_REF
+    // @DisplayName: FFT SNR reference threshold
+    // @Description: FFT SNR reference threshold in dB at which a signal is determined to be present.
+    // @Range: 0.0 100.0
+    // @User: Advanced
+    AP_GROUPINFO("SNR_REF", 9, AP_GyroFFT, _snr_threshold, FFT_SNR_DEFAULT),
+
     // @Param: TRACK_MODE
     // @DisplayName: FFT frequency tracking type
     // @Description: FFT frequency tracking type
     // @Range: 0 1
     // @User: Advanced
-    AP_GROUPINFO("TRACK_MODE", 9, AP_GyroFFT, _track_mode, 0),
+    AP_GROUPINFO("TRACK_MODE", 10, AP_GyroFFT, _track_mode, 0),
 
     AP_GROUPEND
 };
@@ -134,9 +142,15 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
     _window_size = constrain_int16(_window_size, 32, 256);
 
     // check that we have enough memory for the window size requested
-    const uint32_t total_allocation = (3 + XYZ_AXIS_COUNT * INS_MAX_INSTANCES) * _window_size * sizeof(float);
-    if (total_allocation > hal.util->available_memory() / 2) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "AP_GyroFFT: req alloc %u bytes (free=%u)", (unsigned int)total_allocation, (unsigned int)hal.util->available_memory());
+    // INS: XYZ_AXIS_COUNT * INS_MAX_INSTANCES * _window_size, DSP: 3 * _window_size, FFT: XYZ_AXIS_COUNT + 3 * _window_size
+    const uint32_t allocation_count = (XYZ_AXIS_COUNT * INS_MAX_INSTANCES + 3 + XYZ_AXIS_COUNT + 3) * sizeof(float);
+    if (allocation_count * FFT_DEFAULT_WINDOW_SIZE > hal.util->available_memory() / 2) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "AP_GyroFFT: disabled, required %lu bytes", allocation_count * FFT_DEFAULT_WINDOW_SIZE);
+        _enable = 0;
+        return;
+    }
+    else if (allocation_count * _window_size > hal.util->available_memory() / 2) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "AP_GyroFFT: req alloc %lu bytes (free=%u)", allocation_count * _window_size, (unsigned int)hal.util->available_memory());
         _window_size = FFT_DEFAULT_WINDOW_SIZE;
     }
     // save any changes that were made
@@ -151,7 +165,19 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
         _fft_sampling_rate_hz = loop_rate_hz / _sample_mode;
         for (uint8_t axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
             _downsampled_gyro_data[axis] = new float[_window_size];
+            if (_downsampled_gyro_data[axis] == nullptr) {
+                gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for AP_GyroFFT");
+                _enable = 0;
+                return;
+            }
         }
+    }
+
+    _ref_energy = new Vector3f[_window_size];
+    if (_ref_energy == nullptr) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for AP_GyroFFT");
+        _enable = 0;
+        return;
     }
 
     // number of samples needed before a new frame can be processed
@@ -161,10 +187,18 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
     _samples_per_frame = 1 << lrintf(log2f(_samples_per_frame));
  
     // make the gyro window match the window size
-    ins.set_gyro_window_size(_window_size);
+    if (!ins.set_gyro_window_size(_window_size)) {
+        _enable = 0;
+        return;
+    }
 
     // initialise the HAL DSP subsystem
     _state = hal.dsp->fft_init(_window_size, _fft_sampling_rate_hz);
+    if (_state == nullptr) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "Failed to initialize DSP engine");
+        _enable = 0;
+        return;
+    }
 
     // determine the start FFT bin for all frequency detection
     _fft_start_bin = MAX(lrintf((float)_fft_min_hz.get() / _state->_bin_resolution), 1);
@@ -177,6 +211,8 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
         _center_freq_hz_filtered[axis] = _fft_min_hz;
         // calculate low-pass filter characteristics based on overlap size
         _center_freq_filter[axis].set_cutoff_frequency(output_rate, output_rate * 0.48f);
+        // number of cycles to average over, two complete windows to be sure
+        _noise_calibration_cycles[axis] = (_window_size / _samples_per_frame) * 2;
     }
 
     // the number of cycles required to have a proper noise reference
@@ -223,7 +259,7 @@ void AP_GyroFFT::update()
 
     // once there are enough samples, process them
     if (_sample_count >= _samples_per_frame) {
-#if defined(DEBUG_FFT) || defined(DEBUG_FFT_TIMING)
+#if DEBUG_FFT || DEBUG_FFT_TIMING
         _output_count++;
 #endif
         uint32_t now = AP_HAL::micros();
@@ -241,7 +277,7 @@ void AP_GyroFFT::update()
         // something has been detected, update the peak frequency and associated metrics
         if (bin_max > 0) {
             _sample_count -= _samples_per_frame;
-            update_ref_energy();
+            update_ref_energy(bin_max);
             calculate_noise(bin_max);
         }
 
@@ -252,7 +288,7 @@ void AP_GyroFFT::update()
             _overrun_total += time_taken;
             _overrun_max = MAX(_overrun_max, time_taken);
         }
-#ifdef DEBUG_FFT_TIMING
+#if DEBUG_FFT_TIMING
         if (_output_count % (400 / _state->_update_steps) == 0 && _overrun_total > 0) {
             gcs().send_text(MAV_SEVERITY_WARNING, "FFT: oruns:%lu, orunvag:%lu", get_total_overrun_cycles(), get_average_overrun());
         }
@@ -266,6 +302,11 @@ bool AP_GyroFFT::calibration_check() {
         return true;
     }
 
+    // still calibrating noise so not ready
+    if (_noise_needs_calibration) {
+        return false;
+    }
+
     // make sure the frequency maxium is below Nyquist
     if (_fft_max_hz > _fft_sampling_rate_hz / 2) {
         gcs().send_text(MAV_SEVERITY_CRITICAL, "FFT: config MAXHZ %hdHz > %dHz", _fft_max_hz.get(), _fft_sampling_rate_hz / 2);
@@ -274,14 +315,11 @@ bool AP_GyroFFT::calibration_check() {
 
     // larger windows make the the self-test run too long, triggering the watchdog
     if (DataFlash_Class::instance()->log_while_disarmed()
-        || _window_size > FFT_DEFAULT_WINDOW_SIZE * 2
-        || _noise_needs_calibration) {
+        || _window_size > FFT_DEFAULT_WINDOW_SIZE * 2) {
         return true;
     }
 
-    const Vector3f ref_energy = _ref_energy;
     float max_divergence = self_test_bin_frequencies();
-    _ref_energy = ref_energy;
 
     if (max_divergence > _state->_bin_resolution / 2) {
         gcs().send_text(MAV_SEVERITY_WARNING, "FFT: self-test FAILED, max error %fHz", max_divergence);
@@ -294,7 +332,7 @@ void AP_GyroFFT::update_freq_hover(float dt, float throttle_out)
 {
     // we have chosen to constrain the hover frequency to be within the range reachable by the third order expo polynomial.
     _freq_hover = constrain_float(_freq_hover + (dt / (10.0f + dt)) * (get_weighted_noise_center_freq_hz() - _freq_hover), _fft_min_hz, _fft_max_hz);
-    _throttle_ref = constrain_float(_throttle_ref + (dt / (10.0f + dt)) * (throttle_out * powf((float)_fft_min_hz.get() / _freq_hover, 2.0f) - _throttle_ref), 0.01f, 0.9f);
+    _throttle_ref = constrain_float(_throttle_ref + (dt / (10.0f + dt)) * (throttle_out * sq((float)_fft_min_hz.get() / _freq_hover.get()) - _throttle_ref), 0.01f, 0.9f);
 }
 
 // save parameters as part of disarming
@@ -325,13 +363,16 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
     _center_freq_bin[_update_axis] = max_bin;
 
     float weighted_center_freq_hz = 0;
-
+    // cacluate the SNR
+    // float snr = _state->_max_bin_snr;
+    float snr = 10.f * (MAX(0.0f, log10f(_state->_freq_bins[max_bin])) -  MAX(0.0f, log10f(_ref_energy[_update_axis][max_bin])));
     // if the bin energy is above the noise threshold then we have a signal
-    if (!isnan(_state->_freq_bins[max_bin]) && _state->_freq_bins[max_bin] > _ref_energy[_update_axis]) {
+    if (!_noise_needs_calibration && !isnan(_state->_freq_bins[max_bin]) && snr > _snr_threshold) {
         _center_freq_energy[_update_axis] =_state->_freq_bins[max_bin];
         weighted_center_freq_hz = MAX(_state->_max_bin_freq, (float)_fft_min_hz);
         weighted_center_freq_hz = MIN(weighted_center_freq_hz, (float)_fft_max_hz);
         _center_freq_hz[_update_axis] = weighted_center_freq_hz;
+        _center_snr[_update_axis] = snr;
         _missed_cycles = 0;
     }
     // if we failed to find a signal, carry on using the previous reading
@@ -344,16 +385,19 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
         weighted_center_freq_hz = _fft_min_hz;
         _center_freq_hz[_update_axis] = _fft_min_hz;
         _center_freq_energy[_update_axis] = 0.0f;
+        _center_snr[_update_axis] = 0.0f;
     }
 
     _center_freq_hz_filtered[_update_axis] = _center_freq_filter[_update_axis].apply(weighted_center_freq_hz);
 
-#ifdef DEBUG_FFT
+#if DEBUG_FFT
     // output at approx 1hz
    if (_output_count % (400 / _state->_update_steps) == 0)
    {
-        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: e:%.1f, b:%u, f:%.1f, fr:%.1f, r:%.1f, d:%.1f",
-                        _state->_freq_bins[max_bin], max_bin, _center_freq_hz_filtered[_update_axis], _center_freq_hz[_update_axis], _ref_energy[_update_axis], _state->_max_bin_freq);
+        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: f:%.1f, fr:%.1f, b:%u, fd:%.1f",
+                        _center_freq_hz_filtered[_update_axis], _center_freq_hz[_update_axis], max_bin, _state->_max_bin_freq);
+        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: e:%.1f, r:%.1f, snr:%.1f",
+                        _state->_freq_bins[max_bin], _ref_energy[_update_axis][max_bin], snr);
         gcs().send_text(MAV_SEVERITY_WARNING, "[%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f]",
                         _state->_freq_bins[0], _state->_freq_bins[1], _state->_freq_bins[2], _state->_freq_bins[3], _state->_freq_bins[4], _state->_freq_bins[5], _state->_freq_bins[6], _state->_freq_bins[7],
                         _state->_freq_bins[8], _state->_freq_bins[9], _state->_freq_bins[10], _state->_freq_bins[11], _state->_freq_bins[12], _state->_freq_bins[13], _state->_freq_bins[14], _state->_freq_bins[15]);
@@ -363,17 +407,24 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
 }
 
 // calculate noise baseline from FFT data provided by the HAL subsystem
-void AP_GyroFFT::update_ref_energy() {
+void AP_GyroFFT::update_ref_energy(uint16_t max_bin) {
     if (!_noise_needs_calibration) {
         return;
     }
-    // baseline the noise floor by averaging all the bins, this avoids detecting noise as a signal
-    if (_noise_cycles == 0 && is_zero(_ref_energy[_update_axis])) {
+    // according to https://www.tcd.ie/Physics/research/groups/magnetism/files/lectures/py5021/MagneticSensors3.pdf sensor noise is not necessarily gaussian
+    // determine a PS noise reference at each of the possble center frequencies
+    if (_noise_cycles == 0 && _noise_calibration_cycles[_update_axis] > 0) {
         for (uint8_t i = 1; i < _state->_bin_count; i++) {
-            _ref_energy[_update_axis] += _state->_freq_bins[i];
+            _ref_energy[_update_axis][i] += _state->_freq_bins[i];
         }
-        _ref_energy[_update_axis] = _ref_energy[_update_axis] * 100.0f / (_state->_bin_count - 1);
-        _noise_needs_calibration &= ~(1 << _update_axis);
+        if (--_noise_calibration_cycles[_update_axis] == 0) {
+            for (uint8_t i = 1; i < _state->_bin_count; i++) {
+                const float cycles = (_window_size / _samples_per_frame) * 2;
+                // overall random noise is reduced by sqrt(N) when averaging periodigrams so adjust for that
+                _ref_energy[_update_axis][i] = (_ref_energy[_update_axis][i] / cycles) * sqrt(cycles);
+            }
+            _noise_needs_calibration &= ~(1 << _update_axis);
+        }
     }
     else if (_noise_cycles > 0) {
         _noise_cycles--;
@@ -430,13 +481,17 @@ float AP_GyroFFT::self_test_bin_frequencies() {
 // perform FFT analysis of a single sine wave at the selected frequency
 float AP_GyroFFT::self_test(float frequency) {
     static GyroWindow test_window = new float[_state->_window_size];
+    // in the unlikely event we can't allocate a test winodw, skip the checks
+    if (test_window == nullptr) {
+        return 0.0f;
+    }
+
     for(uint16_t i = 0; i < _state->_window_size; i++) {
         test_window[i]= sinf(2.0f * M_PI * frequency * i / _fft_sampling_rate_hz) * 2000.0f;
     }
 
     _update_axis = 0;
     _state->reset();
-    _ref_energy.zero();
 
     uint16_t max_bin = 0;
     uint8_t maxsteps = 8;
