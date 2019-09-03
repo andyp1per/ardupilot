@@ -139,4 +139,5 @@ SPIDEV dataflash SPI3 DEVID1 FLASH_CS MODE3 1*MHZ 8*MHZ
 
 # 8 PWM available by default
 define BOARD_PWM_COUNT_DEFAULT 8
+define HAL_WITH_DSP FALSE
 
