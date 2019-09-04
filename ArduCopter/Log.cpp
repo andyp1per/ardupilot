@@ -509,9 +509,9 @@ struct PACKED log_Filter_Tuning2 {
     float    motor_peak_energy_x;
     float    motor_peak_energy_y;
     float    motor_peak_energy_z;
-    float    motor_noise_ref_x;
-    float    motor_noise_ref_y;
-    float    motor_noise_ref_z;
+    float    motor_snr_x;
+    float    motor_snr_y;
+    float    motor_snr_z;
     uint8_t  motor_peak_bin;
     uint32_t motor_peak_total_overrun_cycles;
 };
@@ -541,9 +541,9 @@ void Copter::Log_Write_Filter_Tuning()
         motor_peak_energy_x : gyro_fft.get_center_freq_energy().x,
         motor_peak_energy_y : gyro_fft.get_center_freq_energy().y,
         motor_peak_energy_z : gyro_fft.get_center_freq_energy().z,
-        motor_noise_ref_x   : gyro_fft.get_noise_ref_energy().x,
-        motor_noise_ref_y   : gyro_fft.get_noise_ref_energy().y,
-        motor_noise_ref_z   : gyro_fft.get_noise_ref_energy().z,
+        motor_snr_x         : gyro_fft.get_noise_signal_to_noise_db().x,
+        motor_snr_y         : gyro_fft.get_noise_signal_to_noise_db().y,
+        motor_snr_z         : gyro_fft.get_noise_signal_to_noise_db().z,
         motor_peak_bin      : gyro_fft.get_center_freq_bin().z,
         motor_peak_total_overrun_cycles : gyro_fft.get_total_overrun_cycles()
     };
@@ -574,7 +574,7 @@ const struct LogStructure Copter::log_structure[] = {
     { LOG_FILTER_TUNING_MSG, sizeof(log_Filter_Tuning),
       "FTUN", "Qfffffffffff", "TimeUS,ThO,ThH,PkAvg,PkX,PkY,PkZ,DnF,ThF,RwPkX,RwPkY,RwPkZ", "s--zzzzzzzzz", "F-----------" },
     { LOG_FILTER_TUNING_MSG2, sizeof(log_Filter_Tuning2),
-      "FTU2", "QffffffBI", "TimeUS,EnX,EnY,EnZ,RfX,RfY,RfZ,Bin,Err", "s--------", "F--------" },
+      "FTU2", "QffffffBI", "TimeUS,EnX,EnY,EnZ,SnX,SnY,SnZ,Bin,Err", "s--------", "F--------" },
 #endif
     { LOG_MOTBATT_MSG, sizeof(log_MotBatt),
       "MOTB", "Qffff",  "TimeUS,LiftMax,BatVolt,BatRes,ThLimit", "s-vw-", "F-00-" },
