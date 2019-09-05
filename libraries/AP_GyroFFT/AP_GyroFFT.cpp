@@ -273,7 +273,7 @@ bool AP_GyroFFT::calibration_check() {
     }
 
     // larger windows make the the self-test run too long, triggering the watchdog
-    if (AP_Logger::get_singleton()->log_while_disarmed()
+    if (DataFlash_Class::instance()->log_while_disarmed()
         || _window_size > FFT_DEFAULT_WINDOW_SIZE * 2
         || _noise_needs_calibration) {
         return true;
