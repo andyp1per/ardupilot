@@ -16,6 +16,7 @@
  */
 
 #include <AP_Math/AP_Math.h>
+#include <GCS_MAVLink/GCS.h>
 #include "AP_HAL.h"
 #include "DSP.h"
 
@@ -31,6 +32,9 @@ DSP::FFTWindowState::FFTWindowState(uint16_t window_size, uint16_t sample_rate, 
 {
     // includes DC ad Nyquist components and needs to be large enough for intermediate steps
     _freq_bins = new float[window_size];
+    if (_freq_bins == nullptr) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for DSP");
+    }
 }
 
 DSP::FFTWindowState::~FFTWindowState()
