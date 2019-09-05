@@ -71,6 +71,8 @@ public:
     static const struct AP_Param::GroupInfo var_info[];
     static AP_GyroFFT *get_singleton() { return _singleton; }
 
+    AP_Int8 _track_mode;
+
 private:
     // calculate the peak noise frequency
     void calculate_noise(uint16_t bin_max);
@@ -146,7 +148,6 @@ private:
     AP_Float _throttle_ref;
     // learned hover filter frequency
     AP_Float _freq_hover;
-    AP_Int8 _track_mode;
     AP_InertialSensor* _ins;
 #if defined(DEBUG_FFT) || defined(DEBUG_FFT_TIMING)
     uint32_t _output_count;
