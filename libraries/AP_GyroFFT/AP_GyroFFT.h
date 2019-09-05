@@ -146,6 +146,7 @@ private:
     AP_Float _throttle_ref;
     // learned hover filter frequency
     AP_Float _freq_hover;
+    AP_Int8 _track_mode;
     AP_InertialSensor* _ins;
 #if defined(DEBUG_FFT) || defined(DEBUG_FFT_TIMING)
     uint32_t _output_count;
