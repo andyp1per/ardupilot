@@ -158,7 +158,7 @@ public:
     uint16_t  get_filtered_gyro_window_index(uint8_t instance) const { return _circular_buffer_idx[instance]; }
     uint16_t get_raw_gyro_rate_hz() const { return get_raw_gyro_rate_hz(_primary_gyro); }
     uint16_t get_raw_gyro_rate_hz(uint8_t instance) const { return _gyro_raw_sample_rates[_primary_gyro]; }
-    void set_gyro_window_size(uint16_t size);
+    bool set_gyro_window_size(uint16_t size);
 
     // get accel offsets in m/s/s
     const Vector3f &get_accel_offsets(uint8_t i) const { return _accel_offset[i]; }
