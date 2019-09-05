@@ -613,15 +613,21 @@ AP_InertialSensor_Backend *AP_InertialSensor::_find_backend(int16_t backend_id, 
     return nullptr;
 }
 
-void AP_InertialSensor::set_gyro_window_size(uint16_t size) {
+bool AP_InertialSensor::set_gyro_window_size(uint16_t size) {
     _gyro_window_size = size;
 
     // allocate FFT gyro window
     for (uint8_t i = 0; i < INS_MAX_INSTANCES; i++) {
         for (uint8_t j = 0; j < XYZ_AXIS_COUNT; j++) {
             _gyro_window[i][j] = new float[size];
+            if (_gyro_window[i][j] == nullptr) {
+                gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for INS");
+                return false;
+            }
         }
     }
+
+    return true;
 }
 
 void
