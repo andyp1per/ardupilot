@@ -76,21 +76,21 @@ AP_HAL::DSP::FFTWindowState* DSP::fft_init(uint16_t window_size, uint16_t sample
 // This is a state-machine version of CMSIS arm_rfft_fast_f32() such that each step can be processed separately as required
 // The number of cycles to reach a solution is based upon the window size as larger windows mean longer step times
 // Experimentally derived values are given as comments in the steps, differences between MCUs may mean more individual steps are required
-uint16_t DSP::fft_analyse(AP_HAL::DSP::FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t start_bin)
+uint16_t DSP::fft_analyse(AP_HAL::DSP::FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t start_bin, uint16_t end_bin)
 {
     FFTWindowStateARM* fft = (FFTWindowStateARM*)state;
     uint16_t bin_max = 0;
 
     switch (fft->_update_steps) {
     case 2:
-        bin_max = fft_analyse_window_2step(fft, samples, buffer_index, start_bin);
+        bin_max = fft_analyse_window_2step(fft, samples, buffer_index, start_bin, end_bin);
         break;
     case 3:
-        bin_max = fft_analyse_window_3step(fft, samples, buffer_index, start_bin);
+        bin_max = fft_analyse_window_3step(fft, samples, buffer_index, start_bin, end_bin);
         break;
     case 6:
     default:
-        bin_max = fft_analyse_window_6step(fft, samples, buffer_index, start_bin);
+        bin_max = fft_analyse_window_6step(fft, samples, buffer_index, start_bin, end_bin);
         break;
     }
     return bin_max;
@@ -138,7 +138,7 @@ DSP::FFTWindowStateARM::~FFTWindowStateARM()
 }
 
 // 2 step FFT analysis for short windows and fast processors
-uint16_t DSP::fft_analyse_window_2step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin)
+uint16_t DSP::fft_analyse_window_2step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin, uint16_t end_bin)
 {
     uint32_t bin_max = 0;
 
@@ -150,8 +150,8 @@ uint16_t DSP::fft_analyse_window_2step(FFTWindowStateARM* fft, const float* samp
     case STEP_BITREVERSAL:
         step_bitreversal(fft);
         step_stage_rfft_f32(fft);
-        step_arm_cmplx_mag_f32(fft, start_bin);
-        bin_max = step_calc_frequencies(fft, start_bin);
+        step_arm_cmplx_mag_f32(fft, start_bin, end_bin);
+        bin_max = step_calc_frequencies(fft, start_bin, end_bin);
         break;
     }
     fft->_update_step = fft->_update_step % STEP_COUNT;
@@ -160,7 +160,7 @@ uint16_t DSP::fft_analyse_window_2step(FFTWindowStateARM* fft, const float* samp
 }
 
 // 3 step FFT analysis for longer windows and slower processors
-uint16_t DSP::fft_analyse_window_3step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin)
+uint16_t DSP::fft_analyse_window_3step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin, uint16_t end_bin)
 {
     uint32_t bin_max = 0;
 
@@ -172,10 +172,10 @@ uint16_t DSP::fft_analyse_window_3step(FFTWindowStateARM* fft, const float* samp
     case STEP_BITREVERSAL:
         step_bitreversal(fft);
         step_stage_rfft_f32(fft);
-        step_arm_cmplx_mag_f32(fft, start_bin);
+        step_arm_cmplx_mag_f32(fft, start_bin, end_bin);
         break;
     case STEP_CALC_FREQUENCIES:
-        bin_max = step_calc_frequencies(fft, start_bin);
+        bin_max = step_calc_frequencies(fft, start_bin, end_bin);
         break;
     }
     fft->_update_step = fft->_update_step % STEP_COUNT;
@@ -184,7 +184,7 @@ uint16_t DSP::fft_analyse_window_3step(FFTWindowStateARM* fft, const float* samp
 }
 
 // 6 step FFT analysis for the largest windows and slowest processors
-uint16_t DSP::fft_analyse_window_6step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin)
+uint16_t DSP::fft_analyse_window_6step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin, uint16_t end_bin)
 {
     uint32_t bin_max = 0;
 
@@ -202,10 +202,10 @@ uint16_t DSP::fft_analyse_window_6step(FFTWindowStateARM* fft, const float* samp
         step_stage_rfft_f32(fft);
         break;
     case STEP_ARM_CMPLX_MAG_F32:
-        step_arm_cmplx_mag_f32(fft, start_bin);
+        step_arm_cmplx_mag_f32(fft, start_bin, end_bin);
         break;
     case STEP_CALC_FREQUENCIES:
-        bin_max = step_calc_frequencies(fft, start_bin);
+        bin_max = step_calc_frequencies(fft, start_bin, end_bin);
         break;
     }
     fft->_update_step = fft->_update_step % STEP_COUNT;
@@ -307,7 +307,7 @@ void DSP::step_stage_rfft_f32(FFTWindowStateARM* fft)
 }
 
 // step 5: find the magnitudes of the complex data
-void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft, uint16_t start_bin)
+void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft, uint16_t start_bin, uint16_t end_bin)
 {
     TIMER_START(_arm_cmplx_mag_f32_timer);
     // 8us (BF)
@@ -325,7 +325,7 @@ void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft, uint16_t start_bin)
     fft->_freq_bins[fft->_bin_count] = sq(fft->_rfft_data[1]); // Nyquist
     // find the maximum power in the range we are interested in
     float max_value = 0;
-    uint16_t bin_range = (fft->_bin_count + 1) - start_bin;
+    uint16_t bin_range = (end_bin - start_bin) + 1;
     arm_max_f32(&fft->_freq_bins[start_bin], bin_range, &max_value, &fft->_max_energy_bin);
     fft->_max_energy_bin += start_bin;
     // scale the power to account for the input window
@@ -336,7 +336,7 @@ void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft, uint16_t start_bin)
 }
     
 // step 6: find the bin with the highest energy and interpolate the required frequency
-uint16_t DSP::step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin)
+uint16_t DSP::step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin, uint16_t end_bin)
 {
     TIMER_START(_step_calc_frequencies);
 
