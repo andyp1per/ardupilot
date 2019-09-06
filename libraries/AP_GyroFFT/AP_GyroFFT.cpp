@@ -202,6 +202,8 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
 
     // determine the start FFT bin for all frequency detection
     _fft_start_bin = MAX(lrintf((float)_fft_min_hz.get() / _state->_bin_resolution), 1);
+    // determine the endt FFT bin for all frequency detection
+    _fft_end_bin = MIN(lrintf((float)_fft_max_hz.get() / _state->_bin_resolution), _state->_bin_count);
 
     // The update rate for the output
     const float output_rate = _fft_sampling_rate_hz / _samples_per_frame;
@@ -268,11 +270,11 @@ void AP_GyroFFT::update()
         uint16_t bin_max = 0;
         if (_sample_mode) {
             // loop rate sampling
-            bin_max = hal.dsp->fft_analyse(_state, _downsampled_gyro_data[_update_axis], _circular_buffer_idx, _fft_start_bin);
+            bin_max = hal.dsp->fft_analyse(_state, _downsampled_gyro_data[_update_axis], _circular_buffer_idx, _fft_start_bin, _fft_end_bin);
         }
         else {
             // gyro rate sampling
-            bin_max = hal.dsp->fft_analyse(_state, _ins->get_filtered_gyro_window(_update_axis), _ins->get_filtered_gyro_window_index(), _fft_start_bin);
+            bin_max = hal.dsp->fft_analyse(_state, _ins->get_filtered_gyro_window(_update_axis), _ins->get_filtered_gyro_window_index(), _fft_start_bin, _fft_end_bin);
         }
         // something has been detected, update the peak frequency and associated metrics
         if (bin_max > 0) {
@@ -471,7 +473,7 @@ float AP_GyroFFT::calculate_jains_estimator_center_freq(uint8_t k)
 float AP_GyroFFT::self_test_bin_frequencies() {
     float max_divergence = 0;
 
-    for (uint8_t bin = _fft_start_bin; bin < _state->_bin_count; bin++) {
+    for (uint8_t bin = _fft_start_bin; bin <= _fft_end_bin; bin++) {
         max_divergence = MAX(max_divergence, self_test(bin * _state->_bin_resolution)); // test bin centers
         max_divergence = MAX(max_divergence, self_test(bin * _state->_bin_resolution - _state->_bin_resolution / 4)); // test bin off-centers
     }
@@ -495,7 +497,7 @@ float AP_GyroFFT::self_test(float frequency) {
 
     uint16_t max_bin = 0;
     uint8_t maxsteps = 8;
-    while ((max_bin = hal.dsp->fft_analyse(_state, test_window, 0, _fft_start_bin)) == 0 && maxsteps-- > 0) {
+    while ((max_bin = hal.dsp->fft_analyse(_state, test_window, 0, _fft_start_bin, _fft_end_bin)) == 0 && maxsteps-- > 0) {
         // NOOP
     }
 
