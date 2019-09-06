@@ -135,7 +135,9 @@ private:
     // configured sampling rate
     uint16_t _fft_sampling_rate_hz;
     // configured start bin based on min hz
-    uint8_t _fft_start_bin;
+    uint16_t _fft_start_bin;
+    // configured end bin based on max hz
+    uint16_t _fft_end_bin;
     // number of cycles without a detected signal
     uint8_t _missed_cycles; 
 
