@@ -47,6 +47,6 @@ public:
     // initialise an FFT instance
     virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate) = 0;
     // perform one step of an FFT analysis
-    virtual uint16_t fft_analyse(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t start_bin) = 0;
+    virtual uint16_t fft_analyse(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t start_bin, uint16_t end_bin) = 0;
 private:
 };
