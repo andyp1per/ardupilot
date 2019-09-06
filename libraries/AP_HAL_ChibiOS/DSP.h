@@ -31,7 +31,7 @@ public:
     // initialise an FFT instance
     virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate) override;
     // perform one step of an FFT analysis
-    virtual uint16_t fft_analyse(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t start_bin) override;
+    virtual uint16_t fft_analyse(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t start_bin, uint16_t end_bin) override;
 
     // the stages of the FFT state machine
     enum {
@@ -71,18 +71,18 @@ public:
 
 private:
     // 2 step FFT analysis for short windows and fast processors
-    uint16_t fft_analyse_window_2step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin);
+    uint16_t fft_analyse_window_2step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin, uint16_t end_bin);
     // 3 step FFT analysis for longer windows and slower processors
-    uint16_t fft_analyse_window_3step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin);
+    uint16_t fft_analyse_window_3step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin, uint16_t end_bin);
     // 6 step FFT analysis for the largest windows and slowest processors
-    uint16_t fft_analyse_window_6step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin);
+    uint16_t fft_analyse_window_6step(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t start_bin, uint16_t end_bin);
     // following are the six independent steps for calculating an FFT
     void step_hanning(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index);
     void step_arm_cfft_f32(FFTWindowStateARM* fft);
     void step_bitreversal(FFTWindowStateARM* fft);
     void step_stage_rfft_f32(FFTWindowStateARM* fft);
-    void step_arm_cmplx_mag_f32(FFTWindowStateARM* fft, uint16_t start_bin);
-    uint16_t step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin);
+    void step_arm_cmplx_mag_f32(FFTWindowStateARM* fft, uint16_t start_bin, uint16_t end_bin);
+    uint16_t step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin, uint16_t end_bin);
     // candan's frequency interpolator
     float calculate_candans_estimator(FFTWindowStateARM* fft, uint8_t k);
     // quinn's frequency interpolator
