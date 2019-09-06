@@ -21,6 +21,7 @@
 #include <AP_Param/AP_Param.h>
 #include <AP_Math/AP_Math.h>
 #include <AP_InertialSensor/AP_InertialSensor.h>
+#include <Filter/LowPassFilter.h>
 
 #define XYZ_AXIS_COUNT              3
 #define FFT_UPDATE_BUDGET_MICROS    175 // the budgeted update period
@@ -124,7 +125,7 @@ private:
     // noise base of the gyros
     Vector3f*_ref_energy;
     // smoothing filter on the output
-    LowPassFilter2pFloat _center_freq_filter[XYZ_AXIS_COUNT];
+    LowPassFilterFloat _center_freq_filter[XYZ_AXIS_COUNT];
 
     // performance counters
     uint32_t _overrun_cycles;
