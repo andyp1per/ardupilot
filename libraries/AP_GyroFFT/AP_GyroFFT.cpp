@@ -83,7 +83,7 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
     // @Description: The learned hover noise frequency
     // @Range: 0 250
     // @User: Advanced
-    AP_GROUPINFO("FREQ_HOVER", 7, AP_GyroFFT, _freq_hover, 80.0f),
+    AP_GROUPINFO("FREQ_HOVER", 7, AP_GyroFFT, _freq_hover_hz, 80.0f),
 
     // @Param: THR_REF
     // @DisplayName: FFT learned thrust reference
@@ -97,7 +97,21 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
     // @Description: FFT SNR reference threshold in dB at which a signal is determined to be present.
     // @Range: 0.0 100.0
     // @User: Advanced
-    AP_GROUPINFO("SNR_REF", 9, AP_GyroFFT, _snr_threshold, FFT_SNR_DEFAULT),
+    AP_GROUPINFO("SNR_REF", 9, AP_GyroFFT, _snr_threshold_db, FFT_SNR_DEFAULT),
+
+    // @Param: ATT_HOVER
+    // @DisplayName: FFT attenuation at hover
+    // @Description: FFT attenuation at hover in dB. The bandwidth is calculated at the attenuation midpoint, i.e. dB/2.
+    // @Range: 0 100
+    // @User: Advanced
+    AP_GROUPINFO("ATT_HOVER", 10, AP_GyroFFT, _attenuation_hover_db, 15),
+
+    // @Param: BW_HOVER
+    // @DisplayName: FFT learned bandwidth at hover
+    // @Description: FFT learned bandwidth at hover for the attenuation/2 frequencies.
+    // @Range: 0 200
+    // @User: Advanced
+    AP_GROUPINFO("BW_HOVER",11, AP_GyroFFT, _bandwidth_hover_hz, 20),
 
     // @Param: TRACK_MODE
     // @DisplayName: FFT frequency tracking type
@@ -219,6 +233,8 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
 
     // the number of cycles required to have a proper noise reference
     _noise_cycles = (_window_size / _samples_per_frame) * XYZ_AXIS_COUNT;
+    // actual attenuation from the db value - see BW definition in http://shepazu.github.io/Audio-EQ-Cookbook/audio-eq-cookbook.html
+    _attenuation_cutoff = powf(10.0f, -_attenuation_hover_db / 20.0f);
 }
 
 // sample the gyros either by using a gyro window sampled at the gyro rate or making invdividual samples
@@ -333,14 +349,16 @@ bool AP_GyroFFT::calibration_check() {
 void AP_GyroFFT::update_freq_hover(float dt, float throttle_out)
 {
     // we have chosen to constrain the hover frequency to be within the range reachable by the third order expo polynomial.
-    _freq_hover = constrain_float(_freq_hover + (dt / (10.0f + dt)) * (get_weighted_noise_center_freq_hz() - _freq_hover), _fft_min_hz, _fft_max_hz);
-    _throttle_ref = constrain_float(_throttle_ref + (dt / (10.0f + dt)) * (throttle_out * sq((float)_fft_min_hz.get() / _freq_hover.get()) - _throttle_ref), 0.01f, 0.9f);
+    _freq_hover_hz = constrain_float(_freq_hover_hz + (dt / (10.0f + dt)) * (get_weighted_noise_center_freq_hz() - _freq_hover_hz), _fft_min_hz, _fft_max_hz);
+    _bandwidth_hover_hz = constrain_float(_bandwidth_hover_hz + (dt / (10.0f + dt)) * (get_weighted_noise_center_bandwidth_hz() - _bandwidth_hover_hz), 0, _fft_max_hz / 2.0f);
+    _throttle_ref = constrain_float(_throttle_ref + (dt / (10.0f + dt)) * (throttle_out * sq((float)_fft_min_hz.get() / _freq_hover_hz.get()) - _throttle_ref), 0.01f, 0.9f);
 }
 
 // save parameters as part of disarming
 void AP_GyroFFT::save_params_on_disarm()
 {
-    _freq_hover.save();
+    _freq_hover_hz.save();
+    _bandwidth_hover_hz.save();
     _throttle_ref.save();
 }
 
@@ -359,22 +377,37 @@ float AP_GyroFFT::get_weighted_noise_center_freq_hz() const
     }
 }
 
+// return an average noise bandwidth weighted by bin energy
+float AP_GyroFFT::get_weighted_noise_center_bandwidth_hz() const
+{
+    if (!_center_freq_energy.is_nan()
+        && !is_zero(_center_freq_energy.x)
+        && !is_zero(_center_freq_energy.y)) {
+        return (_center_bandwidth_hz.x * _center_freq_energy.x + _center_bandwidth_hz.y * _center_freq_energy.y) / (_center_freq_energy.x + _center_freq_energy.y);
+    }
+    else {
+        return (_center_bandwidth_hz.x + _center_bandwidth_hz.y) / 2.0f;
+    }
+}
+
 // calculate noise frequencies from FFT data provided by the HAL subsystem
 void AP_GyroFFT::calculate_noise(uint16_t max_bin)
 {
     _center_freq_bin[_update_axis] = max_bin;
 
     float weighted_center_freq_hz = 0;
-    // cacluate the SNR
-    // float snr = _state->_max_bin_snr;
-    float snr = 10.f * (MAX(0.0f, log10f(_state->_freq_bins[max_bin])) -  MAX(0.0f, log10f(_ref_energy[_update_axis][max_bin])));
+
+    // cacluate the SNR and center frequency energy
+    float snr = 10.f * (MAX(0.0f, log10f(_state->_freq_bins[max_bin])) - MAX(0.0f, log10f(_ref_energy[_update_axis][max_bin])));
     // if the bin energy is above the noise threshold then we have a signal
-    if (!_noise_needs_calibration && !isnan(_state->_freq_bins[max_bin]) && snr > _snr_threshold) {
-        _center_freq_energy[_update_axis] =_state->_freq_bins[max_bin];
+    if (!_noise_needs_calibration && !isnan(_state->_freq_bins[max_bin]) && snr > _snr_threshold_db) {
+        _center_freq_energy[_update_axis] = _state->_freq_bins[max_bin];
         weighted_center_freq_hz = MAX(_state->_max_bin_freq, (float)_fft_min_hz);
         weighted_center_freq_hz = MIN(weighted_center_freq_hz, (float)_fft_max_hz);
         _center_freq_hz[_update_axis] = weighted_center_freq_hz;
         _center_snr[_update_axis] = snr;
+        // determine the bandwidth of the peak
+         _center_bandwidth_hz[_update_axis] = _center_bandwidth_filter[_update_axis].apply(calculate_noise_bandwidth_hz(max_bin));
         _missed_cycles = 0;
     }
     // if we failed to find a signal, carry on using the previous reading
@@ -388,6 +421,7 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
         _center_freq_hz[_update_axis] = _fft_min_hz;
         _center_freq_energy[_update_axis] = 0.0f;
         _center_snr[_update_axis] = 0.0f;
+        _center_bandwidth_hz[_update_axis] = _center_bandwidth_filter[_update_axis].apply(_bandwidth_hover_hz);
     }
 
     _center_freq_hz_filtered[_update_axis] = _center_freq_filter[_update_axis].apply(weighted_center_freq_hz);
@@ -398,14 +432,37 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
    {
         gcs().send_text(MAV_SEVERITY_WARNING, "FFT: f:%.1f, fr:%.1f, b:%u, fd:%.1f",
                         _center_freq_hz_filtered[_update_axis], _center_freq_hz[_update_axis], max_bin, _state->_max_bin_freq);
-        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: e:%.1f, r:%.1f, snr:%.1f",
-                        _state->_freq_bins[max_bin], _ref_energy[_update_axis][max_bin], snr);
+        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: bw:%.1f, e:%.1f, r:%.1f, snr:%.1f",
+                        _center_bandwidth_hz[_update_axis], _state->_freq_bins[max_bin], _ref_energy[_update_axis][max_bin], snr);
         gcs().send_text(MAV_SEVERITY_WARNING, "[%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f]",
                         _state->_freq_bins[0], _state->_freq_bins[1], _state->_freq_bins[2], _state->_freq_bins[3], _state->_freq_bins[4], _state->_freq_bins[5], _state->_freq_bins[6], _state->_freq_bins[7],
                         _state->_freq_bins[8], _state->_freq_bins[9], _state->_freq_bins[10], _state->_freq_bins[11], _state->_freq_bins[12], _state->_freq_bins[13], _state->_freq_bins[14], _state->_freq_bins[15]);
    }
 #endif
     _update_axis = (_update_axis + 1) % XYZ_AXIS_COUNT;
+}
+
+// calculate the noise peak width based on the 3dB points
+float AP_GyroFFT::calculate_noise_bandwidth_hz(uint16_t max_bin)
+{
+    float noise_width = 1;
+    // -attenuation/2 dB point above the center bin
+    for (uint16_t b = max_bin + 1; b <= _state->_bin_count; b++) {
+        if (_state->_freq_bins[b] < _state->_freq_bins[max_bin] * _attenuation_cutoff) {
+            // we assume that the 3dB point is in the middle of the final shoulder bin
+            noise_width += (b - max_bin - 0.5f);
+            break;
+        }
+    }
+    // -attenuation/2 dB point below the center bin
+    for (uint16_t b = max_bin - 1; b >= 1; b--) {
+        if (_state->_freq_bins[b] < _state->_freq_bins[max_bin] * _attenuation_cutoff) {
+            // we assume that the 3dB point is in the middle of the final shoulder bin
+            noise_width += (max_bin - b - 0.5f);
+            break;
+        }
+    }
+    return noise_width * _state->_bin_resolution;
 }
 
 // calculate noise baseline from FFT data provided by the HAL subsystem
@@ -434,13 +491,13 @@ void AP_GyroFFT::update_ref_energy(uint16_t max_bin) {
 }
 
 // interpolate center frequency using simple center of bin
-float AP_GyroFFT::calculate_simple_center_freq(uint8_t bin_max)
+float AP_GyroFFT::calculate_simple_center_freq(uint8_t max_bin)
 {
     float weighted_center_freq_hz = 0;
     // The frequency of each of those frequency components are given by k*fs/N, so first bin is DC.
-    if (_state->_freq_bins[bin_max] > 0) {
+    if (_state->_freq_bins[max_bin] > 0) {
         // the index points at the center frequency of each bin so index 1 is actually 1 * 800 / 64 = 12.5Hz
-        weighted_center_freq_hz = bin_max * _state->_bin_resolution;
+        weighted_center_freq_hz = max_bin * _state->_bin_resolution;
     }
     return weighted_center_freq_hz;
 }
