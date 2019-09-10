@@ -227,7 +227,8 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
         _center_freq_hz_filtered[axis] = _fft_min_hz;
         // calculate low-pass filter characteristics based on overlap size
         _center_freq_filter[axis].set_cutoff_frequency(output_rate, output_rate * 0.48f);
-        _center_bandwidth_filter[axis].set_cutoff_frequency(output_rate, output_rate * 0.48f);
+        // smooth the bandwidth output more aggressively
+        _center_bandwidth_filter[axis].set_cutoff_frequency(output_rate, output_rate * 0.25f);
         // number of cycles to average over, two complete windows to be sure
         _noise_calibration_cycles[axis] = (_window_size / _samples_per_frame) * 2;
     }
