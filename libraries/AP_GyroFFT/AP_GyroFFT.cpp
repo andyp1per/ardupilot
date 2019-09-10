@@ -38,20 +38,18 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
 
     // @Param: MINHZ
     // @DisplayName: Minimum Frequency
-    // @Description: Lower bound of FFT frequency detection in Hz. Takes effect on reboot.
+    // @Description: Lower bound of FFT frequency detection in Hz.
     // @Range: 10 400
     // @Units: Hz
     // @User: Advanced
-    // @RebootRequired: True
     AP_GROUPINFO("MINHZ", 2, AP_GyroFFT, _fft_min_hz, 80),
 
     // @Param: MINHZ
     // @DisplayName: Maximum Frequency
-    // @Description: Upper bound of FFT frequency detection in Hz. Takes effect on reboot.
+    // @Description: Upper bound of FFT frequency detection in Hz.
     // @Range: 10 400
     // @Units: Hz
     // @User: Advanced
-    // @RebootRequired: True
     AP_GROUPINFO("MAXHZ", 3, AP_GyroFFT, _fft_max_hz, 200),
 
     // @Param: SAMPLE_MODE
@@ -101,14 +99,14 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
 
     // @Param: ATT_HOVER
     // @DisplayName: FFT attenuation at hover
-    // @Description: FFT attenuation at hover in dB. The bandwidth is calculated at the attenuation midpoint, i.e. dB/2.
+    // @Description: FFT desired attenuation at hover in dB. The bandwidth is calculated by comparing peak power output with the attenuated version.
     // @Range: 0 100
     // @User: Advanced
-    AP_GROUPINFO("ATT_HOVER", 10, AP_GyroFFT, _attenuation_hover_db, 15),
+    AP_GROUPINFO("ATT_HOVER", 10, AP_GyroFFT, _attenuation_power_db, 15),
 
     // @Param: BW_HOVER
     // @DisplayName: FFT learned bandwidth at hover
-    // @Description: FFT learned bandwidth at hover for the attenuation/2 frequencies.
+    // @Description: FFT learned bandwidth at hover for the attenuation frequencies.
     // @Range: 0 200
     // @User: Advanced
     AP_GROUPINFO("BW_HOVER",11, AP_GyroFFT, _bandwidth_hover_hz, 20),
@@ -193,12 +191,6 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
         _enable = 0;
         return;
     }
-
-    // number of samples needed before a new frame can be processed
-    _window_overlap = constrain_float(_window_overlap, 0.0f, 0.9f);
-    _window_overlap.save();
-    _samples_per_frame = (1.0f - _window_overlap) * _window_size;
-    _samples_per_frame = 1 << lrintf(log2f(_samples_per_frame));
  
     // make the gyro window match the window size
     if (!ins.set_gyro_window_size(_window_size)) {
@@ -214,10 +206,13 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
         return;
     }
 
-    // determine the start FFT bin for all frequency detection
-    _fft_start_bin = MAX(lrintf((float)_fft_min_hz.get() / _state->_bin_resolution), 1);
-    // determine the endt FFT bin for all frequency detection
-    _fft_end_bin = MIN(lrintf((float)_fft_max_hz.get() / _state->_bin_resolution), _state->_bin_count);
+    update_parameters();
+
+    // number of samples needed before a new frame can be processed
+    _window_overlap = constrain_float(_window_overlap, 0.0f, 0.9f);
+    _window_overlap.save();
+    _samples_per_frame = (1.0f - _window_overlap) * _window_size;
+    _samples_per_frame = 1 << lrintf(log2f(_samples_per_frame));
 
     // The update rate for the output
     const float output_rate = _fft_sampling_rate_hz / _samples_per_frame;
@@ -235,8 +230,6 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
 
     // the number of cycles required to have a proper noise reference
     _noise_cycles = (_window_size / _samples_per_frame) * XYZ_AXIS_COUNT;
-    // actual attenuation from the db value - see BW definition in http://shepazu.github.io/Audio-EQ-Cookbook/audio-eq-cookbook.html
-    _attenuation_cutoff = powf(10.0f, -_attenuation_hover_db / 20.0f);
 }
 
 // sample the gyros either by using a gyro window sampled at the gyro rate or making invdividual samples
@@ -316,8 +309,20 @@ void AP_GyroFFT::update()
     }
 }
 
+// update calculated values of dynamic parameters - runs at 1Hz
+void AP_GyroFFT::update_parameters()
+{
+    // determine the start FFT bin for all frequency detection
+    _fft_start_bin = MAX(lrintf((float)_fft_min_hz.get() / _state->_bin_resolution), 1);
+    // determine the endt FFT bin for all frequency detection
+    _fft_end_bin = MIN(lrintf((float)_fft_max_hz.get() / _state->_bin_resolution), _state->_bin_count);
+    // actual attenuation from the db value
+    _attenuation_cutoff = powf(10.0f, -_attenuation_power_db / 10.0f);
+}
+
 // self-test the FFT analyser - can only be done while samples are not being taken
-bool AP_GyroFFT::calibration_check() {
+bool AP_GyroFFT::calibration_check()
+{
     if (!_enable) {
         return true;
     }

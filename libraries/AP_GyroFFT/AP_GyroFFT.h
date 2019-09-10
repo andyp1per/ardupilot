@@ -40,10 +40,12 @@ public:
 
     void init(uint32_t target_looptime, AP_InertialSensor& ins);
 
-    // cycle through the FFT steps
+    // cycle through the FFT steps - runs at 400Hz
     void update();
-    // capture gyro values at the appropriate update rate
+    // capture gyro values at the appropriate update rate - runs at fast loop rate
     void sample_gyros();
+    // update calculated values of dynamic parameters - runs at 1Hz
+    void update_parameters();
     // check at startup that standard frequencies can be detected
     bool calibration_check();
     // called when hovering to determine the average peak frequency and reference value
@@ -173,7 +175,7 @@ private:
     // SNR Threshold
     AP_Float _snr_threshold_db;
     // attenuation to use for calculating the peak bandwidth at hover
-    AP_Float _attenuation_hover_db;
+    AP_Float _attenuation_power_db;
     // learned peak bandwidth at configured attenuation at hover
     AP_Float _bandwidth_hover_hz;
     AP_InertialSensor* _ins;
