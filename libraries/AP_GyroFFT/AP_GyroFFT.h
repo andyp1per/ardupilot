@@ -63,6 +63,10 @@ public:
     Vector3f get_center_freq_energy() const { return _center_freq_energy; }
     // index of the FFT bin containing the detected peak frequency
     Vector3<uint8_t> get_center_freq_bin() const { return _center_freq_bin; }
+    // detected peak bandwidth
+    Vector3f get_noise_center_bandwidth_hz() const { return _center_bandwidth_hz; };
+    // weighted detected peak bandwidth
+    float get_weighted_noise_center_bandwidth_hz() const;
 
     // total number of cycles where the time budget was not met
     uint32_t get_total_overrun_cycles() const { return _overrun_cycles; }
@@ -76,11 +80,13 @@ public:
 
 private:
     // calculate the peak noise frequency
-    void calculate_noise(uint16_t bin_max);
+    void calculate_noise(uint16_t max_bin);
+    // calculate the noise bandwidth in hz
+    float calculate_noise_bandwidth_hz(uint16_t max_bin);
     // update the estimation of the background noise energy
-    void update_ref_energy(uint16_t bin_max);
+    void update_ref_energy(uint16_t max_bin);
     // interpolate between frequency bins using simple method
-    float calculate_simple_center_freq(uint8_t bin_max);
+    float calculate_simple_center_freq(uint8_t max_bin);
     // interpolate between frequency bins using jains method
     float calculate_jains_estimator_center_freq(uint8_t k);
     // test frequency detection for all of the allowable bins
@@ -114,6 +120,8 @@ private:
 
     // energy of the detected peak frequency
     Vector3f _center_freq_energy;
+    // energy of the detected peak frequency in dB
+    Vector3f _center_freq_energy_db;
     // detected peak frequency
     Vector3f _center_freq_hz;
     // bin of detected poeak frequency
@@ -124,8 +132,12 @@ private:
     Vector3f _center_snr;
     // noise base of the gyros
     Vector3f*_ref_energy;
+    // detected peak width
+    Vector3f _center_bandwidth_hz;
     // smoothing filter on the output
     LowPassFilterFloat _center_freq_filter[XYZ_AXIS_COUNT];
+    // smoothing filter on the bandwidth
+    LowPassFilterFloat _center_bandwidth_filter[XYZ_AXIS_COUNT];
 
     // performance counters
     uint32_t _overrun_cycles;
@@ -140,6 +152,8 @@ private:
     uint16_t _fft_end_bin;
     // number of cycles without a detected signal
     uint8_t _missed_cycles; 
+    // attenuation cutoff for calculation of hover bandwidth
+    float _attenuation_cutoff;
 
     // minimum frequency of the detection window
     AP_Int16 _fft_min_hz;
@@ -155,9 +169,13 @@ private:
     // learned throttle reference for the hover frequency
     AP_Float _throttle_ref;
     // learned hover filter frequency
-    AP_Float _freq_hover;
+    AP_Float _freq_hover_hz;
     // SNR Threshold
-    AP_Float _snr_threshold;
+    AP_Float _snr_threshold_db;
+    // attenuation to use for calculating the peak bandwidth at hover
+    AP_Float _attenuation_hover_db;
+    // learned peak bandwidth at configured attenuation at hover
+    AP_Float _bandwidth_hover_hz;
     AP_InertialSensor* _ins;
 #if DEBUG_FFT || DEBUG_FFT_TIMING
     uint32_t _output_count;
