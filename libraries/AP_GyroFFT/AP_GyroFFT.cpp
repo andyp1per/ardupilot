@@ -118,7 +118,7 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
     // @Description: FFT frequency tracking type
     // @Range: 0 1
     // @User: Advanced
-    AP_GROUPINFO("TRACK_MODE", 10, AP_GyroFFT, _track_mode, 0),
+    AP_GROUPINFO("TRACK_MODE", 12, AP_GyroFFT, _track_mode, 0),
 
     AP_GROUPEND
 };
