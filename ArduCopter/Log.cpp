@@ -506,6 +506,10 @@ struct PACKED log_Filter_Tuning {
 struct PACKED log_Filter_Tuning2 {
     LOG_PACKET_HEADER;
     uint64_t time_us;
+    float    motor_peak_bw_avg;
+    float    motor_peak_bw_x;
+    float    motor_peak_bw_y;
+    float    motor_peak_bw_z;
     float    motor_peak_energy_x;
     float    motor_peak_energy_y;
     float    motor_peak_energy_z;
@@ -538,6 +542,10 @@ void Copter::Log_Write_Filter_Tuning()
     struct log_Filter_Tuning2 pkt2 = {
         LOG_PACKET_HEADER_INIT(LOG_FILTER_TUNING_MSG2),
         time_us             : AP_HAL::micros64(),
+        motor_peak_bw_avg  : gyro_fft.get_weighted_noise_center_bandwidth_hz(),
+        motor_peak_bw_x    : gyro_fft.get_noise_center_bandwidth_hz().x,
+        motor_peak_bw_y    : gyro_fft.get_noise_center_bandwidth_hz().y,
+        motor_peak_bw_z    : gyro_fft.get_noise_center_bandwidth_hz().z,
         motor_peak_energy_x : gyro_fft.get_center_freq_energy().x,
         motor_peak_energy_y : gyro_fft.get_center_freq_energy().y,
         motor_peak_energy_z : gyro_fft.get_center_freq_energy().z,
