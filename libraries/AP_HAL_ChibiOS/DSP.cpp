@@ -60,9 +60,10 @@ AP_HAL::DSP::FFTWindowState* DSP::fft_init(uint16_t window_size, uint16_t sample
         break;
     case 256:
     case 512:
-    case 1024:
         update_steps = 6;
         break;
+    default:
+        return nullptr;
     }
     DSP::FFTWindowStateARM* fft = new DSP::FFTWindowStateARM(window_size, sample_rate, update_steps);
     if (fft->_hanning_window == nullptr || fft->_rfft_data == nullptr || fft->_freq_bins == nullptr) {
@@ -100,12 +101,30 @@ uint16_t DSP::fft_analyse(AP_HAL::DSP::FFTWindowState* state, const float* sampl
 DSP::FFTWindowStateARM::FFTWindowStateARM(uint16_t window_size, uint16_t sample_rate, uint8_t update_steps)
     : AP_HAL::DSP::FFTWindowState::FFTWindowState(window_size, sample_rate, update_steps)
 {
-    // initialize the ARM data structure
-    if (window_size == 128) { // This is not set correctly in the official CMSIS 5.6.0
-        arm_rfft_128_fast_init_f32(&_fft_instance);
+    if (_freq_bins == nullptr) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for DSP");
+        return;
     }
-    else {
-        arm_rfft_fast_init_f32(&_fft_instance, _window_size);
+
+    // initialize the ARM data structure.
+    // it's important not to use arm_rfft_fast_init_f32() as this links all of the twiddle tables
+    // by being selective we save 70k in text space
+    switch (window_size) {
+    case 32:
+        arm_rfft_32_fast_init_f32(&_fft_instance);
+        break;
+    case 64:
+        arm_rfft_64_fast_init_f32(&_fft_instance);
+        break;
+    case 128:
+        arm_rfft_128_fast_init_f32(&_fft_instance);
+        break;
+    case 256:
+        arm_rfft_256_fast_init_f32(&_fft_instance);
+        break;
+    case 512:
+        arm_rfft_512_fast_init_f32(&_fft_instance);
+        break;
     }
 
     // allocate workspace
@@ -261,7 +280,7 @@ void DSP::step_arm_cfft_f32(FFTWindowStateARM* fft)
     case 64: // window 128
         // 70us BF
         // 21us F7, 34us F4
-    case 512: // window 1024
+    // case 512: // window 1024
         // 152us F7
         arm_radix8_butterfly_f32(fft->_freq_bins, fft->_bin_count, Sint->pTwiddle, 1);
         break;
