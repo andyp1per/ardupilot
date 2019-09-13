@@ -92,9 +92,6 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK(update_batt_compass,   10,    120),
     SCHED_TASK(read_aux_switches,     10,     50),
     SCHED_TASK(arm_motors_check,      10,     50),
-#if GYROFFT_ENABLED == ENABLED
-    SCHED_TASK_CLASS(AP_GyroFFT,           &copter.gyro_fft,            update,         400,  FFT_UPDATE_BUDGET_MICROS),
-#endif
 #if TOY_MODE_ENABLED == ENABLED
     SCHED_TASK_CLASS(ToyMode,              &copter.g2.toy_mode,         update,          10,  50),
 #endif
@@ -115,6 +112,9 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK(update_altitude,       10,    100),
     SCHED_TASK(run_nav_updates,       50,    100),
     SCHED_TASK(update_throttle_hover,100,     90),
+#if GYROFFT_ENABLED == ENABLED
+    SCHED_TASK_CLASS(AP_GyroFFT,           &copter.gyro_fft,            update,         400,  FFT_UPDATE_BUDGET_MICROS),
+#endif    
 #if MODE_SMARTRTL_ENABLED == ENABLED
     SCHED_TASK_CLASS(Copter::ModeSmartRTL, &copter.mode_smartrtl,       save_position,    3, 100),
 #endif
@@ -192,6 +192,9 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK_CLASS(AP_Button,            &copter.g2.button,           update,           5, 100),
 #if STATS_ENABLED == ENABLED
     SCHED_TASK_CLASS(AP_Stats,             &copter.g2.stats,            update,           1, 100),
+#endif
+#if GYROFFT_ENABLED == ENABLED
+    SCHED_TASK_CLASS(AP_GyroFFT,           &copter.gyro_fft,            update_parameters,1, 50),
 #endif
 };
 
