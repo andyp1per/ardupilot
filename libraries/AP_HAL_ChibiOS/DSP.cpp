@@ -143,7 +143,7 @@ DSP::FFTWindowStateARM::FFTWindowStateARM(uint16_t window_size, uint16_t sample_
     // create the Hanning window
     // https://holometer.fnal.gov/GH_FFT.pdf - equation 19
     for (uint16_t i = 0; i < _window_size; i++) {
-        _hanning_window[i] = (0.5f - 0.5f * cosf(2.0f * M_PI * i / (float)_window_size));
+        _hanning_window[i] = (0.5f - 0.5f * cosf(2.0f * M_PI * i / ((float)_window_size - 1)));
         _window_scale += _hanning_window[i];
     }
     // Calculate the inverse of the Effective Noise Bandwidth
