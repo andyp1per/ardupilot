@@ -120,6 +120,9 @@ protected:
     // apply_thrust_curve_and_volt_scaling - returns throttle in the range 0 ~ 1
     float               apply_thrust_curve_and_volt_scaling(float thrust) const;
 
+    // returns throttle in the range 0 ~ 1
+    float               apply_sigmoid_thrust_curve_and_volt_scaling(float thrust) const;
+
     // update_lift_max_from_batt_voltage - used for voltage compensation
     void                update_lift_max_from_batt_voltage();
 
