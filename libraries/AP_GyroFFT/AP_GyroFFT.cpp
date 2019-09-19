@@ -97,12 +97,12 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("SNR_REF", 9, AP_GyroFFT, _snr_threshold_db, FFT_SNR_DEFAULT),
 
-    // @Param: ATT_HOVER
-    // @DisplayName: FFT attenuation at hover
-    // @Description: FFT desired attenuation at hover in dB. The bandwidth is calculated by comparing peak power output with the attenuated version.
+    // @Param: ATT_REF
+    // @DisplayName: FFT attenuation for bandwidth
+    // @Description: FFT desired attenuation level in dB for bandwidth calculation. The bandwidth is calculated by comparing peak power output with the attenuated version.
     // @Range: 0 100
     // @User: Advanced
-    AP_GROUPINFO("ATT_HOVER", 10, AP_GyroFFT, _attenuation_power_db, 15),
+    AP_GROUPINFO("ATT_REF", 10, AP_GyroFFT, _attenuation_power_db, 15),
 
     // @Param: BW_HOVER
     // @DisplayName: FFT learned bandwidth at hover
