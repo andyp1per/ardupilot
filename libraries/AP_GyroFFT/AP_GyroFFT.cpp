@@ -158,7 +158,6 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
     const uint32_t allocation_count = (XYZ_AXIS_COUNT * INS_MAX_INSTANCES + 3 + XYZ_AXIS_COUNT + 3) * sizeof(float);
     if (allocation_count * FFT_DEFAULT_WINDOW_SIZE > hal.util->available_memory() / 2) {
         gcs().send_text(MAV_SEVERITY_WARNING, "AP_GyroFFT: disabled, required %lu bytes", allocation_count * FFT_DEFAULT_WINDOW_SIZE);
-        _enable = 0;
         return;
     }
     else if (allocation_count * _window_size > hal.util->available_memory() / 2) {
@@ -179,7 +178,6 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
             _downsampled_gyro_data[axis] = new float[_window_size];
             if (_downsampled_gyro_data[axis] == nullptr) {
                 gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for AP_GyroFFT");
-                _enable = 0;
                 return;
             }
         }
@@ -188,13 +186,11 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
     _ref_energy = new Vector3f[_window_size];
     if (_ref_energy == nullptr) {
         gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for AP_GyroFFT");
-        _enable = 0;
         return;
     }
  
     // make the gyro window match the window size
     if (!ins.set_gyro_window_size(_window_size)) {
-        _enable = 0;
         return;
     }
 
@@ -202,7 +198,6 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
     _state = hal.dsp->fft_init(_window_size, _fft_sampling_rate_hz);
     if (_state == nullptr) {
         gcs().send_text(MAV_SEVERITY_WARNING, "Failed to initialize DSP engine");
-        _enable = 0;
         return;
     }
 
@@ -230,12 +225,14 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
 
     // the number of cycles required to have a proper noise reference
     _noise_cycles = (_window_size / _samples_per_frame) * XYZ_AXIS_COUNT;
+    // finally we are done
+    _initialized = true;
 }
 
 // sample the gyros either by using a gyro window sampled at the gyro rate or making invdividual samples
 void AP_GyroFFT::sample_gyros()
 {
-    if (!_enable) {
+    if (!analysis_enabled()) {
         return;
     }
 
@@ -266,7 +263,7 @@ void AP_GyroFFT::sample_gyros()
 // analyse gyro data using FFT
 void AP_GyroFFT::update()
 {
-    if (!_enable) {
+    if (!analysis_enabled()) {
         return;
     }
 
@@ -323,7 +320,7 @@ void AP_GyroFFT::update_parameters()
 // self-test the FFT analyser - can only be done while samples are not being taken
 bool AP_GyroFFT::calibration_check()
 {
-    if (!_enable) {
+    if (!analysis_enabled()) {
         return true;
     }
 
@@ -355,6 +352,9 @@ bool AP_GyroFFT::calibration_check()
 // update the hover frequency input filter. should be called at 100hz when in a stable hover
 void AP_GyroFFT::update_freq_hover(float dt, float throttle_out)
 {
+    if (!analysis_enabled()) {
+        return;
+    }
     // we have chosen to constrain the hover frequency to be within the range reachable by the third order expo polynomial.
     _freq_hover_hz = constrain_float(_freq_hover_hz + (dt / (10.0f + dt)) * (get_weighted_noise_center_freq_hz() - _freq_hover_hz), _fft_min_hz, _fft_max_hz);
     _bandwidth_hover_hz = constrain_float(_bandwidth_hover_hz + (dt / (10.0f + dt)) * (get_weighted_noise_center_bandwidth_hz() - _bandwidth_hover_hz), 0, _fft_max_hz / 2.0f);
@@ -364,6 +364,10 @@ void AP_GyroFFT::update_freq_hover(float dt, float throttle_out)
 // save parameters as part of disarming
 void AP_GyroFFT::save_params_on_disarm()
 {
+    if (!analysis_enabled()) {
+        return;
+    }
+
     _freq_hover_hz.save();
     _bandwidth_hover_hz.save();
     _throttle_ref.save();
@@ -372,6 +376,9 @@ void AP_GyroFFT::save_params_on_disarm()
 // return an average center frequency weighted by bin energy
 float AP_GyroFFT::get_weighted_noise_center_freq_hz() const
 {
+    if (!analysis_enabled()) {
+        return _fft_min_hz;
+    }
     // there is generally a lot of high-energy, slightly lower frequency noise on yaw, however this
     // appears to be a second-order effect as only targetting pitch and roll (x & y) produces much cleaner output all round
     if (!_center_freq_energy.is_nan()
@@ -387,6 +394,9 @@ float AP_GyroFFT::get_weighted_noise_center_freq_hz() const
 // return an average noise bandwidth weighted by bin energy
 float AP_GyroFFT::get_weighted_noise_center_bandwidth_hz() const
 {
+    if (!analysis_enabled()) {
+        return 0.0f;
+    }
     if (!_center_freq_energy.is_nan()
         && !is_zero(_center_freq_energy.x)
         && !is_zero(_center_freq_energy.y)) {
@@ -494,42 +504,6 @@ void AP_GyroFFT::update_ref_energy(uint16_t max_bin) {
     }
     else if (_noise_cycles > 0) {
         _noise_cycles--;
-    }
-}
-
-// interpolate center frequency using simple center of bin
-float AP_GyroFFT::calculate_simple_center_freq(uint8_t max_bin)
-{
-    float weighted_center_freq_hz = 0;
-    // The frequency of each of those frequency components are given by k*fs/N, so first bin is DC.
-    if (_state->_freq_bins[max_bin] > 0) {
-        // the index points at the center frequency of each bin so index 1 is actually 1 * 800 / 64 = 12.5Hz
-        weighted_center_freq_hz = max_bin * _state->_bin_resolution;
-    }
-    return weighted_center_freq_hz;
-}
-
-// interpolate center frequency using https://dspguru.com/dsp/howtos/how-to-interpolate-fft-peak/
-// more complicated interpolators require complex values and are in the DSP subsystem
-float AP_GyroFFT::calculate_jains_estimator_center_freq(uint8_t k)
-{
-    if (k == 0 || k == _state->_bin_count) {
-        return k * _state->_bin_resolution;
-    }
-
-    const float y1 = _state->_freq_bins[k - 1];
-    const float y2 = _state->_freq_bins[k];
-    const float y3 = _state->_freq_bins[k + 1];
-
-    if (y1  > y3) {
-        const float a = y2 / y1;
-        const float d = a / (1 + a);
-        return (k - 1.0f + d) * _state->_bin_resolution;
-    }
-    else {
-        const float a = y3 / y2;
-        const float d = a / (1 + a);
-        return (k + d) * _state->_bin_resolution;
     }
 }
 

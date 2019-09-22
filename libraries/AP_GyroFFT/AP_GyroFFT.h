@@ -52,6 +52,8 @@ public:
     void update_freq_hover(float dt, float throttle_out);
     // called to save the average peak frequency and reference value
     void save_params_on_disarm();
+    // dynamically enable or disable the analysis through the aux switch
+    void set_analysis_enabled(bool enabled) { _enabled = enabled; };
 
     // detected peak frequency filtered at 1/3 the update rate
     Vector3f get_noise_center_freq_hz() const { return _center_freq_hz_filtered; }
@@ -87,14 +89,12 @@ private:
     float calculate_noise_bandwidth_hz(uint16_t max_bin);
     // update the estimation of the background noise energy
     void update_ref_energy(uint16_t max_bin);
-    // interpolate between frequency bins using simple method
-    float calculate_simple_center_freq(uint8_t max_bin);
-    // interpolate between frequency bins using jains method
-    float calculate_jains_estimator_center_freq(uint8_t k);
     // test frequency detection for all of the allowable bins
     float self_test_bin_frequencies();
     // detect the provided frequency
     float self_test(float frequency);
+    // whether to run analysis or not
+    bool analysis_enabled() const { return _enable && _initialized && _enabled; };
 
     // number of sampeles needed before a new frame can be processed
     uint16_t _samples_per_frame;
@@ -156,6 +156,10 @@ private:
     uint8_t _missed_cycles; 
     // attenuation cutoff for calculation of hover bandwidth
     float _attenuation_cutoff;
+    // whether the analyzer initialized correctly
+    bool _initialized;
+    // whether the analyzer should be run
+    bool _enabled = true;
 
     // minimum frequency of the detection window
     AP_Int16 _fft_min_hz;
@@ -165,6 +169,7 @@ private:
     AP_Int16 _window_size;
     // percentage overlap of FFT windows
     AP_Float _window_overlap;
+    // overall enablement of the feature
     AP_Int8 _enable;
     // gyro rate sampling or cycle divider
     AP_Int8 _sample_mode;
