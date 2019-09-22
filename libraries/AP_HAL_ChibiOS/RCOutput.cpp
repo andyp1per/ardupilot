@@ -392,8 +392,11 @@ void RCOutput::push_local(void)
                 } else if (group.current_mode == MODE_PWM_ONESHOT125) {
                     // this gives us a width in 125 ns increments, giving 1000 steps over the 125 to 250 range
                     uint32_t width = ((group.pwm_cfg.frequency/1000000U) * period_us) / 8U;
-                    pwmEnableChannel(group.pwm_drv, j, width);                    
-                } else if (group.current_mode < MODE_PWM_DSHOT150) {
+                    pwmEnableChannel(group.pwm_drv, j, width);
+                    // scale the period down so we don't delay for longer than we need to
+                    period_us /= 8;
+                } 
+                else if (group.current_mode < MODE_PWM_DSHOT150) {
                     uint32_t width = (group.pwm_cfg.frequency/1000000U) * period_us;
                     pwmEnableChannel(group.pwm_drv, j, width);
                 } else if (group.current_mode >= MODE_PWM_DSHOT150 && group.current_mode <= MODE_PWM_DSHOT1200) {
