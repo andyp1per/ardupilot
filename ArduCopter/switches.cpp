@@ -238,6 +238,7 @@ void Copter::init_aux_switch_function(int8_t ch_option, uint8_t ch_flag)
         case AUXSW_INVERTED:
         case AUXSW_WINCH_ENABLE:
         case AUXSW_RC_OVERRIDE_ENABLE:
+        case AUXSW_GYRO_FFT:
         case AUXSW_KILL_IMU1:
         case AUXSW_KILL_IMU2:
             do_aux_switch_function(ch_option, ch_flag);
@@ -766,6 +767,12 @@ void Copter::do_aux_switch_function(int8_t ch_function, uint8_t ch_flag)
                 }
             }
             break;
+
+        case AUXSW_GYRO_FFT:
+#if GYROFFT_ENABLED == ENABLED
+            copter.gyro_fft.set_analysis_enabled(ch_flag==AUX_SWITCH_HIGH);
+#endif
+            break;            
 
         case AUXSW_KILL_IMU1:
             ins.kill_imu(0, ch_flag==AUX_SWITCH_HIGH);
