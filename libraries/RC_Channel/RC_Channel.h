@@ -175,6 +175,7 @@ public:
         SURFACE_TRACKING =    75, // Surface tracking upwards or downwards
         STANDBY  =            76, // Standby mode
         TAKEOFF   =           77, // takeoff
+        GYRO_FFT  =           78, // gyro FFT analysis
         KILL_IMU1 =          100, // disable first IMU (for IMU failure testing)
         KILL_IMU2 =          101, // disable second IMU (for IMU failure testing)
         // if you add something here, make sure to update the documentation of the parameter in RC_Channel.cpp!
