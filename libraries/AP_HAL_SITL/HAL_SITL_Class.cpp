@@ -17,6 +17,7 @@
 #include "GPIO.h"
 #include "SITL_State.h"
 #include "Util.h"
+#include "DSP.h"
 
 #include <AP_HAL_Empty/AP_HAL_Empty.h>
 #include <AP_HAL_Empty/AP_HAL_Empty_Private.h>
@@ -30,13 +31,14 @@ static RCInput  sitlRCInput(&sitlState);
 static RCOutput sitlRCOutput(&sitlState);
 static AnalogIn sitlAnalogIn(&sitlState);
 static GPIO sitlGPIO(&sitlState);
+static DSP dspDriver;
+
 
 // use the Empty HAL for hardware we don't emulate
 static Empty::I2CDeviceManager i2c_mgr_instance;
 static Empty::SPIDeviceManager emptySPI;
 static Empty::OpticalFlow emptyOpticalFlow;
 static Empty::Flash emptyFlash;
-static Empty::DSP emptyDSP;
 
 static UARTDriver sitlUart0Driver(0, &sitlState);
 static UARTDriver sitlUart1Driver(1, &sitlState);
@@ -69,7 +71,7 @@ HAL_SITL::HAL_SITL() :
         &utilInstance,      /* util */
         &emptyOpticalFlow,  /* onboard optical flow */
         &emptyFlash,        /* flash driver */
-        &emptyDSP,          /* dsp driver */
+        &dspDriver,         /* dsp driver */
         nullptr),           /* CAN */
     _sitl_state(&sitlState)
 {}
