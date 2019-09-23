@@ -119,6 +119,8 @@ private:
     uint8_t _noise_calibration_cycles[XYZ_AXIS_COUNT];
     // axes that still require noise calibration
     uint8_t _noise_needs_calibration : 3;
+    // current _sample_mode
+    uint8_t _current_sample_mode : 3;
 
     // energy of the detected peak frequency
     Vector3f _center_freq_energy;
