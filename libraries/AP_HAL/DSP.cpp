@@ -24,6 +24,9 @@ using namespace AP_HAL;
 
 extern const AP_HAL::HAL &hal;
 
+#define SQRT_2_3 0.816496580927726f
+#define SQRT_6   2.449489742783178f
+
 DSP::FFTWindowState::FFTWindowState(uint16_t window_size, uint16_t sample_rate, uint8_t update_steps)
     : _update_steps(update_steps),
     _window_size(window_size),
@@ -32,12 +35,62 @@ DSP::FFTWindowState::FFTWindowState(uint16_t window_size, uint16_t sample_rate, 
 {
     // includes DC ad Nyquist components and needs to be large enough for intermediate steps
     _freq_bins = new float[window_size];
-    if (_freq_bins == nullptr) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for DSP");
+    _hanning_window = new float[window_size];
+
+    if (_freq_bins == nullptr || _hanning_window == nullptr) {
+        delete[] _freq_bins;
+        delete[] _hanning_window;
+        _freq_bins = nullptr;
+        _hanning_window = nullptr;
+        return;
     }
+
+    // create the Hanning window
+    // https://holometer.fnal.gov/GH_FFT.pdf - equation 19
+    for (uint16_t i = 0; i < window_size; i++) {
+        _hanning_window[i] = (0.5f - 0.5f * cosf(2.0f * M_PI * i / ((float)window_size - 1)));
+        _window_scale += _hanning_window[i];
+    }
+    // Calculate the inverse of the Effective Noise Bandwidth
+    _window_scale = 2.0f / sq(_window_scale);
 }
 
 DSP::FFTWindowState::~FFTWindowState()
 {
     delete[] _freq_bins;
+    delete[] _hanning_window;
+}
+
+// Interpolate center frequency using https://dspguru.com/dsp/howtos/how-to-interpolate-fft-peak/
+float DSP::calculate_quinns_second_estimator(FFTWindowState* fft, float* complex_fft, uint16_t k_max)
+{
+    if (k_max <= 1 || k_max >= fft->_bin_count) {
+        return 0.0f;
+    }
+
+    const uint16_t k_m1 = (k_max - 1) * 2;
+    const uint16_t k_p1 = (k_max + 1) * 2;
+    const uint16_t k = k_max * 2;
+
+    float divider = complex_fft[k] * complex_fft[k] + complex_fft[k+1] * complex_fft[k+1];
+    float ap = (complex_fft[k_p1] * complex_fft[k] + complex_fft[k_p1 + 1] * complex_fft[k+1]) / divider;
+    float am = (complex_fft[k_m1] * complex_fft[k] + complex_fft[k_m1 + 1] * complex_fft[k + 1]) / divider;
+
+    const float dp = -ap / (1.0f - ap);
+    const float dm = am / (1.0f - am);
+
+    float d = (dp + dm) / 2.0f + tau(dp * dp) - tau(dm * dm);
+
+    // -0.5 < d < 0.5 which is the fraction of the sample spacing about the center element
+    return constrain_float(d, -0.5f, 0.5f);
+}
+
+// Helper function used for Quinn's frequency estimation
+float DSP::tau(float x)
+{
+    float p1 = logf(3.0f * sq(x) + 6.0f * x + 1.0f);
+    float part1 = x + 1.0f - SQRT_2_3;
+    float part2 = x + 1.0f + SQRT_2_3;
+    float p2 = logf(part1 / part2);
+    return (0.25f * p1 - (SQRT_6 / 24.0f) * p2);
 }

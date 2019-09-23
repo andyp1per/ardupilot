@@ -233,7 +233,11 @@
 #endif
 
 #ifndef HAL_WITH_DSP
+#if CONFIG_HAL_BOARD == HAL_BOARD_LINUX || defined(HAL_BOOTLOADER_BUILD)
+#define HAL_WITH_DSP 0
+#else
 #define HAL_WITH_DSP !HAL_MINIMIZE_FEATURES
+#endif
 #endif
 
 #ifndef HAL_OS_FATFS_IO
