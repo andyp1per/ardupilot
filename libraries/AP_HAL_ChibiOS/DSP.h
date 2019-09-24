@@ -63,10 +63,6 @@ public:
         arm_rfft_fast_instance_f32 _fft_instance;
         // intermediate real FFT data
         float* _rfft_data;
-        // Hanning window for incoming samples, see https://en.wikipedia.org/wiki/Window_function#Hann_.28Hanning.29_window
-        float* _hanning_window;
-        // Use in calculating the PS of the signal [Heinz] equations (20) & (21)
-        float _window_scale;
     };
 
 private:
@@ -85,9 +81,6 @@ private:
     uint16_t step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin, uint16_t end_bin);
     // candan's frequency interpolator
     float calculate_candans_estimator(FFTWindowStateARM* fft, uint8_t k);
-    // quinn's frequency interpolator
-    float calculate_quinns_second_estimator(FFTWindowStateARM* fft, uint8_t k);
-    float tau(float x);
 
 #if DEBUG_FFT
     class StepTimer {
