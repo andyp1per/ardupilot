@@ -69,6 +69,14 @@ const AP_Param::GroupInfo HarmonicNotchFilterParams::var_info[] = {
     // @RebootRequired: True
     AP_GROUPINFO("REF", 6, HarmonicNotchFilterParams, _reference, 0),
 
+    // @Param: TRACK_MODE
+    // @DisplayName: Harmonic Notch Filter dynamic frequency tracking mode
+    // @Description: Harmonic Notch Filter dynamic frequency tracking mode. Dynamic updates can be throttle or FFT based.
+    // @Range: 0 3
+    // @Values: 0:Disabled,1:Throttle-based,2:FFT-based
+    // @User: Advanced
+    AP_GROUPINFO("MODE", 7, HarmonicNotchFilterParams, _tracking_mode, 1),
+
     AP_GROUPEND
 };
 
