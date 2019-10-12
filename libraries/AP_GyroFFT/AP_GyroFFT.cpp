@@ -327,7 +327,7 @@ bool AP_GyroFFT::calibration_check()
 
     // make sure the frequency maxium is below Nyquist
     if (_fft_max_hz > _fft_sampling_rate_hz * 0.5f) {
-        gcs().send_text(MAV_SEVERITY_CRITICAL, "FFT: config MAXHZ %hdHz > %dHz", _fft_max_hz.get(), _fft_sampling_rate_hz * 0.5f);
+        gcs().send_text(MAV_SEVERITY_CRITICAL, "FFT: config MAXHZ %dHz > %dHz", _fft_max_hz.get(), _fft_sampling_rate_hz / 2);
         return false;
     }
 
