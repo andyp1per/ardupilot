@@ -31,7 +31,8 @@
 class AuxiliaryBus;
 class AP_Logger;
 
-#define INS_MAX_GYRO_WINDOW_SAMPLES 5
+ // The maximum we need to store is gyro-rate / loop-rate, worst case ArduCopter with BMI088 is 2000/400
+#define INS_MAX_GYRO_WINDOW_SAMPLES 8
 
 class AP_InertialSensor_Backend
 {
