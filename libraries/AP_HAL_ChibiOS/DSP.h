@@ -73,6 +73,7 @@ private:
     };
 
     uint32_t  _output_count;
+    StepTimer _hanning_timer;
     StepTimer _arm_cfft_f32_timer;
     StepTimer _bitreversal_timer;
     StepTimer _stage_rfft_f32_timer;

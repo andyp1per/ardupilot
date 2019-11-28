@@ -28,14 +28,19 @@
 using namespace ChibiOS;
 
 #if DEBUG_FFT
-#define TIMER_START(timer) uint32_t timer##now = AP_HAL::micros()
-#define TIMER_END(timer) timer.time(timer##now)
+#define TIMER_START(timer) \
+void *istate = hal.scheduler->disable_interrupts_save(); \
+uint32_t timer##now = AP_HAL::micros()
+#define TIMER_END(timer) timer.time(timer##now); \
+hal.scheduler->restore_interrupts(istate)
 #else
 #define TIMER_START(timer)
 #define TIMER_END(timer)
 #endif
 
 #define TICK_CYCLE 10
+
+extern const AP_HAL::HAL& hal;
 
 // The algorithms originally came from betaflight but are now substantially modified based on theory and experiment.
 // https://holometer.fnal.gov/GH_FFT.pdf "Spectrum and spectral density estimation by the Discrete Fourier transform (DFT),
@@ -83,6 +88,7 @@ DSP::FFTWindowStateARM::FFTWindowStateARM(uint16_t window_size, uint16_t sample_
     // initialize the ARM data structure.
     // it's important not to use arm_rfft_fast_init_f32() as this links all of the twiddle tables
     // by being selective we save 70k in text space
+
     switch (window_size) {
     case 32:
         arm_rfft_32_fast_init_f32(&_fft_instance);
@@ -96,13 +102,19 @@ DSP::FFTWindowStateARM::FFTWindowStateARM(uint16_t window_size, uint16_t sample_
     case 256:
         arm_rfft_256_fast_init_f32(&_fft_instance);
         break;
+#ifdef STM32H7xx_MCUCONF
+// Don't pull in the larger FFT tables unless we have to
     case 512:
         arm_rfft_512_fast_init_f32(&_fft_instance);
         break;
+    case 1024:
+        arm_rfft_1024_fast_init_f32(&_fft_instance);
+        break;
+#endif
     }
 
     // allocate workspace, including Nyquist component
-    _rfft_data = new float[_window_size + 2];
+    _rfft_data = (float*)hal.util->malloc_type(sizeof(float) * (_window_size + 2), DSP_MEM_REGION);
     if (_rfft_data == nullptr) {
         gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for DSP");
         return;
@@ -111,7 +123,7 @@ DSP::FFTWindowStateARM::FFTWindowStateARM(uint16_t window_size, uint16_t sample_
 
 DSP::FFTWindowStateARM::~FFTWindowStateARM()
 {
-    delete[] _rfft_data;
+    hal.util->free_type(_rfft_data, sizeof(float) * (_window_size + 2), DSP_MEM_REGION);
 }
 
 extern "C" {
@@ -125,6 +137,7 @@ extern "C" {
 // step 1: filter the incoming samples through a Hanning window
 void DSP::step_hanning(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index)
 {
+    TIMER_START(_hanning_timer);
     // 5us
     // apply hanning window to gyro samples and store result in _freq_bins
     // hanning starts and ends with 0, could be skipped for minor speed improvement
@@ -133,6 +146,8 @@ void DSP::step_hanning(FFTWindowStateARM* fft, const float* samples, uint16_t bu
     if (buffer_index > 0) {
         arm_mult_f32(&samples[0], &fft->_hanning_window[ring_buf_idx], &fft->_freq_bins[ring_buf_idx], buffer_index);
     }
+
+    TIMER_END(_hanning_timer);
 }
 
 // step 2: guts of complex fft processing
@@ -146,23 +161,23 @@ void DSP::step_arm_cfft_f32(FFTWindowStateARM* fft)
     switch (fft->_bin_count) {
     case 16: // window 32
         // 16us (BF)
-        //  5us F7,  7us F4
+        //  5us F7,  7us F4, 8us H7
     case 128: // window 256
-        // 37us F7, 81us F4
+        // 37us F7, 81us F4, 17us H7
         arm_cfft_radix8by2_f32(Sint, fft->_freq_bins);
         break;
     case 32: // window 64
         // 35us (BF)
         // 10us F7,  24us F4
     case 256: // window 512
-        // 66us F7, 174us F4
+        // 66us F7, 174us F4, 37us H7
         arm_cfft_radix8by4_f32(Sint, fft->_freq_bins);
         break;
     case 64: // window 128
         // 70us BF
         // 21us F7, 34us F4
-    // case 512: // window 1024
-        // 152us F7
+    case 512: // window 1024
+        // 152us F7, 73us H7
         arm_radix8_butterfly_f32(fft->_freq_bins, fft->_bin_count, Sint->pTwiddle, 1);
         break;
     }
@@ -175,12 +190,12 @@ void DSP::step_bitreversal(FFTWindowStateARM* fft)
 {
     TIMER_START(_bitreversal_timer);
     // 6us (BF)
-    // 32   -  2us F7,  3us F4
+    // 32   -  2us F7,  3us F4, 1us H7
     // 64   -  3us F7,  6us F4
     // 128  -  4us F7,  9us F4
-    // 256  - 10us F7, 20us F4
-    // 512  - 22us F7, 54us F4
-    // 1024 - 42us F7
+    // 256  - 10us F7, 20us F4, 5us H7
+    // 512  - 22us F7, 54us F4, 15us H7
+    // 1024 - 42us F7,          15us H7
     arm_bitreversal_32((uint32_t *)fft->_freq_bins, fft->_fft_instance.Sint.bitRevLength, fft->_fft_instance.Sint.pBitRevTable);
 
     TIMER_END(_bitreversal_timer);
@@ -191,12 +206,12 @@ void DSP::step_stage_rfft_f32(FFTWindowStateARM* fft)
 {
     TIMER_START(_stage_rfft_f32_timer);
     // 14us (BF)
-    // 32   -  2us F7,  5us F4
+    // 32   -  2us F7,  5us F4,  2us H7
     // 64   -  5us F7, 16us F4
     // 128  - 17us F7, 26us F4
-    // 256  - 21us F7, 70us F4
-    // 512  - 35us F7, 71us F4
-    // 1024 - 76us F7
+    // 256  - 21us F7, 70us F4,  9us H7
+    // 512  - 35us F7, 71us F4, 17us H7
+    // 1024 - 76us F7,          33us H7
     // this does not work in place => _freq_bins AND _rfft_data needed
     stage_rfft_f32(&fft->_fft_instance, fft->_freq_bins, fft->_rfft_data);
 
@@ -208,12 +223,12 @@ void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft, uint16_t start_bin, uin
 {
     TIMER_START(_arm_cmplx_mag_f32_timer);
     // 8us (BF)
-    // 32   -   4us F7,  5us F4
+    // 32   -   4us F7,  5us F4,  5us H7
     // 64   -   7us F7, 13us F4
     // 128  -  14us F7, 17us F4
-    // 256  -  29us F7, 28us F4
-    // 512  -  55us F7, 93us F4
-    // 1024 - 131us F7
+    // 256  -  29us F7, 28us F4,  7us H7
+    // 512  -  55us F7, 93us F4, 13us H7
+    // 1024 - 131us F7,          25us H7
     // General case for the magnitudes - see https://stackoverflow.com/questions/42299932/dsp-libraries-rfft-strange-results
     // The frequency of each of those frequency components are given by k*fs/N
 
@@ -237,6 +252,7 @@ void DSP::step_arm_cmplx_mag_f32(FFTWindowStateARM* fft, uint16_t start_bin, uin
 uint16_t DSP::step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin, uint16_t end_bin)
 {
     TIMER_START(_step_calc_frequencies);
+    // 4us H7
 
     if (is_zero(fft->_freq_bins[fft->_max_energy_bin])) {
         fft->_max_bin_freq = start_bin * fft->_bin_resolution;
@@ -254,8 +270,8 @@ uint16_t DSP::step_calc_frequencies(FFTWindowStateARM* fft, uint16_t start_bin, 
     _output_count++;
     // outputs at approx 1hz
     if (_output_count % 400 == 0) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: en:%.4f t1:%luus, t2:%luus, t3:%luus, t4:%luus, t5:%luus",
-                        fft->_window_scale, _arm_cfft_f32_timer._timer_avg, _bitreversal_timer._timer_avg, _stage_rfft_f32_timer._timer_avg, _arm_cmplx_mag_f32_timer._timer_avg, _step_calc_frequencies._timer_avg);
+        gcs().send_text(MAV_SEVERITY_WARNING, "FFT(us): t1:%lu,t2:%lu,t3:%lu,t4:%lu,t5:%lu,t6:%lu",
+                        _hanning_timer._timer_avg, _arm_cfft_f32_timer._timer_avg, _bitreversal_timer._timer_avg, _stage_rfft_f32_timer._timer_avg, _arm_cmplx_mag_f32_timer._timer_avg, _step_calc_frequencies._timer_avg);
     }
 #endif
 
