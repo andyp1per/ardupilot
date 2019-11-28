@@ -62,8 +62,8 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
 
     // @Param: WINDOW_SIZE
     // @DisplayName: FFT window size
-    // @Description: Size of window to be used in FFT calculations. Takes effect on reboot. Must be a power of 2 and between 32 and 256. Larger windows give greater frequency resolution but poorer time resolution, consume more CPU time and may not be appropriate for all vehicles. Time and frequency resolution are given by the sample-rate / window-size. Windows of 256 are only really recommended for F7 class boards.
-    // @Range: 32 256
+    // @Description: Size of window to be used in FFT calculations. Takes effect on reboot. Must be a power of 2 and between 32 and 1024. Larger windows give greater frequency resolution but poorer time resolution, consume more CPU time and may not be appropriate for all vehicles. Time and frequency resolution are given by the sample-rate / window-size. Windows of 256 are only really recommended for F7 class boards, windows of 512 or more H7 class.
+    // @Range: 32 1024
     // @User: Advanced
     // @RebootRequired: True
     AP_GROUPINFO("WINDOW_SIZE", 5, AP_GyroFFT, _window_size, FFT_DEFAULT_WINDOW_SIZE),
@@ -146,7 +146,11 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
 
     // check that we support the window size requested and it is a power of 2
     _window_size = 1 << lrintf(log2f(_window_size.get()));
+#ifdef STM32H7xx_MCUCONF
+    _window_size = constrain_int16(_window_size, 32, 1024);
+#else
     _window_size = constrain_int16(_window_size, 32, 256);
+#endif
 
     // check that we have enough memory for the window size requested
     // INS: XYZ_AXIS_COUNT * INS_MAX_INSTANCES * _window_size, DSP: 3 * _window_size, FFT: XYZ_AXIS_COUNT + 3 * _window_size
@@ -170,7 +174,7 @@ void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
         const uint16_t loop_rate_hz = 1000*1000UL / target_looptime_us;
         _fft_sampling_rate_hz = loop_rate_hz / _sample_mode;
         for (uint8_t axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
-            _downsampled_gyro_data[axis] = new float[_window_size];
+            _downsampled_gyro_data[axis] = (float*)hal.util->malloc_type(sizeof(float) * _window_size, DSP_MEM_REGION);
             if (_downsampled_gyro_data[axis] == nullptr) {
                 gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for AP_GyroFFT");
                 return;
@@ -320,7 +324,8 @@ void AP_GyroFFT::update_thread(void)
         uint32_t now = AP_HAL::micros();
         update();
         // wait approximately until we are likely to have another frame ready
-        hal.scheduler->delay_microseconds((_samples_per_frame * 1.0e6 / _fft_sampling_rate_hz) - (AP_HAL::micros() - now));
+        uint32_t delay = constrain_int32((_samples_per_frame * 1.0e6 / _fft_sampling_rate_hz) - (AP_HAL::micros() - now), 5, 100000);
+        hal.scheduler->delay_microseconds(delay);
     }
 }
 
@@ -530,11 +535,11 @@ void AP_GyroFFT::update_ref_energy(uint16_t max_bin)
     // according to https://www.tcd.ie/Physics/research/groups/magnetism/files/lectures/py5021/MagneticSensors3.pdf sensor noise is not necessarily gaussian
     // determine a PS noise reference at each of the possble center frequencies
     if (_noise_cycles == 0 && _noise_calibration_cycles[_update_axis] > 0) {
-        for (uint8_t i = 1; i < _state->_bin_count; i++) {
+        for (uint16_t i = 1; i < _state->_bin_count; i++) {
             _ref_energy[_update_axis][i] += _state->_freq_bins[i];
         }
         if (--_noise_calibration_cycles[_update_axis] == 0) {
-            for (uint8_t i = 1; i < _state->_bin_count; i++) {
+            for (uint16_t i = 1; i < _state->_bin_count; i++) {
                 const float cycles = (_window_size / _samples_per_frame) * 2;
                 // overall random noise is reduced by sqrt(N) when averaging periodigrams so adjust for that
                 _ref_energy[_update_axis][i] = (_ref_energy[_update_axis][i] / cycles) * sqrtf(cycles);
@@ -551,27 +556,34 @@ void AP_GyroFFT::update_ref_energy(uint16_t max_bin)
 // called from main thread
 float AP_GyroFFT::self_test_bin_frequencies()
 {
+    if (_state->_window_size * sizeof(float) > hal.util->available_memory() / 2) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "AP_GyroFFT: unable to run self-test, required %u bytes", (unsigned int)(_state->_window_size * sizeof(float)));
+        return 0.0f;
+    }
+
+    GyroWindow test_window = (float*)hal.util->malloc_type(sizeof(float) * _window_size, DSP_MEM_REGION);
+    // in the unlikely event we can't allocate a test window, skip the checks
+    if (test_window == nullptr) {
+        return 0.0f;
+    }
+
     float max_divergence = 0;
-    for (uint8_t bin = _config._fft_start_bin; bin <= _config._fft_end_bin; bin++) {
+    for (uint16_t bin = _config._fft_start_bin; bin <= _config._fft_end_bin; bin++) {
         // the algorithm will only ever return values in this range
         float frequency = constrain_float(bin * _state->_bin_resolution, _fft_min_hz, _fft_max_hz);
-        max_divergence = MAX(max_divergence, self_test(frequency)); // test bin centers
+        max_divergence = MAX(max_divergence, self_test(frequency, test_window)); // test bin centers
         frequency = constrain_float(bin * _state->_bin_resolution - _state->_bin_resolution / 4, _fft_min_hz, _fft_max_hz);
-        max_divergence = MAX(max_divergence, self_test(frequency)); // test bin off-centers
+        max_divergence = MAX(max_divergence, self_test(frequency, test_window)); // test bin off-centers
     }
+
+    hal.util->free_type(test_window, sizeof(float) * _window_size, DSP_MEM_REGION);
     return max_divergence;
 }
 
 // perform FFT analysis of a single sine wave at the selected frequency
 // called from main thread
-float AP_GyroFFT::self_test(float frequency)
+float AP_GyroFFT::self_test(float frequency, GyroWindow test_window)
 {
-    static GyroWindow test_window = new float[_state->_window_size];
-    // in the unlikely event we can't allocate a test winodw, skip the checks
-    if (test_window == nullptr) {
-        return 0.0f;
-    }
-
     for(uint16_t i = 0; i < _state->_window_size; i++) {
         test_window[i]= sinf(2.0f * M_PI * frequency * i / _fft_sampling_rate_hz) * 2000.0f;
     }

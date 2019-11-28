@@ -87,7 +87,7 @@ private:
     // test frequency detection for all of the allowable bins
     float self_test_bin_frequencies();
     // detect the provided frequency
-    float self_test(float frequency);
+    float self_test(float frequency, GyroWindow test_window);
     // whether to run analysis or not
     bool analysis_enabled() const { return _enable && _initialized && _enabled && _thread_created; };
 
