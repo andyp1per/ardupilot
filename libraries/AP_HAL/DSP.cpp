@@ -32,12 +32,13 @@ DSP::FFTWindowState::FFTWindowState(uint16_t window_size, uint16_t sample_rate)
     _bin_resolution((float)sample_rate / (float)window_size)
 {
     // includes DC ad Nyquist components and needs to be large enough for intermediate steps
-    _freq_bins = new float[window_size];
-    _hanning_window = new float[window_size];
+    _freq_bins = (float*)hal.util->malloc_type(sizeof(float) * (window_size), DSP_MEM_REGION);
+    _hanning_window = (float*)hal.util->malloc_type(sizeof(float) * (window_size), DSP_MEM_REGION);
 
     if (_freq_bins == nullptr || _hanning_window == nullptr) {
-        delete[] _freq_bins;
-        delete[] _hanning_window;
+        hal.util->free_type(_freq_bins, sizeof(float) * (_window_size), DSP_MEM_REGION);
+        hal.util->free_type(_hanning_window, sizeof(float) * (_window_size), DSP_MEM_REGION);
+
         _freq_bins = nullptr;
         _hanning_window = nullptr;
         return;
@@ -55,8 +56,8 @@ DSP::FFTWindowState::FFTWindowState(uint16_t window_size, uint16_t sample_rate)
 
 DSP::FFTWindowState::~FFTWindowState()
 {
-    delete[] _freq_bins;
-    delete[] _hanning_window;
+    hal.util->free_type(_freq_bins, sizeof(float) * (_window_size), DSP_MEM_REGION);
+    hal.util->free_type(_hanning_window, sizeof(float) * (_window_size), DSP_MEM_REGION);
 }
 
 // Interpolate center frequency using https://dspguru.com/dsp/howtos/how-to-interpolate-fft-peak/

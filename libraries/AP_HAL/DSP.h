@@ -22,6 +22,8 @@
 #include <stdint.h>
 #include "AP_HAL_Namespace.h"
 
+#define DSP_MEM_REGION AP_HAL::Util::MEM_FAST
+
 class AP_HAL::DSP {
 public:
     typedef float* FFTSampleWindow;
