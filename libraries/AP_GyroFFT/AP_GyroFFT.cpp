@@ -369,8 +369,11 @@ bool AP_GyroFFT::calibration_check()
         || _window_size > FFT_DEFAULT_WINDOW_SIZE * 2) {
         return true;
     }
-
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+    float max_divergence = 0.0f;
+#else
     float max_divergence = self_test_bin_frequencies();
+#endif
 
     if (max_divergence > _state->_bin_resolution * 0.5f) {
         gcs().send_text(MAV_SEVERITY_WARNING, "FFT: self-test FAILED, max error %fHz", max_divergence);
