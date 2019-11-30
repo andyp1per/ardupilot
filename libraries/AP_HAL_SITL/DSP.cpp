@@ -25,6 +25,8 @@
 
 using namespace HALSITL;
 
+extern const AP_HAL::HAL& hal;
+
 // The algorithms originally came from betaflight but are now substantially modified based on theory and experiment.
 // https://holometer.fnal.gov/GH_FFT.pdf "Spectrum and spectral density estimation by the Discrete Fourier transform (DFT),
 // including a comprehensive list of window functions and some new flat-top windows." - Heinzel et. al is a great reference
@@ -67,7 +69,7 @@ DSP::FFTWindowStateSITL::FFTWindowStateSITL(uint16_t window_size, uint16_t sampl
     }
 
     // allocate workspace, +2 includes the nyquist component necessary for the interoplator to work acorss the whole range
-    _rfft_data = new float[_window_size + 2];
+    _rfft_data = (float*)hal.util->malloc_type(sizeof(float) * (_window_size + 2), DSP_MEM_REGION);
     if (_rfft_data == nullptr) {
         gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for DSP");
         return;
@@ -76,7 +78,7 @@ DSP::FFTWindowStateSITL::FFTWindowStateSITL(uint16_t window_size, uint16_t sampl
 
 DSP::FFTWindowStateSITL::~FFTWindowStateSITL()
 {
-    delete[] _rfft_data;
+    hal.util->free_type(_rfft_data, sizeof(float) * (_window_size + 2), DSP_MEM_REGION);
 }
 
 // step 1: filter the incoming samples through a Hanning window
