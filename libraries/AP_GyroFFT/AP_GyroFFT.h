@@ -55,7 +55,7 @@ public:
     // called to save the average peak frequency and reference value
     void save_params_on_disarm();
     // dynamically enable or disable the analysis through the aux switch
-    void set_analysis_enabled(bool enabled) { _enabled = enabled; };
+    void set_analysis_enabled(bool enabled) { _analysis_enabled = enabled; };
 
     // detected peak frequency filtered at 1/3 the update rate
     Vector3f get_noise_center_freq_hz() const { return _global_state._center_freq_hz_filtered; }
@@ -89,7 +89,7 @@ private:
     // detect the provided frequency
     float self_test(float frequency, GyroWindow test_window);
     // whether to run analysis or not
-    bool analysis_enabled() const { return _enable && _initialized && _enabled && _thread_created; };
+    bool analysis_enabled() const { return _initialized && _analysis_enabled && _thread_created; };
 
     // semaphore for access to shared FFT data
     HAL_Semaphore_Recursive _sem;
@@ -122,7 +122,7 @@ private:
     // configuration data local to the FFT thread but set from the main thread
     struct EngineConfig {
         // whether the analyzer should be run
-        bool _enabled;
+        bool _analysis_enabled;
         // minimum frequency of the detection window
         uint16_t _fft_min_hz;
         // maximum frequency of the detection window
@@ -176,7 +176,7 @@ private:
     bool _initialized;
 
     // whether the analyzer should be run
-    bool _enabled = true;
+    bool _analysis_enabled = true;
     // whether the update thread was created
     bool _thread_created = false;
     // minimum frequency of the detection window

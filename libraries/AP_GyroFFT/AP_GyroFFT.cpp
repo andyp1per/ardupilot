@@ -25,6 +25,11 @@ extern const AP_HAL::HAL& hal;
 #define FFT_DEFAULT_WINDOW_OVERLAP  0.5f
 #define FFT_THR_REF_DEFAULT         0.35f   // the estimated throttle reference, 0 ~ 1
 #define FFT_SNR_DEFAULT            25.0f // a higher SNR is safer and this works quite well on a Pixracer
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+#define FFT_STACK_SIZE              2048
+#else
+#define FFT_STACK_SIZE              1024
+#endif
 
 // table of user settable parameters
 const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
@@ -34,6 +39,7 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
     // @Description: Enable Gyro FFT analyser
     // @Values: 0:Disabled,1:Enabled
     // @User: Advanced
+    // @RebootRequired: True
     AP_GROUPINFO_FLAGS("ENABLE", 1, AP_GyroFFT, _enable, 0, AP_PARAM_FLAG_ENABLE),
 
     // @Param: MINHZ
@@ -142,6 +148,11 @@ AP_GyroFFT::AP_GyroFFT()
 // initialize the FFT parameters and engine
 void AP_GyroFFT::init(uint32_t target_looptime_us, AP_InertialSensor& ins)
 {
+    // if FFT analysis is not enabled we don't want to allocate any of the associated resources
+    if (!_enable) {
+        return;
+    }
+
     _ins = &ins;
 
     // check that we support the window size requested and it is a power of 2
@@ -271,7 +282,7 @@ void AP_GyroFFT::sample_gyros()
 // called from FFT thread
 void AP_GyroFFT::update()
 {
-    if (!_enable || !_enabled) {
+    if (!analysis_enabled()) {
         return;
     }
 
@@ -301,6 +312,10 @@ void AP_GyroFFT::update()
 // update calculated values of dynamic parameters - runs at 1Hz
 void AP_GyroFFT::update_parameters()
 {
+    if (!_initialized) {
+        return;
+    }
+
     WITH_SEMAPHORE(_sem);
 
     // don't allow MAXHZ to go to Nyquist
@@ -314,7 +329,7 @@ void AP_GyroFFT::update_parameters()
     _config._fft_end_bin = MIN(ceilf(_fft_max_hz.get() / _state->_bin_resolution), _state->_bin_count);
     // actual attenuation from the db value
     _config._attenuation_cutoff = powf(10.0f, -_attenuation_power_db / 10.0f);
-    _config._enabled = _enabled;
+    _config._analysis_enabled = _analysis_enabled;
 }
 
 // thread for processing gyro data via FFT
@@ -338,7 +353,7 @@ void AP_GyroFFT::start_update_thread(void)
         return;
     }
 
-    if (!hal.scheduler->thread_create(FUNCTOR_BIND_MEMBER(&AP_GyroFFT::update_thread, void), "apm_fft", 1024, AP_HAL::Scheduler::PRIORITY_IO, 1)) {
+    if (!hal.scheduler->thread_create(FUNCTOR_BIND_MEMBER(&AP_GyroFFT::update_thread, void), "apm_fft", FFT_STACK_SIZE, AP_HAL::Scheduler::PRIORITY_IO, 1)) {
         AP_HAL::panic("Failed to start AP_GyroFFT update thread");
     }
 
@@ -369,11 +384,7 @@ bool AP_GyroFFT::calibration_check()
         || _window_size > FFT_DEFAULT_WINDOW_SIZE * 2) {
         return true;
     }
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    float max_divergence = 0.0f;
-#else
     float max_divergence = self_test_bin_frequencies();
-#endif
 
     if (max_divergence > _state->_bin_resolution * 0.5f) {
         gcs().send_text(MAV_SEVERITY_WARNING, "FFT: self-test FAILED, max error %fHz", max_divergence);
