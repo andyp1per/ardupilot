@@ -93,6 +93,7 @@ private:
 
     // semaphore for access to shared FFT data
     HAL_Semaphore_Recursive _sem;
+    HAL_Semaphore_Recursive _analysis_sem;
 
     // data accessible from the main thread protected by the semaphore
     struct EngineState {
@@ -203,7 +204,7 @@ private:
     AP_Float _bandwidth_hover_hz;
     AP_InertialSensor* _ins;
 #if DEBUG_FFT
-    uint32_t _output_count;
+    uint32_t _last_output_ms;
 #endif
 
     static AP_GyroFFT *_singleton;

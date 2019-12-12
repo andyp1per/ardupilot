@@ -25,11 +25,7 @@ extern const AP_HAL::HAL& hal;
 #define FFT_DEFAULT_WINDOW_OVERLAP  0.5f
 #define FFT_THR_REF_DEFAULT         0.35f   // the estimated throttle reference, 0 ~ 1
 #define FFT_SNR_DEFAULT            25.0f // a higher SNR is safer and this works quite well on a Pixracer
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-#define FFT_STACK_SIZE              2048
-#else
 #define FFT_STACK_SIZE              1024
-#endif
 
 // table of user settable parameters
 const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
@@ -285,20 +281,25 @@ void AP_GyroFFT::update()
     if (!analysis_enabled()) {
         return;
     }
-
+    // if the self-test has the semaphore then skip analysis
+    if (!_analysis_sem.take_nonblocking()) {
+        return;
+    }
     // once there are enough samples, process them
     if (_sample_count >= _samples_per_frame) {
-        {
-            WITH_SEMAPHORE(_sem);
-            if (_current_sample_mode) {
-                // loop rate sampling
-                hal.dsp->fft_start(_state, _downsampled_gyro_data[_update_axis], _circular_buffer_idx);
-            }
-            else {
-                // gyro rate sampling
-                hal.dsp->fft_start(_state, _ins->get_filtered_gyro_window(_update_axis), _ins->get_filtered_gyro_window_index());
-            }
+        if (!_sem.take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
+            return;
         }
+
+        if (_current_sample_mode) {
+            // loop rate sampling
+            hal.dsp->fft_start(_state, _downsampled_gyro_data[_update_axis], _circular_buffer_idx);
+        }
+        else {
+            // gyro rate sampling
+            hal.dsp->fft_start(_state, _ins->get_filtered_gyro_window(_update_axis), _ins->get_filtered_gyro_window_index());
+        }
+        _sem.give();
 
         // calculate FFT and update filters
         uint16_t bin_max = hal.dsp->fft_analyse(_state, _config._fft_start_bin, _config._fft_end_bin);
@@ -307,6 +308,8 @@ void AP_GyroFFT::update()
         update_ref_energy(bin_max);
         calculate_noise(bin_max);
     }
+
+    _analysis_sem.give();
 }
 
 // update calculated values of dynamic parameters - runs at 1Hz
@@ -500,9 +503,9 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
     _thread_state._center_freq_hz_filtered[_update_axis] = _center_freq_filter[_update_axis].apply(weighted_center_freq_hz);
 
 #if DEBUG_FFT
-    // output at approx 1hz
-   if (_output_count % 400 == 0)
-   {
+    const uint32_t now = AP_HAL::millis();
+    // output at 1hz
+   if ((now - _last_output_ms) > 1000) {
         gcs().send_text(MAV_SEVERITY_WARNING, "FFT: f:%.1f, fr:%.1f, b:%u, fd:%.1f",
                         _thread_state._center_freq_hz_filtered[_update_axis], _thread_state._center_freq_hz[_update_axis], max_bin, _state->_max_bin_freq);
         gcs().send_text(MAV_SEVERITY_WARNING, "FFT: bw:%.1f, e:%.1f, r:%.1f, snr:%.1f",
@@ -510,6 +513,7 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
         gcs().send_text(MAV_SEVERITY_WARNING, "[%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f]",
                         _state->_freq_bins[0], _state->_freq_bins[1], _state->_freq_bins[2], _state->_freq_bins[3], _state->_freq_bins[4], _state->_freq_bins[5], _state->_freq_bins[6], _state->_freq_bins[7],
                         _state->_freq_bins[8], _state->_freq_bins[9], _state->_freq_bins[10], _state->_freq_bins[11], _state->_freq_bins[12], _state->_freq_bins[13], _state->_freq_bins[14], _state->_freq_bins[15]);
+        _last_output_ms = now;
    }
 #endif
     _update_axis = (_update_axis + 1) % XYZ_AXIS_COUNT;
@@ -519,7 +523,12 @@ void AP_GyroFFT::calculate_noise(uint16_t max_bin)
 // called from FFT thread
 float AP_GyroFFT::calculate_noise_bandwidth_hz(uint16_t max_bin)
 {
+    if (max_bin == 0 || max_bin == _state->_bin_count) {
+        return  _state->_bin_resolution;
+    }
+
     float noise_width = 1;
+
     // -attenuation/2 dB point above the center bin
     for (uint16_t b = max_bin + 1; b <= _state->_bin_count; b++) {
         if (_state->_freq_bins[b] < _state->_freq_bins[max_bin] * _config._attenuation_cutoff) {
@@ -603,7 +612,7 @@ float AP_GyroFFT::self_test(float frequency, GyroWindow test_window)
     }
 
     // while testing prevent the FFT thread from running analyses
-    WITH_SEMAPHORE(_sem);
+    WITH_SEMAPHORE(_analysis_sem);
 
     _update_axis = 0;
 
