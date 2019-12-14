@@ -78,7 +78,9 @@ DSP::FFTWindowStateSITL::FFTWindowStateSITL(uint16_t window_size, uint16_t sampl
 
 DSP::FFTWindowStateSITL::~FFTWindowStateSITL()
 {
-    hal.util->free_type(_rfft_data, sizeof(float) * (_window_size + 2), DSP_MEM_REGION);
+    if (_rfft_data != nullptr) {
+        hal.util->free_type(_rfft_data, sizeof(float) * (_window_size + 2), DSP_MEM_REGION);
+    }
 }
 
 // step 1: filter the incoming samples through a Hanning window
@@ -99,18 +101,18 @@ void DSP::step_fft(FFTWindowStateSITL* fft)
 {
     complexf* buf = new complexf[fft->_window_size];
 
-    for (uint32_t i = 0; i < fft->_window_size; i++) {
+    for (uint16_t i = 0; i < fft->_window_size; i++) {
         buf[i] = complexf(fft->_freq_bins[i], 0);
     }
 
     calculate_fft(buf, fft->_window_size);
 
-    for (uint32_t i = 0; i < fft->_bin_count; i++) {
+    for (uint16_t i = 0; i < fft->_bin_count; i++) {
         fft->_freq_bins[i] = std::norm(buf[i]);
     }
 
     // components at the nyquist frequency are real only
-    for (uint32_t i = 0, j=0; i <= fft->_bin_count; i++, j+=2) {
+    for (uint16_t i = 0, j = 0; i <= fft->_bin_count; i++, j += 2) {
         fft->_rfft_data[j] = buf[i].real();
         fft->_rfft_data[j+1] = buf[i].imag();
     }
@@ -145,18 +147,18 @@ uint16_t DSP::step_calc_frequencies(FFTWindowStateSITL* fft, uint16_t start_bin,
     return fft->_max_energy_bin;
 }
 
-void DSP::mult_f32(const float* v1, const float* v2, float* vout, uint32_t len)
+void DSP::mult_f32(const float* v1, const float* v2, float* vout, uint16_t len)
 {
-    for (uint32_t i = 0; i < len; i++) {
+    for (uint16_t i = 0; i < len; i++) {
         vout[i] = v1[i] * v2[i];
     }
 }
 
-void DSP::max_f32(const float* vin, uint32_t len, float* maxValue, uint32_t* maxIndex)
+void DSP::max_f32(const float* vin, uint16_t len, float* maxValue, uint16_t* maxIndex)
 {
     *maxValue = vin[0];
     *maxIndex = 0;
-    for (uint32_t i = 1; i < len; i++) {
+    for (uint16_t i = 1; i < len; i++) {
         if (vin[i] > *maxValue) {
             *maxValue = vin[i];
             *maxIndex = i;
@@ -164,17 +166,17 @@ void DSP::max_f32(const float* vin, uint32_t len, float* maxValue, uint32_t* max
     }
 }
 
-void DSP::scale_f32(const float* vin, float scale, float* vout, uint32_t len)
+void DSP::scale_f32(const float* vin, float scale, float* vout, uint16_t len)
 {
-    for (uint32_t i = 0; i < len; i++) {
+    for (uint16_t i = 0; i < len; i++) {
         vout[i] = vin[i] * scale;
     }
 }
 
 // simple integer log2
-static uint32_t fft_log2(uint32_t n)
+static uint16_t fft_log2(uint16_t n)
 {
-    uint32_t k = n, i = 0;
+    uint16_t k = n, i = 0;
     while (k) {
         k >>= 1;
         i++;
@@ -183,10 +185,10 @@ static uint32_t fft_log2(uint32_t n)
 }
 
 // bitreverse the input
-static uint32_t fft_bitreverse(uint32_t length, uint32_t n)
+static uint32_t fft_bitreverse(uint16_t length, uint16_t n)
 {
-    uint32_t p = 0;
-    for (uint32_t j = 1; j <= fft_log2(length); j++) {
+    uint16_t p = 0;
+    for (uint16_t j = 1; j <= fft_log2(length); j++) {
         if (n & (1 << (fft_log2(length) - j))) {
             p |= 1 << (j - 1);
         }
@@ -195,31 +197,37 @@ static uint32_t fft_bitreverse(uint32_t length, uint32_t n)
 }
 
 // reorder all elements of the input according to their bitreversed index
-static void fft_order(complexf *f1, uint32_t length, complexf* temp)
+static void fft_order(complexf *f1, uint16_t length, complexf* temp)
 {
-    for (uint32_t i = 0; i < length; i++) {
+    for (uint16_t i = 0; i < length; i++) {
         temp[i] = f1[fft_bitreverse(length, i)];
     }
-    for (uint32_t j = 0; j < length; j++) {
+    for (uint16_t j = 0; j < length; j++) {
         f1[j] = temp[j];
     }
 }
 
 // calculate the in-place FFT of the input using the Cooley–Tukey algorithm
-void DSP::calculate_fft(complexf *f, uint32_t length)
+void DSP::calculate_fft(complexf *f, uint16_t length)
 {
     complexf *temp = new complexf[length];
     fft_order(f, length, temp);
 
     temp[1] = std::polar(1.0f, -2.0f * M_PI / length);
     temp[0] = 1;
-    for (uint32_t i = 2; i < length * 0.5f; i++) {
-        temp[i] = std::pow(temp[1], i);
+
+
+    // pow() is #defined to something not useful, therefore do it the hard way
+    for (uint16_t i = 2; i < length>>1; i++) {
+        float rho = powf(abs(temp[1]), i);
+        float theta = arg(temp[1]);
+        temp[i] = complexf(rho * cosf(i * theta), rho * sinf(i * theta));
     }
-    uint32_t n = 1;
-    uint32_t a = length * 0.5f;
-    for (uint32_t j = 0; j < log2(length); j++) {
-        for (uint32_t i = 0; i < length; i++) {
+
+    uint16_t n = 1;
+    uint16_t a = length * 0.5f;
+    for (uint16_t j = 0; j < fft_log2(length); j++) {
+        for (uint16_t i = 0; i < length; i++) {
             if (!(i & n)) {
                 complexf t1 = f[i];
                 complexf t2 = temp[(i * a) % (n * a)] * f[i + n];

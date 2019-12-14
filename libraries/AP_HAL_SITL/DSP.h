@@ -43,7 +43,7 @@ public:
 
     private:
         // bin with maximum energy
-        uint32_t _max_energy_bin;
+        uint16_t _max_energy_bin;
         // intermediate real FFT data
         float* _rfft_data;
     };
@@ -53,8 +53,8 @@ private:
     void step_fft(FFTWindowStateSITL* fft);
     void step_cmplx_mag_f32(FFTWindowStateSITL* fft, uint16_t start_bin, uint16_t end_bin);
     uint16_t step_calc_frequencies(FFTWindowStateSITL* fft, uint16_t start_bin, uint16_t end_bin);
-    void mult_f32(const float* v1, const float* v2, float* vout, uint32_t len);
-    void max_f32(const float* vin, uint32_t len, float* maxValue, uint32_t* maxIndex);
-    void scale_f32(const float* vin, float scale, float* vout, uint32_t len);
-    void calculate_fft(complexf* f, uint32_t length);
+    void mult_f32(const float* v1, const float* v2, float* vout, uint16_t len);
+    void max_f32(const float* vin, uint16_t len, float* maxValue, uint16_t* maxIndex);
+    void scale_f32(const float* vin, float scale, float* vout, uint16_t len);
+    void calculate_fft(complexf* f, uint16_t length);
 };
