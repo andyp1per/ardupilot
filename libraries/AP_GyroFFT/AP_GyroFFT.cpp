@@ -22,6 +22,9 @@
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Logger/AP_Logger.h>
 #include <Filter/HarmonicNotchFilter.h>
+#include <AP_BoardConfig/AP_BoardConfig.h>
+#include <AP_Arming/AP_Arming.h>
+#include <stdio.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -33,11 +36,20 @@ extern const AP_HAL::HAL& hal;
 #define FFT_DEFAULT_WINDOW_SIZE     32
 #endif
 #endif
+#ifndef FFT_DEFAULT_WINDOW_OVERLAP
+#if defined(STM32H7)
+#define FFT_DEFAULT_WINDOW_OVERLAP  0.75f
+#else
 #define FFT_DEFAULT_WINDOW_OVERLAP  0.5f
+#endif
+#endif
 #define FFT_THR_REF_DEFAULT         0.35f   // the estimated throttle reference, 0 ~ 1
 #define FFT_SNR_DEFAULT            25.0f // a higher SNR is safer and this works quite well on a Pixracer
 #define FFT_STACK_SIZE              1024
-#define FFT_REQUIRED_HARMONIC_FIT  10.0f
+#define FFT_MIN_SAMPLES_PER_FRAME   16
+#define FFT_HARMONIC_FIT_DEFAULT    10
+#define FFT_HARMONIC_FIT_FILTER_HZ  15.0f
+#define FFT_HARMONIC_FIT_MULT       200.0f
 
 // table of user settable parameters
 const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
@@ -53,7 +65,7 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
     // @Param: MINHZ
     // @DisplayName: Minimum Frequency
     // @Description: Lower bound of FFT frequency detection in Hz.
-    // @Range: 10 400
+    // @Range: 80 400
     // @Units: Hz
     // @User: Advanced
     AP_GROUPINFO("MINHZ", 2, AP_GyroFFT, _fft_min_hz, 80),
@@ -61,7 +73,7 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
     // @Param: MAXHZ
     // @DisplayName: Maximum Frequency
     // @Description: Upper bound of FFT frequency detection in Hz.
-    // @Range: 10 400
+    // @Range: 80 400
     // @Units: Hz
     // @User: Advanced
     AP_GROUPINFO("MAXHZ", 3, AP_GyroFFT, _fft_max_hz, 200),
@@ -125,6 +137,21 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("BW_HOVER", 11, AP_GyroFFT, _bandwidth_hover_hz, 20),
 
+    // @Param: HMNC_FIT
+    // @DisplayName: FFT harmonic fit frequency threshold
+    // @Description: FFT harmonic fit frequency threshold percentage at which a signal of the appropriate frequency is determined to be the harmonic of another. Signals that have a harmonic relationship that varies at most by this percentage are considered harmonics of each other for the purpose of selecting the harmonic notch frequency. If a match is found then the lower frequency harmonic is always used as the basis for the dynamic harmonic notch. A value of zero completely disables harmonic matching.
+    // @Range: 0 100
+    // @User: Advanced
+    // @RebootRequired: True
+    AP_GROUPINFO("HMNC_FIT", 12, AP_GyroFFT, _harmonic_fit, FFT_HARMONIC_FIT_DEFAULT),
+
+    // @Param: HMNC_PEAK
+    // @DisplayName: FFT harmonic peak target
+    // @Description: The FFT harmonic peak target that should be returned by FTN1.PkAvg. The resulting value will be used by the harmonic notch if configured to track the FFT frequency. By default the appropriate peak is auto-detected based on the harmonic fit between peaks. Setting this to 1 will always target the highest energy peak. Setting this to 2 will target the highest energy peak that is lower in frequency than the highest energy peak. Setting this to 3 will target the highest energy peak that is higher in frequency than the highest energy peak.
+    // @Values: 0:Auto,1:Center Frequency,2:Lower-Shoulder Frequency,3:Upper-Shoulder Frequency,4:Roll-Axis,5:Pitch-Axis
+    // @User: Advanced
+    AP_GROUPINFO("HMNC_PEAK", 13, AP_GyroFFT, _harmonic_peak, 0),
+
     AP_GROUPEND
 };
 
@@ -135,9 +162,6 @@ const AP_Param::GroupInfo AP_GyroFFT::var_info[] = {
 // For a loop rate of 800Hz, 16 bins each 25Hz wide
 // Eg X[0]=[DC/Nyquist], X[1]=[12,37), X[2]=[37,62), X[3]=[62,87), X[4]=[87,112)
 // So middle frequency is X[n] * 25 and the range is X[n] * 25 - 12 < f < X[n] * 25 + 12
-
-// Maximum tolerated number of cycles with missing signal
-#define FFT_MAX_MISSED_UPDATES 3
 
 const extern AP_HAL::HAL& hal;
 
@@ -215,14 +239,33 @@ void AP_GyroFFT::init(uint32_t target_looptime_us)
         return;
     }
     // current read marker is the beginning of the window
-    if (_sample_mode == 0) {
-        _circular_buffer_idx = _ins->get_raw_gyro_window_index();
-    } else {
-        _circular_buffer_idx = 0;
+    for (uint8_t axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+        if (_sample_mode == 0) {
+            _circular_buffer_idx[axis] = _ins->get_raw_gyro_window_index();
+        } else {
+            _circular_buffer_idx[axis] = 0;
+        }
+    }
+
+    // calculate harmonic multiplier
+    uint8_t first_harmonic = 0;
+    _harmonics = 1; // always search for 1
+    if (_harmonic_fit > 0) {
+        for (uint8_t i = 0; i < HNF_MAX_HARMONICS; i++) {
+            if (_ins->get_gyro_harmonic_notch_harmonics() & (1<<i)) {
+                if (first_harmonic == 0) {
+                    first_harmonic = i + 1;
+                } else {
+                    _harmonics++;
+                    _harmonic_multiplier = float(i + 1) / first_harmonic;
+                    break;
+                }
+            }
+        }
     }
 
     // initialise the HAL DSP subsystem
-    _state = hal.dsp->fft_init(_window_size, _fft_sampling_rate_hz);
+    _state = hal.dsp->fft_init(_window_size, _fft_sampling_rate_hz, _harmonics);
     if (_state == nullptr) {
         gcs().send_text(MAV_SEVERITY_WARNING, "Failed to initialize DSP engine");
         return;
@@ -232,38 +275,38 @@ void AP_GyroFFT::init(uint32_t target_looptime_us)
     _window_overlap = constrain_float(_window_overlap, 0.0f, 0.9f);
     _window_overlap.save();
     _samples_per_frame = (1.0f - _window_overlap) * _window_size;
-    _samples_per_frame = 1 << lrintf(log2f(_samples_per_frame));
-
-    // The update rate for the output
+    // if we allow too small a number of samples per frame the output rate gets very high
+    // this is particularly a problem on IMUs with higher sample rates (e.g. BMI088)
+    // 16 gives a maximum output rate of 2Khz / 16 = 125Hz per axis or 375Hz in aggregate
+    _samples_per_frame = MAX(FFT_MIN_SAMPLES_PER_FRAME, 1 << lrintf(log2f(_samples_per_frame)));
+    // per-axis frame time
+    _frame_time_ms = _samples_per_frame * 1000 / _fft_sampling_rate_hz;
+    // The update rate for the output, defaults are 1Khz / (1 - 0.5) * 32 == 62hz
     const float output_rate = _fft_sampling_rate_hz / _samples_per_frame;
     // establish suitable defaults for the detected values
     for (uint8_t axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
         _thread_state._center_freq_hz[axis] = _fft_min_hz;
-        _thread_state._center_freq_hz_filtered[axis] = _fft_min_hz;
-        // calculate low-pass filter characteristics based on overlap size
-        _center_freq_filter[axis].set_cutoff_frequency(output_rate, output_rate * 0.48f);
-        // smooth the bandwidth output more aggressively
-        _center_bandwidth_filter[axis].set_cutoff_frequency(output_rate, output_rate * 0.25f);
+
+        for (uint8_t peak = 0; peak < FrequencyPeak::MAX_TRACKED_PEAKS; peak++) {
+            _thread_state._center_freq_hz_filtered[axis][peak] = _fft_min_hz;
+        }
         // number of cycles to average over, two complete windows to be sure
         _noise_calibration_cycles[axis] = (_window_size / _samples_per_frame) * 2;
+        // harmonic frequency fit should change relatively slowly
+        _harmonic_fit_filter[axis].set_cutoff_frequency(output_rate, MIN(output_rate * 0.48f, FFT_HARMONIC_FIT_FILTER_HZ));
+    }
+
+    for (uint8_t peak = 0; peak < FrequencyPeak::MAX_TRACKED_PEAKS; peak++) {
+        // calculate low-pass filter characteristics based on window size and overlap
+        _center_freq_filter[peak].set_cutoff_frequency(output_rate, output_rate * 0.48f);
+        // the bin energy jumps around a lot so requires more filtering
+        _center_freq_energy_filter[peak].set_cutoff_frequency(output_rate, output_rate * 0.25f);
+        // smooth the bandwidth output more aggressively
+        _center_bandwidth_filter[peak].set_cutoff_frequency(output_rate, output_rate * 0.25f);
     }
 
     // the number of cycles required to have a proper noise reference
     _noise_cycles = (_window_size / _samples_per_frame) * XYZ_AXIS_COUNT;
-    // calculate harmonic multiplier
-    uint8_t first_harmonic = 0;
-    _harmonics = 1; // always search for 1
-    for (uint8_t i = 0; i < HNF_MAX_HARMONICS; i++) {
-        if (_ins->get_gyro_harmonic_notch_harmonics() & (1<<i)) {
-            if (first_harmonic == 0) {
-                first_harmonic = i + 1;
-            } else {
-                _harmonics++;
-                _harmonic_multiplier = float(i + 1) / first_harmonic;
-                break;
-            }
-        }
-    }
 
     // finally we are done
     _initialized = true;
@@ -274,25 +317,17 @@ void AP_GyroFFT::init(uint32_t target_looptime_us)
 
 // sample the gyros either by using a gyro window sampled at the gyro rate or making invdividual samples
 // called from fast_loop thread - anything that requires atomic access to IMU data needs to be done here
+// this function does not take out a sempahore to avoid waiting on the FFT thread
 void AP_GyroFFT::sample_gyros()
 {
     if (!analysis_enabled()) {
         return;
     }
 
-    WITH_SEMAPHORE(_sem);
-
     // update counters for gyro window
     if (_current_sample_mode == 0) {
         // number of available samples are those in the IMU buffer less those we have already consumed
-        _sample_count = ((_ins->get_raw_gyro_window_index() - _circular_buffer_idx + get_buffer_size()) % get_buffer_size());
-
-        if (start_analysis()) {
-            hal.dsp->fft_start(_state, _ins->get_raw_gyro_window(_update_axis), _circular_buffer_idx, get_buffer_size());
-            // we have pushed a frame into the FFT loop, move the index to the beginning of the next frame
-            _circular_buffer_idx = (_circular_buffer_idx + _samples_per_frame) % get_buffer_size();
-            _sample_count -= _samples_per_frame;
-        }
+        _sample_count[_update_axis] = ((_ins->get_raw_gyro_window_index() - _circular_buffer_idx[_update_axis] + get_buffer_size()) % get_buffer_size());
     }
     // for loop rate sampling accumulate and average gyro samples
     else {
@@ -310,16 +345,48 @@ void AP_GyroFFT::sample_gyros()
             _oversampled_gyro_accum.zero();
             _oversampled_gyro_count = 0;
             _downsampled_gyro_idx = (_downsampled_gyro_idx + 1) % _state->_window_size;
-            _sample_count++;
-
-            if (start_analysis()) {
-                hal.dsp->fft_start(_state, _downsampled_gyro_data[_update_axis], _circular_buffer_idx, _state->_window_size);
-                _circular_buffer_idx = (_circular_buffer_idx + _samples_per_frame) % _state->_window_size;
-                _sample_count -= _samples_per_frame;
-            }
+            _sample_count[0]++;
+            _sample_count[1]++;
+            _sample_count[2]++;
         }
     }
+}
 
+// push a full frame of gyro samples into the FFT engine as required
+// called from main thread at 400Hz - anything that requires atomic access to IMU data needs to be done here
+void AP_GyroFFT::push_gyro_frame()
+{
+    if (!analysis_enabled()) {
+        return;
+    }
+
+    WITH_SEMAPHORE(_sem);
+
+    if (start_analysis()) {
+        if (_current_sample_mode == 0) {
+            const uint16_t buffer_size = get_buffer_size();
+            uint16_t read_idx = _circular_buffer_idx[_update_axis];
+            const uint16_t write_idx = _ins->get_raw_gyro_window_index();
+            // if the write index ran over the read index because we have been too slow, reset
+            // we only get here once we have a full frame so don't need to check for startup conditions
+            if ((read_idx + buffer_size - write_idx) % buffer_size > INS_MAX_GYRO_WINDOW_SAMPLES) {
+                read_idx = (write_idx + 1) % buffer_size;
+                _sample_count[_update_axis] = buffer_size;
+            }
+
+            hal.dsp->fft_start(_state, _ins->get_raw_gyro_window(_update_axis), read_idx, buffer_size);
+            // we have pushed a frame into the FFT loop, move the index to the beginning of the next frame
+            _circular_buffer_idx[_update_axis] = (read_idx + _samples_per_frame) % buffer_size;
+        } else {
+            hal.dsp->fft_start(_state, _downsampled_gyro_data[_update_axis], _circular_buffer_idx[_update_axis], _state->_window_size);
+            _circular_buffer_idx[_update_axis] = (_circular_buffer_idx[_update_axis] + _samples_per_frame) % _state->_window_size;
+        }
+        _sample_count[_update_axis] -= _samples_per_frame;
+    }
+
+    // thread local copy of the sample count so that we don't need a sempahore in sample_gyros()
+    _engine_sample_count[_update_axis] = _sample_count[_update_axis];
+    _config._analysis_enabled = _analysis_enabled;
     _global_state = _thread_state;
 }
 
@@ -337,38 +404,48 @@ uint16_t AP_GyroFFT::update()
 
     // only proceeed if a full frame has been pushed into the dsp
     if (!_thread_state._analysis_started) {
-        uint16_t new_sample_count = _sample_count;
+        uint16_t new_sample_count = _engine_sample_count[_update_axis];
         _sem.give();
         return new_sample_count;
     }
 
-    uint16_t start_bin = _config._fft_start_bin;
-    uint16_t end_bin = _config._fft_end_bin;
+    // take a copy of the config inside the semaphore
+    EngineConfig config = _config;
 
     _sem.give();
 
+    uint32_t now = AP_HAL::micros();
     // calculate FFT and update filters outside the semaphore
-    uint16_t bin_max = hal.dsp->fft_analyse(_state, start_bin, end_bin, _harmonics, _config._attenuation_cutoff);
-
-    // in order to access _config state we need the semaphore again
-    WITH_SEMAPHORE(_sem);
+    uint16_t bin_max = hal.dsp->fft_analyse(_state, config._fft_start_bin, config._fft_end_bin, config._attenuation_cutoff);
 
     // something has been detected, update the peak frequency and associated metrics
     update_ref_energy(bin_max);
-    calculate_noise(bin_max);
+    calculate_noise(false, config);
 
-    // ready to receive another frame
+    // record how we are doing
+    _output_cycle_micros = AP_HAL::micros() - now;
+
+    // ready to receive another frame, because lock contention is so expensive we don't lock
+    // around this flag but rather rely on the semaphore at the beginning of the loop to
+    // ensure eventual visibility to the main loop
     _thread_state._analysis_started = false;
 
-    return _sample_count;
+    // samples remaining in the next axis
+    return _engine_sample_count[_update_axis];
 }
 
-    // whether analysis can be run again or not
+// whether analysis can be run again or not
+// called from main thread with the semaphore held
 bool AP_GyroFFT::start_analysis() {
     if (_thread_state._analysis_started) {
         return false;
     }
-    if (_sample_count >= _state->_window_size) {
+    // don't run any more gyro cycles once noise is calibrated and the self-test is running
+    if (!_thread_state._noise_needs_calibration && !_calibrated) {
+        return false;
+    }
+
+    if (_sample_count[_update_axis] >= _state->_window_size) {
         _thread_state._analysis_started = true;
         return true;
     }
@@ -378,7 +455,8 @@ bool AP_GyroFFT::start_analysis() {
 // update calculated values of dynamic parameters - runs at 1Hz
 void AP_GyroFFT::update_parameters()
 {
-    if (!_initialized) {
+    // lock contention is very costly, so don't allow configuration updates while flying
+    if (!_initialized || AP::arming().is_armed()) {
         return;
     }
 
@@ -395,7 +473,6 @@ void AP_GyroFFT::update_parameters()
     _config._fft_end_bin = MIN(ceilf(_fft_max_hz.get() / _state->_bin_resolution), _state->_bin_count);
     // actual attenuation from the db value
     _config._attenuation_cutoff = powf(10.0f, -_attenuation_power_db / 10.0f);
-    _config._analysis_enabled = _analysis_enabled;
 }
 
 // thread for processing gyro data via FFT
@@ -403,11 +480,20 @@ void AP_GyroFFT::update_thread(void)
 {
     while (true) {
         uint16_t remaining_samples = update();
-        // wait approximately until we are likely to have another frame ready
-        uint32_t delay = constrain_int32((int32_t(_window_size) - remaining_samples) * 1e6 / _fft_sampling_rate_hz, 0, 100000);
+        // this is to stop us burning CPU while waiting for samples, the reduction by _samples_per_frame is a heuristic to prevent waiting too long
+        // and missing frames (easy to see in SITL because the noise will keep calibrating)
+        // we always delay by at least 1us to give logging a chance to run at the same priority
+        uint32_t delay = constrain_int32(_state->_window_size - remaining_samples - _samples_per_frame, 0, _state->_window_size - _samples_per_frame)
+            * 1e6 / _fft_sampling_rate_hz;
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+        // in SITL the gyros do not run in a different thread
         if (delay > 0) {
             hal.scheduler->delay_microseconds(delay);
         }
+#else
+        // on an F4 (Pixracer) we need to delay by at least 10us to not lock up logging, on an H7 1us is enough
+        hal.scheduler->delay_microseconds(MAX(delay, 10U));
+#endif
     }
 }
 
@@ -429,25 +515,32 @@ void AP_GyroFFT::start_update_thread(void)
 
 // self-test the FFT analyser - can only be done while samples are not being taken
 // called from main thread
-bool AP_GyroFFT::calibration_check()
+bool AP_GyroFFT::pre_arm_check(char *failure_msg, const uint8_t failure_msg_len)
 {
     if (!analysis_enabled()) {
         return true;
     }
 
+    // already calibrated
+    if (_calibrated) {
+        return true;
+    }
+
     // analysis is started in the main thread, don't trample on in-flight analysis
     if (_global_state._analysis_started) {
-        return true;
+        hal.util->snprintf(failure_msg, failure_msg_len, "FFT still analyzing");
+        return false;
     }
 
     // still calibrating noise so not ready
     if (_global_state._noise_needs_calibration) {
+        hal.util->snprintf(failure_msg, failure_msg_len, "FFT calibrating noise");
         return false;
     }
 
     // make sure the frequency maxium is below Nyquist
     if (_fft_max_hz > _fft_sampling_rate_hz * 0.5f) {
-        gcs().send_text(MAV_SEVERITY_CRITICAL, "FFT: config MAXHZ %dHz > %dHz", _fft_max_hz.get(), _fft_sampling_rate_hz / 2);
+        hal.util->snprintf(failure_msg, failure_msg_len, "FFT config MAXHZ %dHz > %dHz", _fft_max_hz.get(), _fft_sampling_rate_hz / 2);
         return false;
     }
 
@@ -456,18 +549,39 @@ bool AP_GyroFFT::calibration_check()
         gcs().send_text(MAV_SEVERITY_WARNING, "FFT: resolution is %.1fHz, increase length", _state->_bin_resolution);
         return true; // a low resolution is not fatal
     }
+#if 0 // these calculations do not result in a long enough expected delay
+    // in order to test all frequencies we need to endure a long pause for higher windows lengths
+    // see timings AP_HAL_ChibiOS/DSP.cpp for per step timings on different hardware
+#if defined(STM32H7)
+    const uint32_t cycle_time = (16 * (1 << (_window_size / 32)) + 5) * (_config._fft_end_bin - _config._fft_start_bin + 1) * 2 / 1000; // H7
+#else
+    const uint32_t cycle_time = (29 * (1 << (_window_size / 32)) + 5) * (_config._fft_end_bin - _config._fft_start_bin + 1) * 2 / 1000; // F4
+#endif
+#endif
+    EXPECT_DELAY_MS(2000); // tested on an H7 at 1024 window
 
-    // larger windows make the the self-test run too long, triggering the watchdog
-    if (AP_Logger::get_singleton()->log_while_disarmed()
-        || _window_size > FFT_DEFAULT_WINDOW_SIZE * 2) {
-        return true;
-    }
     float max_divergence = self_test_bin_frequencies();
-
-    if (max_divergence > _state->_bin_resolution * 0.5f) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: self-test FAILED, max error %fHz", max_divergence);
+    // for longer FFT lengths the resolution gets below 1Hz
+    if (max_divergence > MAX(_state->_bin_resolution * 0.5f, 1)) {
+        hal.util->snprintf(failure_msg, failure_msg_len, "FFT self-test failed, max error %fHz", max_divergence);
     }
-    return max_divergence <= _state->_bin_resolution * 0.5f;
+
+    _calibrated =  max_divergence <= MAX(_state->_bin_resolution * 0.5f, 1);
+
+    if (_calibrated) {
+        // provide the user with some useful information about what they have configured
+        gcs().send_text(MAV_SEVERITY_INFO, "FFT: calibrated %.1fKHz/%.1fHz/%.1fHz", _fft_sampling_rate_hz / 1000.0f,
+             _state->_bin_resolution * 0.5, 1000.0f * XYZ_AXIS_COUNT / _frame_time_ms);
+    }
+
+    return _calibrated;
+}
+
+// we may have disabled the FFT arming check, in which case make sure the engine can still run
+bool AP_GyroFFT::prepare_for_arming()
+{
+    _calibrated = true;
+    return true;
 }
 
 // update the hover frequency input filter. should be called at 100hz when in a stable hover
@@ -496,6 +610,42 @@ void AP_GyroFFT::save_params_on_disarm()
     _throttle_ref.save();
 }
 
+// return the noise peak that is being tracked
+// called from main thread
+AP_GyroFFT::FrequencyPeak AP_GyroFFT::get_tracked_noise_peak() const
+{
+    // if the user has specified a specific axis to track then use that
+    if (_harmonic_peak > FrequencyPeak::MAX_TRACKED_PEAKS) {
+        switch (_harmonic_peak) {
+        case 4:
+            if (_global_state._harmonic_fit.x < _harmonic_fit) {
+                return FrequencyPeak(_global_state._tracked_peak.x);
+            }
+            break;
+        case 5:
+            if (_global_state._harmonic_fit.y < _harmonic_fit) {
+                return FrequencyPeak(_global_state._tracked_peak.y);
+            }
+            break;
+        default:
+            break;
+        }
+        return FrequencyPeak::CENTER;
+    }
+    // if the user has specified a specific peak to track then use that
+    if (_harmonic_peak > 0) {
+        return FrequencyPeak(constrain_int16(_harmonic_peak - 1, FrequencyPeak::CENTER, FrequencyPeak::UPPER_SHOULDER));
+    }
+
+    // required fit of 10% is fairly conservative when testing in SITL, testing shows that it's safer to
+    // require both tracked axes to fit - biasing towards the highest energy peak
+    if (_global_state._harmonic_fit.x < _harmonic_fit && _global_state._harmonic_fit.y < _harmonic_fit) {
+        return FrequencyPeak(_global_state._tracked_peak.x);
+    }
+
+    return FrequencyPeak::CENTER;
+}
+
 // return an average center frequency weighted by bin energy
 // called from main thread
 float AP_GyroFFT::get_weighted_noise_center_freq_hz()
@@ -503,62 +653,100 @@ float AP_GyroFFT::get_weighted_noise_center_freq_hz()
     if (!analysis_enabled()) {
         return _fft_min_hz;
     }
+    // calculate health based on being 5 frames behind, SITL needs longer
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+    const uint32_t output_delay = _frame_time_ms * FFT_MAX_MISSED_UPDATES * 2;
+#else
+    const uint32_t output_delay = _frame_time_ms * FFT_MAX_MISSED_UPDATES;
+#endif
+    uint32_t now = AP_HAL::millis();
+    if (now - _global_state._health_ms.x > output_delay && now - _global_state._health_ms.y > output_delay) {
+        _health = 0;
+#if APM_BUILD_TYPE(APM_BUILD_ArduCopter) || APM_BUILD_TYPE(APM_BUILD_ArduPlane)
+        AP_Motors* motors = AP::motors();
+        if (motors != nullptr) {
+            // FFT is not healthy, fallback to throttle-based estimate
+            return constrain_float(_fft_min_hz * MAX(1.0f, sqrtf(motors->get_throttle_out() / _throttle_ref)), _fft_min_hz, _fft_max_hz);
+        }
+#endif
+    }
 
+    _health = _global_state._health;
+
+    const FrequencyPeak peak = get_tracked_noise_peak();
+    // pitch was good or required, roll was not, use pitch only
+    if (now - _global_state._health_ms.x > output_delay || _harmonic_peak == 5) {
+        return get_noise_center_freq_hz(peak).y;
+    }
+    // roll was good or required, pitch was not, use roll only
+    if (now - _global_state._health_ms.y > output_delay || _harmonic_peak == 4) {
+        return get_noise_center_freq_hz(peak).x;
+    }
+
+    return calculate_weighted_freq_hz(get_center_freq_energy(peak), get_noise_center_freq_hz(peak));
+}
+
+float AP_GyroFFT::calculate_weighted_freq_hz(const Vector3f& energy, const Vector3f& freq)
+{
     // there is generally a lot of high-energy, slightly lower frequency noise on yaw, however this
     // appears to be a second-order effect as only targetting pitch and roll (x & y) produces much cleaner output all round
-    if (!_global_state._center_freq_energy.is_nan()
-        && !is_zero(_global_state._center_freq_energy.x)
-        && !is_zero(_global_state._center_freq_energy.y)) {
-        return (_global_state._center_freq_hz_filtered.x * _global_state._center_freq_energy.x
-            + _global_state._center_freq_hz_filtered.y * _global_state._center_freq_energy.y)
-            / (_global_state._center_freq_energy.x + _global_state._center_freq_energy.y);
+    if (!energy.is_nan() && !is_zero(energy.x) && !is_zero(energy.y)) {
+        return (freq.x * energy.x + freq.y * energy.y)
+            / (energy.x + energy.y);
     }
     else {
-        return (_global_state._center_freq_hz_filtered.x + _global_state._center_freq_hz_filtered.y) * 0.5f;
+        return (freq.x + freq.y) * 0.5f;
     }
 }
+
+// @LoggerMessage: FTN1
+// @Description: FFT Filter Tuning
+// @Field: TimeUS: microseconds since system startup
+// @Field: PkAvg: peak noise frequency as an energy-weighted average of roll and pitch peak frequencies
+// @Field: BwAvg: bandwidth of weighted peak freqency where edges are determined by FFT_ATT_REF
+// @Field: DnF: dynamic harmonic notch centre frequency
+// @Field: SnX: signal-to-noise ratio on the roll axis
+// @Field: SnY: signal-to-noise ratio on the pitch axis
+// @Field: SnZ: signal-to-noise ratio on the yaw axis
+// @Field: FtX: harmonic fit on roll of the highest noise peak to the second highest noise peak
+// @Field: FtY: harmonic fit on pitch of the highest noise peak to the second highest noise peak
+// @Field: FtZ: harmonic fit on yaw of the highest noise peak to the second highest noise peak
+// @Field: FH: FFT health
+// @Field: Tc: FFT cycle time
 
 // log gyro fft messages
 void AP_GyroFFT::write_log_messages()
 {
     if (!analysis_enabled()) {
+        // still want to see the harmonic notch values
+        AP::logger().Write(
+            "FTN", "TimeUS,DnF", "sz", "F-", "Qf", AP_HAL::micros64(), AP::ins().get_gyro_dynamic_notch_center_freq_hz());
         return;
     }
 
     AP::logger().Write(
         "FTN1",
-        "TimeUS,PkAvg,PkX,PkY,PkZ,BwAvg,BwX,BwY,BwZ,DnF",
-        "szzzzzzzzz",
-        "F---------",
-        "Qfffffffff",
+        "TimeUS,PkAvg,BwAvg,DnF,SnX,SnY,SnZ,FtX,FtY,FtZ,FH,Tc",
+        "szzz---%%%-s",
+        "F----------F",
+        "QfffffffffBI",
         AP_HAL::micros64(),
         get_weighted_noise_center_freq_hz(),
-        get_noise_center_freq_hz().x,
-        get_noise_center_freq_hz().y,
-        get_noise_center_freq_hz().z,
         get_weighted_noise_center_bandwidth_hz(),
-        get_noise_center_bandwidth_hz().x,
-        get_noise_center_bandwidth_hz().y,
-        get_noise_center_bandwidth_hz().z,
-        _ins->get_gyro_dynamic_notch_center_freq_hz());
-
-    AP::logger().Write(
-        "FTN2",
-        "TimeUS,FtX,FtY,FtZ,EnX,EnY,EnZ,SnX,SnY,SnZ,Bin",
-        "s%%%-------",
-        "F----------",
-        "QfffffffffB",
-        AP_HAL::micros64(),
-        get_raw_noise_harmonic_fit().x,
-        get_raw_noise_harmonic_fit().y,
-        get_raw_noise_harmonic_fit().z,
-        get_center_freq_energy().x,
-        get_center_freq_energy().y,
-        get_center_freq_energy().z,
+        _ins->get_gyro_dynamic_notch_center_freq_hz(),
         get_noise_signal_to_noise_db().x,
         get_noise_signal_to_noise_db().y,
         get_noise_signal_to_noise_db().z,
-        get_center_freq_bin().z);
+        get_raw_noise_harmonic_fit().x,
+        get_raw_noise_harmonic_fit().y,
+        get_raw_noise_harmonic_fit().z,
+        _health, _output_cycle_micros);
+
+    log_noise_peak(0, FrequencyPeak::CENTER);
+    if (_harmonics > 1) {
+        log_noise_peak(1, FrequencyPeak::LOWER_SHOULDER);
+        log_noise_peak(2, FrequencyPeak::UPPER_SHOULDER);
+    }
 
 #if DEBUG_FFT
     const uint32_t now = AP_HAL::millis();
@@ -567,12 +755,43 @@ void AP_GyroFFT::write_log_messages()
         // doing this from the update thread overflows the stack
         WITH_SEMAPHORE(_sem);
         gcs().send_text(MAV_SEVERITY_WARNING, "FFT: f:%.1f, fr:%.1f, b:%u, fd:%.1f",
-                        _debug_state._center_freq_hz_filtered[_update_axis], _debug_state._center_freq_hz[_update_axis], _debug_max_bin, _debug_max_bin_freq);
+                        _debug_state._center_freq_hz_filtered[FrequencyPeak::CENTER][_update_axis], _debug_state._center_freq_hz[_update_axis], _debug_max_bin, _debug_max_bin_freq);
         gcs().send_text(MAV_SEVERITY_WARNING, "FFT: bw:%.1f, e:%.1f, r:%.1f, snr:%.1f",
-                        _debug_state._center_bandwidth_hz[_update_axis], _debug_max_freq_bin, _ref_energy[_update_axis][_debug_max_bin], _debug_snr);
+                        _debug_state._center_bandwidth_hz_filtered[FrequencyPeak::CENTER][_update_axis], _debug_max_freq_bin, _ref_energy[_update_axis][_debug_max_bin], _debug_snr);
         _last_output_ms = now;
     }
 #endif
+}
+
+// @LoggerMessage: FTN2
+// @Description: FFT Noise Frequency Peak
+// @Field: TimeUS: microseconds since system startup
+// @Field: Id: peak id where 0 is the centre peak, 1 is the lower shoulder and 2 is the upper shoulder
+// @Field: PkX: noise frequency of the peak on roll
+// @Field: PkY: noise frequency of the peak on pitch
+// @Field: PkZ: noise frequency of the peak on yaw
+// @Field: BwX: bandwidth of the peak freqency on roll where edges are determined by FFT_ATT_REF
+// @Field: BwY: bandwidth of the peak freqency on pitch where edges are determined by FFT_ATT_REF
+// @Field: BwZ: bandwidth of the peak freqency on yaw where edges are determined by FFT_ATT_REF
+// @Field: EnX: power spectral density bin energy of the peak on roll
+// @Field: EnY: power spectral density bin energy of the peak on roll
+// @Field: EnZ: power spectral density bin energy of the peak on roll
+
+// write a single log message
+void AP_GyroFFT::log_noise_peak(uint8_t id, FrequencyPeak peak)
+{
+    AP::logger().Write("FTN2", "TimeUS,Id,PkX,PkY,PkZ,BwX,BwY,BwZ,EnX,EnY,EnZ", "s#zzzzzz---", "F----------", "QBfffffffff",
+        AP_HAL::micros64(),
+        id,
+        get_noise_center_freq_hz(peak).x,
+        get_noise_center_freq_hz(peak).y,
+        get_noise_center_freq_hz(peak).z,
+        get_noise_center_bandwidth_hz(peak).x,
+        get_noise_center_bandwidth_hz(peak).y,
+        get_noise_center_bandwidth_hz(peak).z,
+        get_center_freq_energy(peak).x,
+        get_center_freq_energy(peak).y,
+        get_center_freq_energy(peak).z);
 }
 
 // return an average noise bandwidth weighted by bin energy
@@ -583,83 +802,253 @@ float AP_GyroFFT::get_weighted_noise_center_bandwidth_hz()
         return 0.0f;
     }
 
-    if (!_global_state._center_freq_energy.is_nan()
-        && !is_zero(_global_state._center_freq_energy.x)
-        && !is_zero(_global_state._center_freq_energy.y)) {
-        return (_global_state._center_bandwidth_hz.x * _global_state._center_freq_energy.x
-            + _global_state._center_bandwidth_hz.y * _global_state._center_freq_energy.y)
-            / (_global_state._center_freq_energy.x + _global_state._center_freq_energy.y);
-    }
-    else {
-        return (_global_state._center_bandwidth_hz.x + _global_state._center_bandwidth_hz.y) * 0.5f;
-    }
+    const FrequencyPeak peak = get_tracked_noise_peak();
+
+    return calculate_weighted_freq_hz(get_center_freq_energy(peak), get_noise_center_bandwidth_hz(peak));
 }
 
 // calculate noise frequencies from FFT data provided by the HAL subsystem
 // called from FFT thread
-void AP_GyroFFT::calculate_noise(uint16_t max_bin)
+void AP_GyroFFT::calculate_noise(bool calibrating, const EngineConfig& config)
 {
-    _thread_state._center_freq_bin[_update_axis] = max_bin;
+    // calculate the SNR and center frequency energy
+    float weighted_center_freq_hz = 0.0f;
+    float snr = 0.0f;
 
-    float weighted_center_freq_hz = 0;
+    uint8_t num_peaks = calculate_tracking_peaks(weighted_center_freq_hz, snr, calibrating, config);
 
-    // cacluate the SNR and center frequency energy
-    const float max_energy = MAX(1.0f, _state->_freq_bins[max_bin]);
-    const float ref_energy = MAX(1.0f, _ref_energy[_update_axis][max_bin]);
-    float snr = 10.f * log10f(max_energy) - log10f(ref_energy);
-    // if the bin energy is above the noise threshold then we have a signal
-    if (!_thread_state._noise_needs_calibration && !isnan(_state->_freq_bins[max_bin]) && snr > _config._snr_threshold_db) {
-        // if targetting more than one harmonic then make sure we get the fundamental
-        // on larger copters the second harmonic often has more energy
-        const float peak_freq_hz = constrain_float(_state->_max_bin_freq, (float)_config._fft_min_hz, (float)_config._fft_max_hz);
-        const float second_peak_freq_hz = constrain_float(_state->_second_bin_freq, (float)_config._fft_min_hz, (float)_config._fft_max_hz);
-        const float harmonic_fit = 100.0f * fabsf(peak_freq_hz - second_peak_freq_hz * _harmonic_multiplier) / peak_freq_hz;
+    _thread_state._center_freq_bin[_update_axis] = _state->_peak_data[FrequencyPeak::CENTER]._bin;
+    _thread_state._center_freq_hz[_update_axis] = weighted_center_freq_hz;
+    _thread_state._center_snr[_update_axis] = snr;
+    // record the last time we had a good signal on this axis
+    if (num_peaks > 0) {
+        _thread_state._health_ms[_update_axis] = AP_HAL::millis();
+    } else {
+        _thread_state._health_ms[_update_axis] = 0;
+    }
+    _thread_state._health = num_peaks;
+    FrequencyPeak tracked_peak = FrequencyPeak::CENTER;
 
-        // required fit of 10% is fairly conservative when testing in SITL
-        if (_harmonics > 1 && peak_freq_hz > second_peak_freq_hz && harmonic_fit < FFT_REQUIRED_HARMONIC_FIT) {
-            weighted_center_freq_hz = second_peak_freq_hz;
-            _thread_state._center_freq_energy[_update_axis] = _state->_freq_bins[_state->_second_energy_bin];
-            _thread_state._center_bandwidth_hz[_update_axis] = _center_bandwidth_filter[_update_axis].apply(_state->_second_noise_width_hz);
-        } else {
-            weighted_center_freq_hz = peak_freq_hz;
-            _thread_state._center_freq_energy[_update_axis] = _state->_freq_bins[max_bin];
-            _thread_state._center_bandwidth_hz[_update_axis] = _center_bandwidth_filter[_update_axis].apply(_state->_max_noise_width_hz);
+    // record the tracked peak for harmonic fit
+    if (num_peaks > 1 && _harmonics > 1 && !is_zero(get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis))) {
+        if (get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis) > get_tl_noise_center_freq_hz(FrequencyPeak::LOWER_SHOULDER, _update_axis)
+            // ignore the fit if there is too big a discrepancy between the energies
+            && get_tl_center_freq_energy(FrequencyPeak::CENTER, _update_axis) < get_tl_center_freq_energy(FrequencyPeak::LOWER_SHOULDER, _update_axis) * FFT_HARMONIC_FIT_MULT) {
+            tracked_peak = FrequencyPeak::LOWER_SHOULDER;
+        } else if (num_peaks > 2 && get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis) > get_tl_noise_center_freq_hz(FrequencyPeak::UPPER_SHOULDER, _update_axis)
+            // ignore the fit if there is too big a discrepancy between the energies
+            && get_tl_center_freq_energy(FrequencyPeak::CENTER, _update_axis) < get_tl_center_freq_energy(FrequencyPeak::UPPER_SHOULDER, _update_axis) * FFT_HARMONIC_FIT_MULT) {
+            tracked_peak = FrequencyPeak::UPPER_SHOULDER;
         }
-        // record how good the fit was
-        if (peak_freq_hz > second_peak_freq_hz) {
-            _thread_state._harmonic_fit[_update_axis] = harmonic_fit;
-        } else {
-            _thread_state._harmonic_fit[_update_axis] = 0.0f;
+    }
+
+    _thread_state._tracked_peak[_update_axis] = tracked_peak;
+
+    // if targetting more than one harmonic then make sure we get the fundamental
+    // on larger copters the second harmonic often has more energy
+    // if the highest peak is above the second highest then check for harmonic fit
+    if (_thread_state._tracked_peak[_update_axis] != FrequencyPeak::CENTER) {
+        // calculate the fit and filter at 10hz
+        const float harmonic_fit = 100.0f * fabsf(get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis)
+            - get_tl_noise_center_freq_hz(tracked_peak, _update_axis) * _harmonic_multiplier)
+            / get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis);
+
+        // calculate the fit and filter at 10hz
+        if (isfinite(harmonic_fit)) {
+            _thread_state._harmonic_fit[_update_axis] = _harmonic_fit_filter[_update_axis].apply(harmonic_fit);
         }
-        _thread_state._center_freq_hz[_update_axis] = weighted_center_freq_hz;
-        _thread_state._center_snr[_update_axis] = snr;
-        _missed_cycles = 0;
+    } else {
+        _thread_state._harmonic_fit[_update_axis] = 100.0f;
     }
-    // if we failed to find a signal, carry on using the previous reading
-    else if (_missed_cycles++ < FFT_MAX_MISSED_UPDATES) {
-        weighted_center_freq_hz = _thread_state._center_freq_hz[_update_axis];
-        // Keep the previous center frequency and energy
-    }
-    // we failed to find a signal for more than FFT_MAX_MISSED_UPDATES cycles
-    else {
-        weighted_center_freq_hz = _config._fft_min_hz;
-        _thread_state._center_freq_hz[_update_axis] = _config._fft_min_hz;
-        _thread_state._center_freq_energy[_update_axis] = 0.0f;
-        _thread_state._center_snr[_update_axis] = 0.0f;
-        _thread_state._center_bandwidth_hz[_update_axis] = _center_bandwidth_filter[_update_axis].apply(_bandwidth_hover_hz);
-    }
-
-    _thread_state._center_freq_hz_filtered[_update_axis] = _center_freq_filter[_update_axis].apply(weighted_center_freq_hz);
-
 #if DEBUG_FFT
     WITH_SEMAPHORE(_sem);
     _debug_state = _thread_state;
-    _debug_max_freq_bin = _state->_freq_bins[max_bin];
-    _debug_max_bin_freq = _state->_max_bin_freq;
+    _debug_max_freq_bin = _state->_freq_bins[_state->_peak_data[FrequencyPeak::CENTER]._bin];
+    _debug_max_bin_freq = _state->_peak_data[FrequencyPeak::CENTER]._freq_hz;
     _debug_snr = snr;
-    _debug_max_bin = max_bin;
+    _debug_max_bin = _state->_peak_data[FrequencyPeak::CENTER]._bin;
 #endif
     _update_axis = (_update_axis + 1) % XYZ_AXIS_COUNT;
+}
+
+
+// calculate noise peaks based on energy and history switching peaks around as necessary
+uint8_t AP_GyroFFT::calculate_tracking_peaks(float& weighted_center_freq_hz, float& snr, bool calibrating, const EngineConfig& config)
+{
+    uint8_t num_peaks = 0;
+    FrequencyData freqs(*this, config);
+
+    // the noise peaks are returned by the HAL in decreasing order of magnitude, however each peak can temporarily
+    // switch places with another depending on a whole host of hardware and software factors
+    // thus we must be able to temporarily reassign the peaks so that the filtered values track
+    // a continuous frequency
+    DistanceMatrix distance_matrix;
+    find_distance_matrix(distance_matrix, freqs, config);
+
+    FrequencyPeak center = find_closest_peak(FrequencyPeak::CENTER, distance_matrix);
+    FrequencyPeak lower = find_closest_peak(FrequencyPeak::LOWER_SHOULDER, distance_matrix, 1 << center);
+    FrequencyPeak upper = find_closest_peak(FrequencyPeak::UPPER_SHOULDER, distance_matrix, 1 << center | 1 << lower);
+
+    if (calibrating || _distorted_cycles[_update_axis] == 0) {
+        calculate_filtered_noise(FrequencyPeak::LOWER_SHOULDER, FrequencyPeak::LOWER_SHOULDER, freqs, config) && num_peaks++;
+        calculate_filtered_noise(FrequencyPeak::UPPER_SHOULDER, FrequencyPeak::UPPER_SHOULDER, freqs, config) && num_peaks++;
+        calculate_filtered_noise(FrequencyPeak::CENTER, FrequencyPeak::CENTER, freqs, config) && num_peaks++;
+        _distorted_cycles[_update_axis] = constrain_int16(_distorted_cycles[_update_axis] + 1, 0, FFT_MAX_MISSED_UPDATES);
+        _thread_state._tracked_peak[_update_axis] = FrequencyPeak::CENTER;
+        weighted_center_freq_hz = freqs.get_weighted_frequency(FrequencyPeak::CENTER);
+        snr = freqs.get_signal_to_noise(FrequencyPeak::CENTER);
+#if DEBUG_FFT
+        printf("Skipped update, order would have been is %d/%.1f(%.1f) %d/%.1f(%.1f) %d/%.1f(%.1f) n = %d\n",
+            center, _state->_peak_data[center]._freq_hz, get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis),
+            lower, _state->_peak_data[lower]._freq_hz, get_tl_noise_center_freq_hz(FrequencyPeak::LOWER_SHOULDER, _update_axis),
+            upper, _state->_peak_data[upper]._freq_hz, get_tl_noise_center_freq_hz(FrequencyPeak::UPPER_SHOULDER, _update_axis), num_peaks);
+#endif
+        return num_peaks;
+    }
+
+    // another peak is closer to what is currently considered the center frequency
+    if (center != FrequencyPeak::CENTER || lower != FrequencyPeak::LOWER_SHOULDER || upper != FrequencyPeak::UPPER_SHOULDER) {
+        if (lower != FrequencyPeak::NONE) {
+            calculate_filtered_noise(FrequencyPeak::LOWER_SHOULDER, lower, freqs, config) && num_peaks++;
+        }
+        if (upper != FrequencyPeak::NONE) {
+            calculate_filtered_noise(FrequencyPeak::UPPER_SHOULDER, upper, freqs, config) && num_peaks++;
+        }
+        if (center != FrequencyPeak::NONE) {
+            calculate_filtered_noise(FrequencyPeak::CENTER,  center, freqs, config) && num_peaks++;
+        }
+        weighted_center_freq_hz = freqs.get_weighted_frequency(center);
+        snr = freqs.get_signal_to_noise(center);
+        _thread_state._tracked_peak[_update_axis] = center;
+        _distorted_cycles[_update_axis]--;
+        return num_peaks;
+    }
+
+    calculate_filtered_noise(FrequencyPeak::LOWER_SHOULDER, FrequencyPeak::LOWER_SHOULDER, freqs, config) && num_peaks++;
+    calculate_filtered_noise(FrequencyPeak::UPPER_SHOULDER, FrequencyPeak::UPPER_SHOULDER, freqs, config) && num_peaks++;
+    calculate_filtered_noise(FrequencyPeak::CENTER, FrequencyPeak::CENTER, freqs, config) && num_peaks++;
+    _distorted_cycles[_update_axis] = constrain_int16(_distorted_cycles[_update_axis] + 1, 0, FFT_MAX_MISSED_UPDATES);
+    weighted_center_freq_hz = freqs.get_weighted_frequency(FrequencyPeak::CENTER);
+    snr = freqs.get_signal_to_noise(FrequencyPeak::CENTER);
+    _thread_state._tracked_peak[_update_axis] = FrequencyPeak::CENTER;
+
+    return num_peaks;
+}
+
+// calculate noise frequencies from FFT data provided by the HAL subsystem
+// called from FFT thread
+bool AP_GyroFFT::calculate_filtered_noise(FrequencyPeak target_peak, FrequencyPeak source_peak, const FrequencyData& freqs, const EngineConfig& config)
+{
+    if (source_peak > FrequencyPeak::MAX_TRACKED_PEAKS) {
+        // if we failed to find a signal, carry on using the previous readings
+        if (_missed_cycles[_update_axis][target_peak]++ < FFT_MAX_MISSED_UPDATES) {
+            return true; // the peak is synthetic
+        }
+        update_tl_center_freq_energy(target_peak, _update_axis, 0.0f);
+        update_tl_noise_center_bandwidth_hz(target_peak, _update_axis, _bandwidth_hover_hz);
+        update_tl_noise_center_freq_hz(target_peak, _update_axis, config._fft_min_hz);
+        return false;
+    }
+
+    AP_HAL::DSP::FrequencyPeakData* peak_data = &_state->_peak_data[source_peak];
+
+    const uint16_t nb = peak_data->_bin;
+
+    if (freqs.is_valid(FrequencyPeak(source_peak))) {
+        update_tl_center_freq_energy(target_peak, _update_axis, _state->_freq_bins[nb]);
+        update_tl_noise_center_bandwidth_hz(target_peak, _update_axis, peak_data->_noise_width_hz);
+        update_tl_noise_center_freq_hz(target_peak, _update_axis, freqs.get_weighted_frequency(FrequencyPeak(source_peak)));
+        _missed_cycles[_update_axis][target_peak] = 0;
+        return true;
+    }
+
+    // if we failed to find a signal, carry on using the previous readings
+    if (_missed_cycles[_update_axis][target_peak]++ < FFT_MAX_MISSED_UPDATES) {
+        return true; // the peak is synthetic
+    }
+
+    // we failed to find a signal for more than FFT_MAX_MISSED_UPDATES cycles
+    update_tl_center_freq_energy(target_peak, _update_axis, _state->_freq_bins[nb]);     // use the actual energy detected rather than 0
+    update_tl_noise_center_bandwidth_hz(target_peak, _update_axis, _bandwidth_hover_hz);
+    update_tl_noise_center_freq_hz(target_peak, _update_axis, config._fft_min_hz);
+
+    return false;
+}
+
+// filter values through a median sliding window followed by low pass filter
+float AP_GyroFFT::MedianLowPassFilter3dFloat::apply(uint8_t axis, float sample)
+{
+    _median_filter[axis].apply(sample);
+    const float a = _median_filter[axis].get_sample(0);
+    const float b = _median_filter[axis].get_sample(1);
+    const float c = _median_filter[axis].get_sample(2);
+    float median = MAX(MIN(a, b), MIN(MAX(a, b), c));
+    return _lowpass_filter[axis].apply(median);
+}
+
+// initialize a FrequencyData with peak frequency information for use in the swapping algorithm
+AP_GyroFFT::FrequencyData::FrequencyData(const AP_GyroFFT& gyrofft, const EngineConfig& config)
+{
+    for (uint8_t i = 0; i < FrequencyPeak::MAX_TRACKED_PEAKS; i++) {
+        valid[i] = gyrofft.get_weighted_frequency(FrequencyPeak(i), frequency[i], snr[i], config);
+    }
+}
+
+// calculate noise frequencies from FFT data provided by the HAL subsystem
+bool AP_GyroFFT::get_weighted_frequency(FrequencyPeak peak, float& weighted_peak_freq_hz, float& snr, const EngineConfig& config) const
+{
+    AP_HAL::DSP::FrequencyPeakData* peak_data = &_state->_peak_data[peak];
+
+    const uint16_t bin = peak_data->_bin;
+
+    // calculate the SNR and center frequency energy
+    const float max_energy = MAX(1.0f, _state->_freq_bins[bin]);
+    const float ref_energy = MAX(1.0f, _ref_energy[_update_axis][bin]);
+    snr = 10.f * (log10f(max_energy) - log10f(ref_energy));
+
+    // if the bin energy is above the noise threshold then we have a signal
+    if (!_thread_state._noise_needs_calibration && isfinite(_state->_freq_bins[bin]) && snr > config._snr_threshold_db) {
+        weighted_peak_freq_hz = constrain_float(peak_data->_freq_hz, (float)config._fft_min_hz, (float)config._fft_max_hz);
+        return true;
+    }
+
+    weighted_peak_freq_hz = (float)config._fft_min_hz;
+
+    return false;
+}
+
+// calculate the distance matrix between the current estimates and the current cycle
+void AP_GyroFFT::find_distance_matrix(DistanceMatrix& distance_matrix, const FrequencyData& freqs, const EngineConfig& config) const
+{
+    float curr_freqs[FrequencyPeak::MAX_TRACKED_PEAKS];
+    // get the current frequency estimate for all peaks
+    for (uint8_t i = 0; i < FrequencyPeak::MAX_TRACKED_PEAKS; i++) {
+        curr_freqs[i] = get_tl_noise_center_freq_hz(FrequencyPeak(i), _update_axis);
+    }
+    // calculate the matrix
+    for (uint8_t i = 0; i < FrequencyPeak::MAX_TRACKED_PEAKS; i++) {
+        for (uint8_t j = 0; j < FrequencyPeak::MAX_TRACKED_PEAKS; j++) {
+            distance_matrix[i][j] = fabsf((freqs.is_valid(FrequencyPeak(i)) ?
+                freqs.get_weighted_frequency(FrequencyPeak(i)) : FLT_MAX) - curr_freqs[j]);
+        }
+    }
+}
+
+// return the instantaneous peak that is closest to the target estimate peak
+AP_GyroFFT::FrequencyPeak AP_GyroFFT::find_closest_peak(const FrequencyPeak target, const DistanceMatrix& distance_matrix, uint8_t ignore) const
+{
+    // find the closest peak to target
+    uint8_t closest = target;
+    for (uint8_t i = 0; i < FrequencyPeak::MAX_TRACKED_PEAKS; i++) {
+        if (distance_matrix[i][target] < distance_matrix[closest][target] && (1 << i & ~ignore)) {
+            closest = i;
+        }
+    }
+    // didn't find anything
+    if (!(1<<closest & ~ignore)) {
+        return FrequencyPeak::NONE;
+    }
+    return FrequencyPeak(closest);
 }
 
 // calculate noise baseline from FFT data provided by the HAL subsystem
@@ -669,6 +1058,9 @@ void AP_GyroFFT::update_ref_energy(uint16_t max_bin)
     if (!_thread_state._noise_needs_calibration) {
         return;
     }
+
+    WITH_SEMAPHORE(_sem);
+
     // according to https://www.tcd.ie/Physics/research/groups/magnetism/files/lectures/py5021/MagneticSensors3.pdf sensor noise is not necessarily gaussian
     // determine a PS noise reference at each of the possble center frequencies
     if (_noise_cycles == 0 && _noise_calibration_cycles[_update_axis] > 0) {
@@ -729,23 +1121,23 @@ float AP_GyroFFT::self_test(float frequency, GyroWindow test_window)
     _update_axis = 0;
 
     hal.dsp->fft_start(_state, test_window, 0, _state->_window_size);
-    uint16_t max_bin = hal.dsp->fft_analyse(_state, _config._fft_start_bin, _config._fft_end_bin, _harmonics, _config._attenuation_cutoff);
+    uint16_t max_bin = hal.dsp->fft_analyse(_state, _config._fft_start_bin, _config._fft_end_bin, _config._attenuation_cutoff);
 
     if (max_bin <= 0) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: self-test failed, failed to find frequency %f", frequency);
+        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: self-test failed, failed to find frequency %.1f", frequency);
     }
 
-    calculate_noise(max_bin);
+    calculate_noise(true, _config);
 
     float max_divergence = 0;
     // make sure the selected frequencies are in the right bin
     max_divergence = MAX(max_divergence, fabsf(frequency - _thread_state._center_freq_hz[0]));
-    if (_thread_state._center_freq_hz[0] < (frequency - _state->_bin_resolution * 0.5f) || _thread_state._center_freq_hz[0] > (frequency + _state->_bin_resolution * 0.5f)) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: self-test failed: wanted %f, had %f", frequency, _thread_state._center_freq_hz[0]);
+    if (_thread_state._center_freq_hz[0] < (frequency - MAX(_state->_bin_resolution * 0.5f, 1)) || _thread_state._center_freq_hz[0] > (frequency + MAX(_state->_bin_resolution * 0.5f, 1))) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: self-test failed: wanted %.1f, had %.1f", frequency, _thread_state._center_freq_hz[0]);
     }
 #if DEBUG_FFT
     else {
-        gcs().send_text(MAV_SEVERITY_INFO, "FFT: self-test succeeded: wanted %f, had %f", frequency, _thread_state._center_freq_hz[0]);
+        gcs().send_text(MAV_SEVERITY_INFO, "FFT: self-test succeeded: wanted %.1f, had %.1f", frequency, _thread_state._center_freq_hz[0]);
     }
 #endif
 
