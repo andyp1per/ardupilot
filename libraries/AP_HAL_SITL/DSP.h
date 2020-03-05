@@ -27,18 +27,18 @@ typedef std::complex<float> complexf;
 class HALSITL::DSP : public AP_HAL::DSP {
 public:
     // initialise an FFT instance
-    virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate) override;
+    virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate, uint8_t harmonics) override;
     // start an FFT analysis
     virtual void fft_start(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t buffer_size) override;
     // perform remaining steps of an FFT analysis
-    virtual uint16_t fft_analyse(FFTWindowState* state, uint16_t start_bin, uint16_t end_bin, uint8_t harmonics, float noise_att_cutoff) override;
+    virtual uint16_t fft_analyse(FFTWindowState* state, uint16_t start_bin, uint16_t end_bin, float noise_att_cutoff) override;
 
     // STM32-based FFT state
     class FFTWindowStateSITL : public AP_HAL::DSP::FFTWindowState {
         friend class HALSITL::DSP;
 
     protected:
-        FFTWindowStateSITL(uint16_t window_size, uint16_t sample_rate);
+        FFTWindowStateSITL(uint16_t window_size, uint16_t sample_rate, uint8_t harmonics);
         ~FFTWindowStateSITL();
 
     private:
@@ -51,5 +51,6 @@ private:
     void mult_f32(const float* v1, const float* v2, float* vout, uint16_t len);
     void vector_max_float(const float* vin, uint16_t len, float* maxValue, uint16_t* maxIndex) const override;
     void vector_scale_float(const float* vin, float scale, float* vout, uint16_t len) const override;
+    void vector_mean_float(const float* vin, uint16_t len, float* mean_value) const override;
     void calculate_fft(complexf* f, uint16_t length);
 };

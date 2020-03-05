@@ -34,9 +34,9 @@ extern const AP_HAL::HAL& hal;
 // important as frequency resolution. Referred to as [Heinz] throughout the code.
 
 // initialize the FFT state machine
-AP_HAL::DSP::FFTWindowState* DSP::fft_init(uint16_t window_size, uint16_t sample_rate)
+AP_HAL::DSP::FFTWindowState* DSP::fft_init(uint16_t window_size, uint16_t sample_rate, uint8_t harmonics)
 {
-    DSP::FFTWindowStateSITL* fft = new DSP::FFTWindowStateSITL(window_size, sample_rate);
+    DSP::FFTWindowStateSITL* fft = new DSP::FFTWindowStateSITL(window_size, sample_rate, harmonics);
     if (fft->_hanning_window == nullptr || fft->_rfft_data == nullptr || fft->_freq_bins == nullptr) {
         delete fft;
         return nullptr;
@@ -51,17 +51,17 @@ void DSP::fft_start(AP_HAL::DSP::FFTWindowState* state, const float* samples, ui
 }
 
 // perform remaining steps of an FFT analysis
-uint16_t DSP::fft_analyse(AP_HAL::DSP::FFTWindowState* state, uint16_t start_bin, uint16_t end_bin, uint8_t harmonics, float noise_att_cutoff)
+uint16_t DSP::fft_analyse(AP_HAL::DSP::FFTWindowState* state, uint16_t start_bin, uint16_t end_bin, float noise_att_cutoff)
 {
     FFTWindowStateSITL* fft = (FFTWindowStateSITL*)state;
     step_fft(fft);
-    step_cmplx_mag(fft, start_bin, end_bin, harmonics, noise_att_cutoff);
+    step_cmplx_mag(fft, start_bin, end_bin, noise_att_cutoff);
     return step_calc_frequencies(fft, start_bin, end_bin);
 }
 
 // create an instance of the FFT state machine
-DSP::FFTWindowStateSITL::FFTWindowStateSITL(uint16_t window_size, uint16_t sample_rate)
-    : AP_HAL::DSP::FFTWindowState::FFTWindowState(window_size, sample_rate)
+DSP::FFTWindowStateSITL::FFTWindowStateSITL(uint16_t window_size, uint16_t sample_rate, uint8_t harmonics)
+    : AP_HAL::DSP::FFTWindowState::FFTWindowState(window_size, sample_rate, harmonics)
 {
     if (_freq_bins == nullptr || _hanning_window == nullptr || _rfft_data == nullptr) {
         gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for DSP");
@@ -133,6 +133,15 @@ void DSP::vector_scale_float(const float* vin, float scale, float* vout, uint16_
     for (uint16_t i = 0; i < len; i++) {
         vout[i] = vin[i] * scale;
     }
+}
+
+void DSP::vector_mean_float(const float* vin, uint16_t len, float* mean_value) const
+{
+    *mean_value = 0.0f;
+    for (uint16_t i = 0; i < len; i++) {
+        *mean_value += vin[i];
+    }
+    *mean_value /= len;
 }
 
 // simple integer log2
