@@ -21,12 +21,13 @@
 class Empty::DSP : public AP_HAL::DSP {
 #if HAL_WITH_DSP
 public:
-    virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate) override { return nullptr; }
+    virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate, uint8_t harmonics) override { return nullptr; }
     virtual void fft_start(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t buffer_size) override {}
-    virtual uint16_t fft_analyse(FFTWindowState* state, uint16_t start_bin, uint16_t end_bin, uint8_t harmonics, float noise_att_cutoff) override { return 0; }
+    virtual uint16_t fft_analyse(FFTWindowState* state, uint16_t start_bin, uint16_t end_bin, float noise_att_cutoff) override { return 0; }
 protected:
     virtual void vector_max_float(const float* vin, uint16_t len, float* maxValue, uint16_t* maxIndex) const override {}
     virtual void vector_scale_float(const float* vin, float scale, float* vout, uint16_t len) const override {}
+    virtual void vector_mean_float(const float* vin, uint16_t len, float* mean_value) const override {};
 #endif // HAL_WITH_DSP
 };
 
