@@ -516,7 +516,7 @@ void AP_InertialSensor_Backend::update_gyro(uint8_t instance)
         // copy the gyro samples from the backend to the frontend window
 #if HAL_WITH_DSP
         if (_imu._gyro_window_size > 0) {
-            uint8_t idx = _imu._circular_buffer_idx[instance];
+            uint16_t idx = _imu._circular_buffer_idx[instance];
             for (uint8_t i = 0; i < _num_gyro_samples; i++) {
                 _imu._gyro_window[instance][0][idx] = _last_gyro_window[i].x;
                 _imu._gyro_window[instance][1][idx] = _last_gyro_window[i].y;
