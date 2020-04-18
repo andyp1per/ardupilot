@@ -73,6 +73,7 @@ COMMON_VEHICLE_DEPENDENT_LIBRARIES = [
     'AP_PiccoloCAN/piccolo_protocol',
     'AP_RAMTRON',
     'AP_RCProtocol',
+    'AP_RCTelemetry',
     'AP_Radio',
     'AP_TempCalibration',
     'AP_VisualOdom',
