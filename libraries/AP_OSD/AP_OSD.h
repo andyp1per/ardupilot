@@ -29,6 +29,35 @@ class AP_OSD_Backend;
 
 #define AP_OSD_NUM_SCREENS 4
 
+#define SYM_M           0xB9
+#define SYM_KM          0xBA
+#define SYM_FT          0x0F
+#define SYM_MI          0xBB
+#define SYM_ALT_M       0xB1
+#define SYM_ALT_FT      0xB3
+#define SYM_BATT_FULL   0x90
+#define SYM_RSSI        0x01
+
+#define SYM_VOLT  0x06
+#define SYM_AMP   0x9A
+#define SYM_MAH   0x07
+#define SYM_MS    0x9F
+#define SYM_FS    0x99
+#define SYM_KMH   0xA1
+#define SYM_MPH   0xB0
+#define SYM_DEGR  0xA8
+#define SYM_PCNT  0x25
+#define SYM_RPM   0xE0
+#define SYM_ASPD  0xE1
+#define SYM_GSPD  0xE2
+#define SYM_WSPD  0xE3
+#define SYM_VSPD  0xE4
+#define SYM_WPNO  0xE5
+#define SYM_WPDIR  0xE6
+#define SYM_WPDST  0xE7
+#define SYM_FTMIN  0xE8
+#define SYM_FTSEC  0x99
+
 /*
   class to hold one setting
  */
@@ -47,18 +76,46 @@ public:
 
 class AP_OSD;
 
+class AP_OSD_AbstractScreen
+{
+public:
+    // constructor
+    AP_OSD_AbstractScreen() {}
+
+    virtual void draw(void) = 0;
+
+    void set_backend(AP_OSD_Backend *_backend);
+
+protected:
+    bool check_option(uint32_t option);
+
+    enum unit_type {
+        ALTITUDE=0,
+        SPEED=1,
+        VSPEED=2,
+        DISTANCE=3,
+        DISTANCE_LONG=4,
+        TEMPERATURE=5,
+        UNIT_TYPE_LAST=6,
+    };
+
+    char u_icon(enum unit_type unit);
+    float u_scale(enum unit_type unit, float value);
+
+    AP_OSD_Backend *backend;
+    AP_OSD *osd;
+};
+
 /*
   class to hold one screen of settings
  */
-class AP_OSD_Screen
+class AP_OSD_Screen : public AP_OSD_AbstractScreen
 {
 public:
     // constructor
     AP_OSD_Screen();
 
-    void draw(void);
-
-    void set_backend(AP_OSD_Backend *_backend);
+    void draw(void) override;
 
     // User settable parameters
     static const struct AP_Param::GroupInfo var_info[];
@@ -68,9 +125,6 @@ public:
     AP_Int16 channel_max;
 
 private:
-    AP_OSD_Backend *backend;
-    AP_OSD *osd;
-
     static const uint8_t message_visible_width = 26;
     static const uint8_t message_scroll_time_ms = 200;
     static const uint8_t message_scroll_delay = 5;
@@ -124,21 +178,6 @@ private:
     AP_OSD_Setting bat2used{false, 0, 0};
     AP_OSD_Setting clk{false, 0, 0};
 
-    bool check_option(uint32_t option);
-
-    enum unit_type {
-        ALTITUDE=0,
-        SPEED=1,
-        VSPEED=2,
-        DISTANCE=3,
-        DISTANCE_LONG=4,
-        TEMPERATURE=5,
-        UNIT_TYPE_LAST=6,
-    };
-
-    char u_icon(enum unit_type unit);
-    float u_scale(enum unit_type unit, float value);
-
     void draw_altitude(uint8_t x, uint8_t y);
     void draw_bat_volt(uint8_t x, uint8_t y);
     void draw_rssi(uint8_t x, uint8_t y);
@@ -188,6 +227,42 @@ private:
     void draw_bat2_vlt(uint8_t x, uint8_t y);
     void draw_bat2used(uint8_t x, uint8_t y);
     void draw_clk(uint8_t x, uint8_t y);
+};
+
+/*
+  class to hold one setting
+ */
+class AP_OSD_ParamSetting : public AP_OSD_Setting
+{
+public:
+    AP_Int32 parameter;
+
+    AP_OSD_ParamSetting(bool enabled, uint8_t x, uint8_t y);
+
+    // User settable parameters
+    static const struct AP_Param::GroupInfo var_info[];
+};
+
+/*
+  class to hold one screen of settings
+ */
+class AP_OSD_ParamScreen : public AP_OSD_AbstractScreen
+{
+public:
+    // constructor
+    AP_OSD_ParamScreen();
+
+    void draw(void) override;
+
+    // User settable parameters
+    static const struct AP_Param::GroupInfo var_info[];
+
+    AP_Int8 enabled;
+
+private:
+    AP_OSD_ParamSetting param1{true, 0, 0};
+
+    void draw_parameter(AP_Param param, uint8_t x, uint8_t y);
 };
 
 class AP_OSD
