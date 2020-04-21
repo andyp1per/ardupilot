@@ -37,6 +37,20 @@ const AP_Param::GroupInfo AP_OSD_ParamScreen::var_info[] = {
     // @User: Standard
     AP_GROUPINFO_FLAGS("ENABLE", 1, AP_OSD_ParamScreen, enabled, 0, AP_PARAM_FLAG_ENABLE),
 
+    // @Param: CHAN_MIN
+    // @DisplayName: Transmitter switch screen minimum pwm
+    // @Description: This sets the PWM lower limit for this screen
+    // @Range: 900 2100
+    // @User: Standard
+    AP_GROUPINFO("CHAN_MIN", 2, AP_OSD_ParamScreen, channel_min, 900),
+
+    // @Param: CHAN_MAX
+    // @DisplayName: Transmitter switch screen maximum pwm
+    // @Description: This sets the PWM upper limit for this screen
+    // @Range: 900 2100
+    // @User: Standard
+    AP_GROUPINFO("CHAN_MAX", 3, AP_OSD_ParamScreen, channel_max, 2100),
+
     // @Param: PARAM1_EN
     // @DisplayName: PARAM1_EN
     // @Description: Enables display of parameter 1
@@ -51,18 +65,23 @@ const AP_Param::GroupInfo AP_OSD_ParamScreen::var_info[] = {
     // @DisplayName: PARAM1_Y
     // @Description: Vertical position on screen
     // @Range: 0 15
-    AP_SUBGROUPINFO(param1, "PARAM1", 2, AP_OSD_ParamScreen, AP_OSD_Setting),
+    AP_SUBGROUPINFO(param1, "PARAM1", 4, AP_OSD_ParamScreen, AP_OSD_ParamSetting),
     
     AP_GROUPEND
 };
 
-void AP_OSD_ParamScreen::draw_parameter(AP_Param param, uint8_t x, uint8_t y)
+// constructor
+AP_OSD_ParamScreen::AP_OSD_ParamScreen()
+{
+}
+
+void AP_OSD_ParamScreen::draw_parameter(uint16_t index, uint8_t x, uint8_t y)
 {
     backend->write(x, y, false, "%3d%c", 0, SYM_DEGR);
 }
 
 #define DRAW_SETTING(n) if (n.enabled) draw_ ## n(n.xpos, n.ypos)
-#define DRAW_PARAM(n) if (n.enabled) draw_parameter(n.parameter, n.xpos, n.ypos)
+#define DRAW_PARAM(n) if (n.enabled) draw_parameter(n.index, n.xpos, n.ypos)
 
 
 void AP_OSD_ParamScreen::draw(void)

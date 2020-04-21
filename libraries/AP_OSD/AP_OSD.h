@@ -27,7 +27,9 @@
 
 class AP_OSD_Backend;
 
-#define AP_OSD_NUM_SCREENS 4
+#define AP_OSD_NUM_DISPLAY_SCREENS 4
+#define AP_OSD_NUM_PARAM_SCREENS 1
+#define AP_OSD_NUM_SCREENS (AP_OSD_NUM_DISPLAY_SCREENS + AP_OSD_NUM_PARAM_SCREENS)
 
 #define SYM_M           0xB9
 #define SYM_KM          0xBA
@@ -86,6 +88,10 @@ public:
 
     void set_backend(AP_OSD_Backend *_backend);
 
+    AP_Int8 enabled;
+    AP_Int16 channel_min;
+    AP_Int16 channel_max;
+
 protected:
     bool check_option(uint32_t option);
 
@@ -119,10 +125,6 @@ public:
 
     // User settable parameters
     static const struct AP_Param::GroupInfo var_info[];
-
-    AP_Int8 enabled;
-    AP_Int16 channel_min;
-    AP_Int16 channel_max;
 
 private:
     static const uint8_t message_visible_width = 26;
@@ -235,9 +237,9 @@ private:
 class AP_OSD_ParamSetting : public AP_OSD_Setting
 {
 public:
-    AP_Int32 parameter;
+    AP_Int16 index;
 
-    AP_OSD_ParamSetting(bool enabled, uint8_t x, uint8_t y);
+    AP_OSD_ParamSetting(bool enabled, uint8_t x, uint8_t y, uint16_t idx);
 
     // User settable parameters
     static const struct AP_Param::GroupInfo var_info[];
@@ -257,18 +259,17 @@ public:
     // User settable parameters
     static const struct AP_Param::GroupInfo var_info[];
 
-    AP_Int8 enabled;
-
 private:
-    AP_OSD_ParamSetting param1{true, 0, 0};
+    AP_OSD_ParamSetting param1{true, 0, 0, 10};
 
-    void draw_parameter(AP_Param param, uint8_t x, uint8_t y);
+    void draw_parameter(uint16_t index, uint8_t x, uint8_t y);
 };
 
 class AP_OSD
 {
 public:
     friend class AP_OSD_Screen;
+    friend class AP_OSD_ParamScreen;
     //constructor
     AP_OSD();
 
@@ -334,7 +335,8 @@ public:
 
     AP_Int8 units;
 
-    AP_OSD_Screen screen[AP_OSD_NUM_SCREENS];
+    AP_OSD_Screen screen[AP_OSD_NUM_DISPLAY_SCREENS];
+    AP_OSD_ParamScreen param_screen[AP_OSD_NUM_PARAM_SCREENS];
 
     struct NavInfo {
         float wp_distance;
@@ -351,6 +353,10 @@ public:
     // enable the display
     void enable() {
         _disable = false;
+    }
+
+    AP_OSD_AbstractScreen& get_screen(uint8_t idx) {
+        return (idx >= AP_OSD_NUM_DISPLAY_SCREENS) ? (AP_OSD_AbstractScreen&)param_screen[idx - AP_OSD_NUM_DISPLAY_SCREENS] : (AP_OSD_AbstractScreen&)screen[idx];
     }
 
 private:

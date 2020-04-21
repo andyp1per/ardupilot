@@ -48,10 +48,48 @@ const AP_Param::GroupInfo AP_OSD_Setting::var_info[] = {
     AP_GROUPEND
 };
 
+const AP_Param::GroupInfo AP_OSD_ParamSetting::var_info[] = {
+    // @Param: _EN
+    // @DisplayName: Enable
+    // @Description: Enable setting
+    // @Values: 0:Disabled,1:Enabled
+    // @User: Standard
+    AP_GROUPINFO("_EN", 1, AP_OSD_ParamSetting, enabled, 0),
+
+    // @Param: _X
+    // @DisplayName: X position
+    // @Description: Horizontal position on screen
+    // @Range: 0 29
+    // @User: Standard
+    AP_GROUPINFO("_X", 2, AP_OSD_ParamSetting, xpos, 0),
+
+    // @Param: _Y
+    // @DisplayName: Y position
+    // @Description: Vertical position on screen
+    // @Range: 0 15
+    // @User: Standard
+    AP_GROUPINFO("_Y", 3, AP_OSD_ParamSetting, ypos, 0),
+
+    // @Param: _NAME
+    // @DisplayName: Parameter index
+    // @Description: Index of the parameter to be displayed and modified
+    // @User: Standard
+    AP_GROUPINFO("_IDX", 4, AP_OSD_ParamSetting, index, 0),
+
+    AP_GROUPEND
+};
+
 // constructor
 AP_OSD_Setting::AP_OSD_Setting(bool _enabled, uint8_t x, uint8_t y)
 {
     enabled = _enabled;
     xpos = x;
     ypos = y;
+}
+
+// constructor
+AP_OSD_ParamSetting::AP_OSD_ParamSetting(bool _enabled, uint8_t x, uint8_t y, uint16_t idx)
+    : AP_OSD_Setting(_enabled, x, y)
+{
+    index = idx;
 }
