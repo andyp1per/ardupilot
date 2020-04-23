@@ -17,7 +17,12 @@
 /*
   with thanks to PX4 dsm.c for DSM decoding approach
  */
+/*
+ * See https://www.spektrumrc.com/ProdInfo/Files/Remote%20Receiver%20Interfacing%20Rev%20A.pdf for official
+ * Spektrum documentation on the format.
+ */
 #include "AP_RCProtocol_DSM.h"
+#include <stdio.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -31,6 +36,10 @@ extern const AP_HAL::HAL& hal;
 
 #define DSM_FRAME_SIZE		16		/**<DSM frame size in bytes*/
 #define DSM_FRAME_CHANNELS	7		/**<Max supported DSM channels*/
+#define DSM2_1024_22MS      0x01
+#define DSM2_2048_11MS      0x12
+#define DSMX_2048_22MS      0xa2
+#define DSMX_2048_11MS      0xb2
 
 void AP_RCProtocol_DSM::process_pulse(uint32_t width_s0, uint32_t width_s1)
 {
@@ -200,8 +209,13 @@ bool AP_RCProtocol_DSM::dsm_decode(uint32_t frame_time_ms, const uint8_t dsm_fra
     }
 
     /*
-     * The encoding of the first two bytes is uncertain, so we're
-     * going to ignore them for now.
+     * For internal remotes the first byte indicates the protocol selected
+     * The second byte indicates the number of fades.
+     * For external remotes both bytes are the number of fades (Section 8)
+     *
+     * The 14-byte data packet is either 1024 or 2048 servo data.  DSM2/22 is the only 1024 packet;
+     * all others use 2048. All data fields are big-endian, that is, the MSB is transmitted before the LSB.
+     * Bit 0 is the lsb, bit 15 is the msb. (Section 8)
      *
      * Each channel is a 16-bit unsigned value containing either a 10-
      * or 11-bit channel value and a 4-bit channel number, shifted
@@ -394,18 +408,30 @@ bool AP_RCProtocol_DSM::dsm_parse_byte(uint32_t frame_time_ms, uint8_t b, uint16
     }
 
 #ifdef DSM_DEBUG
-    debug("dsm state: %s%s, count: %d, val: %02x\n",
+    debug("dsm state: %s%s, count: %d, val: %02x, t: %u\n",
           (dsm_decode_state == DSM_DECODE_STATE_DESYNC) ? "DSM_DECODE_STATE_DESYNC" : "",
           (dsm_decode_state == DSM_DECODE_STATE_SYNC) ? "DSM_DECODE_STATE_SYNC" : "",
           byte_input.ofs,
-          (unsigned)b);
+          (unsigned)b, frame_time_ms - last_rx_time_ms);
 #endif
 
     switch (dsm_decode_state) {
     case DSM_DECODE_STATE_DESYNC:
 
+        // saw a beginning of frame marker
+        if (b == DSM2_1024_22MS || b == DSM2_2048_11MS || b == DSMX_2048_22MS || b == DSMX_2048_11MS) {
+            if (b == DSM2_1024_22MS) {
+                channel_shift = 10;
+            } else {
+                channel_shift = 11;
+            }
+            dsm_decode_state = DSM_DECODE_STATE_SYNC;
+            byte_input.ofs = 1;
+            byte_input.buf[byte_input.ofs++] = b;
+        }
+
         /* we are de-synced and only interested in the frame marker */
-        if ((frame_time_ms - last_rx_time_ms) >= 5) {
+        else if ((frame_time_ms - last_rx_time_ms) >= 5) {
             dsm_decode_state = DSM_DECODE_STATE_SYNC;
             byte_input.ofs = 0;
             byte_input.buf[byte_input.ofs++] = b;
