@@ -19,6 +19,12 @@ void RCInput::init()
     _start_input_thread();
 }
 
+void RCInput::update() {
+    if (!using_rc_protocol) {
+        AP::RC().update();
+    }
+}
+
 bool RCInput::new_input()
 {
     WITH_SEMAPHORE(_sem);

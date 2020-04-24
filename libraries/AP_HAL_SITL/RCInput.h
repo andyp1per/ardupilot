@@ -10,11 +10,16 @@
 
 class HALSITL::RCInput : public AP_HAL::RCInput {
 public:
+    static RCInput *from(AP_HAL::RCInput *rcinput) {
+        return static_cast<RCInput*>(rcinput);
+    }
+
     explicit RCInput(SITL_State *sitlState): _sitlState(sitlState) {}
     void init() override;
     bool new_input() override;
     uint8_t num_channels() override;
     void set_num_channels(uint8_t num);
+    void update();
     uint16_t read(uint8_t ch) override;
     uint8_t read(uint16_t* periods, uint8_t len) override;
 
@@ -36,7 +41,7 @@ private:
     bool _thread_should_exit = false;
 
     SITL_State *_sitlState;
-    bool using_rc_protocol;
+    bool using_rc_protocol = false;
 };
 
 #endif

@@ -244,7 +244,7 @@ void Scheduler::_run_io_procs()
     check_thread_stacks();
 #endif
 
-    //AP::RC().update();
+    RCInput::from(hal.rcin)->update();
 }
 
 /*
