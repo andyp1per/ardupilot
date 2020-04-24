@@ -195,9 +195,11 @@ bool AP_RCProtocol_DSM::dsm_decode(uint32_t frame_time_ms, const uint8_t dsm_fra
      * If we have lost signal for at least 200ms, reset the
      * format guessing heuristic.
      */
+#if 0
     if (((frame_time_ms - last_frame_time_ms) > 200U) && (channel_shift != 0)) {
         dsm_guess_format(true, dsm_frame);
     }
+#endif
 
     /* we have received something we think is a dsm_frame */
     last_frame_time_ms = frame_time_ms;
@@ -429,17 +431,22 @@ bool AP_RCProtocol_DSM::dsm_parse_byte(uint32_t frame_time_ms, uint8_t b, uint16
             byte_input.ofs = 1;
             byte_input.buf[byte_input.ofs++] = b;
         }
-
+#if CONFIG_HAL_BOARD != HAL_BOARD_SITL
         /* we are de-synced and only interested in the frame marker */
         else if ((frame_time_ms - last_rx_time_ms) >= 5) {
             dsm_decode_state = DSM_DECODE_STATE_SYNC;
             byte_input.ofs = 0;
             byte_input.buf[byte_input.ofs++] = b;
         }
+#endif
         break;
-
     case DSM_DECODE_STATE_SYNC: {
-        if ((frame_time_ms - last_rx_time_ms) >= 5 && byte_input.ofs > 0) {
+        if (byte_input.ofs == 1 && b != DSM2_1024_22MS && b != DSM2_2048_11MS && b != DSMX_2048_22MS && b != DSMX_2048_11MS) {
+            dsm_decode_state = DSM_DECODE_STATE_DESYNC;
+            byte_input.ofs = 0;
+            break;
+        }
+        if ((frame_time_ms - last_rx_time_ms) >= 10 && byte_input.ofs > 0) {
             byte_input.ofs = 0;
             dsm_decode_state = DSM_DECODE_STATE_DESYNC;
             break;

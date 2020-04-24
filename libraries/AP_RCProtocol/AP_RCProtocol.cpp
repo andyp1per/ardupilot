@@ -25,6 +25,9 @@
 #include "AP_RCProtocol_ST24.h"
 #include "AP_RCProtocol_FPort.h"
 #include <AP_Math/AP_Math.h>
+#include <stdio.h>
+
+#define RC_SEARCHING_TIMEOUT 500
 
 extern const AP_HAL::HAL& hal;
 
@@ -54,7 +57,7 @@ AP_RCProtocol::~AP_RCProtocol()
 void AP_RCProtocol::process_pulse(uint32_t width_s0, uint32_t width_s1)
 {
     uint32_t now = AP_HAL::millis();
-    bool searching = (now - _last_input_ms >= 200);
+    bool searching = (now - _last_input_ms >= RC_SEARCHING_TIMEOUT);
     if (_detected_protocol != AP_RCProtocol::NONE && _detected_with_bytes && !searching) {
         // we're using byte inputs, discard pulses
         return;
@@ -121,7 +124,7 @@ void AP_RCProtocol::process_pulse_list(const uint32_t *widths, uint16_t n, bool 
 bool AP_RCProtocol::process_byte(uint8_t byte, uint32_t baudrate)
 {
     uint32_t now = AP_HAL::millis();
-    bool searching = (now - _last_input_ms >= 200);
+    bool searching = (now - _last_input_ms >= RC_SEARCHING_TIMEOUT);
     if (_detected_protocol != AP_RCProtocol::NONE && !_detected_with_bytes && !searching) {
         // we're using pulse inputs, discard bytes
         return false;
@@ -172,7 +175,7 @@ void AP_RCProtocol::check_added_uart(void)
         return;
     }
     uint32_t now = AP_HAL::millis();
-    bool searching = (now - _last_input_ms >= 200);
+    bool searching = (now - _last_input_ms >= RC_SEARCHING_TIMEOUT);
     if (!searching && !_detected_with_bytes) {
         // not using this uart
         return;
