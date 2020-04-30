@@ -38,6 +38,7 @@ public:
         SUMD,
         SRXL,
         SRXL2,
+        CRSF,
         ST24,
         FPORT,
         NONE    //last enum always is None
@@ -98,6 +99,7 @@ private:
         CONFIG_115200_8N1 = 0,
         CONFIG_115200_8N1I = 1,
         CONFIG_100000_8E2I = 2,
+        CONFIG_420000_8N1 = 3,
     };
 
     // optional additional uart
