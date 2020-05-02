@@ -21,16 +21,18 @@
 
 #include <stdint.h>
 #include "AP_HAL_Namespace.h"
+#include <AP_HAL/utility/RingBuffer.h>
 
 #define DSP_MEM_REGION AP_HAL::Util::MEM_FAST
 // Maximum tolerated number of cycles with missing signal
 #define FFT_MAX_MISSED_UPDATES 5
 
+template <class T> class ObjectBuffer;
+typedef ObjectBuffer<float> SampleWindow;
+
 class AP_HAL::DSP {
 #if HAL_WITH_DSP
 public:
-    typedef float* FFTSampleWindow;
-
     enum FrequencyPeak {
         CENTER = 0,
         LOWER_SHOULDER = 1,
@@ -78,6 +80,8 @@ public:
     virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate, uint8_t harmonics) = 0;
     // start an FFT analysis
     virtual void fft_start(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t buffer_size) = 0;
+    // start an FFT analysis with an ObjectBuffer
+    virtual void fft_start(FFTWindowState* state, SampleWindow& samples, uint16_t advance) = 0;
     // perform remaining steps of an FFT analysis
     virtual uint16_t fft_analyse(FFTWindowState* state, uint16_t start_bin, uint16_t end_bin, float noise_att_cutoff) = 0;
 
