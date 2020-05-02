@@ -28,6 +28,8 @@ class HALSITL::DSP : public AP_HAL::DSP {
 public:
     // initialise an FFT instance
     virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate, uint8_t harmonics) override;
+    // start an FFT analysis with an ObjectBuffer
+    virtual void fft_start(FFTWindowState* state, SampleWindow& samples, uint16_t advance) override;
     // start an FFT analysis
     virtual void fft_start(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t buffer_size) override;
     // perform remaining steps of an FFT analysis
@@ -47,6 +49,7 @@ public:
 
 private:
     void step_hanning(FFTWindowStateSITL* fft, const float* samples, uint16_t buffer_index, uint16_t buffer_size);
+    void step_hanning(FFTWindowStateSITL* fft, SampleWindow& samples, uint16_t advance);
     void step_fft(FFTWindowStateSITL* fft);
     void mult_f32(const float* v1, const float* v2, float* vout, uint16_t len);
     void vector_max_float(const float* vin, uint16_t len, float* maxValue, uint16_t* maxIndex) const override;
