@@ -65,6 +65,12 @@ void DSP::fft_start(AP_HAL::DSP::FFTWindowState* state, const float* samples, ui
     step_hanning((FFTWindowStateARM*)state, samples, buffer_index, buffer_size);
 }
 
+// start an FFT analysis
+void DSP::fft_start(FFTWindowState* state, SampleWindow& samples, uint16_t advance)
+{
+    step_hanning((FFTWindowStateARM*)state, samples, advance);
+}
+
 // perform remaining steps of an FFT analysis
 uint16_t DSP::fft_analyse(AP_HAL::DSP::FFTWindowState* state, uint16_t start_bin, uint16_t end_bin, float noise_att_cutoff)
 {
@@ -139,6 +145,20 @@ void DSP::step_hanning(FFTWindowStateARM* fft, const float* samples, uint16_t bu
     if (buffer_index > 0) {
         arm_mult_f32(&samples[0], &fft->_hanning_window[ring_buf_idx], &fft->_freq_bins[ring_buf_idx], fft->_window_size - ring_buf_idx);
     }
+
+    TIMER_END(_hanning_timer);
+}
+
+// step 1: filter the incoming samples through a Hanning window
+void DSP::step_hanning(FFTWindowStateARM* fft, SampleWindow& samples, uint16_t advance)
+{
+    TIMER_START(_hanning_timer);
+    // 5us
+    // apply hanning window to gyro samples and store result in _freq_bins
+    // hanning starts and ends with 0, could be skipped for minor speed improvement
+    samples.peekbytes(&fft->_freq_bins[0], fft->_window_size);
+    samples.advance(advance);
+    arm_mult_f32(&fft->_freq_bins[0], &fft->_hanning_window[0], &fft->_freq_bins[0], fft->_window_size);
 
     TIMER_END(_hanning_timer);
 }

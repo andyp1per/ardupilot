@@ -32,6 +32,8 @@ public:
     virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate, uint8_t harmonics) override;
     // start an FFT analysis
     virtual void fft_start(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t buffer_size) override;
+    // start an FFT analysis with an ObjectBuffer
+    virtual void fft_start(FFTWindowState* state, SampleWindow& samples, uint16_t advance) override;
     // perform remaining steps of an FFT analysis
     virtual uint16_t fft_analyse(FFTWindowState* state, uint16_t start_bin, uint16_t end_bin, float noise_att_cutoff) override;
 
@@ -64,6 +66,7 @@ protected:
 private:
     // following are the six independent steps for calculating an FFT
     void step_hanning(FFTWindowStateARM* fft, const float* samples, uint16_t buffer_index, uint16_t buffer_size);
+    void step_hanning(FFTWindowStateARM* fft, SampleWindow& samples, uint16_t advance);
     void step_arm_cfft_f32(FFTWindowStateARM* fft);
     void step_bitreversal(FFTWindowStateARM* fft);
     void step_stage_rfft_f32(FFTWindowStateARM* fft);
