@@ -23,6 +23,7 @@ class Empty::DSP : public AP_HAL::DSP {
 public:
     virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate, uint8_t harmonics) override { return nullptr; }
     virtual void fft_start(FFTWindowState* state, const float* samples, uint16_t buffer_index, uint16_t buffer_size) override {}
+    virtual void fft_start(FFTWindowState* state, SampleWindow& samples, uint16_t advance) override {}
     virtual uint16_t fft_analyse(FFTWindowState* state, uint16_t start_bin, uint16_t end_bin, float noise_att_cutoff) override { return 0; }
 protected:
     virtual void vector_max_float(const float* vin, uint16_t len, float* maxValue, uint16_t* maxIndex) const override {}
