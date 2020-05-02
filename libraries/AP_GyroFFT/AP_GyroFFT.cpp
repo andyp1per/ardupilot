@@ -215,15 +215,18 @@ void AP_GyroFFT::init(uint32_t target_looptime_us)
     // determine the FFT sample rate based on the gyro rate, loop rate and configuration
     if (_sample_mode == 0) {
         _fft_sampling_rate_hz = _ins->get_raw_gyro_rate_hz();
+        for (uint8_t axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+            _gyro_data[axis] = &_ins->get_raw_gyro_window(axis);
+        }
     } else {
         const uint16_t loop_rate_hz = 1000*1000UL / target_looptime_us;
         _fft_sampling_rate_hz = loop_rate_hz / _sample_mode;
         for (uint8_t axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
-            _downsampled_gyro_data[axis] = (float*)hal.util->malloc_type(sizeof(float) * _window_size, DSP_MEM_REGION);
-            if (_downsampled_gyro_data[axis] == nullptr) {
+            if (!_downsampled_gyro_data[axis].set_size(_window_size)) {
                 gcs().send_text(MAV_SEVERITY_WARNING, "Failed to allocate window for AP_GyroFFT");
                 return;
             }
+            _gyro_data[axis] = &_downsampled_gyro_data[axis];
         }
     }
     _current_sample_mode = _sample_mode;
@@ -237,14 +240,6 @@ void AP_GyroFFT::init(uint32_t target_looptime_us)
     // make the gyro window match the window size plus the maximum that can be in play from the backend
     if (!_ins->set_gyro_window_size(_window_size + INS_MAX_GYRO_WINDOW_SAMPLES)) {
         return;
-    }
-    // current read marker is the beginning of the window
-    for (uint8_t axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
-        if (_sample_mode == 0) {
-            _circular_buffer_idx[axis] = _ins->get_raw_gyro_window_index();
-        } else {
-            _circular_buffer_idx[axis] = 0;
-        }
     }
 
     // calculate harmonic multiplier
@@ -316,8 +311,7 @@ void AP_GyroFFT::init(uint32_t target_looptime_us)
 }
 
 // sample the gyros either by using a gyro window sampled at the gyro rate or making invdividual samples
-// called from fast_loop thread - anything that requires atomic access to IMU data needs to be done here
-// this function does not take out a sempahore to avoid waiting on the FFT thread
+// called from fast_loop thread - this function does not take out a sempahore to avoid waiting on the FFT thread
 void AP_GyroFFT::sample_gyros()
 {
     if (!analysis_enabled()) {
@@ -325,12 +319,8 @@ void AP_GyroFFT::sample_gyros()
     }
 
     // update counters for gyro window
-    if (_current_sample_mode == 0) {
-        // number of available samples are those in the IMU buffer less those we have already consumed
-        _sample_count[_update_axis] = ((_ins->get_raw_gyro_window_index() - _circular_buffer_idx[_update_axis] + get_buffer_size()) % get_buffer_size());
-    }
-    // for loop rate sampling accumulate and average gyro samples
-    else {
+    if (_current_sample_mode > 0) {
+        // for loop rate sampling accumulate and average gyro samples
         _oversampled_gyro_accum += _ins->get_raw_gyro();
         _oversampled_gyro_count++;
 
@@ -338,23 +328,28 @@ void AP_GyroFFT::sample_gyros()
             // calculate mean value of accumulated samples
             Vector3f sample = _oversampled_gyro_accum / _current_sample_mode;
             // fast sampling means that the raw gyro values have already been averaged over 8 samples
-            _downsampled_gyro_data[0][_downsampled_gyro_idx] = sample.x;
-            _downsampled_gyro_data[1][_downsampled_gyro_idx] = sample.y;
-            _downsampled_gyro_data[2][_downsampled_gyro_idx] = sample.z;
+            if (_downsampled_gyro_data[0].space()) {
+                _downsampled_gyro_data[0].advance(1);
+            }
+            _downsampled_gyro_data[0].push(sample.x);
+            if (_downsampled_gyro_data[1].space()) {
+                _downsampled_gyro_data[1].advance(1);
+            }
+            _downsampled_gyro_data[1].push(sample.y);
+            if (_downsampled_gyro_data[2].space()) {
+                _downsampled_gyro_data[2].advance(1);
+            }
+            _downsampled_gyro_data[2].push(sample.z);
 
             _oversampled_gyro_accum.zero();
             _oversampled_gyro_count = 0;
-            _downsampled_gyro_idx = (_downsampled_gyro_idx + 1) % _state->_window_size;
-            _sample_count[0]++;
-            _sample_count[1]++;
-            _sample_count[2]++;
         }
     }
 }
 
-// push a full frame of gyro samples into the FFT engine as required
+// update the state as as required
 // called from main thread at 400Hz - anything that requires atomic access to IMU data needs to be done here
-void AP_GyroFFT::push_gyro_frame()
+void AP_GyroFFT::update()
 {
     if (!analysis_enabled()) {
         return;
@@ -362,37 +357,13 @@ void AP_GyroFFT::push_gyro_frame()
 
     WITH_SEMAPHORE(_sem);
 
-    if (start_analysis()) {
-        if (_current_sample_mode == 0) {
-            const uint16_t buffer_size = get_buffer_size();
-            uint16_t read_idx = _circular_buffer_idx[_update_axis];
-            const uint16_t write_idx = _ins->get_raw_gyro_window_index();
-            // if the write index ran over the read index because we have been too slow, reset
-            // we only get here once we have a full frame so don't need to check for startup conditions
-            if ((read_idx + buffer_size - write_idx) % buffer_size > INS_MAX_GYRO_WINDOW_SAMPLES) {
-                read_idx = (write_idx + 1) % buffer_size;
-                _sample_count[_update_axis] = buffer_size;
-            }
-
-            hal.dsp->fft_start(_state, _ins->get_raw_gyro_window(_update_axis), read_idx, buffer_size);
-            // we have pushed a frame into the FFT loop, move the index to the beginning of the next frame
-            _circular_buffer_idx[_update_axis] = (read_idx + _samples_per_frame) % buffer_size;
-        } else {
-            hal.dsp->fft_start(_state, _downsampled_gyro_data[_update_axis], _circular_buffer_idx[_update_axis], _state->_window_size);
-            _circular_buffer_idx[_update_axis] = (_circular_buffer_idx[_update_axis] + _samples_per_frame) % _state->_window_size;
-        }
-        _sample_count[_update_axis] -= _samples_per_frame;
-    }
-
-    // thread local copy of the sample count so that we don't need a sempahore in sample_gyros()
-    _engine_sample_count[_update_axis] = _sample_count[_update_axis];
     _config._analysis_enabled = _analysis_enabled;
     _global_state = _thread_state;
 }
 
 // analyse gyro data using FFT, returns number of samples still held
 // called from FFT thread
-uint16_t AP_GyroFFT::update()
+uint16_t AP_GyroFFT::run_cycle()
 {
     if (!analysis_enabled()) {
         return 0;
@@ -402,9 +373,9 @@ uint16_t AP_GyroFFT::update()
         return 0;
     }
 
-    // only proceeed if a full frame has been pushed into the dsp
-    if (!_thread_state._analysis_started) {
-        uint16_t new_sample_count = _engine_sample_count[_update_axis];
+    // do we have enough samples for another pass?
+    if (!start_analysis()) {
+        uint16_t new_sample_count =  _gyro_data[_update_axis]->available();
         _sem.give();
         return new_sample_count;
     }
@@ -413,6 +384,9 @@ uint16_t AP_GyroFFT::update()
     EngineConfig config = _config;
 
     _sem.give();
+
+    // let's go!
+    hal.dsp->fft_start(_state, *_gyro_data[_update_axis], _samples_per_frame);
 
     uint32_t now = AP_HAL::micros();
     // calculate FFT and update filters outside the semaphore
@@ -431,11 +405,11 @@ uint16_t AP_GyroFFT::update()
     _thread_state._analysis_started = false;
 
     // samples remaining in the next axis
-    return _engine_sample_count[_update_axis];
+    return _gyro_data[_update_axis]->available();
 }
 
 // whether analysis can be run again or not
-// called from main thread with the semaphore held
+// called from FFT thread with the semaphore held
 bool AP_GyroFFT::start_analysis() {
     if (_thread_state._analysis_started) {
         return false;
@@ -445,7 +419,7 @@ bool AP_GyroFFT::start_analysis() {
         return false;
     }
 
-    if (_sample_count[_update_axis] >= _state->_window_size) {
+    if (_gyro_data[_update_axis]->available() >= _state->_window_size) {
         _thread_state._analysis_started = true;
         return true;
     }
@@ -479,7 +453,7 @@ void AP_GyroFFT::update_parameters()
 void AP_GyroFFT::update_thread(void)
 {
     while (true) {
-        uint16_t remaining_samples = update();
+        uint16_t remaining_samples = run_cycle();
         // this is to stop us burning CPU while waiting for samples, the reduction by _samples_per_frame is a heuristic to prevent waiting too long
         // and missing frames (easy to see in SITL because the noise will keep calibrating)
         // we always delay by at least 1us to give logging a chance to run at the same priority
@@ -1090,9 +1064,9 @@ float AP_GyroFFT::self_test_bin_frequencies()
         return 0.0f;
     }
 
-    GyroWindow test_window = (float*)hal.util->malloc_type(sizeof(float) * _state->_window_size, DSP_MEM_REGION);
+    SampleWindow test_window(_state->_window_size);
     // in the unlikely event we can't allocate a test window, skip the checks
-    if (test_window == nullptr) {
+    if (test_window.get_size() == 0) {
         return 0.0f;
     }
 
@@ -1106,21 +1080,23 @@ float AP_GyroFFT::self_test_bin_frequencies()
         max_divergence = MAX(max_divergence, self_test(frequency, test_window)); // test bin off-centers
     }
 
-    hal.util->free_type(test_window, sizeof(float) * _window_size, DSP_MEM_REGION);
     return max_divergence;
 }
 
 // perform FFT analysis of a single sine wave at the selected frequency
 // called from main thread
-float AP_GyroFFT::self_test(float frequency, GyroWindow test_window)
+float AP_GyroFFT::self_test(float frequency, SampleWindow& test_window)
 {
+    test_window.clear();
     for(uint16_t i = 0; i < _state->_window_size; i++) {
-        test_window[i]= sinf(2.0f * M_PI * frequency * i / _fft_sampling_rate_hz) * ToRad(20) * 2000;
+        if (!test_window.push(sinf(2.0f * M_PI * frequency * i / _fft_sampling_rate_hz) * ToRad(20) * 2000)) {
+            AP_HAL::panic("Could not create FFT test window");
+        }
     }
 
     _update_axis = 0;
 
-    hal.dsp->fft_start(_state, test_window, 0, _state->_window_size);
+    hal.dsp->fft_start(_state, test_window, 0);
     uint16_t max_bin = hal.dsp->fft_analyse(_state, _config._fft_start_bin, _config._fft_end_bin, _config._attenuation_cutoff);
 
     if (max_bin <= 0) {

@@ -27,6 +27,7 @@
 
 #include <AP_Common/AP_Common.h>
 #include <AP_HAL/AP_HAL.h>
+#include <AP_HAL/utility/RingBuffer.h>
 #include <AP_Param/AP_Param.h>
 #include <AP_Math/AP_Math.h>
 #include <AP_InertialSensor/AP_InertialSensor.h>
@@ -50,11 +51,11 @@ public:
     void init(uint32_t target_looptime);
 
     // cycle through the FFT steps - runs in the FFT thread
-    uint16_t update();
+    uint16_t run_cycle();
     // capture gyro values at the appropriate update rate - runs at fast loop rate
     void sample_gyros();
-    // push a full frame of gyro samples into the FFT engine - runs at 400Hz
-    void push_gyro_frame();
+    // update the engine state - runs at 400Hz
+    void update();
     // update calculated values of dynamic parameters - runs at 1Hz
     void update_parameters();
     // thread for processing gyro data via FFT
@@ -191,7 +192,7 @@ private:
     // test frequency detection for all of the allowable bins
     float self_test_bin_frequencies();
     // detect the provided frequency
-    float self_test(float frequency, GyroWindow test_window);
+    float self_test(float frequency, SampleWindow& test_window);
     // whether to run analysis or not
     bool analysis_enabled() const { return _initialized && _analysis_enabled && _thread_created; };
     // whether analysis can be run again or not
@@ -241,22 +242,16 @@ private:
     uint16_t _samples_per_frame;
     // number of ms that a frame should take to process to sustain output rate
     uint16_t _frame_time_ms;
-    // downsampled gyro data circular buffer index frequency analysis
-    uint16_t _circular_buffer_idx[XYZ_AXIS_COUNT];
-    // number of collected unprocessed gyro samples
-    uint16_t _sample_count[XYZ_AXIS_COUNT];
-    // number of collected unprocessed gyro samples in the engine
-    uint16_t _engine_sample_count[XYZ_AXIS_COUNT];
     // last cycle time
     uint32_t _output_cycle_micros;
     // downsampled gyro data circular buffer for frequency analysis
-    float* _downsampled_gyro_data[XYZ_AXIS_COUNT];
+    SampleWindow _downsampled_gyro_data[XYZ_AXIS_COUNT];
+    // indirection to gyro data either downsampled or in IMU
+    SampleWindow* _gyro_data[XYZ_AXIS_COUNT];
     // accumulator for sampled gyro data
     Vector3f _oversampled_gyro_accum;
     // count of oversamples
     uint16_t _oversampled_gyro_count;
-    // current write index in the buffer
-    uint16_t _downsampled_gyro_idx;
 
     // state of the FFT engine
     AP_HAL::DSP::FFTWindowState* _state;
