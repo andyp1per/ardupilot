@@ -54,8 +54,8 @@ const AP_Param::GroupInfo AP_Logger::var_info[] = {
     AP_GROUPINFO("_BACKEND_TYPE",  0, AP_Logger, _params.backend_types,       uint8_t(HAL_LOGGING_BACKENDS_DEFAULT)),
 
     // @Param: _FILE_BUFSIZE
-    // @DisplayName: Maximum AP_Logger File Backend buffer size (in kilobytes)
-    // @Description: The AP_Logger_File backend uses a buffer to store data before writing to the block device.  Raising this value may reduce "gaps" in your SD card logging.  This buffer size may be reduced depending on available memory.  PixHawk requires at least 4 kilobytes.  Maximum value available here is 64 kilobytes.
+    // @DisplayName: Maximum AP_Logger File and Block Backend buffer size (in kilobytes)
+    // @Description: The File and Block backends use a buffer to store data before writing to the block device.  Raising this value may reduce "gaps" in your SD card logging.  This buffer size may be reduced depending on available memory.  PixHawk requires at least 4 kilobytes.  Maximum value available here is 64 kilobytes.
     // @User: Standard
     AP_GROUPINFO("_FILE_BUFSIZE",  1, AP_Logger, _params.file_bufsize,       HAL_LOGGING_FILE_BUFSIZE),
 
@@ -75,7 +75,7 @@ const AP_Param::GroupInfo AP_Logger::var_info[] = {
 
     // @Param: _FILE_DSRMROT
     // @DisplayName: Stop logging to current file on disarm
-    // @Description: When set, the current log file is closed when the vehicle is disarmed.  If LOG_DISARMED is set then a fresh log will be opened.
+    // @Description: When set, the current log file is closed when the vehicle is disarmed.  If LOG_DISARMED is set then a fresh log will be opened. Applies to the File and Block logging backends.
     // @Values: 0:Disabled,1:Enabled
     // @User: Standard
     AP_GROUPINFO("_FILE_DSRMROT",  4, AP_Logger, _params.file_disarm_rot,       0),
@@ -101,6 +101,14 @@ const AP_Param::GroupInfo AP_Logger::var_info[] = {
     // @Range: 10 1000
     // @User: Standard
     AP_GROUPINFO("_FILE_MB_FREE",  7, AP_Logger, _params.min_MB_free, 500),
+
+    // @Param: _FILE_MB_ROT
+    // @DisplayName: Start a new log file when the current log file reaches this size/
+    // @Description: Set this to the maximum log file size required. When the current log file reaches this size it will be closed and a new log started. The default of 0 means no rotation will occur. On Block backends with 16MB storage set this to 8MB to ensure that there is always a valid log.
+    // @Units: MB
+    // @Range: 2 1000
+    // @User: Standard
+    AP_GROUPINFO("_FILE_MB_ROT",  8, AP_Logger, _params.file_MB_rotate, 0),
 
     AP_GROUPEND
 };
