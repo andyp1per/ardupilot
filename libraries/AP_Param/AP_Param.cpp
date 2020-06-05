@@ -2565,10 +2565,14 @@ void AP_Param::show_all(AP_HAL::BetterStream *port, bool showKeyValues)
          ap;
          ap=AP_Param::next_scalar(&token, &type)) {
         if (showKeyValues) {
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
             port->printf("| %3u | %2u | %6u | %5u ", token.key, token.idx, token.group_element, ((token.key << 5) | token.idx));
+#else
+            port->printf("| %3lu | %2lu | %6lu | %5u ", token.key, token.idx, token.group_element, ((token.key << 5) | token.idx));
+#endif
         }
         show(ap, token, type, port);
-        hal.scheduler->delay(1);
+        hal.scheduler->delay(3);
     }
 }
 #endif // AP_PARAM_KEY_DUMP
