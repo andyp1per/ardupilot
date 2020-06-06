@@ -5125,6 +5125,10 @@ Brakes have negligible effect (with=%0.2fm without=%0.2fm delta=%0.2fm)
              "Test Rally Points",
              self.test_rally_points),
 
+            ("CRSF",
+             "Test RC CRSF",
+             self.test_crsf),
+
             ("Offboard",
              "Test Offboard Control",
              self.test_offboard),
