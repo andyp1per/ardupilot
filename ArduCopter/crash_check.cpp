@@ -66,6 +66,8 @@ void Copter::crash_check()
         AP::logger().set_force_log_disarmed(true);
         // send message to gcs
         gcs().send_text(MAV_SEVERITY_EMERGENCY,"Crash: Disarming");
+        // panic
+        AP_Notify::flags.vehicle_lost = true;
         // disarm motors
         copter.arming.disarm(AP_Arming::Method::CRASH);
     }
