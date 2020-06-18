@@ -136,7 +136,7 @@ static const char* AUX_OPTIONS[] = {
     "", "", "CIRCLE", "", "", "", "", "TAKEOFF", "RCAM_CTL", "RCAM_OSD",
     "", "DSARM", "QASS3POS", "", "", "", "", "", "", "", 
     "", "", "", "", "", "", "", "", "", "",
-    "KILLIMU1", "KILLIMU2", "CAM_TOG"
+    "KILLIMU1", "KILLIMU2", "CAM_TOG", "", "", "GPSYAW_DIS"
 };
 
 static const char* FLTMODES[] = {
@@ -188,22 +188,22 @@ const AP_OSD_ParamSetting::ParamMetadata AP_OSD_ParamSetting::_param_metadata[] 
     { PARAM_INDEX(4, 0, 21446), 0, 132, 1, ParamMetadata::StringValues, ARRAY_SIZE(SERVO_FUNCTIONS), SERVO_FUNCTIONS }, // SERVO15_FUNCTION
     { PARAM_INDEX(4, 0, 21510), 0, 132, 1, ParamMetadata::StringValues, ARRAY_SIZE(SERVO_FUNCTIONS), SERVO_FUNCTIONS }, // SERVO16_FUNCTION
     
-    { PARAM_INDEX(4, 0, 24647), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC1_OPTION
-    { PARAM_INDEX(4, 0, 24711), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC2_OPTION
-    { PARAM_INDEX(4, 0, 24775), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC3_OPTION
-    { PARAM_INDEX(4, 0, 24839), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC4_OPTION
-    { PARAM_INDEX(4, 0, 24903), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC5_OPTION
-    { PARAM_INDEX(4, 0, 24967), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC6_OPTION
-    { PARAM_INDEX(4, 0, 25031), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC7_OPTION
-    { PARAM_INDEX(4, 0, 25095), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC8_OPTION
-    { PARAM_INDEX(4, 0, 25159), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC9_OPTION
-    { PARAM_INDEX(4, 0, 25223), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC10_OPTION
-    { PARAM_INDEX(4, 0, 25287), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC11_OPTION
-    { PARAM_INDEX(4, 0, 25351), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC12_OPTION
-    { PARAM_INDEX(4, 0, 25415), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC13_OPTION
-    { PARAM_INDEX(4, 0, 25479), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC14_OPTION
-    { PARAM_INDEX(4, 0, 25543), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC15_OPTION
-    { PARAM_INDEX(4, 0, 25607), 0, 104, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC16_OPTION
+    { PARAM_INDEX(4, 0, 24647), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC1_OPTION
+    { PARAM_INDEX(4, 0, 24711), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC2_OPTION
+    { PARAM_INDEX(4, 0, 24775), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC3_OPTION
+    { PARAM_INDEX(4, 0, 24839), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC4_OPTION
+    { PARAM_INDEX(4, 0, 24903), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC5_OPTION
+    { PARAM_INDEX(4, 0, 24967), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC6_OPTION
+    { PARAM_INDEX(4, 0, 25031), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC7_OPTION
+    { PARAM_INDEX(4, 0, 25095), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC8_OPTION
+    { PARAM_INDEX(4, 0, 25159), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC9_OPTION
+    { PARAM_INDEX(4, 0, 25223), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC10_OPTION
+    { PARAM_INDEX(4, 0, 25287), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC11_OPTION
+    { PARAM_INDEX(4, 0, 25351), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC12_OPTION
+    { PARAM_INDEX(4, 0, 25415), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC13_OPTION
+    { PARAM_INDEX(4, 0, 25479), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC14_OPTION
+    { PARAM_INDEX(4, 0, 25543), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC15_OPTION
+    { PARAM_INDEX(4, 0, 25607), 0, 105, 1, ParamMetadata::StringValues, ARRAY_SIZE(AUX_OPTIONS), AUX_OPTIONS },  // RC16_OPTION
 
     { PARAM_INDEX(211, 0, 0), 0, 23, 1, ParamMetadata::StringValues, ARRAY_SIZE(FLTMODES), FLTMODES }, // FLTMODE1
     { PARAM_INDEX(212, 0, 0), 0, 23, 1, ParamMetadata::StringValues, ARRAY_SIZE(FLTMODES), FLTMODES }, // FLTMODE2
