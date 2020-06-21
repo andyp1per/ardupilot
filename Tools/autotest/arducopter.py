@@ -5288,6 +5288,14 @@ class AutoTestCopter(AutoTest):
              "Test RC CRSF",
              self.test_crsf),
 
+            ("DataFlash",
+             "Test DataFlash Block backend",
+             self.test_dataflash_sitl),
+
+            ("DataFlashErase",
+             "Test DataFlash Block backend erase",
+             self.test_dataflash_erase),
+
             ("LogUpload",
              "Log upload",
              self.log_upload),
