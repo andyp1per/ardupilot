@@ -16,10 +16,13 @@ extern const AP_HAL::HAL& hal;
 #define JEDEC_WRITE_DISABLE          0x04
 #define JEDEC_READ_STATUS            0x05
 #define JEDEC_WRITE_STATUS           0x01
+#define JEDEC_READ_STATUS2           0x35
+#define JEDEC_WRITE_STATUS2          0x31
 #define JEDEC_READ_DATA              0x03
 #define JEDEC_FAST_READ              0x0b
 #define JEDEC_DEVICE_ID              0x9F
 #define JEDEC_PAGE_WRITE             0x02
+#define JEDEC_FAST_PAGE_WRITE        0x32
 
 #define JEDEC_BULK_ERASE             0xC7
 #define JEDEC_SECTOR4_ERASE          0x20 // 4k erase
@@ -34,6 +37,7 @@ extern const AP_HAL::HAL& hal;
 #define JEDEC_STATUS_TP              0x20
 #define JEDEC_STATUS_SEC             0x40
 #define JEDEC_STATUS_SRP0            0x80
+
 
 /*
   flash device IDs taken from betaflight flash_m25p16.c
@@ -71,6 +75,8 @@ void AP_Logger_DataFlash::Init()
     if (use_32bit_address) {
         Enter4ByteAddressMode();
     }
+
+    EnableQuadPageProgram();
 
     flash_died = false;
 
@@ -239,7 +245,7 @@ void AP_Logger_DataFlash::BufferToPage(uint32_t pageNum)
     uint32_t PageAdr = (pageNum-1) * df_PageSize;
 
     dev->set_chip_select(true);
-    send_command_addr(JEDEC_PAGE_WRITE, PageAdr);
+    send_command_addr(JEDEC_FAST_PAGE_WRITE, PageAdr);
     dev->transfer(buffer, df_PageSize, NULL, 0);
     dev->set_chip_select(false);
 }
@@ -297,6 +303,19 @@ void AP_Logger_DataFlash::WriteEnable(void)
     WITH_SEMAPHORE(dev_sem);
     uint8_t b = JEDEC_WRITE_ENABLE;
     dev->transfer(&b, 1, NULL, 0);
+}
+
+void AP_Logger_DataFlash::EnableQuadPageProgram(void)
+{
+    WriteEnable();
+
+    WITH_SEMAPHORE(dev_sem);
+    uint8_t b[2];
+    b[0] = JEDEC_WRITE_STATUS2;
+    b[1] = 2; // quad page program
+    dev->set_chip_select(true);
+    dev->transfer(b, 2, NULL, 0);
+    dev->set_chip_select(false);
 }
 
 void AP_Logger_DataFlash::flash_test()

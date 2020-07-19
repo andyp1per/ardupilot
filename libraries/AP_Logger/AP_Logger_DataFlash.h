@@ -29,6 +29,7 @@ private:
     bool              Busy();
     uint8_t           ReadStatusReg();
     void              Enter4ByteAddressMode(void);
+    void              EnableQuadPageProgram();
 
     void              WriteEnable();
     bool              getSectorCount(void);

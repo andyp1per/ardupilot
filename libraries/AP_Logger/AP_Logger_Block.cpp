@@ -778,7 +778,7 @@ bool AP_Logger_Block::BlockRead(uint16_t IntPageAdr, void *pBuffer, uint16_t siz
 
 /*
   IO timer running on IO thread
-  The IO timer runs every 1ms or at 1Khz. The standard flash chip can write rougly 130Kb/s
+  The IO timer runs every 1ms or at 1Khz. The standard flash chip can write roughly 130Kb/s
   so there is little point in trying to write more than 130 bytes - or 1 page (256 bytes).
   The W25Q128FV datasheet gives tpp as typically 0.7ms yielding an absolute maximum rate of
   365Kb/s or just over a page per cycle.
