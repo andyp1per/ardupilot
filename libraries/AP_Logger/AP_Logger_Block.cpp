@@ -320,13 +320,6 @@ void AP_Logger_Block::periodic_10Hz(const uint32_t now)
     }
 }
 
-void AP_Logger_Block::periodic_1Hz()
-{
-    AP_Logger_Backend::periodic_1Hz();
-
-    df_stats_log();
-}
-
 void AP_Logger_Block::Prep()
 {
     if (hal.util->get_soft_armed()) {

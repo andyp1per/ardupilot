@@ -59,6 +59,7 @@ void AP_Logger_Backend::periodic_1Hz()
         // handle log rotation once we stop logging
         stop_logging();
     }
+    df_stats_log();
 }
 
 void AP_Logger_Backend::periodic_fullrate()
@@ -82,6 +83,7 @@ void AP_Logger_Backend::periodic_tasks()
 
 void AP_Logger_Backend::start_new_log_reset_variables()
 {
+    _dropped = 0;
     _startup_messagewriter->reset();
     _front.backend_starting_new_log(this);
 }
@@ -536,7 +538,6 @@ void AP_Logger_Backend::Write_AP_Logger_Stats_File(const struct df_stats &_stats
         buf_space_min   : _stats.buf_space_min,
         buf_space_max   : _stats.buf_space_max,
         buf_space_avg   : (_stats.blocks) ? (_stats.buf_space_sigma / _stats.blocks) : 0,
-
     };
     WriteBlock(&pkt, sizeof(pkt));
 }

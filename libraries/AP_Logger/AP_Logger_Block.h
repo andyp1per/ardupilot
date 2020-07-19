@@ -35,7 +35,6 @@ protected:
     /* Write a block of data at current offset */
     bool _WritePrioritisedBlock(const void *pBuffer, uint16_t size, bool is_critical) override;
     void periodic_10Hz(const uint32_t now) override;
-    void periodic_1Hz() override;
     bool WritesOK() const override;
 
     // get the current sector from the current page

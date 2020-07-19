@@ -152,7 +152,6 @@ void AP_Logger_File::periodic_1Hz()
         _write_fd = -1;
         _initialised = false;
     }
-    df_stats_log();
 }
 
 void AP_Logger_File::periodic_fullrate()
