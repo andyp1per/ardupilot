@@ -71,6 +71,8 @@ private:
     virtual void SectorErase(uint32_t SectorAdr) = 0;
     virtual void Sector4kErase(uint32_t SectorAdr) = 0;
     virtual void StartErase() = 0;
+    // actually do the business of starting a new log
+    void StartNewLog(void);
     virtual bool InErase() = 0;
 
     struct PACKED PageHeader {

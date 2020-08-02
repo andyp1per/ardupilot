@@ -338,11 +338,6 @@ void AP_Logger_Block::periodic_10Hz(const uint32_t now)
     case StatusMessage::NONE:
         break;
     }
-
-    // EraseAll should only set this in the main thread
-    if (new_log_pending) {
-        start_new_log();
-    }
 }
 
 void AP_Logger_Block::Prep()
@@ -539,10 +534,20 @@ void AP_Logger_Block::stop_logging(void)
     writebuf.clear();
 }
 
+void AP_Logger_Block::start_new_log(void)
+{
+    // if we are flying then start a new log asynchronously
+    if (hal.util->get_soft_armed() || false) {
+        new_log_pending = true;
+    } else {
+        StartNewLog();
+    }
+}
+
 // This function starts a new log file in the AP_Logger
 // no actual data should be written to the storage here
 // that should all be handled by the IO thread
-void AP_Logger_Block::start_new_log(void)
+void AP_Logger_Block::StartNewLog(void)
 {
     if (erase_started) {
         // already erasing
@@ -558,7 +563,7 @@ void AP_Logger_Block::start_new_log(void)
     // lose whatever is remaining of the current page so that the timestamp
     // ends up in the right place
     if (logging_started()) {
-        writebuf.clear();
+        stop_logging();
     }
 
     // no need to schedule this anymore
@@ -886,8 +891,13 @@ void AP_Logger_Block::io_timer(void)
         df_EraseFrom = 0;
     }
 
-    if (!CardInserted() || new_log_pending || chip_full) {
+    if (!CardInserted() || chip_full) {
         return;
+    }
+
+    // asynchonously start a new log to avoid blocking the caller
+    if (new_log_pending) {
+        StartNewLog();
     }
 
     // write at most one page
