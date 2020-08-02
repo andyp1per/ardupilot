@@ -5083,13 +5083,14 @@ Also, ignores heartbeats not from our target system'''
             self.mavproxy.send("log erase\n")
             self.mavproxy.expect("Chip erase complete")
 
-            # Rotate after 2MB
+            # Rotate after 2MB while flying
             self.set_parameter("LOG_FILE_MB_ROT", 2)
             # generate a lot of log data
             self.set_parameter("LOG_BITMASK", 131071)
-            self.set_parameter("LOG_DISARMED", 1)
+            self.arm_vehicle()
             self.delay_sim_time(20)
-            self.set_parameter("LOG_DISARMED", 0)
+            self.disarm_vehicle()
+            self.delay_sim_time(15)
             self.mavproxy.send("log list\n")
             self.mavproxy.expect("Log 1  numLogs 2 lastLog 2 size")
             # Download and check
