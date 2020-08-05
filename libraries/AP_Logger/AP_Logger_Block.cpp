@@ -537,9 +537,13 @@ void AP_Logger_Block::stop_logging(void)
 void AP_Logger_Block::start_new_log(void)
 {
     // if we are flying then start a new log asynchronously
-    if (hal.util->get_soft_armed() || false) {
+    if (hal.util->get_soft_armed()) {
         new_log_pending = true;
+        log_write_started = true;
     } else {
+        if (logging_started()) {
+            stop_logging();
+        }
         StartNewLog();
     }
 }
@@ -563,7 +567,7 @@ void AP_Logger_Block::StartNewLog(void)
     // lose whatever is remaining of the current page so that the timestamp
     // ends up in the right place
     if (logging_started()) {
-        stop_logging();
+        writebuf.clear();
     }
 
     // no need to schedule this anymore
