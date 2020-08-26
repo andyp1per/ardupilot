@@ -140,6 +140,7 @@ public:
         SerialProtocol_CRSF = 29,
         SerialProtocol_Generator = 30,
         SerialProtocol_Winch = 31,
+        SerialProtocol_NumProtocols                    // must be the last value
     };
 
     // get singleton instance
