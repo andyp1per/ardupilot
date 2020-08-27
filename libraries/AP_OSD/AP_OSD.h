@@ -302,16 +302,16 @@ public:
 
 private:
     AP_OSD_ParamSetting params[NUM_PARAMS] = {
-        {1, true, 1, 1, 102, 0, 4034 },   // ATC_RAT_PIT_P
-        {2, true, 1, 3, 102, 0, 130  },   // ATC_RAT_PIT_D
-        {3, true, 1, 5, 102, 0, 4033 },   // ATC_RAT_RLL_P
-        {4, true, 1, 7, 102, 0, 129  },   // ATC_RAT_RLL_D
+        {1, true, 2, 2, 102, 0, 4034 },   // ATC_RAT_PIT_P
+        {2, true, 2, 3, 102, 0, 130  },   // ATC_RAT_PIT_D
+        {3, true, 2, 4, 102, 0, 4033 },   // ATC_RAT_RLL_P
+        {4, true, 2, 5, 102, 0, 129  },   // ATC_RAT_RLL_D
         //{5, true, 1, 9, 102, 0, 4035 },   // ATC_RAT_YAW_P
-        {5, true, 1, 9, 6, 0, 24657, OSD_PARAM_AUX_FUNCTION },   // RC1_OPTION
-        {6, true, 1, 11, 3, 0, 231, OSD_PARAM_NONE, 0.0f, 2.0f, 1.0f }, // INS_LOG_BAT_OPT
+        {5, true, 2, 6, 6, 0, 24657, OSD_PARAM_AUX_FUNCTION },   // RC1_OPTION
+        {6, true, 2, 7, 3, 0, 231, OSD_PARAM_NONE, 0.0f, 2.0f, 1.0f }, // INS_LOG_BAT_OPT
         //{6, true, 1, 13, 119, 0, 11 }, // SERIAL0_PROTOCOL
-        {7, true, 1, 13, 119, 0, 11, OSD_PARAM_SERIAL_PROTOCOL }, // SERIAL0_PROTOCOL
-        {8, false, 1, 13, 56, 0, 0, OSD_PARAM_NONE, 0.0f, 1.0f, 0.1f } // ACRO_RP_EXPO
+        {7, true, 2, 8, 119, 0, 11, OSD_PARAM_SERIAL_PROTOCOL }, // SERIAL0_PROTOCOL
+        {8, false, 2, 9, 56, 0, 0, OSD_PARAM_NONE, 0.0f, 1.0f, 0.1f } // ACRO_RP_EXPO
     };
 
     void update_state_machine();
