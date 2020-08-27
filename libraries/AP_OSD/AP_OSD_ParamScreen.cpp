@@ -193,7 +193,7 @@ const AP_Param::GroupInfo AP_OSD_ParamScreen::var_info[] = {
     // @Description: Vertical position of Save button on screen
     // @Range: 0 15
     // @User: Advanced
-    AP_GROUPINFO("SAVE_Y", 13, AP_OSD_ParamScreen, save_y, 14),
+    AP_GROUPINFO("SAVE_Y", 13, AP_OSD_ParamScreen, save_y, 12),
 
     AP_GROUPEND
 };
