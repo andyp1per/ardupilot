@@ -243,7 +243,7 @@ public:
     static const ParamMetadata _param_metadata[];
 
     AP_OSD_ParamSetting(uint8_t param_number, bool enabled, uint8_t x, uint8_t y, int16_t key, int8_t idx, int32_t group,
-        float min = 0.0f, float max = 1.0f, float incr = 0.001f);
+        int8_t type = OSD_PARAM_NONE, float min = 0.0f, float max = 1.0f, float incr = 0.001f);
 
     // initialize the setting from the configured information
     void update();
@@ -307,11 +307,11 @@ private:
         {3, true, 1, 5, 102, 0, 4033 },   // ATC_RAT_RLL_P
         {4, true, 1, 7, 102, 0, 129  },   // ATC_RAT_RLL_D
         //{5, true, 1, 9, 102, 0, 4035 },   // ATC_RAT_YAW_P
-        {5, true, 1, 9, 6, 0, 24657 },   // RC1_OPTION
-        {6, true, 1, 11, 3, 0, 231, 0.0f, 2.0f, 1.0f }, // INS_LOG_BAT_OPT
+        {5, true, 1, 9, 6, 0, 24657, OSD_PARAM_AUX_FUNCTION },   // RC1_OPTION
+        {6, true, 1, 11, 3, 0, 231, OSD_PARAM_NONE, 0.0f, 2.0f, 1.0f }, // INS_LOG_BAT_OPT
         //{6, true, 1, 13, 119, 0, 11 }, // SERIAL0_PROTOCOL
-        {7, true, 1, 13, 119, 0, 11 }, // SERIAL0_PROTOCOL
-        {8, false, 1, 13, 56, 0, 0, 0.0f, 1.0f, 0.1f } // ACRO_RP_EXPO
+        {7, true, 1, 13, 119, 0, 11, OSD_PARAM_SERIAL_PROTOCOL }, // SERIAL0_PROTOCOL
+        {8, false, 1, 13, 56, 0, 0, OSD_PARAM_NONE, 0.0f, 1.0f, 0.1f } // ACRO_RP_EXPO
     };
 
     void update_state_machine();

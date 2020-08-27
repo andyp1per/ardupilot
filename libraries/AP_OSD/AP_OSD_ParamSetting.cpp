@@ -231,13 +231,16 @@ const AP_OSD_ParamSetting::ParamMetadata AP_OSD_ParamSetting::_param_metadata[OS
 extern const AP_HAL::HAL& hal;
 
 // constructor
-AP_OSD_ParamSetting::AP_OSD_ParamSetting(uint8_t param_number, bool _enabled, uint8_t x, uint8_t y,  int16_t key, int8_t idx, int32_t group, float min, float max, float incr)
+AP_OSD_ParamSetting::AP_OSD_ParamSetting(uint8_t param_number, bool _enabled, uint8_t x, uint8_t y,  int16_t key, int8_t idx, int32_t group, int8_t type, float min, float max, float incr)
     : AP_OSD_Setting(_enabled, x, y), _param_number(param_number)
 {
     _param_group = group;
     _param_idx = idx;
     _param_key = key;
-    AP_Param::setup_object_defaults(this, var_info);
+    _param_min = min;
+    _param_max = max;
+    _param_incr = incr;
+    _type = type;
 }
 
 // update the contained parameter
