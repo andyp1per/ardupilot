@@ -144,7 +144,7 @@ static const char* AUX_OPTIONS[] = {
     "", "MANUAL", "", "", "", "GUIDE", "LOIT", "", "CLR_WP", "",
     "", "", "COMP_LRN", "", "REV_THR", "GPS_DIS", "RLY5", "RLY6", "", "",
     "", "", "CIRCLE", "", "", "", "", "TAKEOFF", "RCAM_CTL", "RCAM_OSD",
-    "", "DSARM", "QASS3POS", "", "", "", "", "", "", "", 
+    "", "DSARM", "QASS3POS", "", "AIR", "GEN", "TER_AUTO", "CROW_SEL", "SOAR", "", 
     "", "", "", "", "", "", "", "", "", "",
     "KILLIMU1", "KILLIMU2", "CAM_TOG", "", "", "GPSYAW_DIS"
 };
