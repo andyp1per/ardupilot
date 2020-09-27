@@ -83,6 +83,9 @@ romfs = {}
 # SPI bus list
 spi_list = []
 
+# QSPI bus list
+qspi_list = []
+
 # all config lines in order
 alllines = []
 
@@ -884,6 +887,7 @@ def write_SPI_table(f):
     '''write SPI device table'''
     f.write('\n// SPI device table\n')
     devlist = []
+    qdevlist = []
     for dev in spidev:
         if len(dev) != 7:
             print("Badly formed SPIDEV line %s" % dev)
@@ -894,7 +898,13 @@ def write_SPI_table(f):
         mode = dev[4]
         lowspeed = dev[5]
         highspeed = dev[6]
-        if not bus.startswith('SPI') or bus not in spi_list:
+        if bus.startswith('SPI'):
+            if bus not in spi_list:
+                error("Bad SPI bus in SPIDEV line %s" % dev)
+        elif bus.startswith('QUADSPI'):
+            if bus not in qspi_list:
+                error("Bad QUADSPI bus in SPIDEV line %s" % dev)
+        else:
             error("Bad SPI bus in SPIDEV line %s" % dev)
         if not devid.startswith('DEVID') or not is_int(devid[5:]):
             error("Bad DEVID in SPIDEV line %s" % dev)
@@ -909,13 +919,23 @@ def write_SPI_table(f):
                                                                 dev))
         cs_pin = bylabel[cs]
         pal_line = 'PAL_LINE(GPIO%s,%uU)' % (cs_pin.port, cs_pin.pin)
-        devidx = len(devlist)
-        f.write(
-            '#define HAL_SPI_DEVICE%-2u SPIDesc(%-17s, %2u, %2u, %-19s, SPIDEV_%s, %7s, %7s)\n'
-            % (devidx, name, spi_list.index(bus), int(devid[5:]), pal_line,
-               mode, lowspeed, highspeed))
-        devlist.append('HAL_SPI_DEVICE%u' % devidx)
+        if bus.startswith('QUADSPI'):
+            devidx = len(qdevlist)
+            f.write(
+                '#define HAL_QUADSPI_DEVICE%-2u SPIDesc(%-17s, %2u, %2u, %-19s, SPIDEV_%s, %7s, %7s)\n'
+                % (devidx, name, qspi_list.index(bus), int(devid[5:]), pal_line,
+                mode, lowspeed, highspeed))
+            qdevlist.append('HAL_QUADSPI_DEVICE%u' % devidx)
+        else:
+            devidx = len(devlist)
+            f.write(
+                '#define HAL_SPI_DEVICE%-2u SPIDesc(%-17s, %2u, %2u, %-19s, SPIDEV_%s, %7s, %7s)\n'
+                % (devidx, name, spi_list.index(bus), int(devid[5:]), pal_line,
+                mode, lowspeed, highspeed))
+            devlist.append('HAL_SPI_DEVICE%u' % devidx)
     f.write('#define HAL_SPI_DEVICE_LIST %s\n\n' % ','.join(devlist))
+    if len(qdevlist) > 0:
+        f.write('#define HAL_QUADSPI_DEVICE_LIST %s\n\n' % ','.join(qdevlist))
     for dev in spidev:
         f.write("#define HAL_WITH_SPI_%s 1\n" % dev[0].upper().replace("-","_"))
     f.write("\n")
@@ -923,9 +943,12 @@ def write_SPI_table(f):
 def write_SPI_config(f):
     '''write SPI config defines'''
     global spi_list
+    global qspi_list
     for t in list(bytype.keys()) + list(alttype.keys()):
         if t.startswith('SPI'):
             spi_list.append(t)
+        elif t.startswith('QUADSPI'):
+            qspi_list.append(t)
     spi_list = sorted(spi_list)
     if len(spi_list) == 0:
         f.write('#define HAL_USE_SPI FALSE\n')
@@ -938,8 +961,16 @@ def write_SPI_config(f):
             '#define HAL_SPI%u_CONFIG { &SPID%u, %u, STM32_SPI_SPI%u_DMA_STREAMS }\n'
             % (n, n, n, n))
     f.write('#define HAL_SPI_BUS_LIST %s\n\n' % ','.join(devlist))
+    qspi_list = sorted(qspi_list)
+    if len(qspi_list) == 0:
+        f.write('#define HAL_USE_WSPI FALSE\n')
+        return
+    devlist = []
+    for dev in qspi_list:
+        devlist.append('HAL_WSPI_QUADSPI_CONFIG')
+        f.write('#define HAL_WSPI_QUADSPI_CONFIG { &WSPID, 1, STM32_WSPI_QUADSPI1_DMA_STREAMS }\n')
+    f.write('#define HAL_WSPI_BUS_LIST %s\n\n' % ','.join(devlist))
     write_SPI_table(f)
-
 
 def parse_spi_device(dev):
     '''parse a SPI:xxx device item'''
@@ -1614,6 +1645,8 @@ def write_peripheral_enable(f):
             f.write('#endif\n')
         if type.startswith('SPI'):
             f.write('#define STM32_SPI_USE_%s                  TRUE\n' % type)
+        if type.startswith('QUADSPI'):
+            f.write('#define STM32_WSPI_USE_QUADSPI1           TRUE\n')
         if type.startswith('OTG'):
             f.write('#define STM32_USB_USE_%s                  TRUE\n' % type)
         if type.startswith('I2C'):
@@ -1810,7 +1843,7 @@ def build_peripheral_list():
     '''build a list of peripherals for DMA resolver to work on'''
     peripherals = []
     done = set()
-    prefixes = ['SPI', 'USART', 'UART', 'I2C']
+    prefixes = ['SPI', 'QUADSPI', 'USART', 'UART', 'I2C']
     periph_pins = allpins[:]
     for alt in altmap.keys():
         for p in altmap[alt].keys():
@@ -1823,7 +1856,7 @@ def build_peripheral_list():
             if type.startswith(prefix):
                 ptx = type + "_TX"
                 prx = type + "_RX"
-                if prefix in ['SPI', 'I2C']:
+                if prefix in ['SPI','I2C']:
                     # in DMA map I2C and SPI has RX and TX suffix
                     if ptx not in bylabel:
                         bylabel[ptx] = p
@@ -1835,6 +1868,8 @@ def build_peripheral_list():
                     peripherals.append(ptx)
 
         if type.startswith('ADC'):
+            peripherals.append(type)
+        if type.startswith('QUADSPI'):
             peripherals.append(type)
         if type.startswith('SDIO') or type.startswith('SDMMC'):
             if not mcu_series.startswith("STM32H7"):
@@ -1965,7 +2000,7 @@ def process_line(line):
         mcu_type = a[2]
         mcu_series = a[1]
         setup_mcu_type_defaults()
-    elif a[0] == 'SPIDEV':
+    elif a[0] == 'SPIDEV' or a[0] == 'QUADSPIDEV':
         spidev.append(a[1:])
     elif a[0] == 'IMU':
         imu_list.append(a[1:])

@@ -4,12 +4,12 @@ import sys, fnmatch
 import importlib
 
 # peripheral types that can be shared, wildcard patterns
-SHARED_MAP = ["I2C*", "USART*_TX", "UART*_TX", "SPI*", "TIM*_UP"]
+SHARED_MAP = ["I2C*", "USART*_TX", "UART*_TX", "SPI*", "QUADSPI", "TIM*_UP"]
 
 ignore_list = []
 dma_map = None
 
-debug = False
+debug = True
 
 def check_possibility(periph, dma_stream, curr_dict, dma_map, check_list, recurse=False):
     global ignore_list
@@ -78,6 +78,8 @@ def chibios_dma_define_name(key):
         return 'STM32_ADC_%s_' % dma_key
     elif key.startswith('SPI'):
         return 'STM32_SPI_%s_' % dma_key
+    elif key.startswith('QUADSPI'):
+        return 'STM32_WSPI_QUADSPI1_DMA_'
     elif key.startswith('I2C'):
         return 'STM32_I2C_%s_' % dma_key
     elif key.startswith('USART'):
@@ -390,6 +392,7 @@ def write_dma_header(f, peripheral_list, mcu_type, dma_exclude=[],
             continue
         f.write('#define STM32_SPI_%s_DMA_STREAMS STM32_SPI_%s_TX_%s_STREAM, STM32_SPI_%s_RX_%s_STREAM\n' % (
             key, key, dma_name(key), key, dma_name(key)))
+
     return unassigned
 
 
