@@ -50,6 +50,9 @@ struct RCOutput::pwm_group RCOutput::pwm_group_list[] = { HAL_PWM_GROUPS };
 struct RCOutput::irq_state RCOutput::irq;
 const uint8_t RCOutput::NUM_GROUPS = ARRAY_SIZE(RCOutput::pwm_group_list);
 
+// event mask for triggering a dshot send
+static const eventmask_t EVT_DSHOT_SEND  = EVENT_MASK(11);
+
 // marker for a disabled channel
 #define CHAN_DISABLED 255
 
@@ -65,6 +68,8 @@ void RCOutput::init()
         //Start Pwm groups
         pwm_group &group = pwm_group_list[i];
         group.current_mode = MODE_PWM_NORMAL;
+        group.dshot_event_mask = EVENT_MASK(i);
+
         for (uint8_t j = 0; j < 4; j++ ) {
             uint8_t chan = group.chan[j];
             if (chan >= pwm_count) {
@@ -107,6 +112,63 @@ void RCOutput::init()
     hal.gpio->pinMode(56, 1);
     hal.gpio->pinMode(57, 1);
 #endif
+}
+
+/*
+  thread for handling RCOutput send
+ */
+void RCOutput::rcout_thread()
+{
+    uint32_t last_thread_run_us = 0; // last time we did a 1kHz run of rcout
+
+    rcout_thread_ctx = chThdGetSelfX();
+
+    while (true) {
+        const uint32_t period_us = AP_HAL::micros() - last_thread_run_us;
+        if (period_us < 1000) {
+            chEvtWaitOneTimeout(EVT_DSHOT_SEND, chTimeUS2I(1000 - period_us));
+        }
+        // start the clock
+        last_thread_run_us = AP_HAL::micros();
+
+        // main thread requested a new dshot send
+        if (!serial_group) {
+            // do a blocking send now, to guarantee DShot sends at
+            // above 1000 Hz. This makes the protocol more reliable on
+            // long cables, and also keeps some ESCs happy that don't
+            // like low rates
+            dshot_send_groups();
+
+            // release locks on the groups that are pending in reverse order
+            for (int8_t i = NUM_GROUPS - 1; i >= 0; i--) {
+                pwm_group &group = pwm_group_list[i];
+                if (group.dma_handle != nullptr && group.dma_handle->is_locked()) {
+                    // calculate how long we have left
+                    const uint32_t deltat = AP_HAL::micros() - last_thread_run_us;
+                    // if we have time left wait for the event
+                    eventmask_t mask = 0;
+                    if (deltat < 1000) {
+                        mask = chEvtWaitOneTimeout(group.dshot_event_mask, chTimeUS2I(1000 - deltat));
+                    }
+                    // no time left cancel and restart
+                    if (!mask) {
+                        dma_cancel(group);
+                    }
+                    group.dshot_waiter = nullptr;
+#ifdef HAL_WITH_BIDIR_DSHOT
+                    // if using input capture DMA then clean up
+                    if (group.ic_dma_enabled()) {
+                        group.bdshot.ic_dma_handle[mask ? group.bdshot.prev_telem_chan : group.bdshot.curr_telem_chan]->unlock();
+                    }
+#endif
+                    group.dma_handle->unlock();
+                }
+            }
+        }
+
+        // process any pending RC output requests
+        timer_tick();
+    }
 }
 
 /*
@@ -908,8 +970,9 @@ void RCOutput::trigger_groups(void)
     }
     osalSysUnlock();
 
-    if (!serial_group) {
-        dshot_send_groups(false);
+    // trigger a dshot send
+    if (!serial_group && hal.scheduler->in_main_thread()) {
+        chEvtSignal(rcout_thread_ctx, EVT_DSHOT_SEND);
     }
 
     /*
@@ -929,16 +992,6 @@ void RCOutput::timer_tick(void)
 {
     safety_update();
 
-    uint64_t now = AP_HAL::micros64();
-
-    // do a blocking send now, to guarantee DShot sends at
-    // above 1000 Hz. This makes the protocol more reliable on
-    // long cables, and also keeps some ESCs happy that don't
-    // like low rates
-    if (!serial_group) {
-        dshot_send_groups(true);
-    }
-
     if (serial_led_pending && chMtxTryLock(&trigger_mutex)) {
         serial_led_pending = false;
         for (uint8_t j = 0; j < NUM_GROUPS; j++) {
@@ -955,10 +1008,34 @@ void RCOutput::timer_tick(void)
         serial_group != nullptr) {
         return;
     }
+
+    uint32_t now = AP_HAL::micros();
+
     if (now > min_pulse_trigger_us &&
         now - min_pulse_trigger_us > 4000) {
         // trigger at a minimum of 250Hz
         trigger_groups();
+    }
+}
+
+// send dshot for all groups that support it
+void RCOutput::dshot_send_groups()
+{
+    if (serial_group) {
+        return;
+    }
+
+    // actually do a dshot send
+    for (uint8_t i = 0; i < NUM_GROUPS; i++) {
+        pwm_group &group = pwm_group_list[i];
+        if (group.can_send_dshot_pulse()) {
+            dshot_send(group);
+            // delay sending the next group by the same amount as the IRQ dead time
+            // to avoid irq collisions
+            if (group.bdshot.enabled) {
+                hal.scheduler->delay_microseconds(group.dshot_pulse_time_us);
+            }
+        }
     }
 }
 
@@ -1048,28 +1125,12 @@ void RCOutput::fill_DMA_buffer_dshot(uint32_t *buffer, uint8_t stride, uint16_t 
     }
 }
 
-// send dshot for all groups that support it
-void RCOutput::dshot_send_groups(bool blocking)
-{
-    for (uint8_t i = 0; i < NUM_GROUPS; i++) {
-        pwm_group &group = pwm_group_list[i];
-        if (group.can_send_dshot_pulse()) {
-            dshot_send(group, blocking);
-            // delay sending the next group by the same amount as the bidir dead time
-            // to avoid irq collisions
-            if (group.bdshot.enabled) {
-                hal.scheduler->delay_microseconds(group.dshot_pulse_time_us);
-            }
-        }
-    }
-}
-
 /*
   send a set of DShot packets for a channel group
   This call be called in blocking mode from the timer, in which case it waits for the DMA lock.
   In normal operation it doesn't wait for the DMA lock.
  */
-void RCOutput::dshot_send(pwm_group &group, bool blocking)
+void RCOutput::dshot_send(pwm_group &group)
 {
 #ifndef DISABLE_DSHOT
     if (irq.waiter || (group.dshot_state != DshotState::IDLE && group.dshot_state != DshotState::RECV_COMPLETE)) {
@@ -1078,11 +1139,9 @@ void RCOutput::dshot_send(pwm_group &group, bool blocking)
     }
 
     // first make sure we have the DMA channel before anything else
-    if (blocking) {
-        group.dma_handle->lock();
-    } else if (!group.dma_handle->lock_nonblock()) {
-        return;
-    }
+    group.dma_handle->lock();
+    // only the timer thread releases the locks
+    group.dshot_waiter = rcout_thread_ctx;
 #ifdef HAL_WITH_BIDIR_DSHOT
     // assume that we won't be able to get the input capture lock
     group.bdshot.enabled = false;
@@ -1092,11 +1151,9 @@ void RCOutput::dshot_send(pwm_group &group, bool blocking)
         if (group.has_shared_ic_up_dma()) {
             // no locking required
             group.bdshot.enabled = true;
-        } else if (blocking) {
+        } else {
             group.bdshot.ic_dma_handle[group.bdshot.curr_telem_chan]->lock();
             group.bdshot.enabled = true;
-        } else {
-            group.bdshot.enabled = group.bdshot.ic_dma_handle[group.bdshot.curr_telem_chan]->lock_nonblock();
         }
     }
 
@@ -1179,6 +1236,7 @@ void RCOutput::dshot_send(pwm_group &group, bool blocking)
         }
     }
 
+    chEvtGetAndClearEvents(group.dshot_event_mask);
     // start sending the pulses out
     send_pulses_DMAR(group, DSHOT_BUFFER_LENGTH);
 
@@ -1215,6 +1273,7 @@ bool RCOutput::serial_led_send(pwm_group &group)
 void RCOutput::send_pulses_DMAR(pwm_group &group, uint32_t buffer_length)
 {
 #ifndef DISABLE_DSHOT
+    osalDbgAssert(group.dma && group.dma_buffer, "DMA structures are corrupt");
     /*
       The DMA approach we are using is based on the DMAR method from
       betaflight. We use the TIMn_UP DMA channel for the timer, and
@@ -1260,8 +1319,8 @@ void RCOutput::dma_unlock(void *p)
     pwm_group *group = (pwm_group *)p;
 
     group->dshot_state = DshotState::IDLE;
-    group->dma_handle->unlock_from_IRQ();
-
+    // tell the waiting process we've done the DMA
+    chEvtSignalI(group->dshot_waiter, group->dshot_event_mask);
     chSysUnlockFromISR();
 }
 
@@ -1284,6 +1343,24 @@ void RCOutput::dma_up_irq_callback(void *p, uint32_t flags)
     chSysUnlockFromISR();
 }
 #endif
+
+/*
+  Cancel a DMA transaction in progress
+ */
+void RCOutput::dma_cancel(pwm_group& group)
+{
+    chSysLock();
+    dmaStreamDisable(group.dma);
+#ifdef HAL_WITH_BIDIR_DSHOT
+    if (group.ic_dma_enabled()) {
+        dmaStreamDisable(group.bdshot.ic_dma[group.bdshot.curr_telem_chan]);
+    }
+#endif
+    chVTResetI(&group.dma_timeout);
+    chEvtGetAndClearEventsI(group.dshot_event_mask);
+    group.dshot_state = DshotState::IDLE;
+    chSysUnlock();
+}
 
 /*
   setup for serial output to an ESC using the given

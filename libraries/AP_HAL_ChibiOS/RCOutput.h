@@ -190,6 +190,11 @@ public:
      */
     void serial_led_send(const uint16_t chan) override;
 
+    /*
+      rcout thread
+     */
+    void rcout_thread();
+
 private:
     enum class DshotState {
       IDLE = 0,
@@ -252,6 +257,8 @@ private:
         uint8_t clock_mask;
         bool serial_led_pending;
         bool prepared_send;
+        eventmask_t dshot_event_mask;
+        thread_t* dshot_waiter;
 
         // serial output
         struct {
@@ -317,6 +324,10 @@ private:
           return is_dshot_protocol(current_mode) && AP_HAL::micros64() - last_dmar_send_us > (dshot_pulse_time_us + 50);
         }
     };
+    /*
+      timer thread for use by dshot events
+     */
+    thread_t *rcout_thread_ctx;
 
     /*
       structure for IRQ handler for soft-serial input
@@ -445,6 +456,7 @@ private:
       Serial lED handling. Max of 32 LEDs uses max 12k of memory per group
       return true if send was successful
     */
+    static const eventmask_t serial_event_mask = EVENT_MASK(10);
     bool serial_led_send(pwm_group &group);
     bool serial_led_pending;
 
@@ -453,10 +465,11 @@ private:
     uint16_t create_dshot_packet(const uint16_t value, bool telem_request, bool bidir_telem);
     void fill_DMA_buffer_dshot(uint32_t *buffer, uint8_t stride, uint16_t packet, uint16_t clockmul);
 
-    void dshot_send_groups(bool blocking);
-    void dshot_send(pwm_group &group, bool blocking);
+    void dshot_send_groups();
+    void dshot_send(pwm_group &group);
     static void dma_up_irq_callback(void *p, uint32_t flags);
     static void dma_unlock(void *p);
+    void dma_cancel(pwm_group& group);
     bool mode_requires_dma(enum output_mode mode) const;
     bool setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_width, bool active_high, const uint16_t buffer_length, bool choose_high);
     void send_pulses_DMAR(pwm_group &group, uint32_t buffer_length);
@@ -492,7 +505,6 @@ private:
     void _set_profiled_blank_frame(pwm_group *grp, uint8_t idx, uint8_t led);
 
     // serial output support
-    static const eventmask_t serial_event_mask = EVENT_MASK(1);
     bool serial_write_byte(uint8_t b);
     bool serial_read_byte(uint8_t &b);
     void fill_DMA_buffer_byte(uint32_t *buffer, uint8_t stride, uint8_t b , uint32_t bitval);

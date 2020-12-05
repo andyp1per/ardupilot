@@ -48,7 +48,8 @@ public:
     int16_t read() override;
     ssize_t read(uint8_t *buffer, uint16_t count) override;
     int16_t read_locked(uint32_t key) override;
-    void _timer_tick(void) override;
+    void _rx_timer_tick(void);
+    void _tx_timer_tick(void);
 
     bool discard_input() override;
 
@@ -133,12 +134,16 @@ private:
      */
     ioline_t atx_line;
     ioline_t arx_line;
-    
+
     // thread used for all UARTs
-    static thread_t *uart_thread_ctx;
+    static thread_t *uart_rx_thread_ctx;
 
     // table to find UARTDrivers from serial number, used for event handling
     static UARTDriver *uart_drivers[UART_MAX_DRIVERS];
+    
+    // thread used for writing and reading
+    thread_t *uart_thread_ctx;
+    char uart_thread_name[6];
 
     // index into uart_drivers table
     uint8_t serial_num;
@@ -177,7 +182,8 @@ private:
     const stm32_dma_stream_t* txdma;
 #endif
     virtual_timer_t tx_timeout;
-    bool _in_timer;
+    volatile bool _in_rx_timer;
+    volatile bool _in_tx_timer;
     bool _blocking_writes;
     bool _initialised;
     bool _device_initialised;
@@ -248,7 +254,9 @@ private:
     void set_pushpull(uint16_t options);
 
     void thread_init();
-    static void uart_thread(void *);
+    void uart_thread();
+    static void uart_rx_thread(void* arg);
+    static void uart_thread_trampoline(void* p);
 };
 
 // access to usb init for stdio.cpp

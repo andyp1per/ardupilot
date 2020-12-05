@@ -114,7 +114,7 @@
   expensive in memory
  */
 #ifndef PORT_INT_REQUIRED_STACK
-#define PORT_INT_REQUIRED_STACK 256
+#define PORT_INT_REQUIRED_STACK 64
 #endif
 
 

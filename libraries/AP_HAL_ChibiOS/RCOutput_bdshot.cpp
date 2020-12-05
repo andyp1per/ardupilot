@@ -368,15 +368,11 @@ void RCOutput::bdshot_finish_dshot_gcr_transaction(void *p)
 
     group->dshot_state = DshotState::RECV_COMPLETE;
 
-    // if using input capture DMA then clean up
-    if (group->ic_dma_enabled()) {
-        group->bdshot.ic_dma_handle[curr_telem_chan]->unlock_from_IRQ();
-    }
-
     // rotate to the next input channel
     group->bdshot.prev_telem_chan = group->bdshot.curr_telem_chan;
     group->bdshot.curr_telem_chan = bdshot_find_next_ic_channel(*group);
-    group->dma_handle->unlock_from_IRQ();
+    // tell the waiting process we've done the DMA
+    chEvtSignalI(group->dshot_waiter, group->dshot_event_mask);
 #ifdef HAL_GPIO_LINE_GPIO56
     TOGGLE_PIN_DEBUG(56);
 #endif
