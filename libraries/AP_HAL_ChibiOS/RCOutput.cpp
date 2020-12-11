@@ -75,10 +75,7 @@ void RCOutput::init()
                 group.ch_mask |= (1U<<group.chan[j]);
             }
 #if HAL_WITH_BIDIR_DSHOT
-            // zero out telemetry data structures
-            group.ic_dma_handle[j] = nullptr;
-            group.ic_dma[j] = nullptr;
-            group.telem_tim_ch[j] = CHAN_DISABLED;
+            group.bdshot.telem_tim_ch[j] = CHAN_DISABLED;
 #endif
         }
         if (group.ch_mask != 0) {
@@ -551,7 +548,7 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
 #if HAL_WITH_BIDIR_DSHOT
     // configure input capture DMA if required
     if (is_bidir_dshot_enabled()) {
-        if (!setup_group_ic_DMA(group)) {
+        if (!bdshot_setup_group_ic_DMA(group)) {
             group.dma_handle->unlock();
             return false;
         }
@@ -637,7 +634,7 @@ void RCOutput::set_group_mode(pwm_group &group)
         group.pwm_started = false;
     }
 
-    memset(group.erpm, 0, 4*sizeof(uint16_t));
+    memset(group.bdshot.erpm, 0, 4*sizeof(uint16_t));
 
     switch (group.current_mode) {
     case MODE_PWM_BRUSHED:
@@ -1060,7 +1057,7 @@ void RCOutput::dshot_send_groups(bool blocking)
             dshot_send(group, blocking);
             // delay sending the next group by the same amount as the bidir dead time
             // to avoid irq collisions
-            if (group.bidir_dshot_enabled) {
+            if (group.bdshot.enabled) {
                 hal.scheduler->delay_microseconds(group.dshot_pulse_time_us);
             }
         }
@@ -1088,39 +1085,39 @@ void RCOutput::dshot_send(pwm_group &group, bool blocking)
     }
 #if HAL_WITH_BIDIR_DSHOT
     // assume that we won't be able to get the input capture lock
-    group.bidir_dshot_enabled = false;
+    group.bdshot.enabled = false;
 
     // now grab the input capture lock if we are able
-    if ((_bidir_dshot_mask & (1 << group.chan[group.curr_telem_chan])) && group.has_ic()) {
+    if ((_bdshot.mask & (1 << group.chan[group.bdshot.curr_telem_chan])) && group.has_ic()) {
         if (group.has_shared_ic_up_dma()) {
             // no locking required
-            group.bidir_dshot_enabled = true;
+            group.bdshot.enabled = true;
         } else if (blocking) {
-            group.ic_dma_handle[group.curr_telem_chan]->lock();
-            group.bidir_dshot_enabled = true;
+            group.bdshot.ic_dma_handle[group.bdshot.curr_telem_chan]->lock();
+            group.bdshot.enabled = true;
         } else {
-            group.bidir_dshot_enabled = group.ic_dma_handle[group.curr_telem_chan]->lock_nonblock();
+            group.bdshot.enabled = group.bdshot.ic_dma_handle[group.bdshot.curr_telem_chan]->lock_nonblock();
         }
     }
 
     // if the last transaction returned telemetry, decode it
     if (group.dshot_state == DshotState::RECV_COMPLETE) {
-        uint8_t chan = group.chan[group.prev_telem_chan];
+        uint8_t chan = group.chan[group.bdshot.prev_telem_chan];
         uint32_t now = AP_HAL::millis();
-        if (decode_dshot_telemetry(group, group.prev_telem_chan)) {
-            _erpm_clean_frames[chan]++;
+        if (bdshot_decode_dshot_telemetry(group, group.bdshot.prev_telem_chan)) {
+            _bdshot.erpm_clean_frames[chan]++;
         } else {
-            _erpm_errors[chan]++;
+            _bdshot.erpm_errors[chan]++;
         }
         // reset statistics periodically
-        if (now - _erpm_last_stats_ms[chan] > 5000) {
-            _erpm_clean_frames[chan] = 0;
-            _erpm_errors[chan] = 0;
-            _erpm_last_stats_ms[chan] = now;
+        if (now - _bdshot.erpm_last_stats_ms[chan] > 5000) {
+            _bdshot.erpm_clean_frames[chan] = 0;
+            _bdshot.erpm_errors[chan] = 0;
+            _bdshot.erpm_last_stats_ms[chan] = now;
         }
     }
 
-    if (group.bidir_dshot_enabled) {
+    if (group.bdshot.enabled) {
         if (group.pwm_started) {
             pwmStop(group.pwm_drv);
         }
@@ -1128,7 +1125,7 @@ void RCOutput::dshot_send(pwm_group &group, bool blocking)
         group.pwm_started = true;
 
         // we can be more precise for capture timer
-        group.telempsc = (uint16_t)(lrintf(((float)group.pwm_drv->clock / getDshotHz(group.current_mode) + 0.01f)/TELEM_IC_SAMPLE) - 1);
+        group.bdshot.telempsc = (uint16_t)(lrintf(((float)group.pwm_drv->clock / bdshot_get_output_rate_hz(group.current_mode) + 0.01f)/TELEM_IC_SAMPLE) - 1);
     }
 #endif
     bool safety_on = hal.util->safety_switch_state() == AP_HAL::Util::SAFETY_DISARMED;
@@ -1139,7 +1136,7 @@ void RCOutput::dshot_send(pwm_group &group, bool blocking)
         uint8_t chan = group.chan[i];
         if (chan != CHAN_DISABLED) {
             // retrieve the last erpm values
-            _erpm[chan] = group.erpm[i];
+            _bdshot.erpm[chan] = group.bdshot.erpm[i];
 
             uint16_t pwm = period[chan];
 
@@ -1174,7 +1171,7 @@ void RCOutput::dshot_send(pwm_group &group, bool blocking)
             }
 
             bool request_telemetry = (telem_request_mask & chan_mask)?true:false;
-            uint16_t packet = create_dshot_packet(value, request_telemetry, _bidir_dshot_mask);
+            uint16_t packet = create_dshot_packet(value, request_telemetry, _bdshot.mask);
             if (request_telemetry) {
                 telem_request_mask &= ~chan_mask;
             }

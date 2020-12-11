@@ -55,9 +55,9 @@ public:
         return true;
     }
     // surface dshot telemetry for use by the harmonic notch and status information
-    uint16_t get_erpm(uint8_t chan) const override { return _erpm[chan]; }
+    uint16_t get_erpm(uint8_t chan) const override { return _bdshot.erpm[chan]; }
     float get_erpm_error_rate(uint8_t chan) const override {
-      return 100.0f * float(_erpm_errors[chan]) / (1 + _erpm_errors[chan] + _erpm_clean_frames[chan]);
+      return 100.0f * float(_bdshot.erpm_errors[chan]) / (1 + _bdshot.erpm_errors[chan] + _bdshot.erpm_clean_frames[chan]);
     }
 
     void set_output_mode(uint16_t mask, const enum output_mode mode) override;
@@ -267,37 +267,40 @@ private:
         } serial;
 
         // support for bi-directional dshot
-        uint16_t erpm[4];
-        volatile bool bidir_dshot_enabled;
         volatile DshotState dshot_state;
 
+        struct {
+            uint16_t erpm[4];
+            volatile bool enabled;
+
 #if HAL_WITH_BIDIR_DSHOT
-        const stm32_dma_stream_t *ic_dma[4];
-        uint16_t dma_tx_size; // save tx value from last read
-        Shared_DMA *ic_dma_handle[4];
-        uint8_t telem_tim_ch[4];
-        uint8_t curr_telem_chan;
-        uint8_t prev_telem_chan;
-        uint16_t telempsc;
-        uint32_t dma_buffer_copy[GCR_TELEMETRY_BUFFER_LEN];
+            const stm32_dma_stream_t *ic_dma[4];
+            uint16_t dma_tx_size; // save tx value from last read
+            Shared_DMA *ic_dma_handle[4];
+            uint8_t telem_tim_ch[4];
+            uint8_t curr_telem_chan;
+            uint8_t prev_telem_chan;
+            uint16_t telempsc;
+            uint32_t dma_buffer_copy[GCR_TELEMETRY_BUFFER_LEN];
 #if RCOU_DSHOT_TIMING_DEBUG
-        uint16_t telem_rate[4];
-        uint16_t telem_err_rate[4];
+            uint16_t telem_rate[4];
+            uint16_t telem_err_rate[4];
+            uint64_t last_print;  // debug
 #endif
-        uint64_t last_print;  // debug
+        } bdshot;
 
         // do we have an input capture dma channel
         bool has_ic_dma() const {
-          return ic_dma_handle[curr_telem_chan] != nullptr;
+          return bdshot.ic_dma_handle[bdshot.curr_telem_chan] != nullptr;
         }
 
         bool has_shared_ic_up_dma() const {
-          return ic_dma_handle[curr_telem_chan] == dma_handle;
+          return bdshot.ic_dma_handle[bdshot.curr_telem_chan] == dma_handle;
         }
 
         // is input capture currently enabled
         bool ic_dma_enabled() const {
-          return bidir_dshot_enabled && has_ic_dma() && ic_dma[curr_telem_chan] != nullptr;
+          return bdshot.enabled && has_ic_dma() && bdshot.ic_dma[bdshot.curr_telem_chan] != nullptr;
         }
 
         bool has_ic() const {
@@ -306,7 +309,7 @@ private:
 
         // do we have any kind of input capture
         bool ic_enabled() const {
-          return bidir_dshot_enabled && has_ic();
+          return bdshot.enabled && has_ic();
         }
 #endif
         // are we safe to send another pulse?
@@ -377,11 +380,13 @@ private:
     uint32_t en_mask;
     uint16_t period[max_channels];
     // handling of bi-directional dshot
-    uint16_t _bidir_dshot_mask;
-    uint16_t _erpm[max_channels];
-    uint16_t _erpm_errors[max_channels] {};
-    uint16_t _erpm_clean_frames[max_channels] {};
-    uint32_t _erpm_last_stats_ms[max_channels] {};
+    struct {
+        uint16_t mask;
+        uint16_t erpm[max_channels];
+        uint16_t erpm_errors[max_channels];
+        uint16_t erpm_clean_frames[max_channels];
+        uint32_t erpm_last_stats_ms[max_channels];
+    } _bdshot;
 
     uint16_t safe_pwm[max_channels]; // pwm to use when safety is on
     bool corked;
@@ -405,7 +410,7 @@ private:
     // iomcu output mode (pwm, oneshot or oneshot125)
     enum output_mode iomcu_mode = MODE_PWM_NORMAL;
 
-    bool is_bidir_dshot_enabled() const { return _bidir_dshot_mask != 0; }
+    bool is_bidir_dshot_enabled() const { return _bdshot.mask != 0; }
 
     // find a channel group given a channel number
     struct pwm_group *find_chan(uint8_t chan, uint8_t &group_idx);
@@ -460,17 +465,17 @@ private:
     /*
       Support for bi-direction dshot
      */
-    void ic_dma_allocate(Shared_DMA *ctx);
-    void ic_dma_deallocate(Shared_DMA *ctx);
-    static uint32_t decode_telemetry_packet(uint32_t* buffer, uint32_t count);
-    static bool decode_dshot_telemetry(pwm_group& group, uint8_t chan);
-    static uint8_t find_next_ic_channel(const pwm_group& group);
-    static void dma_ic_irq_callback(void *p, uint32_t flags);
-    static void finish_dshot_gcr_transaction(void *p);
-    bool setup_group_ic_DMA(pwm_group &group);
-    static void receive_pulses_DMAR(pwm_group* group);
-    static void config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t ccr_ch);
-    static uint32_t getDshotHz(const enum output_mode mode);
+    void bdshot_ic_dma_allocate(Shared_DMA *ctx);
+    void bdshot_ic_dma_deallocate(Shared_DMA *ctx);
+    static uint32_t bdshot_decode_telemetry_packet(uint32_t* buffer, uint32_t count);
+    static bool bdshot_decode_dshot_telemetry(pwm_group& group, uint8_t chan);
+    static uint8_t bdshot_find_next_ic_channel(const pwm_group& group);
+    static void bdshot_dma_ic_irq_callback(void *p, uint32_t flags);
+    static void bdshot_finish_dshot_gcr_transaction(void *p);
+    bool bdshot_setup_group_ic_DMA(pwm_group &group);
+    static void bdshot_receive_pulses_DMAR(pwm_group* group);
+    static void bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t ccr_ch);
+    static uint32_t bdshot_get_output_rate_hz(const enum output_mode mode);
 
     /*
       setup neopixel (WS2812B) output data for a given output channel

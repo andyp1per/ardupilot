@@ -49,7 +49,7 @@ extern const AP_HAL::HAL& hal;
  */
 void RCOutput::set_bidir_dshot_mask(uint16_t mask)
 {
-    _bidir_dshot_mask = (mask >> chan_offset);
+    _bdshot.mask = (mask >> chan_offset);
     // we now need to reconfigure the DMA channels since they are affected by the value of the mask
     for (uint8_t i = 0; i < NUM_GROUPS; i++ ) {
         pwm_group &group = pwm_group_list[i];
@@ -61,18 +61,18 @@ void RCOutput::set_bidir_dshot_mask(uint16_t mask)
     }
 }
 
-bool RCOutput::setup_group_ic_DMA(pwm_group &group)
+bool RCOutput::bdshot_setup_group_ic_DMA(pwm_group &group)
 {
     bool set_curr_chan = false;
 
     for (uint8_t i = 0; i < 4; i++) {
         if (group.chan[i] == CHAN_DISABLED ||
-            !group.dma_ch[i].have_dma || !(_bidir_dshot_mask & (1 << group.chan[i]))) {
+            !group.dma_ch[i].have_dma || !(_bdshot.mask & (1 << group.chan[i]))) {
             continue;
         }
         // make sure we don't start on a disabled channel
         if (!set_curr_chan) {
-            group.curr_telem_chan = i;
+            group.bdshot.curr_telem_chan = i;
             set_curr_chan = true;
         }
         pwmmode_t mode = group.pwm_cfg.channels[i].mode;
@@ -82,16 +82,16 @@ bool RCOutput::setup_group_ic_DMA(pwm_group &group)
             // Return error
             return false;
         }
-        if (!group.ic_dma_handle[i]) {
+        if (!group.bdshot.ic_dma_handle[i]) {
             // share up channel if required
             if (group.dma_ch[i].stream_id == group.dma_up_stream_id) {
-                group.ic_dma_handle[i] = group.dma_handle;
+                group.bdshot.ic_dma_handle[i] = group.dma_handle;
             } else {
-                group.ic_dma_handle[i] = new Shared_DMA(group.dma_ch[i].stream_id, SHARED_DMA_NONE,
-                                                FUNCTOR_BIND_MEMBER(&RCOutput::ic_dma_allocate, void, Shared_DMA *),
-                                                FUNCTOR_BIND_MEMBER(&RCOutput::ic_dma_deallocate, void, Shared_DMA *));
+                group.bdshot.ic_dma_handle[i] = new Shared_DMA(group.dma_ch[i].stream_id, SHARED_DMA_NONE,
+                                                FUNCTOR_BIND_MEMBER(&RCOutput::bdshot_ic_dma_allocate, void, Shared_DMA *),
+                                                FUNCTOR_BIND_MEMBER(&RCOutput::bdshot_ic_dma_deallocate, void, Shared_DMA *));
             }
-            if (!group.ic_dma_handle[i]) {
+            if (!group.bdshot.ic_dma_handle[i]) {
                 return false;
             }
         }
@@ -100,13 +100,13 @@ bool RCOutput::setup_group_ic_DMA(pwm_group &group)
     // We might need to do sharing of timers for telemetry feedback
     // due to lack of available DMA channels
     for (uint8_t i = 0; i < 4; i++) {
-        if (group.chan[i] == CHAN_DISABLED || !(_bidir_dshot_mask & (1 << group.chan[i]))) {
+        if (group.chan[i] == CHAN_DISABLED || !(_bdshot.mask & (1 << group.chan[i]))) {
             continue;
         }
         uint8_t curr_chan = i;
-        if (group.ic_dma_handle[i]) {
+        if (group.bdshot.ic_dma_handle[i]) {
             // we are all good just set and continue
-            group.telem_tim_ch[i] = curr_chan;
+            group.bdshot.telem_tim_ch[i] = curr_chan;
         } else {
             // I guess we have to share, but only channels 1 & 2 or 3 & 4
             if (curr_chan % 2 == 0) {
@@ -119,23 +119,23 @@ bool RCOutput::setup_group_ic_DMA(pwm_group &group)
                 // return error
                 return false;
             }
-            if (group.ic_dma_handle[i]) {
+            if (group.bdshot.ic_dma_handle[i]) {
                 INTERNAL_ERROR(AP_InternalError::error_t::dma_fail);
                 return false;
             }
             // share up channel if required
             if (group.dma_ch[curr_chan].stream_id == group.dma_up_stream_id) {
-                group.ic_dma_handle[i] = group.dma_handle;
+                group.bdshot.ic_dma_handle[i] = group.dma_handle;
             } else {
                 // we can use the next channel
-                group.ic_dma_handle[i] = new Shared_DMA(group.dma_ch[curr_chan].stream_id, SHARED_DMA_NONE,
-                                            FUNCTOR_BIND_MEMBER(&RCOutput::ic_dma_allocate, void, Shared_DMA *),
-                                            FUNCTOR_BIND_MEMBER(&RCOutput::ic_dma_deallocate, void, Shared_DMA *));
+                group.bdshot.ic_dma_handle[i] = new Shared_DMA(group.dma_ch[curr_chan].stream_id, SHARED_DMA_NONE,
+                                            FUNCTOR_BIND_MEMBER(&RCOutput::bdshot_ic_dma_allocate, void, Shared_DMA *),
+                                            FUNCTOR_BIND_MEMBER(&RCOutput::bdshot_ic_dma_deallocate, void, Shared_DMA *));
             }
-            if (!group.ic_dma_handle[i]) {
+            if (!group.bdshot.ic_dma_handle[i]) {
                 return false;
             }
-            group.telem_tim_ch[i] = curr_chan;
+            group.bdshot.telem_tim_ch[i] = curr_chan;
             group.dma_ch[i] = group.dma_ch[curr_chan];
         }
     }
@@ -146,18 +146,18 @@ bool RCOutput::setup_group_ic_DMA(pwm_group &group)
 /*
   allocate DMA channel
  */
-void RCOutput::ic_dma_allocate(Shared_DMA *ctx)
+void RCOutput::bdshot_ic_dma_allocate(Shared_DMA *ctx)
 {
     for (uint8_t i = 0; i < NUM_GROUPS; i++ ) {
         pwm_group &group = pwm_group_list[i];
         for (uint8_t icuch = 0; icuch < 4; icuch++) {
-            if (group.ic_dma_handle[icuch] == ctx && group.ic_dma[icuch] == nullptr) {
+            if (group.bdshot.ic_dma_handle[icuch] == ctx && group.bdshot.ic_dma[icuch] == nullptr) {
                 chSysLock();
-                group.ic_dma[icuch] = dmaStreamAllocI(group.dma_ch[icuch].stream_id, 10, dma_ic_irq_callback, &group);
+                group.bdshot.ic_dma[icuch] = dmaStreamAllocI(group.dma_ch[icuch].stream_id, 10, bdshot_dma_ic_irq_callback, &group);
                 chSysUnlock();
 #if STM32_DMA_SUPPORTS_DMAMUX
-                if (group.ic_dma[icuch]) {
-                    dmaSetRequestSource(group.ic_dma[icuch], group.dma_ch[icuch].channel);
+                if (group.bdshot.ic_dma[icuch]) {
+                    dmaSetRequestSource(group.bdshot.ic_dma[icuch], group.dma_ch[icuch].channel);
                 }
 #endif
             }
@@ -168,15 +168,15 @@ void RCOutput::ic_dma_allocate(Shared_DMA *ctx)
 /*
   deallocate DMA channel
  */
-void RCOutput::ic_dma_deallocate(Shared_DMA *ctx)
+void RCOutput::bdshot_ic_dma_deallocate(Shared_DMA *ctx)
 {
     for (uint8_t i = 0; i < NUM_GROUPS; i++ ) {
         pwm_group &group = pwm_group_list[i];
         for (uint8_t icuch = 0; icuch < 4; icuch++) {
-            if (group.ic_dma_handle[icuch] == ctx && group.ic_dma[icuch] != nullptr) {
+            if (group.bdshot.ic_dma_handle[icuch] == ctx && group.bdshot.ic_dma[icuch] != nullptr) {
                 chSysLock();
-                dmaStreamFreeI(group.ic_dma[icuch]);
-                group.ic_dma[icuch] = nullptr;
+                dmaStreamFreeI(group.bdshot.ic_dma[icuch]);
+                group.bdshot.ic_dma[icuch] = nullptr;
                 chSysUnlock();
             }
         }
@@ -185,14 +185,14 @@ void RCOutput::ic_dma_deallocate(Shared_DMA *ctx)
 
 // see https://github.com/betaflight/betaflight/pull/8554#issuecomment-512507625
 // called from the interrupt
-void RCOutput::receive_pulses_DMAR(pwm_group* group)
+void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
 {
     // make sure the transaction finishes or times out, this function takes a little time to run so the most
     // accurate timing is from the beginning. the pulse time is slightly longer than we need so an extra 10U
     // should be plenty
     chVTSetI(&group->dma_timeout, chTimeUS2I(group->dshot_pulse_send_time_us + 30U + 10U),
-        finish_dshot_gcr_transaction, group);
-    uint8_t curr_ch = group->curr_telem_chan;
+        bdshot_finish_dshot_gcr_transaction, group);
+    uint8_t curr_ch = group->bdshot.curr_telem_chan;
 
     // Configure Timer
     group->pwm_drv->tim->SR = 0;
@@ -203,7 +203,7 @@ void RCOutput::receive_pulses_DMAR(pwm_group* group)
     group->pwm_drv->tim->DIER = 0;
     group->pwm_drv->tim->CR1 = 0;
     group->pwm_drv->tim->CR2 = 0;
-    group->pwm_drv->tim->PSC = group->telempsc;
+    group->pwm_drv->tim->PSC = group->bdshot.telempsc;
 
     group->dshot_state = DshotState::RECV_START;
 
@@ -212,7 +212,7 @@ void RCOutput::receive_pulses_DMAR(pwm_group* group)
     group->pwm_drv->tim->CNT = 0;
 
     // Initialise ICU channels
-    config_icu_dshot(group->pwm_drv->tim, curr_ch, group->telem_tim_ch[curr_ch]);
+    bdshot_config_icu_dshot(group->pwm_drv->tim, curr_ch, group->bdshot.telem_tim_ch[curr_ch]);
 
     uint32_t ic_channel = STM32_DMA_CR_CHSEL(group->dma_ch[curr_ch].channel);
     // do a little DMA dance when sharing with UP
@@ -220,7 +220,7 @@ void RCOutput::receive_pulses_DMAR(pwm_group* group)
         ic_channel = STM32_DMA_CR_CHSEL(group->dma_up_channel);
     }
     const stm32_dma_stream_t *ic_dma =
-        group->has_shared_ic_up_dma() ? group->dma : group->ic_dma[curr_ch];
+        group->has_shared_ic_up_dma() ? group->dma : group->bdshot.ic_dma[curr_ch];
 
     // Configure DMA
     dmaStreamSetPeripheral(ic_dma, &(group->pwm_drv->tim->DMAR));
@@ -235,7 +235,7 @@ void RCOutput::receive_pulses_DMAR(pwm_group* group)
 
     // setup for transfers. 0x0D is the register
     // address offset of the CCR registers in the timer peripheral
-    group->pwm_drv->tim->DCR = (0x0D + group->telem_tim_ch[curr_ch]) | STM32_TIM_DCR_DBL(0);
+    group->pwm_drv->tim->DCR = (0x0D + group->bdshot.telem_tim_ch[curr_ch]) | STM32_TIM_DCR_DBL(0);
 
     // Start Timer
     group->pwm_drv->tim->EGR |= STM32_TIM_EGR_UG;
@@ -245,7 +245,7 @@ void RCOutput::receive_pulses_DMAR(pwm_group* group)
 }
 
 
-void RCOutput::config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t ccr_ch)
+void RCOutput::bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t ccr_ch)
 {
     switch(ccr_ch) {
     case 0: {
@@ -348,89 +348,95 @@ void RCOutput::config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t ccr_ch)
 /*
   unlock DMA channel after a bi-directional dshot transaction completes
  */
-void RCOutput::finish_dshot_gcr_transaction(void *p)
+void RCOutput::bdshot_finish_dshot_gcr_transaction(void *p)
 {
     pwm_group *group = (pwm_group *)p;
     chSysLockFromISR();
+#ifdef HAL_GPIO_LINE_GPIO56
     TOGGLE_PIN_DEBUG(56);
-
-    uint8_t curr_telem_chan = group->curr_telem_chan;
+#endif
+    uint8_t curr_telem_chan = group->bdshot.curr_telem_chan;
 
     const stm32_dma_stream_t *dma =
-        group->has_shared_ic_up_dma() ? group->dma : group->ic_dma[curr_telem_chan];
+        group->has_shared_ic_up_dma() ? group->dma : group->bdshot.ic_dma[curr_telem_chan];
     // record the transaction size before the stream is released
     dmaStreamDisable(dma);
-    group->dma_tx_size = MIN(uint16_t(GCR_TELEMETRY_BIT_LEN),
+    group->bdshot.dma_tx_size = MIN(uint16_t(GCR_TELEMETRY_BIT_LEN),
         GCR_TELEMETRY_BIT_LEN - dmaStreamGetTransactionSize(dma));
-    stm32_cacheBufferInvalidate(group->dma_buffer, group->dma_tx_size);
-    memcpy(group->dma_buffer_copy, group->dma_buffer, sizeof(uint32_t) * group->dma_tx_size);
+    stm32_cacheBufferInvalidate(group->dma_buffer, group->bdshot.dma_tx_size);
+    memcpy(group->bdshot.dma_buffer_copy, group->dma_buffer, sizeof(uint32_t) * group->bdshot.dma_tx_size);
 
     group->dshot_state = DshotState::RECV_COMPLETE;
 
     // if using input capture DMA then clean up
     if (group->ic_dma_enabled()) {
-        group->ic_dma_handle[curr_telem_chan]->unlock_from_IRQ();
+        group->bdshot.ic_dma_handle[curr_telem_chan]->unlock_from_IRQ();
     }
 
     // rotate to the next input channel
-    group->prev_telem_chan = group->curr_telem_chan;
-    group->curr_telem_chan = find_next_ic_channel(*group);
+    group->bdshot.prev_telem_chan = group->bdshot.curr_telem_chan;
+    group->bdshot.curr_telem_chan = bdshot_find_next_ic_channel(*group);
     group->dma_handle->unlock_from_IRQ();
-
+#ifdef HAL_GPIO_LINE_GPIO56
     TOGGLE_PIN_DEBUG(56);
+#endif
     chSysUnlockFromISR();
 }
 
 /*
   decode returned data from bi-directional dshot
  */
-bool RCOutput::decode_dshot_telemetry(pwm_group& group, uint8_t chan)
+bool RCOutput::bdshot_decode_dshot_telemetry(pwm_group& group, uint8_t chan)
 {
     if (group.chan[chan] == CHAN_DISABLED) {
         return true;
     }
 
     // evaluate dshot telemetry
-    group.erpm[chan] = decode_telemetry_packet(group.dma_buffer_copy, group.dma_tx_size);
+    group.bdshot.erpm[chan] = bdshot_decode_telemetry_packet(group.bdshot.dma_buffer_copy, group.bdshot.dma_tx_size);
 
     group.dshot_state = DshotState::IDLE;
 
 #if RCOU_DSHOT_TIMING_DEBUG
     // Record Stats
-    if (group.erpm[chan] != 0xFFFF) {
-        group.telem_rate[chan]++;
+    if (group.bdshot.erpm[chan] != 0xFFFF) {
+        group.bdshot.telem_rate[chan]++;
     } else {
+#ifdef HAL_GPIO_LINE_GPIO57
         TOGGLE_PIN_DEBUG(57);
-        group.telem_err_rate[chan]++;
+#endif
+        group.bdshot.telem_err_rate[chan]++;
+#ifdef HAL_GPIO_LINE_GPIO57
         TOGGLE_PIN_DEBUG(57);
+#endif
     }
 
     uint64_t now = AP_HAL::micros64();
-    if (chan == DEBUG_CHANNEL && (now  - group.last_print) > 1000000) {
-        hal.console->printf("TELEM: %d <%d Hz, %.1f%% err>", group.erpm[chan], group.telem_rate[chan],
-            100.0f * float(group.telem_err_rate[chan]) / (group.telem_err_rate[chan] + group.telem_rate[chan]));
-        hal.console->printf(" %ld ", group.dma_buffer_copy[0]);
-        for (uint8_t l = 1; l < group.dma_tx_size; l++) {
-            hal.console->printf(" +%ld ", group.dma_buffer_copy[l] - group.dma_buffer_copy[l-1]);
+    if (chan == DEBUG_CHANNEL && (now  - group.bdshot.last_print) > 1000000) {
+        hal.console->printf("TELEM: %d <%d Hz, %.1f%% err>", group.bdshot.erpm[chan], group.bdshot.telem_rate[chan],
+            100.0f * float(group.bdshot.telem_err_rate[chan]) / (group.bdshot.telem_err_rate[chan] + group.bdshot.telem_rate[chan]));
+        hal.console->printf(" %ld ", group.bdshot.dma_buffer_copy[0]);
+        for (uint8_t l = 1; l < group.bdshot.dma_tx_size; l++) {
+            hal.console->printf(" +%ld ", group.bdshot.dma_buffer_copy[l] - group.bdshot.dma_buffer_copy[l-1]);
         }
         hal.console->printf("\n");
 
-        group.telem_rate[chan] = 0;
-        group.telem_err_rate[chan] = 0;
-        group.last_print = now;
+        group.bdshot.telem_rate[chan] = 0;
+        group.bdshot.telem_err_rate[chan] = 0;
+        group.bdshot.last_print = now;
     }
 #endif
-    return group.erpm[chan] != 0xFFFF;
+    return group.bdshot.erpm[chan] != 0xFFFF;
 }
 
 // Find next valid channel for dshot telem
-uint8_t RCOutput::find_next_ic_channel(const pwm_group& group)
+uint8_t RCOutput::bdshot_find_next_ic_channel(const pwm_group& group)
 {
-    uint8_t chan = group.curr_telem_chan;
+    uint8_t chan = group.bdshot.curr_telem_chan;
     for (uint8_t i = 1; i < 4; i++) {
         const uint8_t next_chan = (chan + i) % 4;
         if (group.chan[next_chan] != CHAN_DISABLED &&
-            group.ic_dma_handle[next_chan] != nullptr) {
+            group.bdshot.ic_dma_handle[next_chan] != nullptr) {
             return next_chan;
         }
     }
@@ -446,7 +452,7 @@ void RCOutput::dma_up_irq_callback(void *p, uint32_t flags)
     chSysLockFromISR();
 
     // there is a small chance the shared UP CH codepath will get here
-    if (group->bidir_dshot_enabled && group->dshot_state == DshotState::RECV_START) {
+    if (group->bdshot.enabled && group->dshot_state == DshotState::RECV_START) {
         chSysUnlockFromISR();
         return;
     }
@@ -460,11 +466,11 @@ void RCOutput::dma_up_irq_callback(void *p, uint32_t flags)
     if (group->in_serial_dma && irq.waiter) {
         // tell the waiting process we've done the DMA
         chEvtSignalI(irq.waiter, serial_event_mask);
-    } else if (group->bidir_dshot_enabled) {
+    } else if (group->bdshot.enabled) {
         group->dshot_state = DshotState::SEND_COMPLETE;
         // sending is done, in 30us the ESC will send telemetry
         TOGGLE_PIN_DEBUG(55);
-        receive_pulses_DMAR(group);
+        bdshot_receive_pulses_DMAR(group);
         TOGGLE_PIN_DEBUG(55);
     } else {
         // non-bidir case
@@ -475,7 +481,7 @@ void RCOutput::dma_up_irq_callback(void *p, uint32_t flags)
 }
 
 // DMA IC channel handler. Used to mark DMA receive completed for DShot
-void RCOutput::dma_ic_irq_callback(void *p, uint32_t flags)
+void RCOutput::bdshot_dma_ic_irq_callback(void *p, uint32_t flags)
 {
     chSysLockFromISR();
 
@@ -490,17 +496,17 @@ void RCOutput::dma_ic_irq_callback(void *p, uint32_t flags)
 /*
     returns the bitrate in Hz of the given output_mode
 */
-uint32_t RCOutput::getDshotHz(const enum output_mode mode)
+uint32_t RCOutput::bdshot_get_output_rate_hz(const enum output_mode mode)
 {
     switch (mode) {
     case MODE_PWM_DSHOT150:
-        return 150000 * 5 / 4;
+        return 150000U * 5 / 4;
     case MODE_PWM_DSHOT300:
-        return 300000 * 5 / 4;
+        return 300000U * 5 / 4;
     case MODE_PWM_DSHOT600:
-        return 600000 * 5 / 4;
+        return 600000U * 5 / 4;
     case MODE_PWM_DSHOT1200:
-        return 120000 * 5 / 4;
+        return 120000U * 5 / 4;
     default:
         // use 1 to prevent a possible divide-by-zero
         return 1;
@@ -509,7 +515,7 @@ uint32_t RCOutput::getDshotHz(const enum output_mode mode)
 
 // decode a telemetry packet from a GCR encoded stride buffer, take from betaflight decodeTelemetryPacket
 // see https://github.com/betaflight/betaflight/pull/8554#issuecomment-512507625 for a description of the protocol
-uint32_t RCOutput::decode_telemetry_packet(uint32_t* buffer, uint32_t count)
+uint32_t RCOutput::bdshot_decode_telemetry_packet(uint32_t* buffer, uint32_t count)
 {
     uint32_t value = 0;
     uint32_t oldValue = buffer[0];
