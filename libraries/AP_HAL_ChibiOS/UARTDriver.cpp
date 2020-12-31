@@ -443,6 +443,7 @@ void UARTDriver::dma_rx_enable(void)
     dmamode |= STM32_DMA_CR_CHSEL(sdef.dma_rx_channel_id);
     dmamode |= STM32_DMA_CR_PL(0);
     rx_bounce_idx ^= 1;
+    stm32_cacheBufferInvalidate(rx_bounce_buf[rx_bounce_idx], RX_BOUNCE_BUFSIZE);
     dmaStreamSetMemory0(rxdma, rx_bounce_buf[rx_bounce_idx]);
     dmaStreamSetTransactionSize(rxdma, RX_BOUNCE_BUFSIZE);
     dmaStreamSetMode(rxdma, dmamode | STM32_DMA_CR_DIR_P2M |
@@ -511,7 +512,6 @@ void UARTDriver::rxbuff_full_irq(void* self, uint32_t flags)
         /*
           we have data to copy out
          */
-        stm32_cacheBufferInvalidate(uart_drv->rx_bounce_buf[bounce_idx], len);
         uart_drv->_readbuf.write(uart_drv->rx_bounce_buf[bounce_idx], len);
         uart_drv->receive_timestamp_update();
     }
@@ -1089,7 +1089,6 @@ void UARTDriver::_rx_timer_tick(void)
         if (!enabled) {
             uint8_t len = RX_BOUNCE_BUFSIZE - dmaStreamGetTransactionSize(rxdma);
             if (len != 0) {
-                stm32_cacheBufferInvalidate(rx_bounce_buf[rx_bounce_idx], len);
                 _readbuf.write(rx_bounce_buf[rx_bounce_idx], len);
 
                 receive_timestamp_update();
