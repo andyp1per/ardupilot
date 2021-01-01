@@ -32,6 +32,10 @@ class ChibiOS::UARTDriver : public AP_HAL::UARTDriver {
 public:
     UARTDriver(uint8_t serial_num);
 
+    /* Do not allow copies */
+    UARTDriver(const UARTDriver &other) = delete;
+    UARTDriver &operator=(const UARTDriver&) = delete;
+
     void begin(uint32_t b) override;
     void begin(uint32_t b, uint16_t rxS, uint16_t txS) override;
     void end() override;
@@ -136,13 +140,13 @@ private:
     ioline_t arx_line;
 
     // thread used for all UARTs
-    static thread_t *uart_rx_thread_ctx;
+    static thread_t* volatile uart_rx_thread_ctx;
 
     // table to find UARTDrivers from serial number, used for event handling
     static UARTDriver *uart_drivers[UART_MAX_DRIVERS];
     
     // thread used for writing and reading
-    thread_t *uart_thread_ctx;
+    thread_t* volatile uart_thread_ctx;
     char uart_thread_name[6];
 
     // index into uart_drivers table
@@ -185,8 +189,9 @@ private:
     volatile bool _in_rx_timer;
     volatile bool _in_tx_timer;
     bool _blocking_writes;
-    bool _initialised;
-    bool _device_initialised;
+    volatile bool _rx_initialised;
+    volatile bool _tx_initialised;
+    volatile bool _device_initialised;
 #ifndef HAL_UART_NODMA
     Shared_DMA *dma_handle;
 #endif
@@ -253,6 +258,7 @@ private:
     // set SERIALn_OPTIONS for pullup/pulldown
     void set_pushpull(uint16_t options);
 
+    static void thread_rx_init();
     void thread_init();
     void uart_thread();
     static void uart_rx_thread(void* arg);

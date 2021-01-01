@@ -41,7 +41,7 @@ extern ChibiOS::UARTDriver uart_io;
 const UARTDriver::SerialDef UARTDriver::_serial_tab[] = { HAL_UART_DEVICE_LIST };
 
 // handle for UART handling thread
-thread_t *UARTDriver::uart_rx_thread_ctx;
+thread_t* volatile UARTDriver::uart_rx_thread_ctx;
 
 // table to find UARTDrivers from serial number, used for event handling
 UARTDriver *UARTDriver::uart_drivers[UART_MAX_DRIVERS];
@@ -100,7 +100,10 @@ void UARTDriver::uart_thread()
 {
     uint32_t last_thread_run_us = 0; // last time we did a 1kHz run of this uart
 
-    uart_thread_ctx = chThdGetSelfX();
+    while (uart_thread_ctx == nullptr) {
+        hal.scheduler->delay(1);
+    }
+
     while (true) {
         eventmask_t mask = chEvtWaitAnyTimeout(EVT_TRANSMIT_DATA_READY | EVT_TRANSMIT_UNBUFFERED, chTimeMS2I(1));
         uint32_t now = AP_HAL::micros();
@@ -119,7 +122,7 @@ void UARTDriver::uart_thread()
         osalDbgAssert(!dma_handle || !dma_handle->is_locked(), "DMA handle is already locked");
 #endif
         // send more data
-        if (_initialised && ((mask & EVT_TRANSMIT_DATA_READY) || need_tick)) {
+        if (_tx_initialised && ((mask & EVT_TRANSMIT_DATA_READY) || need_tick)) {
             _tx_timer_tick();
         }
     }
@@ -136,7 +139,10 @@ void UARTDriver::uart_rx_thread(void* arg)
 {
     uint32_t last_thread_run_us = 0; // last time we did a 1kHz run of uarts
 
-    uart_rx_thread_ctx = chThdGetSelfX();
+    while (uart_rx_thread_ctx == nullptr) {
+        hal.scheduler->delay(1);
+    }
+
     while (true) {
         eventmask_t mask = chEvtWaitAnyTimeout(EVT_TRANSMIT_END, chTimeMS2I(1));
         uint32_t now = AP_HAL::micros();
@@ -151,7 +157,7 @@ void UARTDriver::uart_rx_thread(void* arg)
             if (uart_drivers[i] == nullptr) {
                 continue;
             }
-            if (uart_drivers[i]->_initialised && (need_tick || (uart_drivers[i]->hd_tx_active && (mask & EVT_TRANSMIT_END)))) {
+            if (uart_drivers[i]->_rx_initialised && (need_tick || (uart_drivers[i]->hd_tx_active && (mask & EVT_TRANSMIT_END)))) {
                 uart_drivers[i]->_rx_timer_tick();
             }
         }
@@ -159,32 +165,48 @@ void UARTDriver::uart_rx_thread(void* arg)
 }
 
 /*
-  initialise UART thread
+  initialise UART RX thread
+ */
+void UARTDriver::thread_rx_init(void)
+{
+#if CH_CFG_USE_HEAP == TRUE
+    if (uart_rx_thread_ctx == nullptr) {
+        uart_rx_thread_ctx = thread_create_alloc(THD_WORKING_AREA_SIZE(HAL_UART_RX_STACK_SIZE),
+                                              "apm_uart",
+                                              APM_UART_PRIORITY,
+                                              uart_rx_thread,
+                                              nullptr);
+        if (uart_rx_thread_ctx == nullptr) {
+            AP_HAL::panic("Could not create UART RX thread\n");
+        }
+    }
+#endif
+}
+
+/*
+  initialise UART TX_thread
  */
 void UARTDriver::thread_init(void)
 {
 #if CH_CFG_USE_HEAP == TRUE
-    if (!uart_thread_ctx) {
+    if (uart_thread_ctx == nullptr) {
         hal.util->snprintf(uart_thread_name, sizeof(uart_thread_name), "UART%1u", serial_num);
         uart_thread_ctx = thread_create_alloc(THD_WORKING_AREA_SIZE(HAL_UART_STACK_SIZE),
                                               uart_thread_name,
                                               unbuffered_writes ? APM_UART_UNBUFFERED_PRIORITY : APM_UART_PRIORITY,
                                               uart_thread_trampoline,
                                               this);
-    }
-    if (!uart_rx_thread_ctx) {
-        uart_rx_thread_ctx = thread_create_alloc(THD_WORKING_AREA_SIZE(HAL_UART_RX_STACK_SIZE),
-                                              "apm_uart",
-                                              APM_UART_PRIORITY,
-                                              uart_rx_thread,
-                                              this);
+        if (uart_thread_ctx == nullptr) {
+            AP_HAL::panic("Could not create UART TX thread\n");
+        }
     }
 #endif
 }
 
 void UARTDriver::uart_thread_trampoline(void* p)
 {
-    ((UARTDriver*)p)->uart_thread();
+    UARTDriver* uart = static_cast<UARTDriver*>(p);
+    uart->uart_thread();
 }
 
 #ifndef HAL_STDOUT_SERIAL
@@ -201,7 +223,7 @@ static int hal_console_vprintf(const char *fmt, va_list arg)
 
 void UARTDriver::begin(uint32_t b, uint16_t rxS, uint16_t txS)
 {
-    thread_init();
+    thread_rx_init();
 
     if (sdef.serial == nullptr) {
         return;
@@ -254,7 +276,7 @@ void UARTDriver::begin(uint32_t b, uint16_t rxS, uint16_t txS)
         hal.scheduler->delay(1);
     }
     if (rxS != _readbuf.get_size()) {
-        _initialised = false;
+        _rx_initialised = false;
         _readbuf.set_size(rxS);
     }
 
@@ -300,7 +322,7 @@ void UARTDriver::begin(uint32_t b, uint16_t rxS, uint16_t txS)
         hal.scheduler->delay(1);
     }
     if (txS != _writebuf.get_size()) {
-        _initialised = false;
+        _tx_initialised = false;
         _writebuf.set_size(txS);
     }
 
@@ -395,15 +417,20 @@ void UARTDriver::begin(uint32_t b, uint16_t rxS, uint16_t txS)
 #endif // HAL_USE_SERIAL
     }
 
-    if (_writebuf.get_size() && _readbuf.get_size()) {
-        _initialised = true;
+    if (_writebuf.get_size()) {
+        _tx_initialised = true;
+    }
+    if (_readbuf.get_size()) {
+        _rx_initialised = true;
     }
     _uart_owner_thd = chThdGetSelfX();
+    // initialize the TX thread if necessary
+    thread_init();
 
     // setup flow control
     set_flow_control(_flow_control);
 
-    if (serial_num == 0 && _initialised) {
+    if (serial_num == 0 && _tx_initialised) {
 #ifndef HAL_STDOUT_SERIAL
         // setup hal.console to take printf() output
         vprintf_console_hook = hal_console_vprintf;
@@ -535,10 +562,10 @@ void UARTDriver::begin(uint32_t b)
 
 void UARTDriver::end()
 {
-    _initialised = false;
-    // this is pretty dubious
-    while (_in_tx_timer) hal.scheduler->delay(1);
     while (_in_rx_timer) hal.scheduler->delay(1);
+    _rx_initialised = false;
+    while (_in_tx_timer) hal.scheduler->delay(1);
+    _tx_initialised = false;
 
     if (sdef.is_usb) {
 #ifdef HAVE_USB_SERIAL
@@ -550,6 +577,7 @@ void UARTDriver::end()
         sdStop((SerialDriver*)sdef.serial);
 #endif
     }
+
     _readbuf.set_size(0);
     _writebuf.set_size(0);
 }
@@ -568,7 +596,7 @@ void UARTDriver::flush()
 
 bool UARTDriver::is_initialized()
 {
-    return _initialised;
+    return _tx_initialised && _rx_initialised;
 }
 
 void UARTDriver::set_blocking_writes(bool blocking)
@@ -580,7 +608,7 @@ bool UARTDriver::tx_pending() { return false; }
 
 /* Empty implementations of Stream virtual methods */
 uint32_t UARTDriver::available() {
-    if (!_initialised || lock_read_key) {
+    if (!_rx_initialised || lock_read_key) {
         return 0;
     }
     if (sdef.is_usb) {
@@ -612,7 +640,7 @@ uint32_t UARTDriver::available_locked(uint32_t key)
 
 uint32_t UARTDriver::txspace()
 {
-    if (!_initialised) {
+    if (!_tx_initialised) {
         return 0;
     }
     return _writebuf.space();
@@ -623,7 +651,7 @@ bool UARTDriver::discard_input()
     if (lock_read_key != 0 || _uart_owner_thd != chThdGetSelfX()){
         return false;
     }
-    if (!_initialised) {
+    if (!_rx_initialised) {
         return false;
     }
 
@@ -641,7 +669,7 @@ ssize_t UARTDriver::read(uint8_t *buffer, uint16_t count)
     if (lock_read_key != 0 || _uart_owner_thd != chThdGetSelfX()){
         return -1;
     }
-    if (!_initialised) {
+    if (!_rx_initialised) {
         return -1;
     }
 
@@ -662,7 +690,7 @@ int16_t UARTDriver::read()
     if (lock_read_key != 0 || _uart_owner_thd != chThdGetSelfX()){
         return -1;
     }
-    if (!_initialised) {
+    if (!_rx_initialised) {
         return -1;
     }
 
@@ -682,7 +710,7 @@ int16_t UARTDriver::read_locked(uint32_t key)
     if (lock_read_key != 0 && key != lock_read_key) {
         return -1;
     }
-    if (!_initialised) {
+    if (!_rx_initialised) {
         return -1;
     }
     uint8_t byte;
@@ -703,7 +731,7 @@ size_t UARTDriver::write(uint8_t c)
     }
     _write_mutex.take_blocking();
 
-    if (!_initialised) {
+    if (!_tx_initialised) {
         _write_mutex.give();
         return 0;
     }
@@ -729,7 +757,7 @@ size_t UARTDriver::write(uint8_t c)
 /* write a block of bytes to the port */
 size_t UARTDriver::write(const uint8_t *buffer, size_t size)
 {
-    if (!_initialised || lock_write_key != 0) {
+    if (!_tx_initialised || lock_write_key != 0) {
 		return 0;
 	}
 
@@ -893,7 +921,6 @@ void UARTDriver::write_pending_bytes_DMA(uint32_t n)
         chSysLock();
         dmaStreamDisable(txdma);
         tx_bounce_buf_ready = false;
-        osalDbgAssert(txdma != nullptr, "UART TX DMA allocation failed");
         stm32_cacheBufferFlush(tx_bounce_buf, tx_len);
         dmaStreamSetMemory0(txdma, tx_bounce_buf);
         dmaStreamSetTransactionSize(txdma, tx_len);
@@ -906,20 +933,9 @@ void UARTDriver::write_pending_bytes_DMA(uint32_t n)
         uint32_t timeout_us = ((1000000UL * (tx_len+2) * 10) / _baudrate) + 500;
         chVTSetI(&tx_timeout, chTimeUS2I(timeout_us), handle_tx_timeout, this);
         chSysUnlock();
-
         // wait for the completion or timeout handlers to signal that we are done
-        eventmask_t mask = chEvtWaitAnyTimeout(EVT_TRANSMIT_DMA_COMPLETE | EVT_TRANSMIT_DMA_TIMEOUT, chTimeMS2I(1));
-        // timeout is belt and braces in case something awful went wrong
-        osalDbgAssert(mask, "UART TX DMA did not receive an event in 1ms");
-        if (!mask) {
-            chSysLock();
-            dmaStreamDisable(txdma);
-            const uint32_t tx_size = dmaStreamGetTransactionSize(txdma);
-            tx_len -= MIN(tx_len, tx_size);
-            tx_bounce_buf_ready = true;
-            chVTResetI(&tx_timeout);
-            chSysUnlock();
-        }
+        eventmask_t mask = chEvtWaitAnyTimeout(EVT_TRANSMIT_DMA_COMPLETE | EVT_TRANSMIT_DMA_TIMEOUT, chTimeUS2I(timeout_us + 500));
+        osalDbgAssert(mask, "UART TX DMA did not receive an event within timeout period");
         // clean up pending locks
         dma_handle->unlock(mask & EVT_TRANSMIT_DMA_COMPLETE);
     }
@@ -1059,7 +1075,12 @@ void UARTDriver::half_duplex_setup_tx(void)
  */
 void UARTDriver::_rx_timer_tick(void)
 {
-    if (!_initialised) return;
+    _in_rx_timer = true;
+
+    if (!_rx_initialised) {
+        _in_rx_timer = false;
+        return;
+    }
 
 #ifdef HAVE_USB_SERIAL
     if (hd_tx_active && (chEvtGetAndClearFlags(&hd_listener) & CHN_OUTPUT_EMPTY) != 0) {
@@ -1118,9 +1139,6 @@ void UARTDriver::_rx_timer_tick(void)
         ((GPIO *)hal.gpio)->set_usb_connected();
 #endif
     }
-
-    _in_rx_timer = true;
-
 #ifndef HAL_UART_NODMA
     if (!rx_dma_enabled)
 #endif
@@ -1164,7 +1182,6 @@ void UARTDriver::_rx_timer_tick(void)
     if (_wait.thread_ctx && _readbuf.available() >= _wait.n) {
         chEvtSignal(_wait.thread_ctx, EVT_DATA);
     }
-
     _in_rx_timer = false;
 }
 
@@ -1175,7 +1192,12 @@ void UARTDriver::_rx_timer_tick(void)
  */
 void UARTDriver::_tx_timer_tick(void)
 {
-    if (!_initialised) return;
+    _in_tx_timer = true;
+
+    if (!_tx_initialised) {
+        _in_tx_timer = false;
+        return;
+    }
 
     if (sdef.is_usb) {
 #ifdef HAVE_USB_SERIAL
@@ -1189,8 +1211,6 @@ void UARTDriver::_tx_timer_tick(void)
         ((GPIO *)hal.gpio)->set_usb_connected();
 #endif
     }
-
-    _in_tx_timer = true;
 
     write_pending_bytes();
 
@@ -1209,7 +1229,7 @@ void UARTDriver::set_flow_control(enum flow_control flowcontrol)
 #if HAL_USE_SERIAL == TRUE
     SerialDriver *sd = (SerialDriver*)(sdef.serial);
     _flow_control = flowcontrol;
-    if (!_initialised) {
+    if (!is_initialized()) {
         // not ready yet, we just set variable for when we call begin
         return;
     }
