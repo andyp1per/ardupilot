@@ -98,6 +98,7 @@ int AP_Filesystem_Sys::open(const char *fname, int flags)
     }
     if (strcmp(fname, "memory.txt") == 0) {
         hal.util->mem_info(*r.str);
+    }
     if (strcmp(fname, "uarts.txt") == 0) {
         hal.util->uart_info(*r.str);
     }
