@@ -1302,7 +1302,9 @@ void AP_BLHeli::update(void)
     hal.rcout->set_reversible_mask(channel_reversible_mask.get() & mask);
 #ifdef HAL_WITH_BIDIR_DSHOT
     // possibly enable bi-directional dshot
-    hal.rcout->set_bidir_dshot_mask(channel_bidir_dshot_mask.get() & mask);
+    if (channel_bidir_dshot_mask.get() & mask) {
+        hal.rcout->set_bidir_dshot_mask(channel_bidir_dshot_mask.get() & mask);
+    }
 #endif
     // add motors from channel mask
     for (uint8_t i=0; i<16 && num_motors < max_motors; i++) {
