@@ -186,6 +186,7 @@ public:
         MODE_PWM_DSHOT1200,
         MODE_NEOPIXEL,  // same as MODE_PWM_DSHOT at 800kHz but it's an LED
         MODE_PROFILED,  // same as MODE_PWM_DSHOT using separate clock and data
+        MODE_PWM_BIDIR_DSHOT600,
     };
     virtual void    set_output_mode(uint16_t mask, enum output_mode mode) {}
 

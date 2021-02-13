@@ -23,6 +23,8 @@ const char* AP_HAL::RCOutput::get_output_mode_string(enum output_mode out_mode) 
         return "DS300";
     case MODE_PWM_DSHOT600:
         return "DS600";
+    case MODE_PWM_BIDIR_DSHOT600:
+        return "BDS600";
     case MODE_PWM_DSHOT1200:
         return "DS1200";
     case MODE_NEOPIXEL:
