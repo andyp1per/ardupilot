@@ -131,6 +131,9 @@ void AP_Motors::rc_set_freq(uint32_t mask, uint16_t freq_hz)
     case PWM_TYPE_DSHOT1200:
         hal.rcout->set_output_mode(mask, AP_HAL::RCOutput::MODE_PWM_DSHOT1200);
         break;
+    case PWM_TYPE_BIDIR_DSHOT600:
+        hal.rcout->set_output_mode(mask, AP_HAL::RCOutput::MODE_PWM_BIDIR_DSHOT600);
+        break;
     default:
         hal.rcout->set_output_mode(mask, AP_HAL::RCOutput::MODE_PWM_NORMAL);
         break;

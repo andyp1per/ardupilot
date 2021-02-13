@@ -213,7 +213,9 @@ public:
                     PWM_TYPE_DSHOT150   = 4,
                     PWM_TYPE_DSHOT300   = 5,
                     PWM_TYPE_DSHOT600   = 6,
-                    PWM_TYPE_DSHOT1200  = 7};
+                    PWM_TYPE_DSHOT1200  = 7,
+                    PWM_TYPE_BIDIR_DSHOT600   = 8,
+                    };
     pwm_type            get_pwm_type(void) const { return (pwm_type)_pwm_type.get(); }
 
     MAV_TYPE get_frame_mav_type() const { return _mav_type; }
