@@ -49,7 +49,7 @@ extern const AP_HAL::HAL& hal;
  */
 void RCOutput::set_bidir_dshot_mask(uint16_t mask)
 {
-    _bdshot.mask = (mask >> chan_offset);
+    _bdshot.mask |= (mask >> chan_offset);
     // we now need to reconfigure the DMA channels since they are affected by the value of the mask
     for (uint8_t i = 0; i < NUM_GROUPS; i++ ) {
         pwm_group &group = pwm_group_list[i];

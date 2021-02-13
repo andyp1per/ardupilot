@@ -545,7 +545,7 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
     group.dma_handle->lock();
 #ifdef HAL_WITH_BIDIR_DSHOT
     // configure input capture DMA if required
-    if (is_bidir_dshot_enabled()) {
+    if (is_bidir_dshot_enabled(group)) {
         if (!bdshot_setup_group_ic_DMA(group)) {
             group.dma_handle->unlock();
             return false;
@@ -676,10 +676,11 @@ void RCOutput::set_group_mode(pwm_group &group)
         break;
     }
 
-    case MODE_PWM_DSHOT150 ... MODE_PWM_DSHOT1200: {
+    case MODE_PWM_DSHOT150 ... MODE_PWM_DSHOT1200:
+    case MODE_PWM_BIDIR_DSHOT600: {
         const uint32_t rate = protocol_bitrate(group.current_mode);
         const uint32_t bit_period = 20;
-        bool active_high = is_bidir_dshot_enabled() ? false : true;
+        bool active_high = is_bidir_dshot_enabled(group) ? false : true;
 
         // configure timer driver for DMAR at requested rate
         if (!setup_group_DMA(group, rate, bit_period, active_high,
@@ -689,7 +690,7 @@ void RCOutput::set_group_mode(pwm_group &group)
         }
         // calculate min time between pulses
         group.dshot_pulse_send_time_us = 1000000UL * dshot_bit_length / rate;
-        if (is_bidir_dshot_enabled()) {
+        if (is_bidir_dshot_enabled(group)) {
             // to all intents and purposes the pulse time of send and receive are the same
             group.dshot_pulse_time_us = group.dshot_pulse_send_time_us + group.dshot_pulse_send_time_us + 30;
         } else {
@@ -745,6 +746,11 @@ void RCOutput::set_output_mode(uint16_t mask, const enum output_mode mode)
         if (mode > MODE_PWM_NORMAL) {
             fast_channel_mask |= group.ch_mask;
         }
+        if (mode >= MODE_PWM_BIDIR_DSHOT600) {
+            _bdshot.mask |= group.ch_mask;
+        } else if (mode >= MODE_PWM_DSHOT600) {
+            _bdshot.mask &= ~group.ch_mask;
+        }        
         if (group.current_mode != thismode) {
             group.current_mode = thismode;
             set_group_mode(group);
@@ -1760,6 +1766,7 @@ bool RCOutput::is_dshot_protocol(const enum output_mode mode)
     case MODE_PWM_DSHOT150:
     case MODE_PWM_DSHOT300:
     case MODE_PWM_DSHOT600:
+    case MODE_PWM_BIDIR_DSHOT600:
     case MODE_PWM_DSHOT1200:
         return true;
     default:
@@ -1778,6 +1785,7 @@ uint32_t RCOutput::protocol_bitrate(const enum output_mode mode)
     case MODE_PWM_DSHOT300:
         return 300000;
     case MODE_PWM_DSHOT600:
+    case MODE_PWM_BIDIR_DSHOT600:
         return 600000;
     case MODE_PWM_DSHOT1200:
         return 1200000;

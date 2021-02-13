@@ -427,7 +427,9 @@ private:
 
     volatile bool _initialised;
 
-    bool is_bidir_dshot_enabled() const { return _bdshot.mask != 0; }
+    bool is_bidir_dshot_enabled(const pwm_group& group) const {
+      return (_bdshot.mask & group.ch_mask) == group.ch_mask;
+    }
 
     // find a channel group given a channel number
     struct pwm_group *find_chan(uint8_t chan, uint8_t &group_idx);
