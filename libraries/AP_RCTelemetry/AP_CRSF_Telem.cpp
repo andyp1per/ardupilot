@@ -377,6 +377,10 @@ bool AP_CRSF_Telem::_process_frame(AP_RCProtocol_CRSF::FrameType frame_type, voi
         process_device_info_frame((ParameterDeviceInfoFrame*)data);
         break;
 
+    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_COMMAND:
+        process_command_frame((CommandFrame*)data);
+        break;
+
     default:
         break;
     }
@@ -386,7 +390,8 @@ bool AP_CRSF_Telem::_process_frame(AP_RCProtocol_CRSF::FrameType frame_type, voi
 void AP_CRSF_Telem::process_vtx_frame(VTXFrame* vtx) {
     vtx->user_frequency = be16toh(vtx->user_frequency);
 
-    debug("VTX: SmartAudio: %d, Avail: %d, FreqMode: %d, Band: %d, Channel: %d, Freq: %d, PitMode: %d, Pwr: %d, Pit: %d",
+    debug("VTX[%02x]: SAv: %d, Avail: %d, FreqMode: %d, Band: %d, Channel: %d, Freq: %d, PitMode: %d, Pwr: %d, Pit: %d",
+        vtx->origin,
         vtx->smart_audio_ver, vtx->is_vtx_available, vtx->is_in_user_frequency_mode,
         vtx->band, vtx->channel, vtx->is_in_user_frequency_mode ? vtx->user_frequency : AP_VideoTX::get_frequency_mhz(vtx->band, vtx->channel),
         vtx->is_in_pitmode, vtx->power, vtx->pitmode);
@@ -430,7 +435,7 @@ void AP_CRSF_Telem::process_vtx_frame(VTXFrame* vtx) {
 
 void AP_CRSF_Telem::process_vtx_telem_frame(VTXTelemetryFrame* vtx) {
     vtx->frequency = be16toh(vtx->frequency);
-    debug("VTXTelemetry: Freq: %d, PitMode: %d, Power: %d", vtx->frequency, vtx->pitmode, vtx->power);
+    debug("VTXTelemetry[%02x]: Freq: %d, PitMode: %d, Power: %d", vtx->origin, vtx->frequency, vtx->pitmode, vtx->power);
 
     AP_VideoTX& apvtx = AP::vtx();
 
@@ -509,6 +514,11 @@ void AP_CRSF_Telem::process_device_info_frame(ParameterDeviceInfoFrame* info)
     }
 
     _crsf_version.pending = false;
+}
+
+void AP_CRSF_Telem::process_command_frame(CommandFrame* info)
+{
+    debug("process_command_frame: 0x%x -> 0x%x", info->origin, info->destination);
 }
 
 void AP_CRSF_Telem::process_param_read_frame(ParameterSettingsReadFrame* read_frame)

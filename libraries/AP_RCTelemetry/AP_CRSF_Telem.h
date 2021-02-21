@@ -291,6 +291,7 @@ private:
     void process_param_read_frame(ParameterSettingsReadFrame* read);
     void process_param_write_frame(ParameterSettingsWriteFrame* write);
     void process_device_info_frame(ParameterDeviceInfoFrame* info);
+    void process_command_frame(CommandFrame* info);
 
     // setup ready for passthrough operation
     void setup_wfq_scheduler(void) override;
