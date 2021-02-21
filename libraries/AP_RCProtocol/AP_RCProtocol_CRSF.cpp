@@ -270,15 +270,6 @@ void AP_RCProtocol_CRSF::write_frame(Frame* frame)
 
 bool AP_RCProtocol_CRSF::decode_csrf_packet()
 {
-#ifdef CRSF_DEBUG
-    hal.console->printf("CRSF: received %s:", get_frame_type(_frame.type));
-    uint8_t* fptr = (uint8_t*)&_frame;
-    for (uint8_t i = 0; i < _frame.length + 2; i++) {
-        hal.console->printf(" 0x%x", fptr[i]);
-    }
-    hal.console->printf("\n");
-#endif
-
     bool rc_active = false;
 
     switch (_frame.type) {
@@ -291,6 +282,16 @@ bool AP_RCProtocol_CRSF::decode_csrf_packet()
             process_link_stats_frame((uint8_t*)&_frame.payload);
             break;
         default:
+#ifdef CRSF_DEBUG
+        {
+            hal.console->printf("CRSF: received %s:", get_frame_type(_frame.type));
+            uint8_t* fptr = (uint8_t*)&_frame;
+            for (uint8_t i = 0; i < _frame.length + 2; i++) {
+                hal.console->printf(" 0x%x", fptr[i]);
+            }
+            hal.console->printf("\n");
+        }
+#endif
             break;
     }
 
