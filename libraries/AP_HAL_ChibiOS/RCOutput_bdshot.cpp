@@ -40,9 +40,6 @@ extern const AP_HAL::HAL& hal;
 // marker for a disabled channel
 #define CHAN_DISABLED 255
 
-// #pragma GCC optimize("Og")
-
-
 /*
  * enable bi-directional telemetry request for a mask of channels. This is used
  * with DShot to get telemetry feedback
@@ -143,6 +140,10 @@ bool RCOutput::bdshot_setup_group_ic_DMA(pwm_group &group)
             group.bdshot.telem_tim_ch[i] = curr_chan;
             group.dma_ch[i] = group.dma_ch[curr_chan];
         }
+        // bi-directional dshot requires less than MID2 speed and PUSHPULL in order to avoid noise on the line
+        // when switching from output to input
+        palSetLineMode(group.pal_lines[i], PAL_MODE_ALTERNATE(group.alt_functions[i])
+            | PAL_STM32_OTYPE_PUSHPULL | PAL_STM32_PUPDR_PULLUP | PAL_STM32_OSPEED_MID1);
     }
 
     return true;
@@ -190,23 +191,24 @@ void RCOutput::bdshot_ic_dma_deallocate(Shared_DMA *ctx)
 
 // see https://github.com/betaflight/betaflight/pull/8554#issuecomment-512507625
 // called from the interrupt
-void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
+void RCOutput::bdshot_receive_pulses_DMAR(void* p)
 {
+    pwm_group* group = (pwm_group*)p;
     // make sure the transaction finishes or times out, this function takes a little time to run so the most
     // accurate timing is from the beginning. the pulse time is slightly longer than we need so an extra 10U
     // should be plenty
-    chVTSetI(&group->dma_timeout, chTimeUS2I(group->dshot_pulse_send_time_us + 30U + 10U),
+    chVTSetI(&group->dma_timeout, chTimeUS2I(group->dshot_pulse_send_time_us + 20U + 10U),
         bdshot_finish_dshot_gcr_transaction, group);
     uint8_t curr_ch = group->bdshot.curr_telem_chan;
 
+    group->pwm_drv->tim->CR1 = 0;
+    group->pwm_drv->tim->CCER = 0;
+
     // Configure Timer
     group->pwm_drv->tim->SR = 0;
-    group->pwm_drv->tim->CCER = 0;
     group->pwm_drv->tim->CCMR1 = 0;
     group->pwm_drv->tim->CCMR2 = 0;
-    group->pwm_drv->tim->CCER = 0;
     group->pwm_drv->tim->DIER = 0;
-    group->pwm_drv->tim->CR1 = 0;
     group->pwm_drv->tim->CR2 = 0;
     group->pwm_drv->tim->PSC = group->bdshot.telempsc;
 
@@ -481,9 +483,7 @@ void RCOutput::dma_up_irq_callback(void *p, uint32_t flags)
     } else if (!group->in_serial_dma && group->bdshot.enabled) {
         group->dshot_state = DshotState::SEND_COMPLETE;
         // sending is done, in 30us the ESC will send telemetry
-        TOGGLE_PIN_DEBUG(55);
-        bdshot_receive_pulses_DMAR(group);
-        TOGGLE_PIN_DEBUG(55);
+        chVTSetI(&group->dma_timeout, chTimeUS2I(10U), bdshot_receive_pulses_DMAR, group);
     } else {
         // non-bidir case
         // this prevents us ever having two dshot pulses too close together

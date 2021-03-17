@@ -499,6 +499,7 @@ private:
     void dshot_send_groups(uint32_t time_out_us);
     void dshot_send(pwm_group &group, uint32_t time_out_us);
     static void dshot_update_tick(void* p);
+    static void dshot_send_next_group(void* p);
     // release locks on the groups that are pending in reverse order
     void dshot_collect_dma_locks(uint32_t last_run_us);
     static void dma_up_irq_callback(void *p, uint32_t flags);
@@ -523,7 +524,7 @@ private:
     static void bdshot_dma_ic_irq_callback(void *p, uint32_t flags);
     static void bdshot_finish_dshot_gcr_transaction(void *p);
     bool bdshot_setup_group_ic_DMA(pwm_group &group);
-    static void bdshot_receive_pulses_DMAR(pwm_group* group);
+    static void bdshot_receive_pulses_DMAR(void* group);
     static void bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t ccr_ch);
     static uint32_t bdshot_get_output_rate_hz(const enum output_mode mode);
 
