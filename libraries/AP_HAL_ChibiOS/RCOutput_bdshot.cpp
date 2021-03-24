@@ -140,8 +140,10 @@ bool RCOutput::bdshot_setup_group_ic_DMA(pwm_group &group)
             group.bdshot.telem_tim_ch[i] = curr_chan;
             group.dma_ch[i] = group.dma_ch[curr_chan];
         }
-
-        palSetLineMode(group.pal_lines[i], PAL_MODE_ALTERNATE(group.alt_functions[i]) | PAL_STM32_OTYPE_PUSHPULL | PAL_STM32_PUPDR_PULLUP);
+        // bi-directional dshot requires less than MID2 speed and PUSHPULL in order to avoid noise on the line
+        // when switching from output to input
+        palSetLineMode(group.pal_lines[i], PAL_MODE_ALTERNATE(group.alt_functions[i])
+            | PAL_STM32_OTYPE_PUSHPULL | PAL_STM32_PUPDR_PULLUP | PAL_STM32_OSPEED_MID1);
     }
 
     return true;
