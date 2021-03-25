@@ -137,13 +137,26 @@ void RCOutput::rcout_thread()
 
     chEvtWaitOne(EVT_PWM_START);
 
+    // it takes BLHeli32 about 30ms to calibrate frames on startup, so run a calibration phase
+    // for 2s at startup where we output very even pulses at the correct rate.
+    uint32_t cal_cycles = 2000000UL / _dshot_period_us;
+    _dshot_calibrating = true;
+
+    // prime the pump for calibration
+    chEvtSignal(rcout_thread_ctx, EVT_PWM_SYNTHETIC_SEND);
+
     // don't start calibrating until everything else is ready
     chEvtWaitOne(EVT_PWM_SEND);
 
     // dshot is quite sensitive to timing, it's important to output pulses as
     // regularly as possible at the correct bitrate
     while (true) {
-        chEvtWaitOne(EVT_PWM_SEND | EVT_PWM_SYNTHETIC_SEND);
+        // while calibrating ignore all push-based requests and stick closely to the dshot period
+        if (_dshot_calibrating) {
+            chEvtWaitOne(EVT_PWM_SYNTHETIC_SEND);
+        } else {
+            chEvtWaitOne(EVT_PWM_SEND | EVT_PWM_SYNTHETIC_SEND);
+        }
 
         // start the clock
         last_thread_run_us = AP_HAL::micros();
@@ -152,7 +165,7 @@ void RCOutput::rcout_thread()
         if (_dshot_cycle == 0) {
             last_cycle_run_us = AP_HAL::micros();
             // register a timer for the next tick if push() will not be providing it
-            if (_dshot_rate != 1) {
+            if (_dshot_rate != 1 || _dshot_calibrating) {
                 chVTSet(&_dshot_rate_timer, chTimeUS2I(_dshot_period_us), dshot_update_tick, this);
             }
         }
@@ -177,6 +190,15 @@ void RCOutput::rcout_thread()
 
         // process any pending RC output requests
         timer_tick(time_out_us);
+
+        if (_dshot_calibrating) {
+            if (hal.util->safety_switch_state() == AP_HAL::Util::SAFETY_ARMED) {
+                cal_cycles--;
+                if (cal_cycles == 0) {
+                    _dshot_calibrating = false;
+                }
+            }
+        }
     }
 }
 
@@ -185,7 +207,7 @@ void RCOutput::dshot_update_tick(void* p)
     chSysLockFromISR();
     RCOutput* rcout = (RCOutput*)p;
 
-    if (rcout->_dshot_cycle + 1 < rcout->_dshot_rate) {
+    if (rcout->_dshot_cycle + 1 < rcout->_dshot_rate || rcout->_dshot_calibrating) {
         chVTSetI(&rcout->_dshot_rate_timer, chTimeUS2I(rcout->_dshot_period_us), dshot_update_tick, p);
     }
     chEvtSignalI(rcout->rcout_thread_ctx, EVT_PWM_SYNTHETIC_SEND);
@@ -1118,11 +1140,37 @@ void RCOutput::dshot_send_groups(uint32_t time_out_us)
     if (serial_group) {
         return;
     }
+
+    virtual_timer_t next_group_timeout;
+    chVTObjectInit(&next_group_timeout);
+
+    bool first = true;
     // actually do a dshot send
-    for (auto &group : pwm_group_list) {
+    for (uint8_t i = 0; i < NUM_GROUPS; i++) {
+        pwm_group &group = pwm_group_list[i];
         if (group.can_send_dshot_pulse()) {
+            // if we are calibrating then make the inter-group delay very, very even
+            if (_dshot_calibrating) {
+                if (!first) {
+                    chEvtWaitOne(EVT_PWM_SEND_NEXT);
+                    first = false;
+                }
+                if (i < NUM_GROUPS - 1) {
+                    uint32_t now = AP_HAL::micros();
+                    if (now < time_out_us) {
+                        chVTSet(&next_group_timeout, chTimeUS2I(time_out_us - now), dshot_send_next_group, this);
+                    } else {
+                        chEvtSignal(rcout_thread_ctx, EVT_PWM_SEND_NEXT);
+                    }
+                }
+            }
             dshot_send(group, time_out_us);
         }
+    }
+
+    if (_dshot_calibrating) {
+        chVTReset(&next_group_timeout),
+        chEvtGetAndClearEvents(EVT_PWM_SEND_NEXT);
     }
 }
 
