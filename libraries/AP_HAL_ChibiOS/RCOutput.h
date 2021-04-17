@@ -33,7 +33,7 @@
 #define RCOU_DSHOT_TIMING_DEBUG 0
 
 class ChibiOS::RCOutput : public AP_HAL::RCOutput
-#ifdef HAL_WITH_BIDIR_DSHOT
+#if HAL_WITH_ESC_TELEM
   , AP_ESC_Telem_Backend
 #endif
 {
