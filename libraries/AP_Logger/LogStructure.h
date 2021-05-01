@@ -1264,13 +1264,9 @@ LOG_STRUCTURE_FROM_AVOIDANCE \
       "SIM","QccCfLLffff","TimeUS,Roll,Pitch,Yaw,Alt,Lat,Lng,Q1,Q2,Q3,Q4", "sddhmDU????", "FBBB0GG????" }, \
     { LOG_TERRAIN_MSG, sizeof(log_TERRAIN), \
       "TERR","QBLLHffHH","TimeUS,Status,Lat,Lng,Spacing,TerrH,CHeight,Pending,Loaded", "s-DU-mm--", "F-GG-00--" }, \
-    LOG_STRUCTURE_FROM_ESC_TELEM \
+LOG_STRUCTURE_FROM_ESC_TELEM \
     { LOG_CSRV_MSG, sizeof(log_CSRV), \
       "CSRV","QBfffB","TimeUS,Id,Pos,Force,Speed,Pow", "s#---%", "F-0000" }, \
-    { LOG_ACC_MSG, sizeof(log_ACC), \
-      "ACC", "QBQfff",        "TimeUS,I,SampleUS,AccX,AccY,AccZ", "s#sooo", "F-F000" }, \
-    { LOG_GYR_MSG, sizeof(log_GYR), \
-      "GYR", "QBQfff",        "TimeUS,I,SampleUS,GyrX,GyrY,GyrZ", "s#sEEE", "F-F000" }, \
     { LOG_PIDR_MSG, sizeof(log_PID), \
       "PIDR", PID_FMT,  PID_LABELS, PID_UNITS, PID_MULTS }, \
     { LOG_PIDP_MSG, sizeof(log_PID), \
