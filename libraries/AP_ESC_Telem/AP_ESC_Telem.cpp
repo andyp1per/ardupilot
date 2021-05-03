@@ -22,6 +22,8 @@
 
 #include <AP_BoardConfig/AP_BoardConfig.h>
 
+//#define ESC_TELEM_DEBUG
+
 extern const AP_HAL::HAL& hal;
 
 AP_ESC_Telem::AP_ESC_Telem()
@@ -194,6 +196,7 @@ void AP_ESC_Telem::send_esc_telemetry_mavlink(uint8_t mav_chan)
     static_assert(ESC_TELEM_MAX_ESCS <= 12, "AP_ESC_Telem::send_esc_telemetry_mavlink() only supports up-to 12 motors");
 
     uint32_t now = AP_HAL::millis();
+    uint32_t now_us = AP_HAL::micros();
     // loop through 3 groups of 4 ESCs
     for (uint8_t i = 0; i < 3; i++) {
 
@@ -201,12 +204,12 @@ void AP_ESC_Telem::send_esc_telemetry_mavlink(uint8_t mav_chan)
         if (!HAVE_PAYLOAD_SPACE((mavlink_channel_t)mav_chan, ESC_TELEMETRY_1_TO_4)) {
             return;
         }
+#define ESC_DATA_STALE(idx) \
+        (now - _telem_data[idx].last_update_ms > ESC_TELEM_DATA_TIMEOUT_MS \
+            && now_us - _rpm_data[idx].last_update_us > ESC_RPM_DATA_TIMEOUT_US)
 
         // skip this group of ESCs if no data to send
-        if (now - _telem_data[i * 4].last_update_ms > ESC_TELEM_DATA_TIMEOUT_MS
-            && now - _telem_data[i * 4 + 1].last_update_ms > ESC_TELEM_DATA_TIMEOUT_MS
-            && now - _telem_data[i * 4 + 2].last_update_ms > ESC_TELEM_DATA_TIMEOUT_MS
-            && now - _telem_data[i * 4 + 3].last_update_ms > ESC_TELEM_DATA_TIMEOUT_MS) {
+        if (ESC_DATA_STALE(i * 4) && ESC_DATA_STALE(i * 4 + 1) && ESC_DATA_STALE(i * 4 + 2) && ESC_DATA_STALE(i * 4 + 3)) {
             continue;
         }
 
@@ -225,7 +228,7 @@ void AP_ESC_Telem::send_esc_telemetry_mavlink(uint8_t mav_chan)
             voltage[j] = constrain_float(_telem_data[esc_id].voltage * 100.0f, 0, UINT16_MAX);
             current[j] = constrain_float(_telem_data[esc_id].current * 100.0f, 0, UINT16_MAX);
             current_tot[j] = constrain_float(_telem_data[esc_id].consumption_mah, 0, UINT16_MAX);
-            float rpmf;
+            float rpmf = 0.0f;
             if (get_rpm(esc_id, rpmf)) {
                 rpm[j] = constrain_float(rpmf, 0, UINT16_MAX);
             } else {
