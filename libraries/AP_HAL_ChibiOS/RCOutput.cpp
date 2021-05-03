@@ -1358,7 +1358,7 @@ void RCOutput::dshot_send(pwm_group &group, uint32_t time_out_us)
             const uint16_t erpm = group.bdshot.erpm[i];
 
             // update the ESC telemetry data
-            if (erpm < 0xFFFF) {
+            if (erpm < 0xFFFF && group.bdshot.enabled) {
                 update_rpm(chan, erpm * 200 / _bdshot.motor_poles, get_erpm_error_rate(chan));
             }
 
