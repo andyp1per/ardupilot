@@ -256,7 +256,7 @@ void AP_ESC_Telem::send_esc_telemetry_mavlink(uint8_t mav_chan)
 
 // record an update to the telemetry data together with timestamp
 // this should be called by backends when new telemetry values are available
-void AP_ESC_Telem::update_telem_data(uint8_t esc_index, const AP_ESC_Telem_Backend::TelemetryData& new_data, uint16_t data_mask)
+void AP_ESC_Telem::update_telem_data(const uint8_t esc_index, const AP_ESC_Telem_Backend::TelemetryData& new_data, const uint16_t data_mask)
 {
     // rpm and telemetry data are not protected by a semaphore even though updated from different threads
     // all data is per-ESC and only written from the update thread and read by the user thread
@@ -294,7 +294,7 @@ void AP_ESC_Telem::update_telem_data(uint8_t esc_index, const AP_ESC_Telem_Backe
 
 // record an update to the RPM together with timestamp, this allows the notch values to be slewed
 // this should be called by backends when new telemetry values are available
-void AP_ESC_Telem::update_rpm(uint8_t esc_index, uint16_t new_rpm, float error_rate)
+void AP_ESC_Telem::update_rpm(const uint8_t esc_index, const uint16_t new_rpm, const float error_rate)
 {
     if (esc_index > ESC_TELEM_MAX_ESCS) {
         return;
@@ -335,7 +335,7 @@ void AP_ESC_Telem::update()
                 //   rpm is eRPM (rpm * 100)
                 //   voltage is in Volt
                 //   current is in Ampere
-                //   temperature is in centi-degrees Celsius
+                //   esc_temp is in centi-degrees Celsius
                 //   current_tot is in mili-Ampere hours
                 //   motor_temp is in centi-degrees Celsius
                 //   error_rate is in percentage
