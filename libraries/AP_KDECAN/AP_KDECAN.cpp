@@ -447,7 +447,7 @@ void AP_KDECAN::loop()
 
                             const uint8_t idx = id.source_id - ESC_NODE_ID_FIRST;
                             const uint8_t num_poles = _num_poles > 0 ? _num_poles : DEFAULT_NUM_POLES;
-                            update_rpm(idx, uint16_t(uint16_t(frame.data[4] << 8 | frame.data[5]) * 60UL * 200 / num_poles));
+                            update_rpm(idx, uint16_t(uint16_t(frame.data[4] << 8 | frame.data[5]) * 60UL * 2 / num_poles));
 
                             TelemetryData t {
                                 .temperature_cdeg = int16_t(frame.data[6] * 100),
