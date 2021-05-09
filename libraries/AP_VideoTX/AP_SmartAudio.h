@@ -66,7 +66,7 @@
 
 #define SMARTAUDIO_BANDCHAN_TO_INDEX(band, channel) (band * VTX_MAX_CHANNELS + (channel))
 
-// #define SA_DEBUG
+#define SA_DEBUG
 
 class AP_SmartAudio
 {
@@ -197,6 +197,7 @@ private:
     // value for current baud adjust
     int32_t _smartbaud = AP_SMARTAUDIO_UART_BAUD;
     int32_t _smartbaud_direction = 1;
+    bool _line_low = true; // add a leading 0 to requests to pull the line low
 
     // hw vtx state control with 2 elements array use methods _push _peek
     uint8_t _vtx_state_idx;
@@ -209,15 +210,17 @@ private:
     // RingBuffer to store outgoing request.
     ObjectBuffer<Packet> requests_queue{SMARTAUDIO_BUFFER_CAPACITY};
 
-    // time the last_request is process
+    // time the last request was sent
     uint32_t _last_request_sent_ms;
+    // time the response to the last request was received
+    uint32_t _last_response_received_ms;
 
     // loops is waiting a response after a request
     bool _is_waiting_response;
 
 #ifdef SA_DEBUG
     // utility method for debugging.
-    void print_bytes_to_hex_string(const char* msg, const uint8_t buf[], uint8_t x,uint8_t offset);
+    void print_bytes_to_hex_string(const char* msg, const uint8_t buf[], uint8_t len);
 #endif
     void print_settings(const Settings* settings);
 
@@ -232,7 +235,7 @@ private:
     bool read_response(uint8_t *response_buffer);
     // parses the response and updates the vtx settings
     bool parse_frame_response(const uint8_t *buffer);
-    bool parse_response_buffer(const uint8_t *buffer);
+    bool parse_response_buffer(const uint8_t *buffer, const uint8_t len);
     // get last reading from the fifo queue
     bool get_readings(AP_VideoTX *vtx_dest);
 
@@ -255,9 +258,9 @@ private:
     void set_band_channel(const uint8_t band, const uint8_t channel);
 
     // command functions
-    void push_command_only_frame(uint8_t command);
-    void push_uint8_command_frame(uint8_t command, uint8_t data);
-    void push_uint16_command_frame(uint8_t command, uint16_t data);
+    bool push_command_only_frame(uint8_t command);
+    bool push_uint8_command_frame(uint8_t command, uint8_t data);
+    bool push_uint16_command_frame(uint8_t command, uint16_t data);
 
     static void unpack_frequency(Settings *settings, const uint16_t frequency);
     static void unpack_settings(Settings *settings, const SettingsResponseFrame *frame);

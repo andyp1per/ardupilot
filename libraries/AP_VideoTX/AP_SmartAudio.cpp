@@ -46,7 +46,7 @@ bool AP_SmartAudio::init()
         debug("SmartAudio protocol it's not active");
         return false;
     }
-
+    hal.gpio->pinMode(54, 1);
     // init uart
     _port = AP::serialmanager().find_serial(AP_SerialManager::SerialProtocol_SmartAudio, 0);
     if (_port!=nullptr) {
@@ -98,13 +98,16 @@ void AP_SmartAudio::loop()
                 }
             }
 
-            if (requests_queue.pop(current_command)) {
-                // send the popped command from bugger
+            now = AP_HAL::millis();
+            // The Atlatl won't recognize requests that come less than 100ms after a response has been sent
+            if (now - _last_request_sent_ms > 140 && now - _last_response_received_ms > 100 
+                && requests_queue.pop(current_command)) {
                 send_request(current_command.frame, current_command.frame_size);
 
                 now = AP_HAL::millis();
                 // it takes roughly 15ms to send a request, don't turn around and try and read until
-                // this time has elapsed
+                // this time has elapsed. Unfortunately some VTX (e.g. Atlatl) don't obey the spec and
+                // send a response almost immediately (4ms)
                 hal.scheduler->delay(20);
 
                 _last_request_sent_ms = now;
@@ -123,11 +126,12 @@ void AP_SmartAudio::loop()
         // and the initial response is 40ms long so we should wait at least 140ms before giving up
         if (now - _last_request_sent_ms < 200 && _is_waiting_response) {
 
-            // setup sheduler delay to 50 ms again after response processes
+            // setup scheduler delay to 50 ms again after response processes
             if (!read_response(_response_buffer)) {
                 hal.scheduler->delay(10);
                 res_retries++;
             } else {
+                _last_response_received_ms = AP_HAL::millis();
                 res_retries = 0;
             }
 
@@ -138,13 +142,14 @@ void AP_SmartAudio::loop()
             _inline_buffer_length = 0;
             _is_waiting_response = false;
         } else {
-            if (AP::vtx().have_params_changed() ||_vtx_power_change_pending
-                || _vtx_freq_change_pending || _vtx_options_change_pending) {
+            if (requests_queue.space() > 0
+                && (AP::vtx().have_params_changed() ||_vtx_power_change_pending
+                    || _vtx_freq_change_pending || _vtx_options_change_pending)) {
                 update_vtx_params();
                 _vtx_gcs_pending = true;
-                // we've tried to udpate something, re-request the settings so that they
+                // we've tried to update something, re-request the settings so that they
                 // are reflected correctly
-                request_settings();
+                request_settings();        
             } else if (_vtx_gcs_pending) {
                 AP::vtx().announce_vtx_settings();
                 _vtx_gcs_pending = false;
@@ -171,14 +176,14 @@ void AP_SmartAudio::update_vtx_params()
                 vtx.update_configured_channel_and_band();
             }
         }
-
+#if 0
         debug("update_params(): freq %d->%d, chan: %d->%d, band: %d->%d, pwr: %d->%d, opts: %d->%d",
             vtx.get_frequency_mhz(),  vtx.get_configured_frequency_mhz(),
             vtx.get_channel(), vtx.get_configured_channel(),
             vtx.get_band(), vtx.get_configured_band(),
             vtx.get_power_mw(), vtx.get_configured_power_mw(),
             vtx.get_options(), vtx.get_configured_options());
-
+#endif
         uint8_t opts = vtx.get_configured_options();
         uint8_t pitModeRunning = (vtx.get_options() & uint8_t(AP_VideoTX::VideoOptions::VTX_PITMODE));
         uint8_t pitMode = opts & uint8_t(AP_VideoTX::VideoOptions::VTX_PITMODE);
@@ -253,26 +258,29 @@ void AP_SmartAudio::send_request(const Frame& requestFrame, uint8_t size)
 
     const uint8_t *request = reinterpret_cast<const uint8_t*>(&requestFrame);
 
+    if (_line_low) {
+        _port->write((uint8_t)0);
+    }
     // write request
     _port->write(request, size);
     _port->flush();
 
     _packets_sent++;
 #ifdef SA_DEBUG
-    print_bytes_to_hex_string("send_request():", request, size,0);
+    print_bytes_to_hex_string("send_request():", request, size);
 #endif
 }
 
 /**
  * Reads the response from vtx in the wire
  * - response_buffer, response buffer to fill in
- * - inline_buffer_length , used to passthrought the response lenght in case the response where splitted
+ * - inline_buffer_length , used to passthrought the response length in case the response where splitted
  **/
 bool AP_SmartAudio::read_response(uint8_t *response_buffer)
 {
     int16_t incoming_bytes_count = _port->available();
 
-    const uint8_t response_header_size= sizeof(FrameHeader);
+    const uint8_t response_header_size = sizeof(FrameHeader);
 
     // check if it is a response in the wire
     if (incoming_bytes_count <= 0) {
@@ -280,15 +288,23 @@ bool AP_SmartAudio::read_response(uint8_t *response_buffer)
     }
 
     // wait until we have enough bytes to read a header
-    if (incoming_bytes_count < response_header_size && _inline_buffer_length == 0) {
+    if (incoming_bytes_count < response_header_size + (_line_low ? 1 : 0) && _inline_buffer_length == 0) {
         return false;
     }
 
     // now have at least the header, read it if necessary
     if (_inline_buffer_length == 0) {
         uint8_t b = _port->read();
+        // discard leading 0 if expected
+        if (_line_low && b == 0) {
+            b = _port->read();
+        }
         // didn't see a sync byte, discard and go around again
         if (b != SMARTAUDIO_SYNC_BYTE) {
+            palToggleLine(HAL_GPIO_LINE_GPIO54);
+            palToggleLine(HAL_GPIO_LINE_GPIO54);
+            debug("Sync byte 0x%x", b);
+            _port->discard_input();
             return false;
         }
         response_buffer[_inline_buffer_length++] = b;
@@ -297,6 +313,7 @@ bool AP_SmartAudio::read_response(uint8_t *response_buffer)
         // didn't see a header byte, discard and reset
         if (b != SMARTAUDIO_HEADER_BYTE) {
             _inline_buffer_length = 0;
+            _port->discard_input();
             return false;
         }
 
@@ -322,6 +339,7 @@ bool AP_SmartAudio::read_response(uint8_t *response_buffer)
         if (_inline_buffer_length >= AP_SMARTAUDIO_MAX_PACKET_SIZE) {
             _inline_buffer_length = 0;
             _is_waiting_response = false;
+            _port->discard_input();
             return false;
         }
 
@@ -333,12 +351,19 @@ bool AP_SmartAudio::read_response(uint8_t *response_buffer)
         return false;
     }
 
+    if (_line_low && _port->available() > 0) {
+        response_buffer[_inline_buffer_length++] = _port->read();
+    }
+
+    // drop anything remaining
+    _port->discard_input();
+
 #ifdef SA_DEBUG
-    print_bytes_to_hex_string("read_response():", response_buffer, incoming_bytes_count,(_inline_buffer_length-incoming_bytes_count)>=0?(_inline_buffer_length-incoming_bytes_count):0);
+    print_bytes_to_hex_string("read_response():", response_buffer, _inline_buffer_length);
 #endif
     _is_waiting_response=false;
 
-    bool correct_parse = parse_response_buffer(response_buffer);
+    bool correct_parse = parse_response_buffer(response_buffer, _inline_buffer_length);
     response_buffer=nullptr;
     _inline_buffer_length=0;
     _packet_size = 0;
@@ -349,17 +374,17 @@ bool AP_SmartAudio::read_response(uint8_t *response_buffer)
 }
 
 // format a simple command and push into the request queue
-void AP_SmartAudio::push_command_only_frame(uint8_t cmd_id)
+bool AP_SmartAudio::push_command_only_frame(uint8_t cmd_id)
 {
     Packet command;
     command.frame.header.init(cmd_id, 0);
     command.frame_size = SMARTAUDIO_COMMAND_FRAME_SIZE;
     command.frame.payload[0] = crc8_dvb_s2_update(0, &command.frame, SMARTAUDIO_COMMAND_FRAME_SIZE - 1);
-    requests_queue.push_force(command);
+    return requests_queue.push(command);
 }
 
 // format an 8-bit command and push into the request queue
-void AP_SmartAudio::push_uint8_command_frame(uint8_t cmd_id, uint8_t data)
+bool AP_SmartAudio::push_uint8_command_frame(uint8_t cmd_id, uint8_t data)
 {
     Packet command;
     command.frame.header.init(cmd_id, sizeof(uint8_t));
@@ -367,18 +392,18 @@ void AP_SmartAudio::push_uint8_command_frame(uint8_t cmd_id, uint8_t data)
 
     command.frame.payload[0] = data;
     command.frame.payload[1] = crc8_dvb_s2_update(0, &command.frame, SMARTAUDIO_U8_COMMAND_FRAME_SIZE - 1);
-    requests_queue.push_force(command);
+    return requests_queue.push(command);
 }
 
 // format an 16-bit command and push into the request queue
-void AP_SmartAudio::push_uint16_command_frame(uint8_t cmd_id, uint16_t data)
+bool AP_SmartAudio::push_uint16_command_frame(uint8_t cmd_id, uint16_t data)
 {
     Packet command;
     command.frame.header.init(cmd_id, sizeof(uint16_t));
     command.frame_size = SMARTAUDIO_U16_COMMAND_FRAME_SIZE;
     put_be16_ptr(command.frame.payload, data);
     command.frame.payload[2] = crc8_dvb_s2_update(0, &command.frame, SMARTAUDIO_U16_COMMAND_FRAME_SIZE - 1);
-    requests_queue.push_force(command);
+    return requests_queue.push(command);
 }
 
 /**
@@ -386,7 +411,7 @@ void AP_SmartAudio::push_uint16_command_frame(uint8_t cmd_id, uint16_t data)
  * */
 void AP_SmartAudio::request_settings()
 {
-    debug("request_settings()");
+    //debug("request_settings()");
     push_command_only_frame(SMARTAUDIO_CMD_GET_SETTINGS);
 }
 
@@ -466,11 +491,11 @@ void AP_SmartAudio::unpack_settings(Settings *settings, const SettingsExtendedRe
 }
 
 #ifdef SA_DEBUG
-void AP_SmartAudio::print_bytes_to_hex_string(const char* msg, const uint8_t buf[], uint8_t len,uint8_t offset)
+void AP_SmartAudio::print_bytes_to_hex_string(const char* msg, const uint8_t buf[], uint8_t len)
 {
     hal.console->printf("SA: %s ", msg);
     for (uint8_t i = 0; i < len; i++) {
-        hal.console->printf("0x%02X ", buf[i+offset]);
+        hal.console->printf("0x%02X ", buf[i]);
     }
     hal.console->printf("\n");
 }
@@ -517,20 +542,28 @@ void AP_SmartAudio::update_vtx_settings(const Settings& settings)
     _vtx_power_change_pending = _vtx_freq_change_pending = _vtx_options_change_pending = false;
 }
 
-bool  AP_SmartAudio::parse_response_buffer(const uint8_t *buffer)
+bool  AP_SmartAudio::parse_response_buffer(const uint8_t *buffer, uint8_t len)
 {
     const FrameHeader *header = (const FrameHeader *)buffer;
     const uint8_t fullFrameLength = sizeof(FrameHeader) + header->length;
     const uint8_t headerPayloadLength = fullFrameLength - 1; // subtract crc byte from length
     const uint8_t *startPtr = buffer + 2;
-    const uint8_t *endPtr = buffer + headerPayloadLength;
 
-    if (crc8_dvb_s2_update(0x00, startPtr, headerPayloadLength-2)!=*(endPtr)
-        || header->headerByte != SMARTAUDIO_HEADER_BYTE
-        || header->syncByte!=SMARTAUDIO_SYNC_BYTE) {
+    uint8_t crcin = buffer[headerPayloadLength];
+    uint8_t crc = crc8_dvb_s2_update(0x00, startPtr, headerPayloadLength-2);
+
+    // seems it's the wild west out there, the Atlatl sends a frame length that doesn't include the CRC
+    // have a stab at seeing if reading an extra byte gives a frame that makes sense
+    if (crc != crcin && len > fullFrameLength) {
+        crc = crc8_dvb_s2_update(0x00, startPtr, headerPayloadLength-1);
+        crcin = buffer[headerPayloadLength+1];
+    }
+
+    if (crcin != crc || header->headerByte != SMARTAUDIO_HEADER_BYTE || header->syncByte!=SMARTAUDIO_SYNC_BYTE) {
+        debug("Corrupt frame 0x%x", crc);
         return false;
     }
-    // SEND TO GCS A MESSAGE TO UNDERSTAND WHATS HAPPENING
+
     AP_VideoTX& vtx = AP::vtx();
     Settings settings {};
 
@@ -626,17 +659,18 @@ void AP_SmartAudio::update_baud_rate()
     if (_packets_sent - _packets_rcvd < 10) {
         return;
     }
-
+#if 0
     if ((_smartbaud_direction == 1) && (_smartbaud == AP_SMARTAUDIO_SMARTBAUD_MAX)) {
         _smartbaud_direction = -1;
     } else if ((_smartbaud_direction == -1 && _smartbaud == AP_SMARTAUDIO_SMARTBAUD_MIN)) {
         _smartbaud_direction = 1;
+        _line_low = !_line_low; // still no comms so try adding a leading 0 to packets
     }
 
     _smartbaud += AP_SMARTAUDIO_SMARTBAUD_STEP * _smartbaud_direction;
 
     debug("autobaud: %d", int(_smartbaud));
-
+#endif
     _port->begin(_smartbaud);
 }
 
