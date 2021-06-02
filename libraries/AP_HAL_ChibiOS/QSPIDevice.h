@@ -28,7 +28,8 @@
 #include "Scheduler.h"
 #include "Device.h"
 
-namespace ChibiOS {
+namespace ChibiOS
+{
 
 struct QSPIDesc {
     QSPIDesc(const char *_name, uint8_t _bus,
@@ -44,33 +45,44 @@ struct QSPIDesc {
     uint32_t speed;
 };
 
-class QSPIBus : public DeviceBus {
+class QSPIBus : public DeviceBus
+{
 public:
     QSPIBus(uint8_t _bus) :
-    DeviceBus(APM_SPI_PRIORITY, true),
-    bus(_bus) {}    
+        DeviceBus(APM_SPI_PRIORITY, true),
+        bus(_bus) {}
 
     uint8_t bus;
     WSPIConfig wspicfg;
     bool qspi_started;
 };
 
-class QSPIDevice : public AP_HAL::QSPIDevice {
+class QSPIDevice : public AP_HAL::QSPIDevice
+{
 public:
     static QSPIDevice *from(AP_HAL::QSPIDevice *dev)
     {
         return static_cast<QSPIDevice*>(dev);
     }
 
-    QSPIDevice(QSPIBus &_bus, QSPIDesc &_device_desc) : 
-    bus(_bus), 
-    device_desc(_device_desc)
+    QSPIDevice(QSPIBus &_bus, QSPIDesc &_device_desc) :
+        bus(_bus),
+        device_desc(_device_desc)
     {}
 
-    bool set_speed(Speed speed) override { return true; }
+    bool set_speed(Speed speed) override
+    {
+        return true;
+    }
 
-    PeriodicHandle register_periodic_callback(uint32_t period_usec, PeriodicCb) override { return nullptr; }
-    bool adjust_periodic_callback(PeriodicHandle h, uint32_t period_usec) override { return false; }
+    PeriodicHandle register_periodic_callback(uint32_t period_usec, PeriodicCb) override
+    {
+        return nullptr;
+    }
+    bool adjust_periodic_callback(PeriodicHandle h, uint32_t period_usec) override
+    {
+        return false;
+    }
 
     /* See AP_HAL::Device::transfer() */
     bool transfer(const uint8_t *send, uint32_t send_len,
@@ -78,7 +90,8 @@ public:
 
     void set_cmd_header(CommandHeader cmd_hdr) override;
 
-    AP_HAL::Semaphore* get_semaphore() override {
+    AP_HAL::Semaphore* get_semaphore() override
+    {
         // if asking for invalid bus number use bus 0 semaphore
         return &bus.semaphore;
     }
@@ -91,7 +104,8 @@ private:
     CommandHeader _cmd_hdr;
 };
 
-class QSPIDeviceManager : public AP_HAL::QSPIDeviceManager {
+class QSPIDeviceManager : public AP_HAL::QSPIDeviceManager
+{
 public:
     friend class QSPIDevice;
 

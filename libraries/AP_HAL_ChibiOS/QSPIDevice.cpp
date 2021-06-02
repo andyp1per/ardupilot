@@ -58,7 +58,7 @@ QSPIDesc QSPIDeviceManager::device_table[] = { HAL_QSPI_DEVICE_LIST };
 #endif
 
 bool QSPIDevice::transfer(const uint8_t *send, uint32_t send_len,
-                             uint8_t *recv, uint32_t recv_len)
+                          uint8_t *recv, uint32_t recv_len)
 {
     if (!acquire_bus(true)) {
         return false;
@@ -94,7 +94,8 @@ bool QSPIDevice::transfer(const uint8_t *send, uint32_t send_len,
     return ret;
 }
 
-void QSPIDevice::set_cmd_header(CommandHeader cmd_hdr) {
+void QSPIDevice::set_cmd_header(CommandHeader cmd_hdr)
+{
     _cmd_hdr = cmd_hdr;
 }
 
