@@ -35,6 +35,7 @@ void AP_BattMonitor_ESC::read(void)
     float current_sum = 0;
     float temperature_sum = 0;
     uint32_t highest_ms = 0;
+     _state.consumed_mah = 0;
 
     for (uint8_t i=0; i<ESC_TELEM_MAX_ESCS; i++) {
         int16_t  temperature_cdeg;
