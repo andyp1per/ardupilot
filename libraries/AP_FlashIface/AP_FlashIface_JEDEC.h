@@ -114,6 +114,7 @@ private:
         uint8_t fast_read_ins;
         uint8_t fast_read_dummy_cycles;
         uint8_t quad_mode_ins;
+        uint8_t quad_mode_enable;
         bool quad_mode_rmw_seq;
         uint8_t status_read_ins;
         bool legacy_status_polling;

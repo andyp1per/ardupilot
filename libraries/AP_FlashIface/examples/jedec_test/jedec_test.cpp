@@ -1,4 +1,7 @@
 #include <AP_HAL/AP_HAL.h>
+#include <GCS_MAVLink/GCS_Dummy.h>
+#include <AP_Vehicle/AP_Vehicle.h>
+#include <AP_SerialManager/AP_SerialManager.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_FlashIface/AP_FlashIface.h>
 #include <stdio.h>
@@ -11,6 +14,13 @@ AP_FlashIface_JEDEC jedec_dev;
 void setup();
 void loop();
 
+GCS_Dummy _gcs;
+
+const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
+        AP_GROUPEND
+};
+
+static AP_SerialManager serial_manager;
 static AP_BoardConfig board_config;
 
 static UNUSED_FUNCTION void test_page_program()
@@ -138,6 +148,7 @@ static UNUSED_FUNCTION void test_mass_erase()
 void setup()
 {
     board_config.init();
+    serial_manager.init();
 }
 
 void loop()
@@ -148,8 +159,8 @@ void loop()
     }
     hal.console->printf("\n\n******************Starting Test********************\n");
     jedec_dev.init();
-    test_page_program();
     test_sector_erase();
+    test_page_program();
     // test_mass_erase();
     hal.scheduler->delay(1000);
 }

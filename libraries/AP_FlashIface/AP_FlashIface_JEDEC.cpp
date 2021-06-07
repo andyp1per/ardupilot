@@ -33,7 +33,8 @@ struct supported_device {
 };
 
 static const struct supported_device supported_devices[] = {
-    {"mt25q", 0x20, 0xBA}
+    {"mt25q", 0x20, 0xBA},
+    {"w25q", 0xEF, 0x40}
 };
 
 // Vendor Specific Constants
@@ -63,7 +64,10 @@ static const struct supported_device supported_devices[] = {
 #define SFDP_PARAM_DWORD_LEN(x)             SFDP_GET_BITS(x[0], 24, 31)
 #define SFDP_PARAM_POINTER(x)               SFDP_GET_BITS(x[1], 0, 23)
 
+#define SFDP_REV_1_5                        0x0105
 #define SFDP_REV_1_6                        0x0106
+// quad enable for winbond
+#define QUAD_ENABLE_B1R2                    0x4
 
 #define Debug(fmt, args ...)  do {hal.console->printf("FlashIface_JEDEC: " fmt "\n", ## args);} while(0)
 
@@ -226,7 +230,7 @@ bool AP_FlashIface_JEDEC::detect_device()
         }
         // Read Revision
         _desc.param_rev = SFDP_HDR_PARAM_REV(sfdp_header);
-        if (_desc.param_rev != SFDP_REV_1_6) {
+        if (_desc.param_rev != SFDP_REV_1_6 && _desc.param_rev != SFDP_REV_1_5) {
             Debug("Unsupported revision %x", (unsigned int)_desc.param_rev);
             return false;
         }
@@ -368,26 +372,23 @@ bool AP_FlashIface_JEDEC::detect_device()
         _desc.fast_read_dummy_cycles = SFDP_GET_BITS(param_table[6], 16, 20) +
                                        SFDP_GET_BITS(param_table[6], 21, 23);
 
-        uint8_t QER = SFDP_GET_BITS(param_table[14], 20, 22);
-        if (QER != 0b000) {
-            Debug("Unsupported Quad Enable Requirement");
+        _desc.quad_mode_enable = SFDP_GET_BITS(param_table[14], 20, 22);
+        if (_desc.quad_mode_enable != 0b000 && _desc.quad_mode_enable != QUAD_ENABLE_B1R2) {
+            Debug("Unsupported Quad Enable Requirement 0x%x", _desc.quad_mode_enable);
             return false;
         }
-        if (SFDP_GET_BIT(param_table[14], 4)) {
+        if (SFDP_GET_BIT(param_table[14], 4) && _desc.quad_mode_enable != QUAD_ENABLE_B1R2) {
             Debug("Unsupported Quad Enable Requirement: set QE bits");
             return false;
         }
 
-        if (SFDP_GET_BIT(param_table[14], 5)) {
+        if (SFDP_GET_BIT(param_table[14], 5) || SFDP_GET_BIT(param_table[14], 4)) {
             _desc.quad_mode_ins = 0x38;
         } else if (SFDP_GET_BIT(param_table[14], 6)) {
             _desc.quad_mode_ins = 0x35;
         }
 
         if (SFDP_GET_BIT(param_table[14], 7)) {
-            Debug("Unsupported Quad enable seq");
-            return false;
-        } else if (SFDP_GET_BIT(param_table[14], 8)) {
             _desc.quad_mode_rmw_seq = true;
         } else {
             _desc.quad_mode_rmw_seq = false;
@@ -408,8 +409,50 @@ bool AP_FlashIface_JEDEC::detect_device()
 
 bool AP_FlashIface_JEDEC::configure_device()
 {
-    AP_HAL::QSPIDevice::CommandHeader cmd;
     // Enable 4-4-4 mode and test it by fetching Device ID
+    if (_desc.quad_mode_enable == QUAD_ENABLE_B1R2) {
+        uint8_t reg1, reg2;
+        if (!read_reg(0x05, reg1, false)) {
+            Debug("Failed reg1 read");
+            return false;
+        }
+        if (!read_reg(0x35, reg2, false)) {
+            Debug("Failed reg2 read");
+            return false;
+        }
+        write_enable(false);
+
+        AP_HAL::QSPIDevice::CommandHeader cmd {
+            .cmd    = 0x01,
+            .cfg    =  AP_HAL::QSPI::CFG_CMD_MODE_ONE_LINE |
+                        AP_HAL::QSPI::CFG_DATA_MODE_ONE_LINE,
+            .addr   =  0,
+            .alt    =  0,
+            .dummy  =  0
+        };
+
+        reg2 |= 0x2;    // enable QE bit
+        uint8_t write_val[2] { reg1, reg2 };
+        _dev->set_cmd_header(cmd);
+
+        if (!_dev->transfer(write_val, 2, nullptr, 0)) {
+            Debug("Failed QE write");
+            write_disable(false);
+            return false;
+        }
+
+        write_disable(false);
+
+        if (!read_reg(0x35, reg2, false) || (reg2 & 0x2) == 0) {
+            Debug("Failed to set QE bit");
+            return false;
+        }
+    }
+
+    Debug("QE bit 0x%x, QE ins 0x%x, QE rmw 0x%x, fast read ins 0x%x",
+        _desc.quad_mode_enable, _desc.quad_mode_ins, _desc.quad_mode_rmw_seq,  _desc.fast_read_ins);
+
+    AP_HAL::QSPIDevice::CommandHeader cmd;
     {
         // Quad Mode Enable Sequence, Ref. JESD216 6.4.18
         if (_desc.quad_mode_ins && !write_enable_called) {
