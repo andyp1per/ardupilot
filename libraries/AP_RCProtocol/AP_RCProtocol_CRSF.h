@@ -46,6 +46,10 @@ public:
         CRSF_FRAMETYPE_VTX_TELEM = 0x10,
         CRSF_FRAMETYPE_LINK_STATISTICS = 0x14,
         CRSF_FRAMETYPE_RC_CHANNELS_PACKED = 0x16,
+        CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED = 0x17,
+        CRSF_FRAMETYPE_RC_CHANNELS_PACKED_11BIT = 0x18,
+        CRSF_FRAMETYPE_LINK_STATISTICS_RX = 0x1C,
+        CRSF_FRAMETYPE_LINK_STATISTICS_TX = 0x1D,
         CRSF_FRAMETYPE_ATTITUDE = 0x1E,
         CRSF_FRAMETYPE_FLIGHT_MODE = 0x21,
         // Extended Header Frames, range: 0x28 to 0x96
@@ -171,6 +175,78 @@ public:
         int8_t downlink_dnr; // ( db )
     } PACKED;
 
+    struct LinkStatisticsRXFrame {
+        uint8_t rssi_db;        // RSSI(dBm*-1)
+        uint8_t rssi_percent;   // RSSI in percent
+        uint8_t link_quality;   // Package success rate / Link quality ( % )
+        int8_t snr;             // SNR(dB)
+        uint8_t rf_power_db;    // rf power in dBm
+    } PACKED;
+
+    struct LinkStatisticsTXFrame {
+        uint8_t rssi_db;        // RSSI(dBm*-1)
+        uint8_t rssi_percent;   // RSSI in percent
+        uint8_t link_quality;   // Package success rate / Link quality ( % )
+        int8_t snr;             // SNR(dB)
+        uint8_t rf_power_db;    // rf power in dBm
+        uint8_t fps;            // rf frames per second (fps / 10)
+    } PACKED;
+
+    struct Channels10Bit_8Chan {
+#if __BYTE_ORDER != __LITTLE_ENDIAN
+#error "Only supported on little-endian architectures"
+#endif
+        uint32_t ch0 : 10;
+        uint32_t ch1 : 10;
+        uint32_t ch2 : 10;
+        uint32_t ch3 : 10;
+        uint32_t ch4 : 10;
+        uint32_t ch5 : 10;
+        uint32_t ch6 : 10;
+        uint32_t ch7 : 10;
+    } PACKED;
+
+    struct Channels12Bit_8Chan {
+#if __BYTE_ORDER != __LITTLE_ENDIAN
+#error "Only supported on little-endian architectures"
+#endif
+        uint32_t ch0 : 12;
+        uint32_t ch1 : 12;
+        uint32_t ch2 : 12;
+        uint32_t ch3 : 12;
+        uint32_t ch4 : 12;
+        uint32_t ch5 : 12;
+        uint32_t ch6 : 12;
+        uint32_t ch7 : 12;
+    } PACKED;
+
+    struct Channels13Bit_8Chan {
+#if __BYTE_ORDER != __LITTLE_ENDIAN
+#error "Only supported on little-endian architectures"
+#endif
+        uint32_t ch0 : 13;
+        uint32_t ch1 : 13;
+        uint32_t ch2 : 13;
+        uint32_t ch3 : 13;
+        uint32_t ch4 : 13;
+        uint32_t ch5 : 13;
+        uint32_t ch6 : 13;
+        uint32_t ch7 : 13;
+    } PACKED;
+
+    struct SubsetChannelsFrame {
+#if __BYTE_ORDER != __LITTLE_ENDIAN
+#error "Only supported on little-endian architectures"
+#endif
+        uint8_t starting_channel:5;     // which channel number is the first one in the frame
+        uint8_t res_configuration:2;    // configuration for the RC data resolution (10 - 13 bits)
+        uint8_t digital_switch_flag:1;  // configuration bit for digital channel
+        uint8_t channels[CRSF_FRAMELEN_MAX - 4]; // +1 for crc
+        // uint16_t channel[]:res;      // variable amount of channels (with variable resolution based
+                                        // on the res_configuration) based on the frame size 
+        // uint16_t digital_switch_channel[]:10; // digital switch channel
+    } PACKED;
+
     enum class RFMode : uint8_t {
         CRSF_RF_MODE_4HZ = 0,
         CRSF_RF_MODE_50HZ,
@@ -203,6 +279,11 @@ private:
     bool decode_csrf_packet();
     bool process_telemetry(bool check_constraint = true);
     void process_link_stats_frame(const void* data);
+    void process_link_stats_rx_frame(const void* data);
+    void process_link_stats_tx_frame(const void* data);
+
+    void decode_variable_bit_channels(const uint8_t* data, uint8_t nchannels, uint16_t *values);
+
     void write_frame(Frame* frame);
     void start_uart();
     AP_HAL::UARTDriver* get_current_UART() { return (_uart ? _uart : get_available_UART()); }

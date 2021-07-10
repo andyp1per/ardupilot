@@ -290,6 +290,17 @@ bool AP_RCProtocol_CRSF::decode_csrf_packet()
         case CRSF_FRAMETYPE_LINK_STATISTICS:
             process_link_stats_frame((uint8_t*)&_frame.payload);
             break;
+        case CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED:
+            // scale factors defined by TBS - TICKS_TO_US(x) ((x - 992) * 5 / 8 + 1500)
+            decode_variable_bit_channels((const uint8_t*)(&_frame.payload), CRSF_MAX_CHANNELS, _channels);
+            rc_active = !_uart; // only accept RC data if we are not in standalone mode
+            break;
+        case CRSF_FRAMETYPE_LINK_STATISTICS_RX:
+            process_link_stats_rx_frame((uint8_t*)&_frame.payload);
+            break;
+        case CRSF_FRAMETYPE_LINK_STATISTICS_TX:
+            process_link_stats_tx_frame((uint8_t*)&_frame.payload);
+            break;
         default:
             break;
     }
@@ -301,6 +312,58 @@ bool AP_RCProtocol_CRSF::decode_csrf_packet()
 #endif
 
     return rc_active;
+}
+
+/*
+  decode channels from the standard 11bit format (used by CRSF, SBUS, FPort and FPort2)
+  must be used on multiples of 8 channels
+*/
+void AP_RCProtocol_CRSF::decode_variable_bit_channels(const uint8_t* data, uint8_t nchannels, uint16_t *values)
+{
+    const SubsetChannelsFrame* channel_data = (const SubsetChannelsFrame*)data;
+    // scale factors defined by TBS - TICKS_TO_US(x) ((x - 992) * 5 / 8 + 1500)
+#define CHANNEL_SCALE(x) ((int32_t(x) * 5) / 8 + 1500)
+    uint8_t chan = channel_data->starting_channel;
+#define DECODE_CHANNELS(channels, chan) \
+    values[chan++] = CHANNEL_SCALE(channels->ch0); \
+    values[chan++] = CHANNEL_SCALE(channels->ch1); \
+    values[chan++] = CHANNEL_SCALE(channels->ch2); \
+    values[chan++] = CHANNEL_SCALE(channels->ch3); \
+    values[chan++] = CHANNEL_SCALE(channels->ch4); \
+    values[chan++] = CHANNEL_SCALE(channels->ch5); \
+    values[chan++] = CHANNEL_SCALE(channels->ch6); \
+    values[chan++] = CHANNEL_SCALE(channels->ch7)
+
+    while (chan < nchannels) {
+        switch (channel_data->res_configuration) {
+            case 0: { // 10 bit
+                const Channels10Bit_8Chan* channels = (const Channels10Bit_8Chan*)channel_data->channels;
+                DECODE_CHANNELS(channels, chan);
+                data += sizeof(*channels);
+            }
+                break;
+            case 1: { // 11 bit
+                const Channels11Bit_8Chan* channels = (const Channels11Bit_8Chan*)channel_data->channels;
+                DECODE_CHANNELS(channels, chan);
+                data += sizeof(*channels);
+            }
+                break;
+            case 2: { // 12 bit
+                const Channels12Bit_8Chan* channels = (const Channels12Bit_8Chan*)channel_data->channels;
+                DECODE_CHANNELS(channels, chan);
+                data += sizeof(*channels);
+            }
+                break;
+            case 3: { // 13 bit
+                const Channels13Bit_8Chan* channels = (const Channels13Bit_8Chan*)channel_data->channels;
+                DECODE_CHANNELS(channels, chan);
+                data += sizeof(*channels);
+            }
+                break;
+        }
+        nchannels -= 8;
+        values += 8;
+    }
 }
 
 // send out telemetry
@@ -352,6 +415,22 @@ void AP_RCProtocol_CRSF::process_link_stats_frame(const void* data)
     }
 
     _link_status.rf_mode = static_cast<RFMode>(MIN(link->rf_mode, 3U));
+}
+
+// process link statistics to get RX RSSI
+void AP_RCProtocol_CRSF::process_link_stats_rx_frame(const void* data)
+{
+    const LinkStatisticsRXFrame* link = (const LinkStatisticsRXFrame*)data;
+
+    _link_status.rssi = link->rssi_percent * 255.0f / 100.0f;
+}
+
+// process link statistics to get TX RSSI
+void AP_RCProtocol_CRSF::process_link_stats_tx_frame(const void* data)
+{
+    const LinkStatisticsTXFrame* link = (const LinkStatisticsTXFrame*)data;
+
+    _link_status.rssi = link->rssi_percent * 255.0f / 100.0f;
 }
 
 // process a byte provided by a uart
