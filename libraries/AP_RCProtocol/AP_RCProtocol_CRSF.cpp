@@ -112,6 +112,10 @@ static const char* get_frame_type(uint8_t byte)
         return "SETTINGS_ENTRY";
     case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_LINK_STATISTICS:
     case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_RC_CHANNELS_PACKED:
+    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED:
+    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_RC_CHANNELS_PACKED_11BIT:
+    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_LINK_STATISTICS_RX:
+    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_LINK_STATISTICS_TX:
     case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAMETER_WRITE:
         return "UNKNOWN";
     }
@@ -308,6 +312,7 @@ bool AP_RCProtocol_CRSF::decode_csrf_packet()
     switch (_frame.type) {
         case CRSF_FRAMETYPE_RC_CHANNELS_PACKED:
             // scale factors defined by TBS - TICKS_TO_US(x) ((x - 992) * 5 / 8 + 1500)
+            //hal.console->printf("11 bit channels\n");
             decode_11bit_channels((const uint8_t*)(&_frame.payload), CRSF_MAX_CHANNELS, _channels, 5U, 8U, 880U);
             rc_active = !_uart; // only accept RC data if we are not in standalone mode
             break;
@@ -315,7 +320,7 @@ bool AP_RCProtocol_CRSF::decode_csrf_packet()
             process_link_stats_frame((uint8_t*)&_frame.payload);
             break;
         case CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED:
-            // scale factors defined by TBS - TICKS_TO_US(x) ((x - 992) * 5 / 8 + 1500)
+            //hal.console->printf("Variable bit channels\n");
             decode_variable_bit_channels((const uint8_t*)(&_frame.payload), _frame.length, CRSF_MAX_CHANNELS, _channels);
             rc_active = !_uart; // only accept RC data if we are not in standalone mode
             break;
@@ -359,29 +364,30 @@ void AP_RCProtocol_CRSF::decode_variable_bit_channels(const uint8_t* payload, ui
     // get the channel resolution settings
     uint8_t channelBits;
     uint16_t channelMask;
+    float channelScale;
     uint8_t channelRes = configByte & CRSF_SUBSET_RC_RES_CONFIGURATION_MASK;
     configByte >>= CRSF_SUBSET_RC_RES_CONFIGURATION_BITS;
     switch (channelRes) {
     case CRSF_SUBSET_RC_RES_CONF_10B:
         channelBits = CRSF_SUBSET_RC_RES_BITS_10B;
         channelMask = CRSF_SUBSET_RC_RES_MASK_10B;
-        //channelScale = CRSF_SUBSET_RC_CHANNEL_SCALE_10B;
+        channelScale = CRSF_SUBSET_RC_CHANNEL_SCALE_10B;
         break;
     default:
     case CRSF_SUBSET_RC_RES_CONF_11B:
         channelBits = CRSF_SUBSET_RC_RES_BITS_11B;
         channelMask = CRSF_SUBSET_RC_RES_MASK_11B;
-        //channelScale = CRSF_SUBSET_RC_CHANNEL_SCALE_11B;
+        channelScale = CRSF_SUBSET_RC_CHANNEL_SCALE_11B;
         break;
     case CRSF_SUBSET_RC_RES_CONF_12B:
         channelBits = CRSF_SUBSET_RC_RES_BITS_12B;
         channelMask = CRSF_SUBSET_RC_RES_MASK_12B;
-        //channelScale = CRSF_SUBSET_RC_CHANNEL_SCALE_12B;
+        channelScale = CRSF_SUBSET_RC_CHANNEL_SCALE_12B;
         break;
     case CRSF_SUBSET_RC_RES_CONF_13B:
         channelBits = CRSF_SUBSET_RC_RES_BITS_13B;
         channelMask = CRSF_SUBSET_RC_RES_MASK_13B;
-        //channelScale = CRSF_SUBSET_RC_CHANNEL_SCALE_13B;
+        channelScale = CRSF_SUBSET_RC_CHANNEL_SCALE_13B;
         break;
     }
 
@@ -391,7 +397,6 @@ void AP_RCProtocol_CRSF::decode_variable_bit_channels(const uint8_t* payload, ui
     // calculate the number of channels packed
     uint8_t numOfChannels = ((frame_length - 2) * 8 - CRSF_SUBSET_RC_STARTING_CHANNEL_BITS) / channelBits;
 
-#define TICKS_TO_US(x) ((x - 992) * 5 / 8 + 1500)
     // unpack the channel data
     uint8_t bitsMerged = 0;
     uint32_t readValue = 0;
@@ -401,7 +406,7 @@ void AP_RCProtocol_CRSF::decode_variable_bit_channels(const uint8_t* payload, ui
             readValue |= ((uint32_t) readByte) << bitsMerged;
             bitsMerged += 8;
         }
-        _channels[startChannel + n] = TICKS_TO_US(uint16_t(readValue & channelMask));
+        _channels[startChannel + n] = uint16_t(channelScale * float(uint16_t(readValue & channelMask)) + 988);
         readValue >>= channelBits;
         bitsMerged -= channelBits;
     }
