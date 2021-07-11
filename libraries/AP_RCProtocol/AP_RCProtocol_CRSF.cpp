@@ -27,6 +27,30 @@
 #include <AP_RCTelemetry/AP_CRSF_Telem.h>
 #include <AP_SerialManager/AP_SerialManager.h>
 
+#define CRSF_SUBSET_RC_STARTING_CHANNEL_BITS        5
+#define CRSF_SUBSET_RC_STARTING_CHANNEL_MASK        0x1F
+#define CRSF_SUBSET_RC_RES_CONFIGURATION_BITS       2
+#define CRSF_SUBSET_RC_RES_CONFIGURATION_MASK       0x03
+#define CRSF_SUBSET_RC_RESERVED_CONFIGURATION_BITS  1
+
+#define CRSF_RC_CHANNEL_SCALE_LEGACY                0.62477120195241f
+#define CRSF_SUBSET_RC_RES_CONF_10B                 0
+#define CRSF_SUBSET_RC_RES_BITS_10B                 10
+#define CRSF_SUBSET_RC_RES_MASK_10B                 0x03FF
+#define CRSF_SUBSET_RC_CHANNEL_SCALE_10B            1.0f
+#define CRSF_SUBSET_RC_RES_CONF_11B                 1
+#define CRSF_SUBSET_RC_RES_BITS_11B                 11
+#define CRSF_SUBSET_RC_RES_MASK_11B                 0x07FF
+#define CRSF_SUBSET_RC_CHANNEL_SCALE_11B            0.5f
+#define CRSF_SUBSET_RC_RES_CONF_12B                 2
+#define CRSF_SUBSET_RC_RES_BITS_12B                 12
+#define CRSF_SUBSET_RC_RES_MASK_12B                 0x0FFF
+#define CRSF_SUBSET_RC_CHANNEL_SCALE_12B            0.25f
+#define CRSF_SUBSET_RC_RES_CONF_13B                 3
+#define CRSF_SUBSET_RC_RES_BITS_13B                 13
+#define CRSF_SUBSET_RC_RES_MASK_13B                 0x1FFF
+#define CRSF_SUBSET_RC_CHANNEL_SCALE_13B            0.125f
+
 /*
  * CRSF protocol
  *
@@ -292,7 +316,7 @@ bool AP_RCProtocol_CRSF::decode_csrf_packet()
             break;
         case CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED:
             // scale factors defined by TBS - TICKS_TO_US(x) ((x - 992) * 5 / 8 + 1500)
-            decode_variable_bit_channels((const uint8_t*)(&_frame.payload), CRSF_MAX_CHANNELS, _channels);
+            decode_variable_bit_channels((const uint8_t*)(&_frame.payload), _frame.length, CRSF_MAX_CHANNELS, _channels);
             rc_active = !_uart; // only accept RC data if we are not in standalone mode
             break;
         case CRSF_FRAMETYPE_LINK_STATISTICS_RX:
@@ -318,51 +342,68 @@ bool AP_RCProtocol_CRSF::decode_csrf_packet()
   decode channels from the standard 11bit format (used by CRSF, SBUS, FPort and FPort2)
   must be used on multiples of 8 channels
 */
-void AP_RCProtocol_CRSF::decode_variable_bit_channels(const uint8_t* data, uint8_t nchannels, uint16_t *values)
+void AP_RCProtocol_CRSF::decode_variable_bit_channels(const uint8_t* payload, uint8_t frame_length, uint8_t nchannels, uint16_t *values)
 {
-    const SubsetChannelsFrame* channel_data = (const SubsetChannelsFrame*)data;
-    // scale factors defined by TBS - TICKS_TO_US(x) ((x - 992) * 5 / 8 + 1500)
-#define CHANNEL_SCALE(x) ((int32_t(x) * 5) / 8 + 1500)
-    uint8_t chan = channel_data->starting_channel;
-#define DECODE_CHANNELS(channels, chan) \
-    values[chan++] = CHANNEL_SCALE(channels->ch0); \
-    values[chan++] = CHANNEL_SCALE(channels->ch1); \
-    values[chan++] = CHANNEL_SCALE(channels->ch2); \
-    values[chan++] = CHANNEL_SCALE(channels->ch3); \
-    values[chan++] = CHANNEL_SCALE(channels->ch4); \
-    values[chan++] = CHANNEL_SCALE(channels->ch5); \
-    values[chan++] = CHANNEL_SCALE(channels->ch6); \
-    values[chan++] = CHANNEL_SCALE(channels->ch7)
+//    const SubsetChannelsFrame* channel_data = (const SubsetChannelsFrame*)data;
 
-    while (chan < nchannels) {
-        switch (channel_data->res_configuration) {
-            case 0: { // 10 bit
-                const Channels10Bit_8Chan* channels = (const Channels10Bit_8Chan*)channel_data->channels;
-                DECODE_CHANNELS(channels, chan);
-                data += sizeof(*channels);
-            }
-                break;
-            case 1: { // 11 bit
-                const Channels11Bit_8Chan* channels = (const Channels11Bit_8Chan*)channel_data->channels;
-                DECODE_CHANNELS(channels, chan);
-                data += sizeof(*channels);
-            }
-                break;
-            case 2: { // 12 bit
-                const Channels12Bit_8Chan* channels = (const Channels12Bit_8Chan*)channel_data->channels;
-                DECODE_CHANNELS(channels, chan);
-                data += sizeof(*channels);
-            }
-                break;
-            case 3: { // 13 bit
-                const Channels13Bit_8Chan* channels = (const Channels13Bit_8Chan*)channel_data->channels;
-                DECODE_CHANNELS(channels, chan);
-                data += sizeof(*channels);
-            }
-                break;
+    // use subset RC frame structure (0x17)
+    uint8_t readByteIndex = 0;
+
+    // get the configuration byte
+    uint8_t configByte = payload[readByteIndex++];
+
+    // get the channel number of start channel
+    uint8_t startChannel = configByte & CRSF_SUBSET_RC_STARTING_CHANNEL_MASK;
+    configByte >>= CRSF_SUBSET_RC_STARTING_CHANNEL_BITS;
+
+    // get the channel resolution settings
+    uint8_t channelBits;
+    uint16_t channelMask;
+    uint8_t channelRes = configByte & CRSF_SUBSET_RC_RES_CONFIGURATION_MASK;
+    configByte >>= CRSF_SUBSET_RC_RES_CONFIGURATION_BITS;
+    switch (channelRes) {
+    case CRSF_SUBSET_RC_RES_CONF_10B:
+        channelBits = CRSF_SUBSET_RC_RES_BITS_10B;
+        channelMask = CRSF_SUBSET_RC_RES_MASK_10B;
+        //channelScale = CRSF_SUBSET_RC_CHANNEL_SCALE_10B;
+        break;
+    default:
+    case CRSF_SUBSET_RC_RES_CONF_11B:
+        channelBits = CRSF_SUBSET_RC_RES_BITS_11B;
+        channelMask = CRSF_SUBSET_RC_RES_MASK_11B;
+        //channelScale = CRSF_SUBSET_RC_CHANNEL_SCALE_11B;
+        break;
+    case CRSF_SUBSET_RC_RES_CONF_12B:
+        channelBits = CRSF_SUBSET_RC_RES_BITS_12B;
+        channelMask = CRSF_SUBSET_RC_RES_MASK_12B;
+        //channelScale = CRSF_SUBSET_RC_CHANNEL_SCALE_12B;
+        break;
+    case CRSF_SUBSET_RC_RES_CONF_13B:
+        channelBits = CRSF_SUBSET_RC_RES_BITS_13B;
+        channelMask = CRSF_SUBSET_RC_RES_MASK_13B;
+        //channelScale = CRSF_SUBSET_RC_CHANNEL_SCALE_13B;
+        break;
+    }
+
+    // do nothing for the reserved configuration bit
+    configByte >>= CRSF_SUBSET_RC_RESERVED_CONFIGURATION_BITS;
+
+    // calculate the number of channels packed
+    uint8_t numOfChannels = ((frame_length - 2) * 8 - CRSF_SUBSET_RC_STARTING_CHANNEL_BITS) / channelBits;
+
+#define TICKS_TO_US(x) ((x - 992) * 5 / 8 + 1500)
+    // unpack the channel data
+    uint8_t bitsMerged = 0;
+    uint32_t readValue = 0;
+    for (uint8_t n = 0; n < numOfChannels; n++) {
+        while (bitsMerged < channelBits) {
+            uint8_t readByte = payload[readByteIndex++];
+            readValue |= ((uint32_t) readByte) << bitsMerged;
+            bitsMerged += 8;
         }
-        nchannels -= 8;
-        values += 8;
+        _channels[startChannel + n] = TICKS_TO_US(uint16_t(readValue & channelMask));
+        readValue >>= channelBits;
+        bitsMerged -= channelBits;
     }
 }
 

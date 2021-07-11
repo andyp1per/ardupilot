@@ -22,7 +22,7 @@
 #include <AP_Math/AP_Math.h>
 #include "SoftSerial.h"
 
-#define CRSF_MAX_CHANNELS   16U      // Maximum number of channels from crsf datastream
+#define CRSF_MAX_CHANNELS   24U      // Maximum number of channels from crsf datastream
 #define CRSF_FRAMELEN_MAX   64U      // maximum possible framelength
 #define CRSF_BAUDRATE       416666
 
@@ -192,48 +192,6 @@ public:
         uint8_t fps;            // rf frames per second (fps / 10)
     } PACKED;
 
-    struct Channels10Bit_8Chan {
-#if __BYTE_ORDER != __LITTLE_ENDIAN
-#error "Only supported on little-endian architectures"
-#endif
-        uint32_t ch0 : 10;
-        uint32_t ch1 : 10;
-        uint32_t ch2 : 10;
-        uint32_t ch3 : 10;
-        uint32_t ch4 : 10;
-        uint32_t ch5 : 10;
-        uint32_t ch6 : 10;
-        uint32_t ch7 : 10;
-    } PACKED;
-
-    struct Channels12Bit_8Chan {
-#if __BYTE_ORDER != __LITTLE_ENDIAN
-#error "Only supported on little-endian architectures"
-#endif
-        uint32_t ch0 : 12;
-        uint32_t ch1 : 12;
-        uint32_t ch2 : 12;
-        uint32_t ch3 : 12;
-        uint32_t ch4 : 12;
-        uint32_t ch5 : 12;
-        uint32_t ch6 : 12;
-        uint32_t ch7 : 12;
-    } PACKED;
-
-    struct Channels13Bit_8Chan {
-#if __BYTE_ORDER != __LITTLE_ENDIAN
-#error "Only supported on little-endian architectures"
-#endif
-        uint32_t ch0 : 13;
-        uint32_t ch1 : 13;
-        uint32_t ch2 : 13;
-        uint32_t ch3 : 13;
-        uint32_t ch4 : 13;
-        uint32_t ch5 : 13;
-        uint32_t ch6 : 13;
-        uint32_t ch7 : 13;
-    } PACKED;
-
     struct SubsetChannelsFrame {
 #if __BYTE_ORDER != __LITTLE_ENDIAN
 #error "Only supported on little-endian architectures"
@@ -282,7 +240,7 @@ private:
     void process_link_stats_rx_frame(const void* data);
     void process_link_stats_tx_frame(const void* data);
 
-    void decode_variable_bit_channels(const uint8_t* data, uint8_t nchannels, uint16_t *values);
+    void decode_variable_bit_channels(const uint8_t* data, uint8_t frame_length, uint8_t nchannels, uint16_t *values);
 
     void write_frame(Frame* frame);
     void start_uart();
