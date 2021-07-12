@@ -71,7 +71,7 @@ public:
         CRSF_COMMAND_OSD = 0x05,
         CRSF_COMMAND_VTX = 0x08,
         CRSF_COMMAND_LED = 0x09,
-        CRSF_COMMAND_FW_UPDATE = 0x0A,
+        CRSF_COMMAND_GENERAL = 0x0A,
         CRSF_COMMAND_RX = 0x10,
     };
 
@@ -112,15 +112,22 @@ public:
         CRSF_COMMAND_LED_SHIFT = 0x05,
     };
 
-    // Commands for CRSF_COMMAND_FW_UPDATE
-    enum CommandFirmwareUpdate {
-        CRSF_COMMAND_FIRMWARE_UPDATE_BOOTLOADER = 0x0A,
-        CRSF_COMMAND_FIRMWARE_UPDATE_ERASE = 0x0B,
-    };
-
     // Commands for CRSF_COMMAND_RX
     enum CommandRX {
         CRSF_COMMAND_RX_BIND = 0x01,
+    };
+
+    // Commands for CRSF_COMMAND_GENERAL
+    enum CommandGeneral {
+        CRSF_COMMAND_GENERAL_CHILD_DEVICE_REQUEST = 0x04,
+        CRSF_COMMAND_GENERAL_CHILD_DEVICE_FRAME = 0x05,
+        CRSF_COMMAND_GENERAL_FIRMWARE_UPDATE_BOOTLOADER = 0x0A,
+        CRSF_COMMAND_GENERAL_FIRMWARE_UPDATE_ERASE = 0x0B,
+        CRSF_COMMAND_GENERAL_WRITE_SERIAL_NUMBER = 0x13,
+        CRSF_COMMAND_GENERAL_USER_ID = 0x15,
+        CRSF_COMMAND_GENERAL_SOFTWARE_PRODUCT_KEY = 0x60,
+        CRSF_COMMAND_GENERAL_CRSF_SPEED_PROPOSAL = 0x70,    // proposed new CRSF port speed
+        CRSF_COMMAND_GENERAL_CRSF_SPEED_RESPONSE = 0x71,    // response to the proposed CRSF port speed
     };
 
     // SubType IDs for CRSF_FRAMETYPE_CUSTOM_TELEM
