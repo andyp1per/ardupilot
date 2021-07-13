@@ -500,6 +500,30 @@ void AP_RCProtocol_CRSF::start_uart()
     _uart->begin(CRSF_BAUDRATE, 128, 128);
 }
 
+// change the baudrate of the protocol if we are able
+void AP_RCProtocol_CRSF::change_baud_rate(uint32_t baudrate)
+{
+    if (is_baud_rate_available(baudrate)) {
+        get_available_UART()->begin(baudrate);
+    }
+}
+
+// change the baudrate of the protocol if we are able
+bool AP_RCProtocol_CRSF::is_baud_rate_available(uint32_t baudrate)
+{
+    AP_HAL::UARTDriver* uart = get_available_UART();
+    if (uart == nullptr) {
+        return false;
+    }
+    if (baudrate > CRSF_BAUDRATE && !uart->is_dma_enabled()) {
+        return false;
+    }
+    if (baudrate >= 2000000) {
+        return false;
+    }
+    return true;
+}
+
 namespace AP {
     AP_RCProtocol_CRSF* crsf() {
         return AP_RCProtocol_CRSF::get_singleton();

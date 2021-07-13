@@ -33,6 +33,8 @@ public:
     void process_byte(uint8_t byte, uint32_t baudrate) override;
     void process_pulse(uint32_t width_s0, uint32_t width_s1) override;
     void update(void) override;
+    void change_baud_rate(uint32_t baudrate);
+    bool is_baud_rate_available(uint32_t baudrate);
     // get singleton instance
     static AP_RCProtocol_CRSF* get_singleton() {
         return _singleton;
