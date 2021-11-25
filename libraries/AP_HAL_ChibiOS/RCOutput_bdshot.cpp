@@ -35,6 +35,8 @@ extern const AP_HAL::HAL& hal;
 
 #define TELEM_IC_SAMPLE 16
 
+#pragma GCC optimize("O2")
+
 /*
  * enable bi-directional telemetry request for a mask of channels. This is used
  * with DShot to get telemetry feedback
@@ -186,8 +188,6 @@ void RCOutput::bdshot_ic_dma_deallocate(Shared_DMA *ctx)
 
 // see https://github.com/betaflight/betaflight/pull/8554#issuecomment-512507625
 // called from the interrupt
-#pragma GCC push_options
-#pragma GCC optimize("O2")
 void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
 {
     // make sure the transaction finishes or times out, this function takes a little time to run so the most
@@ -585,7 +585,5 @@ uint32_t RCOutput::bdshot_decode_telemetry_packet(uint32_t* buffer, uint32_t cou
     uint32_t ret = (1000000 * 60 / 100 + decodedValue / 2) / decodedValue;
     return ret;
 }
-#pragma GCC pop_options
-
 
 #endif // HAL_WITH_BIDIR_DSHOT

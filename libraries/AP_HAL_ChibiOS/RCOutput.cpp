@@ -54,7 +54,7 @@ static const eventmask_t EVT_PWM_START  = EVENT_MASK(12);
 static const eventmask_t EVT_PWM_SYNTHETIC_SEND  = EVENT_MASK(13);
 static const eventmask_t EVT_PWM_SEND_NEXT  = EVENT_MASK(14);
 
-// #pragma GCC optimize("Og")
+#pragma GCC optimize("O2")
 
 /*
   initialise RC output driver
@@ -2102,10 +2102,6 @@ bool RCOutput::set_serial_led_num_LEDs(const uint16_t chan, uint8_t num_leds, ou
 
 }
 
-
-
-#pragma GCC push_options
-#pragma GCC optimize("O2")
 // Fill the group DMA buffer with data to be output
 void RCOutput::fill_DMA_buffer_serial_led(pwm_group& group)
 {
@@ -2212,7 +2208,6 @@ void RCOutput::_set_profiled_clock(pwm_group *grp, uint8_t idx, uint8_t led)
         buf[b * stride] = BIT_1;
     }
 }
-#pragma GCC pop_options
 
 /*
   setup serial LED output data for a given output channel
