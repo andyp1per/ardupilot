@@ -15,6 +15,8 @@
  * Code by Andrew Tridgell and Siddharth Bharat Purohit
  * Bi-directional dshot based on Betaflight, code by Andy Piper and Siddharth Bharat Purohit
  */
+#pragma GCC optimize("O2")
+
 #include "RCOutput.h"
 #include <AP_Math/AP_Math.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
@@ -53,8 +55,6 @@ static const eventmask_t EVT_PWM_SEND  = EVENT_MASK(11);
 static const eventmask_t EVT_PWM_START  = EVENT_MASK(12);
 static const eventmask_t EVT_PWM_SYNTHETIC_SEND  = EVENT_MASK(13);
 static const eventmask_t EVT_PWM_SEND_NEXT  = EVENT_MASK(14);
-
-#pragma GCC optimize("O2")
 
 /*
   initialise RC output driver
