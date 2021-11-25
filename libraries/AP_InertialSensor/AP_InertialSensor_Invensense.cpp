@@ -68,6 +68,8 @@ extern const AP_HAL::HAL& hal;
 #define int16_val(v, idx) ((int16_t)(((uint16_t)v[2*idx] << 8) | v[2*idx+1]))
 #define uint16_val(v, idx)(((uint16_t)v[2*idx] << 8) | v[2*idx+1])
 
+#pragma GCC optimize("O2")
+
 /*
  *  RM-MPU-6000A-00.pdf, page 31, section 4.23 lists LSB sensitivity of
  *  accel as 4096 LSB/mg at scale factor of +/- 8g (AFS_SEL==2)

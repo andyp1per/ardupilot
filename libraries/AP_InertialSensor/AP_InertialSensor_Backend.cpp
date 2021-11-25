@@ -10,6 +10,8 @@
 
 #define SENSOR_RATE_DEBUG 0
 
+#pragma GCC optimize("O2")
+
 const extern AP_HAL::HAL& hal;
 
 AP_InertialSensor_Backend::AP_InertialSensor_Backend(AP_InertialSensor &imu) :
