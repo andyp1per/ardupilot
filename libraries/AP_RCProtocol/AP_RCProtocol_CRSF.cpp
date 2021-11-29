@@ -177,6 +177,8 @@ void AP_RCProtocol_CRSF::process_pulse(uint32_t width_s0, uint32_t width_s1)
     }
 }
 
+#pragma GCC push_options
+#pragma GCC optimize("O2")
 void AP_RCProtocol_CRSF::_process_byte(uint32_t timestamp_us, uint8_t byte)
 {
     //debug("process_byte(0x%x)", byte);
@@ -424,6 +426,7 @@ void AP_RCProtocol_CRSF::decode_variable_bit_channels(const uint8_t* payload, ui
         bitsMerged -= channelBits;
     }
 }
+#pragma GCC pop_options
 
 // send out telemetry
 bool AP_RCProtocol_CRSF::process_telemetry(bool check_constraint)
