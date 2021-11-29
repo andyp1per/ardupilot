@@ -72,8 +72,6 @@ extern const AP_HAL::HAL& hal;
 #define HAL_INS_TRIM_LIMIT_DEG 10
 #endif
 
-#pragma GCC optimize("O2")
-
 // Class level parameters
 const AP_Param::GroupInfo AP_InertialSensor::var_info[] = {
     // 0 was PRODUCT_ID
