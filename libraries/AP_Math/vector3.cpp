@@ -298,25 +298,11 @@ void Vector3<T>::rotate_xy(T angle_rad)
     y = ry;
 }
 
-// vector cross product
-template <typename T>
-Vector3<T> Vector3<T>::operator %(const Vector3<T> &v) const
-{
-    Vector3<T> temp(y*v.z - z*v.y, z*v.x - x*v.z, x*v.y - y*v.x);
-    return temp;
-}
-
 // dot product
 template <typename T>
 T Vector3<T>::operator *(const Vector3<T> &v) const
 {
     return x*v.x + y*v.y + z*v.z;
-}
-
-template <typename T>
-T Vector3<T>::length(void) const
-{
-    return norm(x, y, z);
 }
 
 // limit xy component vector to a given length. returns true if vector was limited
@@ -366,34 +352,9 @@ bool Vector3<T>::is_inf(void) const
 }
 
 template <typename T>
-Vector3<T> &Vector3<T>::operator +=(const Vector3<T> &v)
-{
-    x+=v.x; y+=v.y; z+=v.z;
-    return *this;
-}
-
-template <typename T>
 Vector3<T> Vector3<T>::operator /(const T num) const
 {
     return Vector3<T>(x/num, y/num, z/num);
-}
-
-template <typename T>
-Vector3<T> Vector3<T>::operator *(const T num) const
-{
-    return Vector3<T>(x*num, y*num, z*num);
-}
-
-template <typename T>
-Vector3<T> Vector3<T>::operator -(const Vector3<T> &v) const
-{
-    return Vector3<T>(x-v.x, y-v.y, z-v.z);
-}
-
-template <typename T>
-Vector3<T> Vector3<T>::operator +(const Vector3<T> &v) const
-{
-    return Vector3<T>(x+v.x, y+v.y, z+v.z);
 }
 
 template <typename T>

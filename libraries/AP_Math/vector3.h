@@ -103,19 +103,28 @@ public:
     Vector3<T> operator -(void) const;
 
     // addition
-    Vector3<T> operator +(const Vector3<T> &v) const;
+    Vector3<T> operator +(const Vector3<T> &v) const {
+        return Vector3<T>(x+v.x, y+v.y, z+v.z);
+    }
 
     // subtraction
-    Vector3<T> operator -(const Vector3<T> &v) const;
+    Vector3<T> operator -(const Vector3<T> &v) const {
+        return Vector3<T>(x-v.x, y-v.y, z-v.z);
+    }
 
     // uniform scaling
-    Vector3<T> operator *(const T num) const;
+    Vector3<T> operator *(const T num) const {
+        return Vector3<T>(x*num, y*num, z*num);
+    }
 
     // uniform scaling
     Vector3<T> operator  /(const T num) const;
 
     // addition
-    Vector3<T> &operator +=(const Vector3<T> &v);
+    Vector3<T> &operator +=(const Vector3<T> &v) {
+        x+=v.x; y+=v.y; z+=v.z;
+        return *this;
+    }
 
     // subtraction
     Vector3<T> &operator -=(const Vector3<T> &v);
@@ -164,7 +173,9 @@ public:
     Matrix3<T> mul_rowcol(const Vector3<T> &v) const;
 
     // cross product
-    Vector3<T> operator %(const Vector3<T> &v) const;
+    Vector3<T> operator %(const Vector3<T> &v) const {
+        return Vector3<T>(y*v.z - z*v.y, z*v.x - x*v.z, x*v.y - y*v.x);
+    }
 
     // cross product for Lua
     Vector3<T> cross(const Vector3<T> &v) const {
@@ -216,7 +227,9 @@ public:
     }
 
     // gets the length of this vector
-    T length(void) const;
+    T length(void) const {
+        return sqrtF(x*x + y*y + z*z);
+    }
 
     // limit xy component vector to a given length. returns true if vector was limited
     bool limit_length_xy(T max_length);
