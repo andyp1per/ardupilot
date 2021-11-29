@@ -159,6 +159,8 @@ void HarmonicNotchFilter<T>::allocate_filters(uint8_t harmonics, bool double_not
     _harmonics = harmonics;
 }
 
+#pragma GCC optimize("O2")
+
 /*
   update the underlying filters' center frequency using the current attenuation and quality
   this function is cheaper than init() because A & Q do not need to be recalculated
