@@ -596,6 +596,8 @@ void NavEKF3_core::SelectVelPosFusion()
 }
 
 // fuse selected position, velocity and height measurements
+#pragma GCC push_options
+#pragma GCC optimize("O3")
 void NavEKF3_core::FuseVelPosNED()
 {
     // health is set bad until test passed
@@ -1043,6 +1045,7 @@ void NavEKF3_core::FuseVelPosNED()
         }
     }
 }
+#pragma GCC pop_options
 
 /********************************************************
 *                   MISC FUNCTIONS                      *

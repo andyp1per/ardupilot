@@ -441,6 +441,8 @@ void NavEKF3_core::SelectMagFusion()
  * The script file used to generate these and other equations in this filter can be found here:
  * https://github.com/PX4/ecl/blob/master/matlab/scripts/Inertial%20Nav%20EKF/GenerateNavFilterEquations.m
 */
+#pragma GCC push_options
+#pragma GCC optimize("O3")
 void NavEKF3_core::FuseMagnetometer()
 {
     // declarations
@@ -890,6 +892,7 @@ void NavEKF3_core::FuseMagnetometer()
         }
     }
 }
+#pragma GCC push_options
 
 /*
  * Fuse direct yaw measurements using explicit algebraic equations auto-generated from
