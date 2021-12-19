@@ -687,8 +687,8 @@ public:
     class TCal {
     public:
         static const struct AP_Param::GroupInfo var_info[];
-        void correct_accel(float temperature, float cal_temp, Vector3f &accel) const;
-        void correct_gyro(float temperature, float cal_temp, Vector3f &accel) const;
+        Vector3f calc_accel_correction(float temperature, float cal_temp) const;
+        Vector3f calc_gyro_correction(float temperature, float cal_temp) const;
         void sitl_apply_accel(float temperature, Vector3f &accel) const;
         void sitl_apply_gyro(float temperature, Vector3f &accel) const;
 
@@ -751,7 +751,7 @@ public:
         Vector3f gyro_tref;
         Learn *learn;
 
-        void correct_sensor(float temperature, float cal_temp, const AP_Vector3f coeff[3], Vector3f &v) const;
+        void calc_sensor_correction(float temperature, float cal_temp, const AP_Vector3f coeff[3]) const;
         Vector3f polynomial_eval(float temperature, const AP_Vector3f coeff[3]) const;
 
         // get instance number

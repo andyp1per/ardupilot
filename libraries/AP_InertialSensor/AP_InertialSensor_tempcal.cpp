@@ -208,10 +208,10 @@ Vector3f AP_InertialSensor::TCal::polynomial_eval(float tdiff, const AP_Vector3f
 /*
   correct a single sensor for the current temperature
  */
-void AP_InertialSensor::TCal::correct_sensor(float temperature, float cal_temp, const AP_Vector3f coeff[3], Vector3f &v) const
+Vector3f AP_InertialSensor::TCal::calc_sensor_correction(float temperature, float cal_temp, const AP_Vector3f coeff[3]) const
 {
     if (enable != Enable::Enabled) {
-        return;
+        return Vector3f();
     }
     temperature = constrain_float(temperature, temp_min, temp_max);
     cal_temp = constrain_float(cal_temp, temp_min, temp_max);
@@ -219,23 +219,25 @@ void AP_InertialSensor::TCal::correct_sensor(float temperature, float cal_temp, 
 
     // get the polynomial correction for the difference between the
     // current temperature and the mid temperature
-    v -= polynomial_eval(temperature - TEMP_REFERENCE, coeff);
+    Vector3f v = -polynomial_eval(temperature - TEMP_REFERENCE, coeff);
 
     // we need to add the correction for the temperature
     // difference between the TREF, which is the reference used for
     // the calibration process, and the cal_temp, which is the
     // temperature that the offsets and scale factors was setup for
     v += polynomial_eval(cal_temp - TEMP_REFERENCE, coeff);
+
+    return v;
 }
 
-void AP_InertialSensor::TCal::correct_accel(float temperature, float cal_temp, Vector3f &accel) const
+Vector3f AP_InertialSensor::TCal::calc_accel_correction(float temperature, float cal_temp) const
 {
-    correct_sensor(temperature, cal_temp, accel_coeff, accel);
+    return calc_sensor_correction(temperature, cal_temp, accel_coeff);
 }
 
-void AP_InertialSensor::TCal::correct_gyro(float temperature, float cal_temp, Vector3f &gyro) const
+Vector3f AP_InertialSensor::TCal::calc_gyro_correction(float temperature, float cal_temp) const
 {
-    correct_sensor(temperature, cal_temp, gyro_coeff, gyro);
+    return calc_sensor_correction(temperature, cal_temp, gyro_coeff);
 }
 
 /*
