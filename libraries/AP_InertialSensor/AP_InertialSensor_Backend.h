@@ -296,6 +296,13 @@ protected:
     float _last_harmonic_notch_bandwidth_hz;
     float _last_harmonic_notch_attenuation_dB;
 
+#if HAL_INS_TEMPERATURE_CAL_ENABLE
+    Vector3f _last_tcal_accel_offset;
+    Vector3f _last_tcal_gyro_offset;
+    uint8_t _tcal_accel_offset_count;
+    uint8_t _tcal_gyro_offset_count;
+#endif
+
     void set_gyro_orientation(uint8_t instance, enum Rotation rotation) {
         _imu._gyro_orientation[instance] = rotation;
     }
