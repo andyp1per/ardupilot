@@ -18,7 +18,6 @@
 
 #define AP_INLINE_VECTOR_OPS
 
-#include <AP_Math/AP_Math.h>
 #include "AP_InertialSensor.h"
 
 #if HAL_INS_TEMPERATURE_CAL_ENABLE

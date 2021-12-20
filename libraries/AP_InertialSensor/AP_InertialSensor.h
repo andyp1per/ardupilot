@@ -751,7 +751,7 @@ public:
         Vector3f gyro_tref;
         Learn *learn;
 
-        void calc_sensor_correction(float temperature, float cal_temp, const AP_Vector3f coeff[3]) const;
+        Vector3f calc_sensor_correction(float temperature, float cal_temp, const AP_Vector3f coeff[3]) const;
         Vector3f polynomial_eval(float temperature, const AP_Vector3f coeff[3]) const;
 
         // get instance number
