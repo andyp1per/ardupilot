@@ -618,6 +618,12 @@ void AP_GyroFFT::update_freq_hover(float dt, float throttle_out)
     _freq_hover_hz = constrain_float(_freq_hover_hz + (dt / (10.0f + dt)) * (get_weighted_noise_center_freq_hz() - _freq_hover_hz), _fft_min_hz, _fft_max_hz);
     _bandwidth_hover_hz = constrain_float(_bandwidth_hover_hz + (dt / (10.0f + dt)) * (get_weighted_noise_center_bandwidth_hz() - _bandwidth_hover_hz), 0, _fft_max_hz * 0.5f);
     _throttle_ref = constrain_float(_throttle_ref + (dt / (10.0f + dt)) * (throttle_out * sq((float)_fft_min_hz.get() / _freq_hover_hz.get()) - _throttle_ref), 0.01f, 0.9f);
+    // throttle averaging for average fft calculation
+    if (is_zero(_avg_throttle_out)) {
+        _avg_throttle_out = throttle_out;
+    } else {
+        _avg_throttle_out = constrain_float(_avg_throttle_out + (dt / (10.0f + dt)) * (throttle_out - _avg_throttle_out), 0.01f, 0.9f);
+    }
 }
 
 // save parameters as part of disarming
@@ -631,6 +637,59 @@ void AP_GyroFFT::save_params_on_disarm()
     _freq_hover_hz.save();
     _bandwidth_hover_hz.save();
     _throttle_ref.save();
+}
+
+    // notch tuning
+void AP_GyroFFT::start_notch_tune()
+{
+    if (!analysis_enabled()) {
+        return;
+    }
+
+    if (!hal.dsp->fft_start_average(_state)) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: Unable to start FFT averaging");
+    }
+    _avg_throttle_out = 0.0f;
+}
+
+void AP_GyroFFT::stop_notch_tune()
+{
+    if (!analysis_enabled()) {
+        return;
+    }
+
+    float freqs[FrequencyPeak::MAX_TRACKED_PEAKS] {};
+
+    uint16_t numpeaks = hal.dsp->fft_stop_average(_state, _config._fft_start_bin, _config._fft_end_bin, freqs);
+
+    if (numpeaks == 0) {
+        return;
+    }
+
+    float harmonic = freqs[0];
+    float harmonic_fit = 100.0f;
+
+    for (uint8_t i = 1; i < numpeaks; i++) {
+        if (freqs[i] < harmonic) {
+            const float fit = 100.0f * fabsf(harmonic - freqs[i] * _harmonic_multiplier) / harmonic;
+            if (isfinite(fit) && fit < _harmonic_fit && fit < harmonic_fit) {
+                harmonic = freqs[i];
+                harmonic_fit = fit;
+            }
+        }
+    }
+
+    gcs().send_text(MAV_SEVERITY_INFO, "FFT: Found peaks at %.1f %.1f %.1f", freqs[0], freqs[1], freqs[2]);
+    gcs().send_text(MAV_SEVERITY_INFO, "FFT: Selected %.1f with fit %.1f%%\n", harmonic, is_equal(harmonic_fit, 100.0f) ? 100.0f : 100.0f - harmonic_fit);
+
+    // pick a ref which means the notch covers all the way down to FFT_MINHZ
+    const float thr_ref = _avg_throttle_out * sq((float)_fft_min_hz.get() / harmonic);
+
+    if (!_ins->setup_throttle_gyro_harmonic_notch((float)_fft_min_hz.get(), thr_ref)) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "FFT: Unable to enable throttle-based notch");
+    }
+
+    gcs().send_text(MAV_SEVERITY_INFO, "FFT: Notch frequency %.1fHz and ref %.2f selected", (float)_fft_min_hz.get(), thr_ref);
 }
 
 // return the noise peak that is being tracked
