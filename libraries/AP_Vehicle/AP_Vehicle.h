@@ -154,6 +154,11 @@ public:
     virtual void get_scheduler_tasks(const AP_Scheduler::Task *&tasks, uint8_t &task_count, uint32_t &log_bit) = 0;
 
     /*
+      print fast_loop sub-tasks
+    */
+    virtual void fast_loop_task_info(ExpandingString &str) {}
+
+    /*
       set the "likely flying" flag. This is not guaranteed to be
       accurate, but is the vehicle codes best guess as to the whether
       the vehicle is currently flying
