@@ -80,6 +80,8 @@
 #include "version.h"
 #undef FORCE_VERSION_H_INCLUDE
 
+#include <AP_Scheduler/PerfInfo.h>
+
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
 #define SCHED_TASK(func, _interval_ticks, _max_time_micros, _prio) SCHED_TASK_CLASS(Copter, &copter, func, _interval_ticks, _max_time_micros, _prio)
@@ -237,21 +239,57 @@ void Copter::get_scheduler_tasks(const AP_Scheduler::Task *&tasks,
 
 constexpr int8_t Copter::_failsafe_priorities[7];
 
+#if HAL_ENABLE_THREAD_STATISTICS
+struct FastLoopTaskInfo {
+    const char* task_name;
+    AP::PerfInfo::TaskInfo task;
+};
+
+static FastLoopTaskInfo fast_loop_tasks[] =
+{
+    {" update"},
+    {" rate_controller_run"},
+    {" motors_output"},
+    {" read_AHRS"},
+    {" read_inertia"},
+    {" check_ekf_reset"},
+    {" update_flight_mode"},
+    {" update_home_from_EKF"},
+    {" update_land_and_crash_detectors"}
+};
+
+#define TIME_TASK(i) last = now; \
+    now = AP_HAL::micros(); \
+    fast_loop_tasks[i++].task.update(now - last, false)
+
+#else
+#define TIME_TASK(i) do {} while (0)
+#endif
+
 // Main loop - 400hz
 void Copter::fast_loop()
 {
+#if HAL_ENABLE_THREAD_STATISTICS
+    uint8_t i = 0;
+    uint32_t last = 0;
+    uint32_t now = AP_HAL::micros();
+#endif
     // update INS immediately to get current gyro data populated
     ins.update();
+    TIME_TASK(i);
 
     // run low level rate controllers that only require IMU data
     attitude_control->rate_controller_run();
+    TIME_TASK(i);
 
     // send outputs to the motors library immediately
     motors_output();
+    TIME_TASK(i);
 
     // run EKF state estimator (expensive)
     // --------------------
     read_AHRS();
+    TIME_TASK(i);
 
 #if FRAME_CONFIG == HELI_FRAME
     update_heli_control_dynamics();
@@ -263,18 +301,23 @@ void Copter::fast_loop()
     // Inertial Nav
     // --------------------
     read_inertia();
+    TIME_TASK(i);
 
     // check if ekf has reset target heading or position
     check_ekf_reset();
+    TIME_TASK(i);
 
     // run the attitude controllers
     update_flight_mode();
+    TIME_TASK(i);
 
     // update home from EKF if necessary
     update_home_from_EKF();
+    TIME_TASK(i);
 
     // check if we've landed or crashed
     update_land_and_crash_detectors();
+    TIME_TASK(i);
 
 #if HAL_MOUNT_ENABLED
     // camera mount's fast update
@@ -291,6 +334,20 @@ void Copter::fast_loop()
     if (should_log(MASK_LOG_VIDEO_STABILISATION)) {
         ahrs.write_video_stabilisation();
     }
+}
+
+void Copter::fast_loop_task_info(ExpandingString &str)
+{
+#if HAL_ENABLE_THREAD_STATISTICS
+    float total_time = 1.0f;
+    for (uint8_t i = 0; i < ARRAY_SIZE(fast_loop_tasks); i++) {
+        total_time += fast_loop_tasks[i].task.elapsed_time_us;
+    }
+
+    for (uint8_t i = 0; i < ARRAY_SIZE(fast_loop_tasks); i++) {
+        fast_loop_tasks[i].task.print(fast_loop_tasks[i].task_name, total_time, str);
+    }
+#endif
 }
 
 #if AP_SCRIPTING_ENABLED

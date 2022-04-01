@@ -642,6 +642,8 @@ private:
                              uint8_t &task_count,
                              uint32_t &log_bit) override;
     void fast_loop() override;
+    void fast_loop_task_info(ExpandingString &str) override;
+
 #if AP_SCRIPTING_ENABLED
     bool start_takeoff(float alt) override;
     bool set_target_location(const Location& target_loc) override;
