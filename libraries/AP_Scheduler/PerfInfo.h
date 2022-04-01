@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <AP_Common/ExpandingString.h>
 
 namespace AP {
 
@@ -16,6 +17,9 @@ public:
         uint32_t tick_count;
         uint16_t slip_count;
         uint16_t overrun_count;
+
+        void update(uint16_t task_time_us, bool overrun);
+        void print(const char* task_name, uint32_t total_time, ExpandingString& str) const;
     };
 
     /* Do not allow copies */

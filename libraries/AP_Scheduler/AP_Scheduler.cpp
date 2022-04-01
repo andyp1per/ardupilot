@@ -518,21 +518,12 @@ void AP_Scheduler::task_info(ExpandingString &str)
             // perf_info list
         }
 
-        uint16_t avg = 0;
-        float pct = 0.0f;
-        if (ti != nullptr && ti->tick_count > 0) {
-            pct = ti->elapsed_time_us * 100.0f / total_time;
-            avg = MIN(uint16_t(ti->elapsed_time_us / ti->tick_count), 9999);
-        }
+        ti->print(task_name, total_time, str);
 
-#if HAL_MINIMIZE_FEATURES
-        const char* fmt = "%-16.16s MIN=%4u MAX=%4u AVG=%4u OVR=%3u SLP=%3u, TOT=%4.1f%%\n";
-#else
-        const char* fmt = "%-32.32s MIN=%4u MAX=%4u AVG=%4u OVR=%3u SLP=%3u, TOT=%4.1f%%\n";
-#endif
-        str.printf(fmt, task_name,
-                   unsigned(MIN(ti->min_time_us, 9999)), unsigned(MIN(ti->max_time_us, 9999)), unsigned(avg),
-                   unsigned(MIN(ti->overrun_count, 999)), unsigned(MIN(ti->slip_count, 999)), pct);
+        if (i == 0) {
+            // print out vehicle specific breakdown
+            AP::vehicle()->fast_loop_task_info(str);
+        }
     }
 }
 

@@ -64,17 +64,40 @@ void AP::PerfInfo::update_task_info(uint8_t task_index, uint16_t task_time_us, b
         return;
     }
     TaskInfo& ti = _task_info[task_index];
-    ti.max_time_us = MAX(ti.max_time_us, task_time_us);
-    if (ti.min_time_us == 0) {
-        ti.min_time_us = task_time_us;
+    ti.update(task_time_us, overrun);
+}
+
+void AP::PerfInfo::TaskInfo::update(uint16_t task_time_us, bool overrun)
+{
+    max_time_us = MAX(max_time_us, task_time_us);
+    if (min_time_us == 0) {
+        min_time_us = task_time_us;
     } else {
-        ti.min_time_us = MIN(ti.min_time_us, task_time_us);
+        min_time_us = MIN(min_time_us, task_time_us);
     }
-    ti.elapsed_time_us += task_time_us;
-    ti.tick_count++;
+    elapsed_time_us += task_time_us;
+    tick_count++;
     if (overrun) {
-        ti.overrun_count++;
+        overrun_count++;
     }
+}
+
+void AP::PerfInfo::TaskInfo::print(const char* task_name, uint32_t total_time, ExpandingString& str) const
+{
+    uint16_t avg = 0;
+    float pct = 0.0f;
+    if (tick_count > 0) {
+        pct = elapsed_time_us * 100.0f / total_time;
+        avg = MIN(uint16_t(elapsed_time_us / tick_count), 9999);
+    }
+#if HAL_MINIMIZE_FEATURES
+    const char* fmt = "%-16.16s MIN=%4u MAX=%4u AVG=%4u OVR=%3u SLP=%3u, TOT=%4.1f%%\n";
+#else
+    const char* fmt = "%-32.32s MIN=%4u MAX=%4u AVG=%4u OVR=%3u SLP=%3u, TOT=%4.1f%%\n";
+#endif
+    str.printf(fmt, task_name,
+                unsigned(MIN(min_time_us, 9999)), unsigned(MIN(max_time_us, 9999)), unsigned(avg),
+                unsigned(MIN(overrun_count, 999)), unsigned(MIN(slip_count, 999)), pct);
 }
 
 // check_loop_time - check latest loop time vs min, max and overtime threshold
