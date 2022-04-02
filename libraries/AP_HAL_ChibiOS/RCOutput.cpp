@@ -150,8 +150,8 @@ void RCOutput::init()
  */
 void RCOutput::rcout_thread()
 {
-    uint64_t last_thread_run_us = 0; // last time we did a 1kHz run of rcout
-    uint64_t last_cycle_run_us = 0;
+    uint32_t last_thread_run_us = 0; // last time we did a 1kHz run of rcout
+    uint32_t last_cycle_run_us = 0;
 
     rcout_thread_ctx = chThdGetSelfX();
 
@@ -234,18 +234,15 @@ void RCOutput::dshot_collect_dma_locks(uint32_t cycle_start_us, uint32_t timeout
         pwm_group &group = pwm_group_list[i];
         if (group.dma_handle != nullptr && group.dma_handle->is_locked()) {
             // calculate how long we have left
-            uint64_t now = AP_HAL::micros64();
+            uint32_t now = AP_HAL::micros();
             // if we have time left wait for the event
             eventmask_t mask = 0;
-            const uint64_t pulse_elapsed_us = now - group.last_dmar_send_us;
-            uint32_t wait_us = 0;
-            if (now < (cycle_start_us + timeout_period_us)) {
-                wait_us = (cycle_start_us + timeout_period_us) - now;
-            }
-            if (pulse_elapsed_us < group.dshot_pulse_send_time_us) {
-                // better to let the burst write in progress complete rather than cancelling mid way through
-                wait_us = MAX(wait_us, group.dshot_pulse_send_time_us - pulse_elapsed_us);
-            }
+            const uint32_t pulse_remaining_us
+                = AP_HAL::timeout_remaining(group.last_dmar_send_us, now, group.dshot_pulse_send_time_us);
+            const uint32_t timeout_remaining_us
+                = AP_HAL::timeout_remaining(cycle_start_us, now, timeout_period_us);
+            // better to let the burst write in progress complete rather than cancelling mid way through
+            uint32_t wait_us = MAX(pulse_remaining_us, timeout_remaining_us);
 
             // waiting for a very short period of time can cause a
             // timer wrap with ChibiOS timers. Use CH_CFG_ST_TIMEDELTA
@@ -709,7 +706,7 @@ void RCOutput::push_local(void)
     if (widest_pulse > 2300) {
         widest_pulse = 2300;
     }
-    trigger_widest_pulse = widest_pulse;
+    trigger_widest_pulse = widest_pulse + 50;
 
     trigger_groupmask = need_trigger;
 
@@ -1173,15 +1170,15 @@ bool RCOutput::enable_px4io_sbus_out(uint16_t rate_hz)
 /*
   trigger output groups for oneshot or dshot modes
  */
-void RCOutput::trigger_groups(void)
+void RCOutput::trigger_groups()
 {
     if (!chMtxTryLock(&trigger_mutex)) {
         return;
     }
-    uint64_t now = AP_HAL::micros64();
-    if (now < min_pulse_trigger_us) {
+
+    if (!AP_HAL::timeout_expired_us(last_pulse_trigger_us, trigger_widest_pulse)) {
         // guarantee minimum pulse separation
-        hal.scheduler->delay_microseconds(min_pulse_trigger_us - now);
+        hal.scheduler->delay_microseconds(AP_HAL::timeout_remaining_us(last_pulse_trigger_us, trigger_widest_pulse));
     }
 
     osalSysLock();
@@ -1210,7 +1207,7 @@ void RCOutput::trigger_groups(void)
       calculate time that we are allowed to trigger next pulse
       to guarantee at least a 50us gap between pulses
     */
-    min_pulse_trigger_us = AP_HAL::micros64() + trigger_widest_pulse + 50;
+    last_pulse_trigger_us = AP_HAL::micros();
 
     chMtxUnlock(&trigger_mutex);
 }
@@ -1226,7 +1223,7 @@ void RCOutput::timer_tick(uint32_t cycle_start_us, uint32_t timeout_period_us)
     }
 
     // if we have enough time left send out LED data
-    if (serial_led_pending && ((cycle_start_us + timeout_period_us) > (AP_HAL::micros() + (_dshot_period_us >> 1)))) {
+    if (serial_led_pending && AP_HAL::timeout_remaining_us(cycle_start_us, timeout_period_us) > (_dshot_period_us >> 1)) {
         serial_led_pending = false;
         for (auto &group : pwm_group_list) {
             serial_led_pending |= !serial_led_send(group);
@@ -1236,14 +1233,11 @@ void RCOutput::timer_tick(uint32_t cycle_start_us, uint32_t timeout_period_us)
         dshot_collect_dma_locks(cycle_start_us, timeout_period_us);
     }
 
-    if (min_pulse_trigger_us == 0) {
+    if (last_pulse_trigger_us == 0) {
         return;
     }
 
-    uint64_t now = AP_HAL::micros64();
-
-    if (now > min_pulse_trigger_us &&
-        now - min_pulse_trigger_us > 4000) {
+    if (AP_HAL::timeout_expired_us(last_pulse_trigger_us, trigger_widest_pulse + 4000)) {
         // trigger at a minimum of 250Hz
         trigger_groups();
     }
@@ -1393,7 +1387,7 @@ void RCOutput::dshot_send(pwm_group &group, uint32_t cycle_start_us, uint32_t ti
 
     // if we are sharing UP channels then it might have taken a long time to get here,
     // if there's not enough time to actually send a pulse then cancel
-    if (AP_HAL::micros() + group.dshot_pulse_time_us > (cycle_start_us + timeout_period_us)) {
+    if (AP_HAL::timeout_remaining_us(cycle_start_us, timeout_period_us) < group.dshot_pulse_time_us) {
         group.dma_handle->unlock();
         return;
     }

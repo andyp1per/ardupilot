@@ -534,8 +534,8 @@ private:
     // mask of active ESCs
     uint32_t _active_escs_mask;
 
-    // min time to trigger next pulse to prevent overlap
-    uint64_t min_pulse_trigger_us;
+    // last time pulse was triggererd used to prevent overlap
+    uint32_t last_pulse_trigger_us;
 
     // mutex for oneshot triggering
     mutex_t trigger_mutex;
