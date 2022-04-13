@@ -1389,8 +1389,8 @@ void Copter::convert_pid_parameters(void)
 
     // notch filter parameter conversions (changed position and type) for Copter-3.7
     const AP_Param::ConversionInfo notchfilt_conversion_info[] = {
-        { Parameters::k_param_ins, 165, AP_PARAM_INT16, "INS_NOTCH_FREQ" },
-        { Parameters::k_param_ins, 229, AP_PARAM_INT16, "INS_NOTCH_BW" },
+        { Parameters::k_param_ins, 165, AP_PARAM_INT16, "INS_HNTC2_FREQ" },
+        { Parameters::k_param_ins, 229, AP_PARAM_INT16, "INS_HNTC2_BW" },
     };
     uint8_t notchfilt_table_size = ARRAY_SIZE(notchfilt_conversion_info);
     for (uint8_t i=0; i<notchfilt_table_size; i++) {
