@@ -47,6 +47,9 @@ public:
         return num_cores;
     }
 
+    // Allocate the filter
+    bool AllocateFilter(void);
+
     // Initialise the filter
     bool InitialiseFilter(void);
 

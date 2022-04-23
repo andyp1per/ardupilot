@@ -106,7 +106,7 @@ public:
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     uint32_t available_memory() const { return _RFRN.available_memory + 10240; }
 #else
-    uint32_t available_memory() const { return _RFRN.available_memory; }
+    uint32_t available_memory() const; { return _RFRN.available_memory; }
 #endif
 
     int8_t get_ekf_type(void) const {

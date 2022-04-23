@@ -219,6 +219,7 @@ void AP_GyroFFT::init(uint16_t loop_rate_hz)
         gcs().send_text(MAV_SEVERITY_WARNING, "AP_GyroFFT: req alloc %u bytes (free=%u)", (unsigned int)allocation_count * _window_size, (unsigned int)hal.util->available_memory());
         _window_size = FFT_DEFAULT_WINDOW_SIZE;
     }
+    gcs().send_text(MAV_SEVERITY_WARNING, "AP_GyroFFT: req alloc %u bytes (free=%u)", (unsigned int)allocation_count * _window_size, (unsigned int)hal.util->available_memory());
     // save any changes that were made
     _window_size.save();
 

@@ -251,6 +251,11 @@ void AP_AHRS::init()
         }
     }
 #endif // !APM_BUILD_TYPE(APM_BUILD_AP_Periph)
+#if HAL_NAVEKF3_AVAILABLE
+    if (!EKF3.AllocateFilter()) {
+        GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "EKF3 filter allocation failed");
+    }
+#endif
 }
 
 // updates matrices responsible for rotating vectors from vehicle body

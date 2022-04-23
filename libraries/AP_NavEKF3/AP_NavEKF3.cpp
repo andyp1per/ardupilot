@@ -731,26 +731,12 @@ NavEKF3::NavEKF3()
 
 
 // Initialise the filter
-bool NavEKF3::InitialiseFilter(void)
+bool NavEKF3::AllocateFilter(void)
 {
     if (_enable == 0 || _imuMask == 0) {
         return false;
     }
     const auto &ins = AP::dal().ins();
-
-    AP::dal().start_frame(AP_DAL::FrameType::InitialiseFilterEKF3);
-
-    imuSampleTime_us = AP::dal().micros64();
-
-    // remember expected frame time
-    const float loop_rate = ins.get_loop_rate_hz();
-    if (!is_positive(loop_rate)) {
-        return false;
-    }
-    _frameTimeUsec = 1e6 / loop_rate;
-
-    // expected number of IMU frames per prediction
-    _framesPerPrediction = uint8_t((EKF_TARGET_DT / (_frameTimeUsec * 1.0e-6) + 0.5));
 
 #if !APM_BUILD_TYPE(APM_BUILD_AP_DAL_Standalone)
     // convert parameters if necessary
@@ -787,7 +773,7 @@ bool NavEKF3::InitialiseFilter(void)
 
         // check if there is enough memory to create the EKF cores
         if (AP::dal().available_memory() < sizeof(NavEKF3_core)*num_cores + 4096) {
-            GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "EKF3 not enough memory");
+            GCS_SEND_TEXT(MAV_SEVERITY_CRITICAL, "EKF3 not enough memory (free=%u)", unsigned(AP::dal().available_memory()));
             _enable.set(0);
             return false;
         }
@@ -831,6 +817,31 @@ bool NavEKF3::InitialiseFilter(void)
 
     // invalidate shared origin
     common_origin_valid = false;
+
+    return true;
+}
+
+// Initialise the filter
+bool NavEKF3::InitialiseFilter(void)
+{
+    if (_enable == 0 || _imuMask == 0) {
+        return false;
+    }
+
+    AP::dal().start_frame(AP_DAL::FrameType::InitialiseFilterEKF3);
+    const auto &ins = AP::dal().ins();
+
+    // remember expected frame time
+    const float loop_rate = ins.get_loop_rate_hz();
+    if (!is_positive(loop_rate)) {
+        return false;
+    }
+    _frameTimeUsec = 1e6 / loop_rate;
+
+    // expected number of IMU frames per prediction
+    _framesPerPrediction = uint8_t((EKF_TARGET_DT / (_frameTimeUsec * 1.0e-6) + 0.5));
+
+    imuSampleTime_us = AP::dal().micros64();
 
     // initialise the cores. We return success only if all cores
     // initialise successfully
