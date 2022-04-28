@@ -184,9 +184,10 @@ uint16_t AP_Logger_Block::StartRead(uint32_t PageAdr)
     // copy flash page to buffer
     if (erase_started) {
         memset(buffer, 0xff, df_PageSize);
-    } else {
-        PageToBuffer(df_Read_PageAdr);
+        return 0;
     }
+
+    PageToBuffer(df_Read_PageAdr);
     return ReadHeaders();
 }
 
@@ -379,12 +380,14 @@ bool AP_Logger_Block::NeedErase(void)
 void AP_Logger_Block::validate_log_structure()
 {
     WITH_SEMAPHORE(sem);
-    bool wrapped = is_wrapped();
-    uint32_t page = 1;
-    uint32_t page_start = 1;
 
-    uint16_t file = StartRead(page);
-    uint16_t first_file = file;
+    bool wrapped = is_wrapped();
+    uint32_t page = 1;          // current page
+    uint32_t page_start = 1;    // first page of first complete file
+
+    uint16_t file = StartRead(page);    // file number of current file
+    uint32_t first_page = df_FilePage;  // first file page of current file
+    uint16_t first_file = file;         // file number of first complete file
     uint16_t next_file = file;
     uint16_t last_file = 0;
 
@@ -400,23 +403,27 @@ void AP_Logger_Block::validate_log_structure()
         if (wrapped && file == 0xFFFF) {
             file = StartRead((get_block(page) + 1) * df_PagePerBlock + 1);
         }
+        first_page = df_FilePage;
         if (wrapped && file < next_file) {
-            page_start = page;
+            // this is the point at which the final log ends
+            page_start = first_page == 1 ? page : find_last_page_of_log(file) + 1;
             next_file = file;
             first_file = file;
         } else if (last_file < next_file) {
             last_file = file;
         }
         if (file == next_file) {
-            hal.console->printf("Found complete log %d at %X-%X\n", int(file), unsigned(page), unsigned(find_last_page_of_log(file)));
+            hal.console->printf("Found %s log %d at %X-%X\n", first_page == 1 ? "complete" : "partial",
+                int(file), unsigned(page), unsigned(find_last_page_of_log(file)));
         }
     }
 
     if (file != 0xFFFF && file != next_file && page <= df_NumPages && page > 0) {
-        hal.console->printf("Found corrupt log %d at 0x%04X, erasing", int(file), unsigned(page));
+        hal.console->printf("Found corrupt log %d at 0x%04X, erasing\n", int(file), unsigned(page));
         df_EraseFrom = page;
     } else if (next_file != 0xFFFF && page > 0 && next_file > 1) { // chip is empty
-        hal.console->printf("Found %d complete logs at 0x%04X-0x%04X", int(next_file - first_file), unsigned(page_start), unsigned(page - 1));
+        hal.console->printf("Found %d complete logs at 0x%04X-0x%04X\n", int(next_file - first_file),
+            unsigned(page_start), unsigned(find_last_page_of_log(last_file)));
     }
 }
 
@@ -762,7 +769,8 @@ uint32_t AP_Logger_Block::find_last_page_of_log(uint16_t log_number)
         return bottom;
     }
 
-    GCS_SEND_TEXT(MAV_SEVERITY_ERROR, "No last page of log %d at top=%X or bot=%X", int(log_number), unsigned(top), unsigned(bottom));
+    GCS_SEND_TEXT(MAV_SEVERITY_ERROR, "No last page of log %d at top=%X(%d) or bot=%X(%d)",
+        int(log_number), unsigned(top), StartRead(top), unsigned(bottom), StartRead(bottom));
     return 0;
 }
 
