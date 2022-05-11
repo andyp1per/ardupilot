@@ -148,6 +148,13 @@ const AP_Param::GroupInfo AC_AttitudeControl::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("INPUT_TC", 20, AC_AttitudeControl, _input_tc, AC_ATTITUDE_CONTROL_INPUT_TC_DEFAULT),
 
+    // @Param: ANTIG_BOOST
+    // @DisplayName: Anti-gravity boost
+    // @Description: Anti-gravity boost factor. A value of 1.0 means no boosting is performed. A value of greater than 1 will cause boosting to be applied to angle P and PD on pitch and roll.
+    // @Range: 1 2
+    // @User: Advanced
+    AP_GROUPINFO("ANTIG_BOOST", 21, AC_AttitudeControl, _anti_gravity_boost, 1.0f),
+
     AP_GROUPEND
 };
 
@@ -981,18 +988,29 @@ bool AC_AttitudeControl::ang_vel_to_euler_rate(const Vector3f& euler_rad, const 
 Vector3f AC_AttitudeControl::update_ang_vel_target_from_att_error(const Vector3f &attitude_error_rot_vec_rad)
 {
     Vector3f rate_target_ang_vel;
+    float angle_p_boost = 1.0f;
+
+    // Boost Angle P one very rapid throttle changes
+    if (_motors.get_throttle_slew_rate() > AC_ATTITUDE_CONTROL_AG_BOOST_THRESH) {
+        angle_p_boost = constrain_float(_anti_gravity_boost * _anti_gravity_boost, 1.0, 4.0);
+    }
+
     // Compute the roll angular velocity demand from the roll angle error
     if (_use_sqrt_controller && !is_zero(get_accel_roll_max_radss())) {
-        rate_target_ang_vel.x = sqrt_controller(attitude_error_rot_vec_rad.x, _p_angle_roll.kP(), constrain_float(get_accel_roll_max_radss() / 2.0f, AC_ATTITUDE_ACCEL_RP_CONTROLLER_MIN_RADSS, AC_ATTITUDE_ACCEL_RP_CONTROLLER_MAX_RADSS), _dt);
+        rate_target_ang_vel.x = sqrt_controller(attitude_error_rot_vec_rad.x, _p_angle_roll.kP(), constrain_float(get_accel_roll_max_radss() / 2.0f,
+                                                AC_ATTITUDE_ACCEL_RP_CONTROLLER_MIN_RADSS, AC_ATTITUDE_ACCEL_RP_CONTROLLER_MAX_RADSS), _dt)
+                                                * angle_p_boost;
     } else {
-        rate_target_ang_vel.x = _p_angle_roll.kP() * attitude_error_rot_vec_rad.x;
+        rate_target_ang_vel.x = _p_angle_roll.kP() * attitude_error_rot_vec_rad.x * angle_p_boost;
     }
 
     // Compute the pitch angular velocity demand from the pitch angle error
     if (_use_sqrt_controller && !is_zero(get_accel_pitch_max_radss())) {
-        rate_target_ang_vel.y = sqrt_controller(attitude_error_rot_vec_rad.y, _p_angle_pitch.kP(), constrain_float(get_accel_pitch_max_radss() / 2.0f, AC_ATTITUDE_ACCEL_RP_CONTROLLER_MIN_RADSS, AC_ATTITUDE_ACCEL_RP_CONTROLLER_MAX_RADSS), _dt);
+        rate_target_ang_vel.y = sqrt_controller(attitude_error_rot_vec_rad.y, _p_angle_pitch.kP() * angle_p_boost, constrain_float(get_accel_pitch_max_radss() / 2.0f,
+                                                AC_ATTITUDE_ACCEL_RP_CONTROLLER_MIN_RADSS, AC_ATTITUDE_ACCEL_RP_CONTROLLER_MAX_RADSS), _dt)
+                                                * angle_p_boost;
     } else {
-        rate_target_ang_vel.y = _p_angle_pitch.kP() * attitude_error_rot_vec_rad.y;
+        rate_target_ang_vel.y = _p_angle_pitch.kP() * attitude_error_rot_vec_rad.y * angle_p_boost;
     }
 
     // Compute the yaw angular velocity demand from the yaw angle error

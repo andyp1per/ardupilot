@@ -44,6 +44,7 @@
 #define AC_ATTITUDE_CONTROL_MAX                         5.0f    // maximum throttle mix default
 
 #define AC_ATTITUDE_CONTROL_THR_MIX_DEFAULT             0.5f  // ratio controlling the max throttle output during competing requests of low throttle from the pilot (or autopilot) and higher throttle for attitude control.  Higher favours Attitude over pilot input
+#define AC_ATTITUDE_CONTROL_AG_BOOST_THRESH             1.0f  // default angle-p/pd throttle boost threshold
 
 class AC_AttitudeControl {
 public:
@@ -418,6 +419,9 @@ protected:
 
     // rate controller input smoothing time constant
     AP_Float            _input_tc;
+
+    // angle_p/pd boost multiplier
+    AP_Float            _anti_gravity_boost;
 
     // Intersampling period in seconds
     float               _dt;

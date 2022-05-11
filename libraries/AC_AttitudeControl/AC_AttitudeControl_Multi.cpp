@@ -349,10 +349,17 @@ void AC_AttitudeControl_Multi::rate_controller_run()
 
     Vector3f gyro_latest = _ahrs.get_gyro_latest();
 
-    _motors.set_roll(get_rate_roll_pid().update_all(_ang_vel_body.x, gyro_latest.x, _motors.limit.roll) + _actuator_sysid.x);
+    float pd_boost = 1.0f;
+
+    // Boost PD on very rapid throttle changes
+    if (_motors.get_throttle_slew_rate() > AC_ATTITUDE_CONTROL_AG_BOOST_THRESH) {
+        pd_boost = constrain_float(_anti_gravity_boost, 1.0, 2.0);
+    }
+
+    _motors.set_roll(get_rate_roll_pid().update_all(_ang_vel_body.x, gyro_latest.x, _motors.limit.roll, pd_boost) + _actuator_sysid.x);
     _motors.set_roll_ff(get_rate_roll_pid().get_ff());
 
-    _motors.set_pitch(get_rate_pitch_pid().update_all(_ang_vel_body.y, gyro_latest.y, _motors.limit.pitch) + _actuator_sysid.y);
+    _motors.set_pitch(get_rate_pitch_pid().update_all(_ang_vel_body.y, gyro_latest.y, _motors.limit.pitch, pd_boost) + _actuator_sysid.y);
     _motors.set_pitch_ff(get_rate_pitch_pid().get_ff());
 
     _motors.set_yaw(get_rate_yaw_pid().update_all(_ang_vel_body.z, gyro_latest.z, _motors.limit.yaw) + _actuator_sysid.z);
