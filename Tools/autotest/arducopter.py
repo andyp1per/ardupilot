@@ -4949,7 +4949,7 @@ class AutoTestCopter(AutoTest):
             "LOG_DISARMED": 0,
             "SIM_VIB_MOT_MAX": 350,
             "SIM_GYR1_RND": 20,
-            "SIM_ESC_TELEM": 1,
+            "SIM_ESC_TELEM": 1
         })
         self.reboot_sitl()
 
@@ -8251,6 +8251,9 @@ class AutoTestCopter(AutoTest):
              "Test Splines and Terrain",
              self.test_terrain_spline_mission),
 
+            ("TakeoffCheck",
+             "Test takeoff check",
+             self.test_takeoff_check),
         ])
         return ret
 
