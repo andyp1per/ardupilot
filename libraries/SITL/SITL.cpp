@@ -292,6 +292,7 @@ const AP_Param::GroupInfo SIM::var_info3[] = {
     AP_GROUPINFO("ARSPD2_FAIL",   58, SIM,  arspd_fail[1], 0),
     AP_GROUPINFO("ARSPD2_FAILP",  59, SIM,  arspd_fail_pressure[1], 0),
     AP_GROUPINFO("ARSPD2_PITOT",  60, SIM,  arspd_fail_pitot_pressure[1], 0),
+    AP_GROUPINFO("ESC_ARM_RPM", 41, SIM,  esc_rpm_armed, 0.0f),
 
     // user settable common airspeed parameters
     AP_GROUPINFO("ARSPD_SIGN",    62, SIM,  arspd_signflip, 0),
