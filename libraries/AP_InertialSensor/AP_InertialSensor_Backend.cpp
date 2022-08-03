@@ -318,6 +318,7 @@ void AP_InertialSensor_Backend::_notify_new_gyro_raw_sample(uint8_t instance,
         _imu._new_gyro_data[instance] = true;
     }
 
+    // 5us
     if (!_imu.batchsampler.doing_post_filter_logging()) {
         log_gyro_raw(instance, sample_us, gyro);
     }
@@ -545,6 +546,7 @@ void AP_InertialSensor_Backend::_notify_new_accel_raw_sample(uint8_t instance,
         _imu._new_accel_data[instance] = true;
     }
 
+    // 5us
     if (!_imu.batchsampler.doing_post_filter_logging()) {
         log_accel_raw(instance, sample_us, accel);
     } else {
