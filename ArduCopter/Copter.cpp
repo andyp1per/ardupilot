@@ -514,6 +514,9 @@ void Copter::loop_rate_logging()
     if (should_log(MASK_LOG_ATTITUDE_FAST) && !copter.flightmode->logs_attitude()) {
         Log_Write_Attitude();
     }
+    if (should_log(MASK_LOG_FTN_FAST)) {
+        AP::ins().write_notch_log_messages();
+    }
 }
 
 // ten_hz_logging_loop
