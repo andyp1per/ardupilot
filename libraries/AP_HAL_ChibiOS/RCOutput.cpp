@@ -829,6 +829,17 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
         group.dma_handle = new Shared_DMA(group.dma_up_stream_id, SHARED_DMA_NONE,
                                           FUNCTOR_BIND_MEMBER(&RCOutput::dma_allocate, void, Shared_DMA *),
                                           FUNCTOR_BIND_MEMBER(&RCOutput::dma_deallocate, void, Shared_DMA *));
+#if !STM32_DMA_ADVANCED
+        // we don't do dma sharing in non advanced mode
+        // we do use the locking interface though, 
+        // that's why we initialise Shared_DMA but with empty alloc and dealloc methods
+        chSysLock();
+        group.dma = dmaStreamAllocI(group.dma_up_stream_id, 10, dma_irq_callback, &group);
+        chSysUnlock();
+        if (group.dma == nullptr) {
+            return false;
+        }
+#endif
         if (!group.dma_handle) {
             print_group_setup_error(group, "failed to allocate DMA");
             return false;
@@ -842,7 +853,7 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
             hal.util->free_type(group.dma_buffer, group.dma_buffer_len, AP_HAL::Util::MEM_DMA_SAFE);
             group.dma_buffer_len = 0;
         }
-        group.dma_buffer = (uint32_t *)hal.util->malloc_type(buffer_length, AP_HAL::Util::MEM_DMA_SAFE);
+        group.dma_buffer = (dmar_uint *)hal.util->malloc_type(buffer_length, AP_HAL::Util::MEM_DMA_SAFE);
         if (!group.dma_buffer) {
             group.dma_handle->unlock();
             print_group_setup_error(group, "failed to allocate DMA buffer");
@@ -867,10 +878,14 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
         pwmStop(group.pwm_drv);
         group.pwm_started = false;
     }
-
+    const uint32_t clock_hz = group.pwm_drv->clock;
     const uint32_t target_frequency = bitrate * bit_width;
     const uint32_t prescaler = calculate_bitrate_prescaler(group.pwm_drv->clock, target_frequency, is_dshot);
-
+    if (clock_hz < target_frequency) {
+        group.dma_handle->unlock();
+        print_group_setup_error(group, "failed to match clock speed");
+        return false;
+    }
     if (prescaler > 0x8000) {
         group.dma_handle->unlock();
         print_group_setup_error(group, "failed to match clock speed");
@@ -1045,24 +1060,25 @@ void RCOutput::set_output_mode(uint32_t mask, const enum output_mode mode)
     }
 #if HAL_WITH_IO_MCU
     if ((mode == MODE_PWM_ONESHOT ||
-         mode == MODE_PWM_ONESHOT125) &&
+        mode == MODE_PWM_ONESHOT125 ||
+        mode == MODE_PWM_BRUSHED ||
+        (mode >= MODE_PWM_DSHOT150 && mode <= MODE_PWM_DSHOT300)) &&
         (mask & ((1U<<chan_offset)-1)) &&
         AP_BoardConfig::io_enabled()) {
         iomcu_mode = mode;
-        // also setup IO to use a 1Hz frequency, so we only get output
-        // when we trigger
-        iomcu.set_freq(io_fast_channel_mask, 1);
-        iomcu.set_oneshot_mode();
-        return;
-    }
-    if (mode == MODE_PWM_BRUSHED &&
-        (mask & ((1U<<chan_offset)-1)) &&
-        AP_BoardConfig::io_enabled()) {
-        iomcu_mode = mode;
-        iomcu.set_brushed_mode();
+        iomcu.set_output_mode(mask, mode);
         return;
     }
 #endif
+}
+
+/*
+  enable telemetry request for a mask of channels. This is used
+  with DShot to get telemetry feedback
+ */
+void RCOutput::set_telem_request_mask(uint16_t mask)
+{
+    telem_request_mask = (mask >> chan_offset);
 }
 
 /*
@@ -1226,6 +1242,7 @@ void RCOutput::timer_tick(uint32_t time_out_us)
         return;
     }
 
+#if STM32_DMA_ADVANCED
     // if we have enough time left send out LED data
     if (serial_led_pending && (time_out_us > (AP_HAL::micros() + (_dshot_period_us >> 1)))) {
         serial_led_pending = false;
@@ -1236,6 +1253,7 @@ void RCOutput::timer_tick(uint32_t time_out_us)
         // release locks on the groups that are pending in reverse order
         dshot_collect_dma_locks(time_out_us);
     }
+#endif
 
     if (min_pulse_trigger_us == 0) {
         return;
@@ -1296,6 +1314,7 @@ __RAMFUNC__ void RCOutput::dshot_send_next_group(void* p)
  */
 void RCOutput::dma_allocate(Shared_DMA *ctx)
 {
+#if STM32_DMA_ADVANCED
     for (auto &group : pwm_group_list) {
         if (group.dma_handle == ctx && group.dma == nullptr) {
             chSysLock();
@@ -1308,6 +1327,7 @@ void RCOutput::dma_allocate(Shared_DMA *ctx)
 #endif
         }
     }
+#endif
 }
 
 /*
@@ -1315,6 +1335,7 @@ void RCOutput::dma_allocate(Shared_DMA *ctx)
  */
 void RCOutput::dma_deallocate(Shared_DMA *ctx)
 {
+#if STM32_DMA_ADVANCED
     for (auto &group : pwm_group_list) {
         if (group.dma_handle == ctx && group.dma != nullptr) {
             chSysLock();
@@ -1323,6 +1344,7 @@ void RCOutput::dma_deallocate(Shared_DMA *ctx)
             chSysUnlock();
         }
     }
+#endif
 }
 
 /*
@@ -1358,10 +1380,10 @@ uint16_t RCOutput::create_dshot_packet(const uint16_t value, bool telem_request,
 /*
   fill in a DMA buffer for dshot
  */
-void RCOutput::fill_DMA_buffer_dshot(uint32_t *buffer, uint8_t stride, uint16_t packet, uint16_t clockmul)
+void RCOutput::fill_DMA_buffer_dshot(dmar_uint *buffer, uint8_t stride, uint16_t packet, uint16_t clockmul)
 {
-    const uint32_t DSHOT_MOTOR_BIT_0 = DSHOT_BIT_0_TICKS * clockmul;
-    const uint32_t DSHOT_MOTOR_BIT_1 = DSHOT_BIT_1_TICKS * clockmul;
+    const dmar_uint DSHOT_MOTOR_BIT_0 = DSHOT_BIT_0_TICKS * clockmul;
+    const dmar_uint DSHOT_MOTOR_BIT_1 = DSHOT_BIT_1_TICKS * clockmul;
     uint16_t i = 0;
     for (; i < dshot_pre; i++) {
         buffer[i * stride] = 0;
@@ -1585,13 +1607,18 @@ void RCOutput::send_pulses_DMAR(pwm_group &group, uint32_t buffer_length)
     dmaStreamSetPeripheral(group.dma, &(group.pwm_drv->tim->DMAR));
     stm32_cacheBufferFlush(group.dma_buffer, buffer_length);
     dmaStreamSetMemory0(group.dma, group.dma_buffer);
-    dmaStreamSetTransactionSize(group.dma, buffer_length/sizeof(uint32_t));
+    dmaStreamSetTransactionSize(group.dma, buffer_length/sizeof(dmar_uint));
 #if STM32_DMA_ADVANCED
     dmaStreamSetFIFO(group.dma, STM32_DMA_FCR_DMDIS | STM32_DMA_FCR_FTH_FULL);
 #endif
     dmaStreamSetMode(group.dma,
                      STM32_DMA_CR_CHSEL(group.dma_up_channel) |
-                     STM32_DMA_CR_DIR_M2P | STM32_DMA_CR_PSIZE_WORD | STM32_DMA_CR_MSIZE_WORD |
+                     STM32_DMA_CR_DIR_M2P | STM32_DMA_CR_PSIZE_WORD | 
+#if STM32_DMA_ADVANCED
+                     STM32_DMA_CR_MSIZE_WORD |
+#else
+                     STM32_DMA_CR_MSIZE_HWORD |
+#endif
                      STM32_DMA_CR_MINC | STM32_DMA_CR_PL(3) |
                      STM32_DMA_CR_TEIE | STM32_DMA_CR_TCIE);
 
@@ -1750,10 +1777,10 @@ bool RCOutput::serial_setup_output(uint8_t chan, uint32_t baudrate, uint32_t cha
 /*
   fill in a DMA buffer for a serial byte, assuming 1 start bit and 1 stop bit
  */
-void RCOutput::fill_DMA_buffer_byte(uint32_t *buffer, uint8_t stride, uint8_t b, uint32_t bitval)
+void RCOutput::fill_DMA_buffer_byte(dmar_uint *buffer, uint8_t stride, uint8_t b, uint32_t bitval)
 {
-    const uint32_t BIT_0 = bitval;
-    const uint32_t BIT_1 = 0;
+    const dmar_uint BIT_0 = bitval;
+    const dmar_uint BIT_1 = 0;
 
     // start bit
     buffer[0] = BIT_0;

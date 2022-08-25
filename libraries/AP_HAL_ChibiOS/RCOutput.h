@@ -27,8 +27,14 @@
 
 #if HAL_USE_PWM == TRUE
 
-#if !STM32_DMA_ADVANCED && !defined(STM32G4) && !defined(STM32L4)
-#define DISABLE_DSHOT
+#ifndef DMA_DISABLE
+#define DMA_DISABLE 0
+#endif
+
+#if STM32_DMA_ADVANCED
+typedef uint32_t dmar_uint;
+#else
+typedef uint16_t dmar_uint;
 #endif
 
 #define RCOU_DSHOT_TIMING_DEBUG 0
@@ -150,7 +156,7 @@ public:
       with Dshot to get telemetry feedback
       The mask uses servo channel numbering
      */
-    void set_telem_request_mask(uint32_t mask) override { telem_request_mask = (mask >> chan_offset); }
+    void set_telem_request_mask(uint16_t mask) override;
 
 #ifdef HAL_WITH_BIDIR_DSHOT
     /*
@@ -281,7 +287,7 @@ private:
     static const uint8_t dshot_pre = 1;
     static const uint8_t dshot_post = 2;
     static const uint16_t dshot_bit_length = 16 + dshot_pre + dshot_post;
-    static const uint16_t DSHOT_BUFFER_LENGTH = dshot_bit_length * 4 * sizeof(uint32_t);
+    static const uint16_t DSHOT_BUFFER_LENGTH = dshot_bit_length*4*sizeof(dmar_uint);
     static const uint16_t MIN_GCR_BIT_LEN = 7;
     static const uint16_t MAX_GCR_BIT_LEN = 22;
     static const uint16_t GCR_TELEMETRY_BIT_LEN = MAX_GCR_BIT_LEN;
