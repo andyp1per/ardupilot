@@ -26,8 +26,10 @@
 
 #if HAL_USE_PWM == TRUE
 
-#if !STM32_DMA_ADVANCED && !defined(STM32G4) && !defined(STM32L4)
-#define DISABLE_DSHOT
+#if STM32_DMA_ADVANCED
+typedef uint32_t dmar_uint_t;
+#else
+typedef uint8_t dmar_uint_t;
 #endif
 
 #define RCOU_DSHOT_TIMING_DEBUG 0
@@ -109,12 +111,17 @@ public:
      */
     void led_timer_tick(uint64_t last_run_us);
 
+#if defined(IOMCU_FW) && HAL_ENABLE_DSHOT
+    void timer_tick() override;
+    static void dshot_send_trampoline(void *p);
+#endif
     /*
       setup for serial output to a set of ESCs, using the given
       baudrate. Assumes 1 start bit, 1 stop bit, LSB first and 8
       databits. This is used for ESC configuration and firmware
       flashing
      */
+#if AP_HAL_SHARED_DMA_ENABLED
     bool setup_serial_output(uint32_t chan_mask, ByteBuffer *buffer, uint32_t baudrate);
 
     /*
@@ -148,13 +155,14 @@ public:
       serial_setup_output()
      */
     void serial_end(void) override;
+#endif
 
     /*
       enable telemetry request for a mask of channels. This is used
       with Dshot to get telemetry feedback
       The mask uses servo channel numbering
      */
-    void set_telem_request_mask(uint32_t mask) override { telem_request_mask = (mask >> chan_offset); }
+    void set_telem_request_mask(uint32_t mask) override;
 
 #ifdef HAL_WITH_BIDIR_DSHOT
     /*
@@ -172,7 +180,7 @@ public:
      */
     void set_dshot_rate(uint8_t dshot_rate, uint16_t loop_rate_hz) override;
 
-#ifndef DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
     /*
       Set/get the dshot esc_type
      */
@@ -196,7 +204,7 @@ public:
      */
     void set_safety_mask(uint32_t mask) { safety_mask = mask; }
 
-#ifndef DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
     /*
      * mark the channels in chanmask as reversible. This is needed for some ESC types (such as Dshot)
      * so that output scaling can be performed correctly. The chanmask passed is added (ORed) into any existing mask.
@@ -240,6 +248,7 @@ public:
       setup serial LED output for a given channel number, with
       the given max number of LEDs in the chain.
      */
+#if AP_HAL_SHARED_DMA_ENABLED
     bool set_serial_led_num_LEDs(const uint16_t chan, uint8_t num_leds, output_mode mode = MODE_PWM_NONE, uint32_t clock_mask = 0) override;
 
     /*
@@ -252,7 +261,7 @@ public:
       trigger send of serial LED data
      */
     void serial_led_send(const uint16_t chan) override;
-
+#endif
     /*
       rcout thread
      */
@@ -285,7 +294,7 @@ private:
     static const uint8_t dshot_pre = 1;
     static const uint8_t dshot_post = 2;
     static const uint16_t dshot_bit_length = 16 + dshot_pre + dshot_post;
-    static const uint16_t DSHOT_BUFFER_LENGTH = dshot_bit_length * 4 * sizeof(uint32_t);
+    static const uint16_t DSHOT_BUFFER_LENGTH = dshot_bit_length*4*sizeof(dmar_uint_t);
     static const uint16_t MIN_GCR_BIT_LEN = 7;
     static const uint16_t MAX_GCR_BIT_LEN = 22;
     static const uint16_t GCR_TELEMETRY_BIT_LEN = MAX_GCR_BIT_LEN;
@@ -318,8 +327,10 @@ private:
         // mask of channels that are enabled and active
         uint32_t en_mask;
         const stm32_dma_stream_t *dma;
+#if STM32_DMA_ADVANCED
         Shared_DMA *dma_handle;
-        uint32_t *dma_buffer;
+#endif
+        dmar_uint_t *dma_buffer;
         uint16_t dma_buffer_len;
         bool pwm_started;
         uint32_t bit_width_mul;
@@ -358,7 +369,7 @@ private:
 
         // support for bi-directional dshot
         volatile DshotState dshot_state;
-
+#ifdef HAL_WITH_BIDIR_DSHOT
         struct {
             uint16_t erpm[4];
             volatile bool enabled;
@@ -378,7 +389,7 @@ private:
 #endif
 #endif
         } bdshot;
-
+#endif
 #ifdef HAL_WITH_BIDIR_DSHOT
         // do we have an input capture dma channel
         bool has_ic_dma() const {
@@ -516,7 +527,7 @@ private:
     // virtual timer for post-push() pulses
     virtual_timer_t _dshot_rate_timer;
 
-#ifndef DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
     // dshot commands
     // RingBuffer to store outgoing request.
     struct DshotCommandPacket {
@@ -560,6 +571,8 @@ private:
 
     // widest pulse for oneshot triggering
     uint16_t trigger_widest_pulse;
+
+    bool dshot_timer_setup;
 
     // iomcu output mode (pwm, oneshot or oneshot125)
     enum output_mode iomcu_mode = MODE_PWM_NORMAL;
@@ -617,7 +630,7 @@ private:
     void dma_allocate(Shared_DMA *ctx);
     void dma_deallocate(Shared_DMA *ctx);
     uint16_t create_dshot_packet(const uint16_t value, bool telem_request, bool bidir_telem);
-    void fill_DMA_buffer_dshot(uint32_t *buffer, uint8_t stride, uint16_t packet, uint16_t clockmul);
+    void fill_DMA_buffer_dshot(dmar_uint_t *buffer, uint8_t stride, uint16_t packet, uint16_t clockmul);
 
     void dshot_send_groups(uint64_t time_out_us);
     void dshot_send(pwm_group &group, uint64_t time_out_us);
@@ -671,6 +684,8 @@ private:
     void fill_DMA_buffer_byte(uint32_t *buffer, uint8_t stride, uint8_t b , uint32_t bitval);
     static void serial_bit_irq(void);
     static void serial_byte_timeout(virtual_timer_t* vt, void *ctx);
+
+    // RC Update
 
 };
 
