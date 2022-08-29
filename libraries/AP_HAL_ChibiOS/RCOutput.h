@@ -28,9 +28,9 @@
 #if HAL_USE_PWM == TRUE
 
 #if STM32_DMA_ADVANCED
-typedef uint32_t dmar_uint;
+typedef uint32_t dmar_uint_t;
 #else
-typedef uint16_t dmar_uint;
+typedef uint8_t dmar_uint_t;
 #endif
 
 #define RCOU_DSHOT_TIMING_DEBUG 0
@@ -290,7 +290,7 @@ private:
     static const uint8_t dshot_pre = 1;
     static const uint8_t dshot_post = 2;
     static const uint16_t dshot_bit_length = 16 + dshot_pre + dshot_post;
-    static const uint16_t DSHOT_BUFFER_LENGTH = dshot_bit_length*4*sizeof(dmar_uint);
+    static const uint16_t DSHOT_BUFFER_LENGTH = dshot_bit_length*4*sizeof(dmar_uint_t);
     static const uint16_t MIN_GCR_BIT_LEN = 7;
     static const uint16_t MAX_GCR_BIT_LEN = 22;
     static const uint16_t GCR_TELEMETRY_BIT_LEN = MAX_GCR_BIT_LEN;
@@ -326,7 +326,7 @@ private:
 #if STM32_DMA_ADVANCED
         Shared_DMA *dma_handle;
 #endif
-        dmar_uint *dma_buffer;
+        dmar_uint_t *dma_buffer;
         uint16_t dma_buffer_len;
         bool pwm_started;
         uint32_t bit_width_mul;
@@ -611,7 +611,7 @@ private:
     void dma_allocate(Shared_DMA *ctx);
     void dma_deallocate(Shared_DMA *ctx);
     uint16_t create_dshot_packet(const uint16_t value, bool telem_request, bool bidir_telem);
-    void fill_DMA_buffer_dshot(dmar_uint *buffer, uint8_t stride, uint16_t packet, uint16_t clockmul);
+    void fill_DMA_buffer_dshot(dmar_uint_t *buffer, uint8_t stride, uint16_t packet, uint16_t clockmul);
 
     void dshot_send_groups(uint32_t time_out_us);
     void dshot_send(pwm_group &group, uint32_t time_out_us);

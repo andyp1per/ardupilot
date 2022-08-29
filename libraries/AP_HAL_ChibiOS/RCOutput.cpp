@@ -860,7 +860,7 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
             hal.util->free_type(group.dma_buffer, group.dma_buffer_len, AP_HAL::Util::MEM_DMA_SAFE);
             group.dma_buffer_len = 0;
         }
-        group.dma_buffer = (dmar_uint *)hal.util->malloc_type(buffer_length, AP_HAL::Util::MEM_DMA_SAFE);
+        group.dma_buffer = (dmar_uint_t *)hal.util->malloc_type(buffer_length, AP_HAL::Util::MEM_DMA_SAFE);
         if (!group.dma_buffer) {
 #if AP_HAL_SHARED_DMA_ENABLED
             group.dma_handle->unlock();
@@ -1442,10 +1442,10 @@ uint16_t RCOutput::create_dshot_packet(const uint16_t value, bool telem_request,
 /*
   fill in a DMA buffer for dshot
  */
-void RCOutput::fill_DMA_buffer_dshot(dmar_uint *buffer, uint8_t stride, uint16_t packet, uint16_t clockmul)
+void RCOutput::fill_DMA_buffer_dshot(dmar_uint_t *buffer, uint8_t stride, uint16_t packet, uint16_t clockmul)
 {
-    const dmar_uint DSHOT_MOTOR_BIT_0 = DSHOT_BIT_0_TICKS * clockmul;
-    const dmar_uint DSHOT_MOTOR_BIT_1 = DSHOT_BIT_1_TICKS * clockmul;
+    const dmar_uint_t DSHOT_MOTOR_BIT_0 = DSHOT_BIT_0_TICKS * clockmul;
+    const dmar_uint_t DSHOT_MOTOR_BIT_1 = DSHOT_BIT_1_TICKS * clockmul;
     uint16_t i = 0;
     for (; i < dshot_pre; i++) {
         buffer[i * stride] = 0;
@@ -1642,7 +1642,7 @@ void RCOutput::send_pulses_DMAR(pwm_group &group, uint32_t buffer_length)
     dmaStreamSetPeripheral(group.dma, &(group.pwm_drv->tim->DMAR));
     stm32_cacheBufferFlush(group.dma_buffer, buffer_length);
     dmaStreamSetMemory0(group.dma, group.dma_buffer);
-    dmaStreamSetTransactionSize(group.dma, buffer_length/sizeof(dmar_uint));
+    dmaStreamSetTransactionSize(group.dma, buffer_length/sizeof(dmar_uint_t));
 #if STM32_DMA_ADVANCED
     dmaStreamSetFIFO(group.dma, STM32_DMA_FCR_DMDIS | STM32_DMA_FCR_FTH_FULL);
 #endif
@@ -1652,7 +1652,7 @@ void RCOutput::send_pulses_DMAR(pwm_group &group, uint32_t buffer_length)
 #if STM32_DMA_ADVANCED
                      STM32_DMA_CR_MSIZE_WORD |
 #else
-                     STM32_DMA_CR_MSIZE_HWORD |
+                     STM32_DMA_CR_MSIZE_BYTE |
 #endif
                      STM32_DMA_CR_MINC | STM32_DMA_CR_PL(3) |
                      STM32_DMA_CR_TEIE | STM32_DMA_CR_TCIE);
@@ -1813,10 +1813,10 @@ bool RCOutput::serial_setup_output(uint8_t chan, uint32_t baudrate, uint32_t cha
 /*
   fill in a DMA buffer for a serial byte, assuming 1 start bit and 1 stop bit
  */
-void RCOutput::fill_DMA_buffer_byte(dmar_uint *buffer, uint8_t stride, uint8_t b, uint32_t bitval)
+void RCOutput::fill_DMA_buffer_byte(dmar_uint_t *buffer, uint8_t stride, uint8_t b, uint32_t bitval)
 {
-    const dmar_uint BIT_0 = bitval;
-    const dmar_uint BIT_1 = 0;
+    const dmar_uint_t BIT_0 = bitval;
+    const dmar_uint_t BIT_1 = 0;
 
     // start bit
     buffer[0] = BIT_0;
