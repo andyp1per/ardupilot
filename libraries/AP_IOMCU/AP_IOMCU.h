@@ -254,6 +254,7 @@ private:
 
     // firmware upload
     const char *fw_name = "io_firmware.bin";
+    const char *dshot_fw_name = "io_firmware_dshot.bin";
     const uint8_t *fw;
     uint32_t fw_size;
 

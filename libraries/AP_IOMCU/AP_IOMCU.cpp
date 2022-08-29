@@ -391,7 +391,7 @@ void AP_IOMCU::write_log()
         static uint32_t last_io_print;
         if (now - last_io_print >= 5000) {
             last_io_print = now;
-            debug("t=%u num=%u mem=%u terr=%u nerr=%u crc=%u opcode=%u rd=%u wr=%u ur=%u ndel=%u\n",
+            debug("t=%lu num=%lu mem=%u terr=%lu nerr=%lu crc=%u opcode=%u rd=%u wr=%u ur=%u ndel=%lu\n",
                   now,
                   reg_status.total_pkts,
                   reg_status.freemem,
@@ -494,7 +494,7 @@ bool AP_IOMCU::read_registers(uint8_t page, uint8_t offset, uint8_t count, uint1
 
     // wait for the expected number of reply bytes or timeout
     if (!uart.wait_timeout(count*2+4, 10)) {
-        debug("t=%u timeout read page=%u offset=%u count=%u\n",
+        debug("t=%lu timeout read page=%u offset=%u count=%u\n",
               AP_HAL::millis(), page, offset, count);
         protocol_fail_count++;
         return false;
@@ -503,12 +503,12 @@ bool AP_IOMCU::read_registers(uint8_t page, uint8_t offset, uint8_t count, uint1
     uint8_t *b = (uint8_t *)&pkt;
     uint8_t n = uart.available();
     if (n < offsetof(struct IOPacket, regs)) {
-        debug("t=%u small pkt %u\n", AP_HAL::millis(), n);
+        debug("t=%lu small pkt %u\n", AP_HAL::millis(), n);
         protocol_fail_count++;
         return false;
     }
     if (pkt.get_size() != n) {
-        debug("t=%u bad len %u %u\n", AP_HAL::millis(), n, pkt.get_size());
+        debug("t=%lu bad len %u %u\n", AP_HAL::millis(), n, pkt.get_size());
         protocol_fail_count++;
         return false;
     }
@@ -522,7 +522,7 @@ bool AP_IOMCU::read_registers(uint8_t page, uint8_t offset, uint8_t count, uint1
     pkt.crc = 0;
     uint8_t expected_crc = crc_crc8((const uint8_t *)&pkt, pkt.get_size());
     if (got_crc != expected_crc) {
-        debug("t=%u bad crc %02x should be %02x n=%u %u/%u/%u\n",
+        debug("t=%lu bad crc %02x should be %02x n=%u %u/%u/%u\n",
               AP_HAL::millis(), got_crc, expected_crc,
               n, page, offset, count);
         protocol_fail_count++;
@@ -834,9 +834,13 @@ bool AP_IOMCU::check_crc(void)
     // flash size minus 4k bootloader
 	const uint32_t flash_size = 0x10000 - 0x1000;
 
-    fw = AP_ROMFS::find_decompress(fw_name, fw_size);
+    if (!AP_BoardConfig::io_dshot()) {
+        fw = AP_ROMFS::find_decompress(fw_name, fw_size);
+    } else {
+        fw = AP_ROMFS::find_decompress(dshot_fw_name, fw_size);
+    }
     if (!fw) {
-        DEV_PRINTF("failed to find %s\n", fw_name);
+        DEV_PRINTF("failed to find %s\n", AP_BoardConfig::io_dshot()?dshot_fw_name:fw_name);
         return false;
     }
     uint32_t crc = crc32_small(0, fw, fw_size);

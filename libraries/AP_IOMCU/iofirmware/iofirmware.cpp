@@ -738,7 +738,7 @@ void AP_IOMCU_FW::safety_update(void)
  */
 void AP_IOMCU_FW::rcout_mode_update(void)
 {
-    bool use_dshot = mode_out.mode >= AP_HAL::RCOutput::MODE_PWM_DSHOT150;
+    bool use_dshot = mode_out.mode >= AP_HAL::RCOutput::MODE_PWM_DSHOT150 && mode_out.mode <= AP_HAL::RCOutput::MODE_PWM_DSHOT600;
     if (use_dshot && !dshot_enabled) {
         dshot_enabled = true;
         hal.rcout->set_output_mode(mode_out.mask, (AP_HAL::RCOutput::output_mode)mode_out.mode);
