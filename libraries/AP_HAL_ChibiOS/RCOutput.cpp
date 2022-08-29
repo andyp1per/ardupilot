@@ -828,7 +828,7 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
 #if !DISABLE_DSHOT
     // for dshot we setup for DMAR based output
 #if !AP_HAL_SHARED_DMA_ENABLED
-    if (!group.dma) {
+    if (group.dma == nullptr) {
         // we don't do dma sharing in non advanced mode
         // we do use the locking interface though, 
         // that's why we initialise Shared_DMA but with empty alloc and dealloc methods
@@ -1090,6 +1090,7 @@ void RCOutput::set_output_mode(uint32_t mask, const enum output_mode mode)
 /*
   enable telemetry request for a mask of channels. This is used
   with DShot to get telemetry feedback
+  The mask uses servo channel numbering
  */
 void RCOutput::set_telem_request_mask(uint32_t mask)
 {
@@ -1284,6 +1285,7 @@ void RCOutput::timer_tick(uint32_t time_out_us)
 }
 
 #if defined(IOMCU_FW) && !DISABLE_DSHOT
+THD_WORKING_AREA(dshot_thread_wa, 32);
 void RCOutput::timer_tick()
 {
     uint64_t now = AP_HAL::micros64();

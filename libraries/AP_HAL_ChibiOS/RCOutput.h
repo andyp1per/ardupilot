@@ -666,9 +666,6 @@ private:
     static void serial_bit_irq(void);
     static void serial_byte_timeout(void *ctx);
 
-#if defined(IOMCU_FW) && !DISABLE_DSHOT
-    uint8_t dshot_thread_wa[300];
-#endif
     // RC Update
 
 };
