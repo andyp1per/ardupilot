@@ -314,6 +314,10 @@
 #define HAL_CANFD_SUPPORTED 0
 #endif
 
+#ifndef DISABLE_DSHOT
+#define DISABLE_DSHOT FALSE
+#endif
+
 #ifndef __RAMFUNC__
 #define __RAMFUNC__
 #endif
