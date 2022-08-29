@@ -52,8 +52,10 @@ void AP_RCProtocol::init()
     backend[AP_RCProtocol::CRSF] = new AP_RCProtocol_CRSF(*this);
     backend[AP_RCProtocol::FPORT2] = new AP_RCProtocol_FPort2(*this, true);
 #endif
+#if !defined(IOMCU_FW) && !DISABLE_DSHOT
     backend[AP_RCProtocol::ST24] = new AP_RCProtocol_ST24(*this);
     backend[AP_RCProtocol::FPORT] = new AP_RCProtocol_FPort(*this, true);
+#endif
 }
 
 AP_RCProtocol::~AP_RCProtocol()
