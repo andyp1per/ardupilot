@@ -21,7 +21,7 @@
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
 #if HAL_USE_PWM == TRUE
-#ifndef DISABLE_DSHOT
+#if !DISABLE_DSHOT
 
 using namespace ChibiOS;
 
@@ -42,9 +42,10 @@ bool RCOutput::dshot_send_command(pwm_group& group, uint8_t command, uint8_t cha
     TOGGLE_PIN_DEBUG(81);
 #endif
     // first make sure we have the DMA channel before anything else
-
+#if AP_HAL_SHARED_DMA_ENABLED
     osalDbgAssert(!group.dma_handle->is_locked(), "DMA handle is already locked");
     group.dma_handle->lock();
+#endif
 
     // only the timer thread releases the locks
     group.dshot_waiter = rcout_thread_ctx;
