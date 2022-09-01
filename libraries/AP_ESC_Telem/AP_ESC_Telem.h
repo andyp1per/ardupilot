@@ -82,6 +82,13 @@ public:
     // udpate at 10Hz to log telemetry
     void update();
 
+#if AP_SCRIPTING_ENABLED
+    /*
+      set RPM scale factor from script
+     */
+    void set_rpm_scale(const uint8_t esc_index, const float scale_factor);
+#endif
+
 private:
     // callback to update the rpm in the frontend, should be called by the driver when new data is available
     void update_rpm(const uint8_t esc_index, const uint16_t new_rpm, const float error_rate);
@@ -96,6 +103,12 @@ private:
     uint32_t _last_telem_log_ms[ESC_TELEM_MAX_ESCS];
     uint32_t _last_rpm_log_us[ESC_TELEM_MAX_ESCS];
 
+#if AP_SCRIPTING_ENABLED
+    // allow for scaling of RPMs via lua scripts
+    float rpm_scale_factor[ESC_TELEM_MAX_ESCS];
+    uint32_t rpm_scale_mask;
+#endif
+    
     bool _have_data;
 
     static AP_ESC_Telem *_singleton;
