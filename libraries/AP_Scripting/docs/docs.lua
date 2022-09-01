@@ -1070,6 +1070,10 @@ function esc_telem:get_temperature(instance) end
 ---@return number|nil
 function esc_telem:get_rpm(instance) end
 
+-- set scale factor for RPM on a motor
+---@param param1 motor index (0 is first motor)
+---@param param2 scale factor
+function esc_telem:set_rpm_scale(esc_index, scale_factor) end
 
 -- desc
 ---@class optical_flow
