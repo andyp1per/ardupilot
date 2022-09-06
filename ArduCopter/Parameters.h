@@ -668,6 +668,9 @@ public:
     AP_Float                pilot_y_expo;
     AP_Int8                 surftrak_mode;
     AP_Int16                takeoff_rpm_min;
+#if HAL_WITH_ESC_TELEM && FRAME_CONFIG != HELI_FRAME
+    AP_Int16 takeoff_rpm_min;
+#endif
 };
 
 extern const AP_Param::Info        var_info[];

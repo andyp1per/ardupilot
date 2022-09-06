@@ -1099,7 +1099,7 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("SURFTRAK_MODE", 51, ParametersG2, surftrak_mode, (uint8_t)Copter::SurfaceTracking::Surface::GROUND),
 
-#if FRAME_CONFIG != HELI_FRAME
+#if HAL_WITH_ESC_TELEM && FRAME_CONFIG != HELI_FRAME
     // @Param: TKOFF_RPM_MIN
     // @DisplayName: Takeoff Check RPM minimum
     // @Description: Takeoff is not permitted until motors report at least this RPM.  Set to zero to disable check
