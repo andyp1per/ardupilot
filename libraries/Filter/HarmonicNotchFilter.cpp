@@ -96,6 +96,13 @@ const AP_Param::GroupInfo HarmonicNotchFilterParams::var_info[] = {
     // @Range: 0.1 1.0
     // @User: Advanced
     AP_GROUPINFO("FM_RAT", 9, HarmonicNotchFilterParams, _freq_min_ratio, 1.0),
+
+    // @Param: SLEW
+    // @DisplayName: Harmonic Notch maximum center frequency percentage change per cycle
+    // @Description: The maximum percentage change allowed in the harmonic notch centre frequency on each update. Large step changes in centre frequency can lead to filter instability.
+    // @Range: 0.001 1.0
+    // @User: Advanced
+    AP_GROUPINFO("SLEW", 10, HarmonicNotchFilterParams, _max_slew_pct, 0.1),
     
     AP_GROUPEND
 };
@@ -115,7 +122,7 @@ HarmonicNotchFilter<T>::~HarmonicNotchFilter() {
   the constraints are used to determine attenuation (A) and quality (Q) factors for the filter
  */
 template <class T>
-void HarmonicNotchFilter<T>::init(float sample_freq_hz, float center_freq_hz, float bandwidth_hz, float attenuation_dB)
+void HarmonicNotchFilter<T>::init(float sample_freq_hz, float center_freq_hz, float bandwidth_hz, float attenuation_dB, float max_slew_pct)
 {
     // sanity check the input
     if (_filters == nullptr || is_zero(sample_freq_hz) || isnan(sample_freq_hz)) {
@@ -123,6 +130,7 @@ void HarmonicNotchFilter<T>::init(float sample_freq_hz, float center_freq_hz, fl
     }
 
     _sample_freq_hz = sample_freq_hz;
+    _max_slew_pct = constrain_float(max_slew_pct, 0.001f, 1.0f);
 
     const float nyquist_limit = sample_freq_hz * 0.48f;
     const float bandwidth_limit = bandwidth_hz * 0.52f;
@@ -182,20 +190,19 @@ void HarmonicNotchFilter<T>::update(float center_freq_hz)
             if (_composite_notches != 2) {
                 // only enable the filter if its center frequency is below the nyquist frequency
                 if (notch_center < nyquist_limit) {
-                    _filters[_num_enabled_filters++].init_with_A_and_Q(_sample_freq_hz, notch_center, _A, _Q);
+                    _filters[_num_enabled_filters++].init_with_A_and_Q(_sample_freq_hz, notch_center, _A, _Q, _max_slew_pct);
                 }
             }
             if (_composite_notches > 1) {
-                float notch_center_double;
                 // only enable the filter if its center frequency is below the nyquist frequency
-                notch_center_double = notch_center * (1.0 - _notch_spread);
+                float notch_center_double = notch_center * (1.0 - _notch_spread);
                 if (notch_center_double < nyquist_limit) {
-                    _filters[_num_enabled_filters++].init_with_A_and_Q(_sample_freq_hz, notch_center_double, _A, _Q);
+                    _filters[_num_enabled_filters++].init_with_A_and_Q(_sample_freq_hz, notch_center_double, _A, _Q, _max_slew_pct);
                 }
                 // only enable the filter if its center frequency is below the nyquist frequency
                 notch_center_double = notch_center * (1.0 + _notch_spread);
                 if (notch_center_double < nyquist_limit) {
-                    _filters[_num_enabled_filters++].init_with_A_and_Q(_sample_freq_hz, notch_center_double, _A, _Q);
+                    _filters[_num_enabled_filters++].init_with_A_and_Q(_sample_freq_hz, notch_center_double, _A, _Q, _max_slew_pct);
                 }
             }
         }
@@ -232,7 +239,7 @@ void HarmonicNotchFilter<T>::update(uint8_t num_centers, const float center_freq
         if (_composite_notches != 2) {
             // only enable the filter if its center frequency is below the nyquist frequency
             if (notch_center < nyquist_limit) {
-                _filters[_num_enabled_filters++].init_with_A_and_Q(_sample_freq_hz, notch_center, _A, _Q);
+                _filters[_num_enabled_filters++].init_with_A_and_Q(_sample_freq_hz, notch_center, _A, _Q, _max_slew_pct);
             }
         }
         if (_composite_notches > 1) {
@@ -240,12 +247,12 @@ void HarmonicNotchFilter<T>::update(uint8_t num_centers, const float center_freq
             // only enable the filter if its center frequency is below the nyquist frequency
             notch_center_double = notch_center * (1.0 - _notch_spread);
             if (notch_center_double < nyquist_limit) {
-                _filters[_num_enabled_filters++].init_with_A_and_Q(_sample_freq_hz, notch_center_double, _A, _Q);
+                _filters[_num_enabled_filters++].init_with_A_and_Q(_sample_freq_hz, notch_center_double, _A, _Q, _max_slew_pct);
             }
             // only enable the filter if its center frequency is below the nyquist frequency
             notch_center_double = notch_center * (1.0 + _notch_spread);
             if (notch_center_double < nyquist_limit) {
-                _filters[_num_enabled_filters++].init_with_A_and_Q(_sample_freq_hz, notch_center_double, _A, _Q);
+                _filters[_num_enabled_filters++].init_with_A_and_Q(_sample_freq_hz, notch_center_double, _A, _Q, _max_slew_pct);
             }
         }
     }
@@ -302,6 +309,8 @@ void HarmonicNotchFilterParams::save_params()
     _attenuation_dB.save();
     _harmonics.save();
     _reference.save();
+    _freq_min_ratio.save();
+    _max_slew_pct.save();
 }
 
 /* 

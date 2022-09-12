@@ -106,7 +106,7 @@ TEST(NotchFilterTest, HarmonicNotchTest)
         for (uint8_t c=0; c<chained_filters; c++) {
             auto &f = filters[i][c];
             f.allocate_filters(num_harmonics, harmonics, double_notch?2:1);
-            f.init(rate_hz, base_freq, bandwidth, attenuation_dB);
+            f.init(rate_hz, base_freq, bandwidth, attenuation_dB, 1.0f);
         }
     }
 

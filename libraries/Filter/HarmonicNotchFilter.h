@@ -32,7 +32,7 @@ public:
     // allocate a bank of notch filters for this harmonic notch filter
     void allocate_filters(uint8_t num_notches, uint8_t harmonics, uint8_t composite_notches);
     // initialize the underlying filters using the provided filter parameters
-    void init(float sample_freq_hz, float center_freq_hz, float bandwidth_hz, float attenuation_dB);
+    void init(float sample_freq_hz, float center_freq_hz, float bandwidth_hz, float attenuation_dB, float max_slew_pct);
     // update the underlying filters' center frequencies using center_freq_hz as the fundamental
     void update(float center_freq_hz);
     // update all o fthe underlying center frequencies individually
@@ -63,6 +63,9 @@ private:
     uint8_t _num_harmonics;
     // number of enabled filters
     uint8_t _num_enabled_filters;
+    // maximum percentage rate of change in center frequency
+    float _max_slew_pct;
+
     bool _initialised;
 };
 
@@ -112,6 +115,11 @@ public:
         return _freq_min_ratio;
     }
 
+    // maximum percentage rate of change in center frequency
+    float max_slew_pct(void) const {
+        return _max_slew_pct;
+    }
+
     // save parameters
     void save_params();
 
@@ -124,9 +132,10 @@ private:
     AP_Int8 _tracking_mode;
     // notch options
     AP_Int16 _options;
-
     // minimum frequency ratio for throttle based notches
     AP_Float _freq_min_ratio;
+    // maximum percentage rate of change in center frequency
+    AP_Float _max_slew_pct;
 };
 
 typedef HarmonicNotchFilter<Vector3f> HarmonicNotchFilterVector3f;
