@@ -5260,6 +5260,7 @@ class AutoTestCopter(AutoTest):
             "INS_HNTCH_ATT": 50,
             "INS_HNTCH_BW": 40,
             "INS_HNTCH_MODE": 3,
+            "INS_HNTCH_SLEW": 0.1,
         })
         self.reboot_sitl()
 
