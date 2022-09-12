@@ -466,6 +466,7 @@ public:
         float last_center_freq_hz[INS_MAX_INSTANCES];
         float last_bandwidth_hz[INS_MAX_INSTANCES];
         float last_attenuation_dB[INS_MAX_INSTANCES];
+        float last_max_slew_pct[INS_MAX_INSTANCES];
         bool inactive;
     } harmonic_notches[HAL_INS_NUM_HARMONIC_NOTCH_FILTERS];
 

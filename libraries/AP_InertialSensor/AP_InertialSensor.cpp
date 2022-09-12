@@ -946,7 +946,8 @@ AP_InertialSensor::init(uint16_t loop_rate)
                                                      notch.params.harmonics(), double_notch ? 2 : triple_notch ? 3 : 1);
                     // initialise default settings, these will be subsequently changed in AP_InertialSensor_Backend::update_gyro()
                     notch.filter[i].init(_gyro_raw_sample_rates[i], notch.calculated_notch_freq_hz[0],
-                                         notch.params.bandwidth_hz(), notch.params.attenuation_dB());
+                                         notch.params.bandwidth_hz(), notch.params.attenuation_dB(),
+                                         notch.params.max_slew_pct());
                 }
             }
         }
@@ -1615,14 +1616,17 @@ void AP_InertialSensor::HarmonicNotch::update_params(uint8_t instance, bool conv
     const float center_freq = calculated_notch_freq_hz[0];
     if (!is_equal(last_bandwidth_hz[instance], params.bandwidth_hz()) ||
         !is_equal(last_attenuation_dB[instance], params.attenuation_dB()) ||
+        !is_equal(last_max_slew_pct[instance], params.max_slew_pct()) ||
         converging) {
         filter[instance].init(gyro_rate,
                               center_freq,
                               params.bandwidth_hz(),
-                              params.attenuation_dB());
+                              params.attenuation_dB(),
+                              params.max_slew_pct());
         last_center_freq_hz[instance] = center_freq;
         last_bandwidth_hz[instance] = params.bandwidth_hz();
         last_attenuation_dB[instance] = params.attenuation_dB();
+        last_max_slew_pct[instance] = params.max_slew_pct();
     } else if (!is_equal(last_center_freq_hz[instance], center_freq)) {
         if (num_calculated_notch_frequencies > 1) {
             filter[instance].update(num_calculated_notch_frequencies, calculated_notch_freq_hz);
