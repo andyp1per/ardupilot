@@ -130,7 +130,7 @@ void HarmonicNotchFilter<T>::init(float sample_freq_hz, float center_freq_hz, fl
     }
 
     _sample_freq_hz = sample_freq_hz;
-    _max_slew_pct = constrain_float(max_slew_pct, 0.001f, 1.0f);
+    _max_slew_pct = constrain_float(max_slew_pct, 0.001f, 0.99f);
 
     const float nyquist_limit = sample_freq_hz * 0.48f;
     const float bandwidth_limit = bandwidth_hz * 0.52f;
