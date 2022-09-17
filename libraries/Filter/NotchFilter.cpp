@@ -56,7 +56,7 @@ void NotchFilter<T>::init_with_A_and_Q(float sample_freq_hz, float center_freq_h
     float new_center_freq = center_freq_hz;
 
     // constrain the new center frequency by a percentage of the old frequency
-    if (initialised && !need_reset && !is_positive(max_slew)) {
+    if (initialised && !need_reset && is_positive(max_slew)) {
         new_center_freq = constrain_float(new_center_freq, _center_freq_hz * (1.0f - max_slew),
                                           _center_freq_hz / (1.0f - max_slew));
     }
