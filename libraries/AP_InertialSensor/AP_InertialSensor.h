@@ -524,6 +524,8 @@ private:
     Vector3f _gyro_raw[INS_MAX_INSTANCES];
     FloatBuffer _gyro_window[INS_MAX_INSTANCES][XYZ_AXIS_COUNT];
     uint16_t _gyro_window_size;
+    // capture a gyro window after the filters
+    uint8_t _post_filter_fft_mask;
 #endif
     bool _new_accel_data[INS_MAX_INSTANCES];
     bool _new_gyro_data[INS_MAX_INSTANCES];
