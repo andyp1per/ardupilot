@@ -880,6 +880,9 @@ AP_InertialSensor::init(uint16_t loop_rate)
 #if HAL_WITH_DSP
     AP_GyroFFT* fft = AP::fft();
     bool fft_enabled = fft != nullptr && fft->enabled();
+    if (fft_enabled) {
+        _post_filter_fft_mask = fft->get_post_filter_mask();
+    }
 #else
     bool fft_enabled = false;
 #endif

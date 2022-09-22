@@ -141,8 +141,8 @@ protected:
     // rotate gyro vector, offset and publish
     void _publish_gyro(uint8_t instance, const Vector3f &gyro) __RAMFUNC__; /* front end */
 
-    // apply notch and lowpass gyro filters
-    void apply_gyro_filters(const uint8_t instance, const Vector3f &gyro);
+    // apply notch and lowpass gyro filters and sample for FFT
+    void apply_gyro_filters(const uint8_t instance, const Vector3f &gyro, bool post_filter);
 
     // this should be called every time a new gyro raw sample is
     // available - be it published or not the sample is raw in the
