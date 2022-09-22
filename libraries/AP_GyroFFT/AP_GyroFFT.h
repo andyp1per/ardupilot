@@ -85,7 +85,8 @@ public:
     float get_slewed_weighted_freq_hz(FrequencyPeak peak) const;
     float get_slewed_noise_center_freq_hz(FrequencyPeak peak, uint8_t axis) const;
     // energy of the background noise at the detected center frequency
-    const Vector3f& get_noise_signal_to_noise_db() const { return _global_state._center_snr; }
+    const Vector3f& get_noise_signal_to_noise_db() const { return get_noise_signal_to_noise_db(FrequencyPeak::CENTER); }
+    const Vector3f& get_noise_signal_to_noise_db(FrequencyPeak peak) const { return _global_state._center_freq_snr[peak];; }
     // detected peak frequency weighted by energy
     float get_weighted_noise_center_freq_hz() const;
     // all detected peak frequencies weighted by energy
@@ -106,6 +107,10 @@ public:
     float get_weighted_noise_center_bandwidth_hz() const;
     // log gyro fft messages
     void write_log_messages();
+    // post filter mask of IMUs
+    uint8_t get_post_filter_mask() const { return _post_filter_mask; }
+    // look for a frequency in the detected noise
+    float has_noise_at_frequency_hz(float freq) const;
 
     static const struct AP_Param::GroupInfo var_info[];
     static AP_GyroFFT *get_singleton() { return _singleton; }
@@ -184,9 +189,10 @@ private:
     // calculate the peak noise frequency
     void calculate_noise(bool calibrating, const EngineConfig& config);
     // calculate noise peaks based on energy and history
-    uint8_t calculate_tracking_peaks(float& weighted_peak_freq_hz, float& snr, bool calibrating, const EngineConfig& config);
+    uint8_t calculate_tracking_peaks(float& weighted_peak_freq_hz, bool calibrating, const EngineConfig& config);
     // calculate noise peak frequency characteristics
     bool calculate_filtered_noise(FrequencyPeak target_peak, FrequencyPeak source_peak, const FrequencyData& freqs, const EngineConfig& config);
+    void update_snr_values(const FrequencyData& freqs);
     // get the weighted frequency
     bool get_weighted_frequency(FrequencyPeak peak, float& weighted_peak_freq_hz, float& snr, const EngineConfig& config) const;
     // return the tracked noise peak
@@ -232,8 +238,8 @@ private:
         uint32_t _output_cycle_ms;
         // tracked frequency peak
         Vector3<uint8_t> _tracked_peak;
-        // signal to noise ratio of PSD at the detected centre frequency
-        Vector3f _center_snr;
+        // signal to noise ratio of PSD at each of the detected centre frequencies
+        Vector3f _center_freq_snr[FrequencyPeak::MAX_TRACKED_PEAKS];
         // filtered version of the peak frequency
         Vector3f _center_freq_hz_filtered[FrequencyPeak::MAX_TRACKED_PEAKS];
         // previous filtered version of the peak frequency
@@ -343,6 +349,8 @@ private:
     AP_Int8 _harmonic_peak;
     // number of output frames to retain for averaging
     AP_Int8 _num_frames;
+    // mask of IMUs to record gyro frames after the filter bank
+    AP_Int8 _post_filter_mask;
     AP_InertialSensor* _ins;
 #if DEBUG_FFT
     uint32_t _last_output_ms;
