@@ -61,6 +61,7 @@ static const float GYRO_SCALE = (0.0174532f / 16.4f);
 #define INV3REG_FIFO_COUNTH   0x2e
 #define INV3REG_FIFO_DATA     0x30
 #define INV3REG_BANK_SEL      0x76
+#define INV3REG_TEMP_DATA1    0x29
 
 // ICM42688 bank1
 #define INV3REG_GYRO_CONFIG_STATIC2 0x0B
@@ -85,6 +86,8 @@ static const float GYRO_SCALE = (0.0174532f / 16.4f);
 #define INV3REG_70_MCLK_RDY      0x00
 #define INV3REG_70_SIGNAL_PATH_RESET 0x02
 #define INV3REG_70_FIFO_CONFIG1  0x28
+#define INV3REG_70_TEMP_DATA1    0x09
+
 #define INV3REG_BLK_SEL_W 0x79
 #define INV3REG_BLK_SEL_R 0x7C
 #define INV3REG_MADDR_W   0x7A
@@ -105,6 +108,8 @@ static const float GYRO_SCALE = (0.0174532f / 16.4f);
 #define INV3_ID_ICM42688      0x47
 #define INV3_ID_IIM42652      0x6f
 #define INV3_ID_ICM42670      0x67
+
+#define int16_val(v, idx) ((int16_t)(((uint16_t)v[2*idx] << 8) | v[2*idx+1]))
 
 /*
   really nice that this sensor has an option to request little-endian
@@ -293,6 +298,25 @@ void AP_InertialSensor_Invensensev3::accumulate()
     // nothing to do
 }
 
+bool AP_InertialSensor_Invensensev3::check_raw_temp(int16_t t2)
+{
+    if (abs(t2 - raw_temp) < 400) {
+        // cached copy OK
+        return true;
+    }
+    uint8_t trx[2];
+    const uint8_t temp_data = (inv3_type == Invensensev3_Type::ICM42670)?INV3REG_70_TEMP_DATA1:INV3REG_TEMP_DATA1;
+
+    if (block_read(temp_data, trx, 2)) {
+        raw_temp = int16_val(trx, 0);
+    }
+    return (abs(t2 - raw_temp) < 800);
+}
+
+static uint32_t bad_frames;
+static uint32_t good_frames;
+static uint32_t last_output_ms;
+
 bool AP_InertialSensor_Invensensev3::accumulate_samples(const FIFOData *data, uint8_t n_samples)
 {
     for (uint8_t i = 0; i < n_samples; i++) {
@@ -302,14 +326,33 @@ bool AP_InertialSensor_Invensensev3::accumulate_samples(const FIFOData *data, ui
         // about with the temperature registers
         if ((d.header & 0xFC) != 0x68) {
             // no or bad data
+            bad_frames++;
+
+            if (AP_HAL::millis() - last_output_ms > 5000) {
+                 hal.console->printf("ICM42xxx error rate %.2f%%\n", (100.0f * bad_frames) / (bad_frames + good_frames));
+                 bad_frames = 0;
+                 good_frames = 0;
+                 last_output_ms = AP_HAL::millis();
+            }
             return false;
         }
+
+        good_frames++;
 
         Vector3f accel{float(d.accel[0]), float(d.accel[1]), float(d.accel[2])};
         Vector3f gyro{float(d.gyro[0]), float(d.gyro[1]), float(d.gyro[2])};
 
+        if (!check_raw_temp(d.temperature)) {
+            if (!hal.scheduler->in_expected_delay()) {
+                hal.console->printf("temp reset IMU[%u] %d %d", accel_instance, raw_temp, d.temperature);
+            }
+            fifo_reset();
+            return false;
+        }
+
         accel *= accel_scale;
         gyro *= GYRO_SCALE;
+
         const float temp = d.temperature * temp_sensitivity + temp_zero;
 
         // these four calls are about 40us
