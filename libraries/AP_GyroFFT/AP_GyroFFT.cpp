@@ -53,7 +53,7 @@ extern const AP_HAL::HAL& hal;
 #define FFT_MIN_SAMPLES_PER_FRAME   16
 #define FFT_HARMONIC_FIT_DEFAULT    10
 #define FFT_HARMONIC_FIT_FILTER_HZ  15.0f
-#define FFT_HARMONIC_FIT_MULT       200.0f
+#define FFT_HARMONIC_FIT_MULT       50.0f
 #define FFT_HARMONIC_FIT_TRACK_ROLL    4
 #define FFT_HARMONIC_FIT_TRACK_PITCH   5
 
@@ -352,6 +352,8 @@ void AP_GyroFFT::init(uint16_t loop_rate_hz)
     if (start_update_thread()) {
         set_analysis_enabled(true);
     }
+
+    hal.console->printf("FFT started\n");
 }
 
 // sample the gyros either by using a gyro window sampled at the gyro rate or making invdividual samples
@@ -410,16 +412,15 @@ void AP_GyroFFT::update()
     _rpy_health.y = (now - _global_state._health_ms.y <= output_delay);
     _rpy_health.z = (now - _global_state._health_ms.z <= output_delay);
 
-    if (!_rpy_health.x && !_rpy_health.y) {
-        _health = 0;
-    } else {
-        uint8_t num_notches = 1;
-        for (auto &notch : _ins->harmonic_notches) {
-            if (notch.params.enabled()) {
-                num_notches = MAX(num_notches, notch.num_dynamic_notches);
-            }
-        }
-        _health = MIN(_global_state._health, num_notches);
+    _health = _global_state._health;
+    if (!_rpy_health.x) {
+        _health.x = 0;
+    }
+    if (!_rpy_health.y) {
+        _health.y = 0;
+    }
+    if (!_rpy_health.z) {
+        _health.z = 0;
     }
 }
 
@@ -469,6 +470,27 @@ uint16_t AP_GyroFFT::run_cycle()
     // record how we are doing
     _thread_state._last_output_us[_update_axis] = AP_HAL::micros();
     _output_cycle_micros = _thread_state._last_output_us[_update_axis] - now;
+
+#if AP_SIM_ENABLED
+    // extra logging when running simulations
+    AP::logger().WriteStreaming(
+        "FTN3",
+        "TimeUS,Id,Pk1,Pk2,Pk3,Bw1,Bw2,Bw3,En1,En2,En3",
+        "s#zzzzzz---",
+        "F----------",
+        "QBfffffffff",
+        AP_HAL::micros64(),
+        _update_axis,
+        _state->_peak_data[0]._freq_hz,
+        _state->_peak_data[1]._freq_hz,
+        _state->_peak_data[2]._freq_hz,
+        _state->_peak_data[0]._noise_width_hz,
+        _state->_peak_data[1]._noise_width_hz,
+        _state->_peak_data[2]._noise_width_hz,
+        _state->_freq_bins[_state->_peak_data[0]._bin],
+        _state->_freq_bins[_state->_peak_data[1]._bin],
+        _state->_freq_bins[_state->_peak_data[2]._bin]);
+#endif
 
     // move onto the next axis
     _update_axis = (_update_axis + 1) % XYZ_AXIS_COUNT;
@@ -766,22 +788,12 @@ AP_GyroFFT::FrequencyPeak AP_GyroFFT::get_tracked_noise_peak() const
     return FrequencyPeak::CENTER;
 }
 
-// center frequency slewed from previous to current value at the output rate
-float AP_GyroFFT::get_slewed_noise_center_freq_hz(FrequencyPeak peak, uint8_t axis) const
-{
-    uint32_t now = AP_HAL::micros();
-    const float slew = MIN(1.0f, (now - _global_state._last_output_us[axis])
-        * (static_cast<float>(_fft_sampling_rate_hz) / static_cast<float>(_samples_per_frame)) * 1e-6f);
-    return (_global_state._prev_center_freq_hz_filtered[peak][axis]
-        + (_global_state._center_freq_hz_filtered[peak][axis] - _global_state._prev_center_freq_hz_filtered[peak][axis]) * slew);
-}
-
-// weighted center frequency slewed from previous to current value at the output rate
-float AP_GyroFFT::get_slewed_weighted_freq_hz(FrequencyPeak peak) const
+// weighted center frequency
+float AP_GyroFFT::get_weighted_freq_hz(FrequencyPeak peak) const
 {
     const Vector3f& energy = get_center_freq_energy(peak);
-    const float freq_x = get_slewed_noise_center_freq_hz(peak, 0);
-    const float freq_y = get_slewed_noise_center_freq_hz(peak, 1);
+    const float freq_x = get_noise_center_freq_hz(peak).x;
+    const float freq_y = get_noise_center_freq_hz(peak).y;
 
     if (!energy.is_nan() && !is_zero(energy.x) && !is_zero(energy.y)) {
         return (freq_x * energy.x + freq_y * energy.y) / (energy.x + energy.y);
@@ -798,7 +810,7 @@ float AP_GyroFFT::get_weighted_noise_center_freq_hz() const
         return _fft_min_hz;
     }
 
-    if (!_health) {
+    if (_health.is_zero()) {
 #if APM_BUILD_COPTER_OR_HELI || APM_BUILD_TYPE(APM_BUILD_ArduPlane)
         AP_Motors* motors = AP::motors();
         if (motors != nullptr && !is_zero(_throttle_ref)) {
@@ -810,15 +822,15 @@ float AP_GyroFFT::get_weighted_noise_center_freq_hz() const
 
     const FrequencyPeak peak = get_tracked_noise_peak();
     // pitch was good or required, roll was not, use pitch only
-    if (!_rpy_health.x || _harmonic_peak == FFT_HARMONIC_FIT_TRACK_PITCH) {
-        return get_slewed_noise_center_freq_hz(peak, 1);    // Y-axis
+    if (!_health.x || _harmonic_peak == FFT_HARMONIC_FIT_TRACK_PITCH) {
+        return get_noise_center_freq_hz(peak).y;    // Y-axis
     }
     // roll was good or required, pitch was not, use roll only
-    if (!_rpy_health.y || _harmonic_peak == FFT_HARMONIC_FIT_TRACK_ROLL) {
-        return get_slewed_noise_center_freq_hz(peak, 0);    // X-axis
+    if (!_health.y || _harmonic_peak == FFT_HARMONIC_FIT_TRACK_ROLL) {
+        return get_noise_center_freq_hz(peak).x;    // X-axis
     }
 
-    return get_slewed_weighted_freq_hz(peak);
+    return get_weighted_freq_hz(peak);
 }
 
 // return all the center frequencies weighted by bin energy
@@ -830,7 +842,7 @@ uint8_t AP_GyroFFT::get_weighted_noise_center_frequencies_hz(uint8_t num_freqs, 
         return 1;
     }
 
-    if (!_health) {
+    if (_health.is_zero()) {
 #if APM_BUILD_COPTER_OR_HELI || APM_BUILD_TYPE(APM_BUILD_ArduPlane)
         AP_Motors* motors = AP::motors();
         if (motors != nullptr) {
@@ -841,24 +853,26 @@ uint8_t AP_GyroFFT::get_weighted_noise_center_frequencies_hz(uint8_t num_freqs, 
 #endif
     }
 
-    const uint8_t tracked_peaks = MIN(_health, num_freqs);
     // pitch was good or required, roll was not, use pitch only
-    if (!_rpy_health.x || _harmonic_peak == FFT_HARMONIC_FIT_TRACK_PITCH) {
+    if (!_health.x || _harmonic_peak == FFT_HARMONIC_FIT_TRACK_PITCH) {
+        const uint8_t tracked_peaks = MIN(_health.y, num_freqs);
         for (uint8_t i = 0; i < tracked_peaks; i++) {
-            freqs[i] = get_slewed_noise_center_freq_hz(FrequencyPeak(i), 1);    // Y-axis
+            freqs[i] = get_noise_center_freq_hz(FrequencyPeak(i)).y;    // Y-axis
         }
         return tracked_peaks;
     }
     // roll was good or required, pitch was not, use roll only
-    if (!_rpy_health.y || _harmonic_peak == FFT_HARMONIC_FIT_TRACK_ROLL) {
+    if (!_health.y || _harmonic_peak == FFT_HARMONIC_FIT_TRACK_ROLL) {
+        const uint8_t tracked_peaks = MIN(_health.x, num_freqs);
         for (uint8_t i = 0; i < tracked_peaks; i++) {
-            freqs[i] = get_slewed_noise_center_freq_hz(FrequencyPeak(i), 0);    // X-axis
+            freqs[i] = get_noise_center_freq_hz(FrequencyPeak(i)).x;    // X-axis
         }
         return tracked_peaks;
     }
 
+    const uint8_t tracked_peaks = MIN(MAX(_health.x, _health.y), num_freqs);
     for (uint8_t i = 0; i < tracked_peaks; i++) {
-        freqs[i] = get_slewed_weighted_freq_hz(FrequencyPeak(i));
+        freqs[i] = get_weighted_freq_hz(FrequencyPeak(i));
     }
     return tracked_peaks;
 }
@@ -915,7 +929,9 @@ float AP_GyroFFT::calculate_weighted_freq_hz(const Vector3f& energy, const Vecto
 // @Field: FtX: harmonic fit on roll of the highest noise peak to the second highest noise peak
 // @Field: FtY: harmonic fit on pitch of the highest noise peak to the second highest noise peak
 // @Field: FtZ: harmonic fit on yaw of the highest noise peak to the second highest noise peak
-// @Field: FH: FFT health
+// @Field: FHX: FFT health, X-axis
+// @Field: FHY: FFT health, Y-axis
+// @Field: FHZ: FFT health, Z-axis
 // @Field: Tc: FFT cycle time
 
 // log gyro fft messages
@@ -927,10 +943,10 @@ void AP_GyroFFT::write_log_messages()
 
     AP::logger().WriteStreaming(
         "FTN1",
-        "TimeUS,PkAvg,BwAvg,SnX,SnY,SnZ,FtX,FtY,FtZ,FH,Tc",
-        "szz---%%%-s",
-        "F---------F",
-        "QffffffffBI",
+        "TimeUS,PkAvg,BwAvg,SnX,SnY,SnZ,FtX,FtY,FtZ,FHX,FHY,FHZ,Tc",
+        "szz---%%%---s",
+        "F-----------F",
+        "QffffffffBBBI",
         AP_HAL::micros64(),
         get_weighted_noise_center_freq_hz(),
         get_weighted_noise_center_bandwidth_hz(),
@@ -940,7 +956,7 @@ void AP_GyroFFT::write_log_messages()
         get_raw_noise_harmonic_fit().x,
         get_raw_noise_harmonic_fit().y,
         get_raw_noise_harmonic_fit().z,
-        _health, _output_cycle_micros);
+        _health.x, _health.y, _health.z, _output_cycle_micros);
 
     log_noise_peak(0, FrequencyPeak::CENTER);
     if (_tracked_peaks> 1) {
@@ -970,9 +986,9 @@ void AP_GyroFFT::write_log_messages()
 // @Field: PkX: noise frequency of the peak on roll
 // @Field: PkY: noise frequency of the peak on pitch
 // @Field: PkZ: noise frequency of the peak on yaw
-// @Field: BwX: bandwidth of the peak freqency on roll where edges are determined by FFT_ATT_REF
-// @Field: BwY: bandwidth of the peak freqency on pitch where edges are determined by FFT_ATT_REF
-// @Field: BwZ: bandwidth of the peak freqency on yaw where edges are determined by FFT_ATT_REF
+// @Field: BwX: bandwidth of the peak frequency on roll where edges are determined by FFT_ATT_REF
+// @Field: BwY: bandwidth of the peak frequency on pitch where edges are determined by FFT_ATT_REF
+// @Field: BwZ: bandwidth of the peak frequency on yaw where edges are determined by FFT_ATT_REF
 // @Field: SnX: signal-to-noise ratio on the roll axis
 // @Field: SnY: signal-to-noise ratio on the pitch axis
 // @Field: SnZ: signal-to-noise ratio on the yaw axis
@@ -1022,7 +1038,7 @@ void AP_GyroFFT::calculate_noise(bool calibrating, const EngineConfig& config)
 
     uint8_t num_peaks = calculate_tracking_peaks(weighted_center_freq_hz, calibrating, config);
 
-    _thread_state._center_freq_bin[_update_axis] = _state->_peak_data[FrequencyPeak::CENTER]._bin;
+    _thread_state._center_freq_bin[_update_axis] = _state->_peak_data[_thread_state._center_peak[_update_axis]]._bin;
     _thread_state._center_freq_hz[_update_axis] = weighted_center_freq_hz;
     // record the last time we had a good signal on this axis
     if (num_peaks > 0) {
@@ -1030,10 +1046,11 @@ void AP_GyroFFT::calculate_noise(bool calibrating, const EngineConfig& config)
     } else {
         _thread_state._health_ms[_update_axis] = 0;
     }
-    _thread_state._health = num_peaks;
+    _thread_state._health[_update_axis] = num_peaks;
     FrequencyPeak tracked_peak = FrequencyPeak::CENTER;
 
     // record the tracked peak for harmonic fit, but only if we have more than one noise peak
+    // this checks filtered energies and so can allow energies to be closer together
     if (num_peaks > 1 && _tracked_peaks > 1 && !is_zero(get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis))) {
         if (get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis) > get_tl_noise_center_freq_hz(FrequencyPeak::LOWER_SHOULDER, _update_axis)
             // ignore the fit if there is too big a discrepancy between the energies
@@ -1051,6 +1068,7 @@ void AP_GyroFFT::calculate_noise(bool calibrating, const EngineConfig& config)
     // if targetting more than one harmonic then make sure we get the fundamental
     // on larger copters the second harmonic often has more energy
     // if the highest peak is above the second highest then check for harmonic fit
+    // comparisons are made using filter, normalised data
     if (_thread_state._tracked_peak[_update_axis] != FrequencyPeak::CENTER) {
         // calculate the fit and filter at 10hz
         const float harmonic_fit = 100.0f * fabsf(get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis)
@@ -1092,47 +1110,70 @@ uint8_t AP_GyroFFT::calculate_tracking_peaks(float& weighted_center_freq_hz, boo
     FrequencyPeak lower = find_closest_peak(FrequencyPeak::LOWER_SHOULDER, distance_matrix, 1 << center);
     FrequencyPeak upper = find_closest_peak(FrequencyPeak::UPPER_SHOULDER, distance_matrix, 1 << center | 1 << lower);
 
+    // if we have had the maximum number of swapped cycles, force a full calculation
     if (calibrating || _distorted_cycles[_update_axis] == 0) {
-        calculate_filtered_noise(FrequencyPeak::LOWER_SHOULDER, FrequencyPeak::LOWER_SHOULDER, freqs, config) && num_peaks++;
-        calculate_filtered_noise(FrequencyPeak::UPPER_SHOULDER, FrequencyPeak::UPPER_SHOULDER, freqs, config) && num_peaks++;
-        calculate_filtered_noise(FrequencyPeak::CENTER, FrequencyPeak::CENTER, freqs, config) && num_peaks++;
-        _distorted_cycles[_update_axis] = constrain_int16(_distorted_cycles[_update_axis] + 1, 0, FFT_MAX_MISSED_UPDATES);
-        _thread_state._tracked_peak[_update_axis] = FrequencyPeak::CENTER;
-        weighted_center_freq_hz = freqs.get_weighted_frequency(FrequencyPeak::CENTER);
+        num_peaks = calculate_tracking_peaks(weighted_center_freq_hz, freqs, config);
 #if DEBUG_FFT
         printf("Skipped update, order would have been is %d/%.1f(%.1f) %d/%.1f(%.1f) %d/%.1f(%.1f) n = %d\n",
             center, _state->_peak_data[center]._freq_hz, get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis),
             lower, _state->_peak_data[lower]._freq_hz, get_tl_noise_center_freq_hz(FrequencyPeak::LOWER_SHOULDER, _update_axis),
             upper, _state->_peak_data[upper]._freq_hz, get_tl_noise_center_freq_hz(FrequencyPeak::UPPER_SHOULDER, _update_axis), num_peaks);
 #endif
-        update_snr_values(freqs);
         return num_peaks;
     }
 
     // another peak is closer to what is currently considered the center frequency
     if (center != FrequencyPeak::CENTER || lower != FrequencyPeak::LOWER_SHOULDER || upper != FrequencyPeak::UPPER_SHOULDER) {
-        if (lower != FrequencyPeak::NONE) {
-            calculate_filtered_noise(FrequencyPeak::LOWER_SHOULDER, lower, freqs, config) && num_peaks++;
+        if (lower != FrequencyPeak::NONE && calculate_filtered_noise(FrequencyPeak::LOWER_SHOULDER, lower, freqs, config)) {
+            num_peaks++;
+        } else {
+            lower = FrequencyPeak::NONE;
         }
-        if (upper != FrequencyPeak::NONE) {
-            calculate_filtered_noise(FrequencyPeak::UPPER_SHOULDER, upper, freqs, config) && num_peaks++;
+        if (upper != FrequencyPeak::NONE && calculate_filtered_noise(FrequencyPeak::UPPER_SHOULDER, upper, freqs, config)) {
+            num_peaks++;
+        } else {
+            upper = FrequencyPeak::NONE;
         }
-        if (center != FrequencyPeak::NONE) {
-            calculate_filtered_noise(FrequencyPeak::CENTER,  center, freqs, config) && num_peaks++;
+        if (center != FrequencyPeak::NONE && calculate_filtered_noise(FrequencyPeak::CENTER,  center, freqs, config)) {
+            num_peaks++;
+        } else {
+            center = FrequencyPeak::NONE;
         }
         weighted_center_freq_hz = freqs.get_weighted_frequency(center);
-        _thread_state._tracked_peak[_update_axis] = center;
+        _thread_state._center_peak[_update_axis] = center;
         update_snr_values(freqs);
-        _distorted_cycles[_update_axis]--;
+        // if two adjacent peaks have simply swapped, we will allow this to continue indefinitely
+        // as there is no loss of fidelity
+        if (!((center == FrequencyPeak::LOWER_SHOULDER && lower == FrequencyPeak::CENTER)
+            || (center == FrequencyPeak::UPPER_SHOULDER && upper == FrequencyPeak::CENTER))) {
+            _distorted_cycles[_update_axis]--;
+        }
         return num_peaks;
     }
 
-    calculate_filtered_noise(FrequencyPeak::LOWER_SHOULDER, FrequencyPeak::LOWER_SHOULDER, freqs, config) && num_peaks++;
-    calculate_filtered_noise(FrequencyPeak::UPPER_SHOULDER, FrequencyPeak::UPPER_SHOULDER, freqs, config) && num_peaks++;
-    calculate_filtered_noise(FrequencyPeak::CENTER, FrequencyPeak::CENTER, freqs, config) && num_peaks++;
+    num_peaks = calculate_tracking_peaks(weighted_center_freq_hz, freqs, config);
+
+    return num_peaks;
+}
+
+// calculate the noise and whether valid for each peak
+uint8_t AP_GyroFFT::calculate_tracking_peaks(float& weighted_center_freq_hz, const FrequencyData& freqs, const EngineConfig& config)
+{
+    uint8_t num_peaks = 0;
+    if (calculate_filtered_noise(FrequencyPeak::LOWER_SHOULDER, FrequencyPeak::LOWER_SHOULDER, freqs, config)) {
+        num_peaks++;
+    }
+    if (calculate_filtered_noise(FrequencyPeak::UPPER_SHOULDER, FrequencyPeak::UPPER_SHOULDER, freqs, config)) {
+        num_peaks++;
+    }
+    if (calculate_filtered_noise(FrequencyPeak::CENTER, FrequencyPeak::CENTER, freqs, config)) {
+        num_peaks++;
+    }
+    // record the number of cycles where something was tracked
     _distorted_cycles[_update_axis] = constrain_int16(_distorted_cycles[_update_axis] + 1, 0, FFT_MAX_MISSED_UPDATES);
     weighted_center_freq_hz = freqs.get_weighted_frequency(FrequencyPeak::CENTER);
-    _thread_state._tracked_peak[_update_axis] = FrequencyPeak::CENTER;
+    _thread_state._center_peak[_update_axis] = FrequencyPeak::CENTER;
+
     update_snr_values(freqs);
 
     return num_peaks;

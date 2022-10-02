@@ -38,6 +38,8 @@
 // a library that leverages the HAL DSP support to perform FFT analysis on gyro samples
 class AP_GyroFFT
 {
+    friend class ReplayGyroFFT;
+
 public:
     typedef AP_HAL::DSP::FrequencyPeak FrequencyPeak;
 
@@ -81,9 +83,8 @@ public:
     // detected peak frequency filtered at 1/3 the update rate
     const Vector3f& get_noise_center_freq_hz() const { return get_noise_center_freq_hz(FrequencyPeak::CENTER); }
     const Vector3f& get_noise_center_freq_hz(FrequencyPeak peak) const { return _global_state._center_freq_hz_filtered[peak]; }
-    // slew frequency values
-    float get_slewed_weighted_freq_hz(FrequencyPeak peak) const;
-    float get_slewed_noise_center_freq_hz(FrequencyPeak peak, uint8_t axis) const;
+    // frequency values
+    float get_weighted_freq_hz(FrequencyPeak peak) const;
     // energy of the background noise at the detected center frequency
     const Vector3f& get_noise_signal_to_noise_db() const { return get_noise_signal_to_noise_db(FrequencyPeak::CENTER); }
     const Vector3f& get_noise_signal_to_noise_db(FrequencyPeak peak) const { return _global_state._center_freq_snr[peak];; }
@@ -175,7 +176,6 @@ private:
     float get_tl_noise_center_bandwidth_hz(FrequencyPeak peak, uint8_t axis) const { return _thread_state._center_bandwidth_hz_filtered[peak][axis]; };
     // thread-local mutators of filtered state
     float update_tl_noise_center_freq_hz(FrequencyPeak peak, uint8_t axis, float value) {
-        _thread_state._prev_center_freq_hz_filtered[peak][axis] = _thread_state._center_freq_hz_filtered[peak][axis];
         return (_thread_state._center_freq_hz_filtered[peak][axis] = _center_freq_filter[peak].apply(axis, value));
     }
     float update_tl_center_freq_energy(FrequencyPeak peak, uint8_t axis, float value) {
@@ -190,6 +190,7 @@ private:
     void calculate_noise(bool calibrating, const EngineConfig& config);
     // calculate noise peaks based on energy and history
     uint8_t calculate_tracking_peaks(float& weighted_peak_freq_hz, bool calibrating, const EngineConfig& config);
+    uint8_t calculate_tracking_peaks(float& weighted_center_freq_hz, const FrequencyData& freqs, const EngineConfig& config);
     // calculate noise peak frequency characteristics
     bool calculate_filtered_noise(FrequencyPeak target_peak, FrequencyPeak source_peak, const FrequencyData& freqs, const EngineConfig& config);
     void update_snr_values(const FrequencyData& freqs);
@@ -232,18 +233,18 @@ private:
         // bin of detected peak frequency
         Vector3ui _center_freq_bin;
         // fft engine health
-        uint8_t _health;
+        Vector3<uint8_t> _health;
         Vector3ul _health_ms;
         // fft engine output rate
         uint32_t _output_cycle_ms;
-        // tracked frequency peak
+        // tracked frequency peak for the purposes of notching
         Vector3<uint8_t> _tracked_peak;
+        // center frequency peak ignoring temporary energy changes / order switching
+        Vector3<uint8_t> _center_peak;
         // signal to noise ratio of PSD at each of the detected centre frequencies
         Vector3f _center_freq_snr[FrequencyPeak::MAX_TRACKED_PEAKS];
         // filtered version of the peak frequency
         Vector3f _center_freq_hz_filtered[FrequencyPeak::MAX_TRACKED_PEAKS];
-        // previous filtered version of the peak frequency
-        Vector3f _prev_center_freq_hz_filtered[FrequencyPeak::MAX_TRACKED_PEAKS];
         // when we last calculated a value
         Vector3ul _last_output_us;
         // filtered energy of the detected peak frequency
@@ -290,8 +291,8 @@ private:
     float _harmonic_multiplier;
     // number of tracked peaks
     uint8_t _tracked_peaks;
-    // engine health in tracked peaks
-    uint8_t _health;
+    // engine health in tracked peaks per axis
+    Vector3<uint8_t> _health;
     // engine health on roll/pitch/yaw
     Vector3<uint8_t> _rpy_health;
     // averaged throttle output over averaging period
@@ -310,7 +311,7 @@ private:
     uint16_t _fft_sampling_rate_hz;
     // number of cycles without a detected signal
     uint8_t _missed_cycles[XYZ_AXIS_COUNT][FrequencyPeak::MAX_TRACKED_PEAKS];
-    // number of cycles without a detected signal
+    // number of cycles where peaks have swapped places
     uint8_t _distorted_cycles[XYZ_AXIS_COUNT];
     // whether the analyzer initialized correctly
     bool _initialized;
