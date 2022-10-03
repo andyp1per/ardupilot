@@ -765,22 +765,12 @@ AP_GyroFFT::FrequencyPeak AP_GyroFFT::get_tracked_noise_peak() const
     return FrequencyPeak::CENTER;
 }
 
-// center frequency slewed from previous to current value at the output rate
-float AP_GyroFFT::get_slewed_noise_center_freq_hz(FrequencyPeak peak, uint8_t axis) const
-{
-    uint32_t now = AP_HAL::micros();
-    const float slew = MIN(1.0f, (now - _global_state._last_output_us[axis])
-        * (static_cast<float>(_fft_sampling_rate_hz) / static_cast<float>(_samples_per_frame)) * 1e-6f);
-    return (_global_state._prev_center_freq_hz_filtered[peak][axis]
-        + (_global_state._center_freq_hz_filtered[peak][axis] - _global_state._prev_center_freq_hz_filtered[peak][axis]) * slew);
-}
-
-// weighted center frequency slewed from previous to current value at the output rate
-float AP_GyroFFT::get_slewed_weighted_freq_hz(FrequencyPeak peak) const
+// weighted center frequency
+float AP_GyroFFT::get_weighted_freq_hz(FrequencyPeak peak) const
 {
     const Vector3f& energy = get_center_freq_energy(peak);
-    const float freq_x = get_slewed_noise_center_freq_hz(peak, 0);
-    const float freq_y = get_slewed_noise_center_freq_hz(peak, 1);
+    const float freq_x = get_noise_center_freq_hz(peak).x;
+    const float freq_y = get_noise_center_freq_hz(peak).y;
 
     if (!energy.is_nan() && !is_zero(energy.x) && !is_zero(energy.y)) {
         return (freq_x * energy.x + freq_y * energy.y) / (energy.x + energy.y);
@@ -810,14 +800,14 @@ float AP_GyroFFT::get_weighted_noise_center_freq_hz() const
     const FrequencyPeak peak = get_tracked_noise_peak();
     // pitch was good or required, roll was not, use pitch only
     if (!_health.x || _harmonic_peak == FFT_HARMONIC_FIT_TRACK_PITCH) {
-        return get_slewed_noise_center_freq_hz(peak, 1);    // Y-axis
+        return get_noise_center_freq_hz(peak).y;    // Y-axis
     }
     // roll was good or required, pitch was not, use roll only
     if (!_health.y || _harmonic_peak == FFT_HARMONIC_FIT_TRACK_ROLL) {
-        return get_slewed_noise_center_freq_hz(peak, 0);    // X-axis
+        return get_noise_center_freq_hz(peak).x;    // X-axis
     }
 
-    return get_slewed_weighted_freq_hz(peak);
+    return get_weighted_freq_hz(peak);
 }
 
 // return all the center frequencies weighted by bin energy
@@ -844,7 +834,7 @@ uint8_t AP_GyroFFT::get_weighted_noise_center_frequencies_hz(uint8_t num_freqs, 
     if (!_health.x || _harmonic_peak == FFT_HARMONIC_FIT_TRACK_PITCH) {
         const uint8_t tracked_peaks = MIN(_health.y, num_freqs);
         for (uint8_t i = 0; i < tracked_peaks; i++) {
-            freqs[i] = get_slewed_noise_center_freq_hz(FrequencyPeak(i), 1);    // Y-axis
+            freqs[i] = get_noise_center_freq_hz(FrequencyPeak(i)).y;    // Y-axis
         }
         return tracked_peaks;
     }
@@ -852,14 +842,14 @@ uint8_t AP_GyroFFT::get_weighted_noise_center_frequencies_hz(uint8_t num_freqs, 
     if (!_health.y || _harmonic_peak == FFT_HARMONIC_FIT_TRACK_ROLL) {
         const uint8_t tracked_peaks = MIN(_health.x, num_freqs);
         for (uint8_t i = 0; i < tracked_peaks; i++) {
-            freqs[i] = get_slewed_noise_center_freq_hz(FrequencyPeak(i), 0);    // X-axis
+            freqs[i] = get_noise_center_freq_hz(FrequencyPeak(i)).x;    // X-axis
         }
         return tracked_peaks;
     }
 
     const uint8_t tracked_peaks = MIN(MAX(_health.x, _health.y), num_freqs);
     for (uint8_t i = 0; i < tracked_peaks; i++) {
-        freqs[i] = get_slewed_weighted_freq_hz(FrequencyPeak(i));
+        freqs[i] = get_weighted_freq_hz(FrequencyPeak(i));
     }
     return tracked_peaks;
 }
