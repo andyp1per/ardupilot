@@ -231,7 +231,7 @@ private:
         // bin of detected peak frequency
         Vector3ui _center_freq_bin;
         // fft engine health
-        uint8_t _health;
+        Vector3<uint8_t> _health;
         Vector3ul _health_ms;
         // fft engine output rate
         uint32_t _output_cycle_ms;
@@ -289,8 +289,8 @@ private:
     float _harmonic_multiplier;
     // number of tracked peaks
     uint8_t _tracked_peaks;
-    // engine health in tracked peaks
-    uint8_t _health;
+    // engine health in tracked peaks per axis
+    Vector3<uint8_t> _health;
     // engine health on roll/pitch/yaw
     Vector3<uint8_t> _rpy_health;
     // averaged throttle output over averaging period
