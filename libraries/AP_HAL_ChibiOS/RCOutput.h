@@ -107,7 +107,7 @@ public:
      */
     void timer_tick(uint32_t last_run_us);
 
-#if defined(IOMCU_FW) && !DISABLE_DSHOT
+#if defined(IOMCU_FW) && HAL_ENABLE_DSHOT
     void timer_tick() override;
     static void dshot_send_trampoline(void *p);
 #endif
@@ -176,7 +176,7 @@ public:
      */
     void set_dshot_rate(uint8_t dshot_rate, uint16_t loop_rate_hz) override;
 
-#if !DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
     /*
       Set/get the dshot esc_type
      */
@@ -200,7 +200,7 @@ public:
      */
     void set_safety_mask(uint32_t mask) { safety_mask = mask; }
 
-#if !DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
     /*
      * mark the channels in chanmask as reversible. This is needed for some ESC types (such as Dshot)
      * so that output scaling can be performed correctly. The chanmask passed is added (ORed) into any existing mask.
@@ -512,7 +512,7 @@ private:
     // virtual timer for post-push() pulses
     virtual_timer_t _dshot_rate_timer;
 
-#if !DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
     // dshot commands
     // RingBuffer to store outgoing request.
     struct DshotCommandPacket {

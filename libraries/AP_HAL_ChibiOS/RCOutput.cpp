@@ -473,7 +473,7 @@ void RCOutput::set_dshot_rate(uint8_t dshot_rate, uint16_t loop_rate_hz)
     _dshot_period_us = 1000000UL / drate;
 }
 
-#if !DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
 /*
  Set/get the dshot esc_type
  */
@@ -687,12 +687,12 @@ void RCOutput::push_local(void)
                     uint32_t width = (group.pwm_cfg.frequency/1000000U) * period_us;
                     pwmEnableChannel(group.pwm_drv, j, width);
                 }
-#if !DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
                 else if (is_dshot_protocol(group.current_mode) || group.current_mode == MODE_NEOPIXEL || group.current_mode == MODE_PROFILED) {
                     // set period_us to time for pulse output, to enable very fast rates
                     period_us = group.dshot_pulse_time_us;
                 }
-#endif //#if !DISABLE_DSHOT
+#endif //#if HAL_ENABLE_DSHOT
                 if (group.current_mode == MODE_PWM_ONESHOT ||
                     group.current_mode == MODE_PWM_ONESHOT125 ||
                     group.current_mode == MODE_NEOPIXEL ||
@@ -786,11 +786,11 @@ void RCOutput::read_last_sent(uint16_t* period_us, uint8_t len)
  */
 bool RCOutput::mode_requires_dma(enum output_mode mode) const
 {
-#if DISABLE_DSHOT
+#if !HAL_ENABLE_DSHOT
     return false;
 #else
     return is_dshot_protocol(mode) || (mode == MODE_NEOPIXEL) || (mode == MODE_PROFILED);
-#endif //#if DISABLE_DSHOT
+#endif //#if !HAL_ENABLE_DSHOT
 }
 
 void RCOutput::print_group_setup_error(pwm_group &group, const char* error_string)
@@ -825,7 +825,7 @@ void RCOutput::print_group_setup_error(pwm_group &group, const char* error_strin
 bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_width, bool active_high, const uint16_t buffer_length,
                                uint32_t pulse_time_us, bool is_dshot)
 {
-#if !DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
     // for dshot we setup for DMAR based output
 #if !AP_HAL_SHARED_DMA_ENABLED
     if (group.dma == nullptr) {
@@ -941,7 +941,7 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
     return true;
 #else
     return false;
-#endif //#if !DISABLE_DSHOT
+#endif //#if HAL_ENABLE_DSHOT
 }
 
 /*
@@ -1284,7 +1284,7 @@ void RCOutput::timer_tick(uint32_t time_out_us)
     }
 }
 
-#if defined(IOMCU_FW) && !DISABLE_DSHOT
+#if defined(IOMCU_FW) && HAL_ENABLE_DSHOT
 THD_WORKING_AREA(dshot_thread_wa, 32);
 void RCOutput::timer_tick()
 {
@@ -1335,7 +1335,7 @@ void RCOutput::dshot_send_trampoline(void *p)
 // send dshot for all groups that support it
 void RCOutput::dshot_send_groups(uint32_t time_out_us)
 {
-#if !DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
     if (serial_group) {
         return;
     }
@@ -1361,7 +1361,7 @@ void RCOutput::dshot_send_groups(uint32_t time_out_us)
     if (command_sent) {
         _dshot_current_command.cycle--;
     }
-#endif //#if !DISABLE_DSHOT
+#endif //#if HAL_ENABLE_DSHOT
 }
 
 __RAMFUNC__ void RCOutput::dshot_send_next_group(void* p)
@@ -1466,7 +1466,7 @@ void RCOutput::fill_DMA_buffer_dshot(dmar_uint_t *buffer, uint8_t stride, uint16
  */
 void RCOutput::dshot_send(pwm_group &group, uint32_t time_out_us)
 {
-#if !DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
     if (irq.waiter || (group.dshot_state != DshotState::IDLE && group.dshot_state != DshotState::RECV_COMPLETE)) {
         // doing serial output or DMAR input, don't send DShot pulses
         return;
@@ -1612,7 +1612,7 @@ void RCOutput::dshot_send(pwm_group &group, uint32_t time_out_us)
     chEvtGetAndClearEvents(group.dshot_event_mask);
     // start sending the pulses out
     send_pulses_DMAR(group, DSHOT_BUFFER_LENGTH);
-#endif //#if !DISABLE_DSHOT
+#endif //#if HAL_ENABLE_DSHOT
 }
 
 
@@ -1623,7 +1623,7 @@ void RCOutput::dshot_send(pwm_group &group, uint32_t time_out_us)
  */
 void RCOutput::send_pulses_DMAR(pwm_group &group, uint32_t buffer_length)
 {
-#if !DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
     osalDbgAssert(group.dma && group.dma_buffer, "DMA structures are corrupt");
     /*
       The DMA approach we are using is based on the DMAR method from
@@ -1667,7 +1667,7 @@ void RCOutput::send_pulses_DMAR(pwm_group &group, uint32_t buffer_length)
     dmaStreamEnable(group.dma);
     // record when the transaction was started
     group.last_dmar_send_us = AP_HAL::micros();
-#endif //#if !DISABLE_DSHOT
+#endif //#if HAL_ENABLE_DSHOT
 }
 
 /*
@@ -1859,7 +1859,7 @@ bool RCOutput::serial_write_byte(uint8_t b)
 */
 bool RCOutput::serial_write_bytes(const uint8_t *bytes, uint16_t len)
 {
-#if !DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
     if (!serial_group) {
         return false;
     }
@@ -2507,7 +2507,7 @@ bool RCOutput::serial_led_send(pwm_group &group)
         return true;
     }
 
-#if !DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
     if (irq.waiter || !group.dma_handle->lock_nonblock()) {
         // doing serial output, don't send Serial LED pulses
         return false;
@@ -2529,7 +2529,7 @@ bool RCOutput::serial_led_send(pwm_group &group)
 
     // start sending the pulses out
     send_pulses_DMAR(group, group.dma_buffer_len);
-#endif //#if !DISABLE_DSHOT
+#endif //#if HAL_ENABLE_DSHOT
     return true;
 }
 #endif

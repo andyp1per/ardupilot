@@ -21,7 +21,7 @@
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
 #if HAL_USE_PWM == TRUE
-#if !DISABLE_DSHOT
+#if HAL_ENABLE_DSHOT
 
 using namespace ChibiOS;
 
