@@ -314,8 +314,8 @@
 #define HAL_CANFD_SUPPORTED 0
 #endif
 
-#ifndef DISABLE_DSHOT
-#define DISABLE_DSHOT FALSE
+#ifndef HAL_ENABLE_DSHOT
+#define HAL_ENABLE_DSHOT 1
 #endif
 
 #ifndef __RAMFUNC__
