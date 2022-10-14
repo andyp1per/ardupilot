@@ -38,6 +38,8 @@
 // a library that leverages the HAL DSP support to perform FFT analysis on gyro samples
 class AP_GyroFFT
 {
+    friend class ReplayGyroFFT;
+
 public:
     typedef AP_HAL::DSP::FrequencyPeak FrequencyPeak;
 

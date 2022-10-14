@@ -352,6 +352,8 @@ void AP_GyroFFT::init(uint16_t loop_rate_hz)
     if (start_update_thread()) {
         set_analysis_enabled(true);
     }
+
+    hal.console->printf("FFT started\n");
 }
 
 // sample the gyros either by using a gyro window sampled at the gyro rate or making invdividual samples
