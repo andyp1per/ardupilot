@@ -185,6 +185,11 @@ void AP_InertialSensor_SITL::generate_accel()
 
         _notify_new_accel_sensor_rate_sample(accel_instance, accel);
 
+#if AP_SIM_INS_FILE_ENABLED
+        if (sitl->accel_file_rw == SITL::SIM::INSFileMode::INS_FILE_WRITE) {
+            write_accel_to_file(accel);
+        }
+#endif
         accel_accum += accel;
     }
 
@@ -279,6 +284,12 @@ void AP_InertialSensor_SITL::generate_gyro()
 
         gyro_accum += gyro;
         _notify_new_gyro_sensor_rate_sample(gyro_instance, gyro);
+
+#if AP_SIM_INS_FILE_ENABLED
+        if (sitl->gyro_file_rw == SITL::SIM::INSFileMode::INS_FILE_WRITE) {
+            write_gyro_to_file(gyro);
+        }
+#endif
     }
     gyro_accum /= nsamples;
     _rotate_and_correct_gyro(gyro_instance, gyro_accum);
@@ -301,10 +312,11 @@ void AP_InertialSensor_SITL::timer_update(void)
     if (now >= next_accel_sample) {
         if (((1U << accel_instance) & sitl->accel_fail_mask) == 0) {
 #if AP_SIM_INS_FILE_ENABLED
-            read_accel_from_file();
-#else
-            generate_accel();
+            if (sitl->accel_file_rw == SITL::SIM::INSFileMode::INS_FILE_READ) {
+                read_accel_from_file();
+            } else
 #endif
+            generate_accel();
             if (next_accel_sample == 0) {
                 next_accel_sample = now + 1000000UL / accel_sample_hz;
             } else {
@@ -317,10 +329,12 @@ void AP_InertialSensor_SITL::timer_update(void)
     if (now >= next_gyro_sample) {
         if (((1U << gyro_instance) & sitl->gyro_fail_mask) == 0) {
 #if AP_SIM_INS_FILE_ENABLED
-            read_gyro_from_file();
-#else
-            generate_gyro();
+            if (sitl->gyro_file_rw == SITL::SIM::INSFileMode::INS_FILE_READ) {
+                read_gyro_from_file();
+            } else
 #endif
+            generate_gyro();
+
             if (next_gyro_sample == 0) {
                 next_gyro_sample = now + 1000000UL / gyro_sample_hz;
             } else {
@@ -372,7 +386,6 @@ void AP_InertialSensor_SITL::start()
   temporary method to use file as GPS data
  */
 #if AP_SIM_INS_FILE_ENABLED
-#error "my bad"
 void AP_InertialSensor_SITL::read_gyro_from_file()
 {
     if (gyro_fd == -1) {
@@ -381,17 +394,15 @@ void AP_InertialSensor_SITL::read_gyro_from_file()
         gyro_fd = open(namebuf, O_RDONLY|O_CLOEXEC);
     }
 
-    char buf[200];
+    float buf[8 * 3 * sizeof(float)];
 
     uint8_t nsamples = enable_fast_sampling(gyro_instance) ? 8 : 1;
-    ssize_t ret = ::read(gyro_fd, buf, nsamples * sizeof(float));
-    if (ret == nsamples * sizeof(float)) {
-        ::printf("read gyro %u bytes\n", (unsigned)ret);
-        read_gyro((const float*)buf, nsamples);
+    ssize_t ret = ::read(gyro_fd, buf, nsamples * 3 * sizeof(float));
+    if (ret == nsamples * 3 * sizeof(float)) {
+        read_gyro(buf, nsamples);
     }
 
     if (ret == 0) {
-        ::printf("gyro rewind\n");
         lseek(gyro_fd, 0, SEEK_SET);
     }
 }
@@ -401,14 +412,12 @@ void AP_InertialSensor_SITL::read_gyro(const float* buf, uint8_t nsamples)
     Vector3f gyro_accum;
 
     for (uint8_t j = 0; j < nsamples; j++) {
-        float p = buf[j];
-        float q = buf[j];
-        float r = buf[j];
+        float p = buf[j*3];
+        float q = buf[j*3+1];
+        float r = buf[j*3+2];
+
         Vector3f gyro = Vector3f(p, q, r);
 
-#if HAL_INS_TEMPERATURE_CAL_ENABLE
-        sitl->imu_tcal[gyro_instance].sitl_apply_gyro(get_temperature(), gyro);
-#endif
         _notify_new_gyro_sensor_rate_sample(gyro_instance, gyro);
 
         gyro_accum += gyro;
@@ -416,6 +425,19 @@ void AP_InertialSensor_SITL::read_gyro(const float* buf, uint8_t nsamples)
     gyro_accum /= nsamples;
     _rotate_and_correct_gyro(gyro_instance, gyro_accum);
     _notify_new_gyro_raw_sample(gyro_instance, gyro_accum, AP_HAL::micros64());
+}
+
+void AP_InertialSensor_SITL::write_gyro_to_file(Vector3f gyro)
+{
+    if (gyro_fd == -1) {
+        char namebuf[32];
+        snprintf(namebuf, 32, "/tmp/gyro%d.dat", gyro_instance);
+        gyro_fd = open(namebuf, O_WRONLY|O_TRUNC|O_CREAT, S_IRWXU|S_IRGRP|S_IROTH);
+    }
+
+    float buf[] { gyro.x, gyro.y, gyro.z };
+
+    ::write(gyro_fd, (void*)buf, sizeof(float) * 3);
 }
 
 void AP_InertialSensor_SITL::read_accel_from_file()
@@ -426,17 +448,15 @@ void AP_InertialSensor_SITL::read_accel_from_file()
         accel_fd = open(namebuf, O_RDONLY|O_CLOEXEC);
     }
 
-    char buf[200];
+    float buf[4*3*sizeof(float)];
 
     uint8_t nsamples = enable_fast_sampling(accel_instance) ? 4 : 1;
-    ssize_t ret = ::read(accel_fd, buf, nsamples * sizeof(float));
-    if (ret == nsamples * sizeof(float)) {
-        ::printf("read accel %u bytes\n", (unsigned)ret);
-        read_accel((const float*)buf, nsamples);
+    ssize_t ret = ::read(accel_fd, buf, nsamples * 3 * sizeof(float));
+    if (ret == nsamples * 3 * sizeof(float)) {
+        read_accel(buf, nsamples);
     }
 
     if (ret == 0) {
-        ::printf("accel rewind\n");
         lseek(accel_fd, 0, SEEK_SET);
     }
 }
@@ -446,15 +466,11 @@ void AP_InertialSensor_SITL::read_accel(const float* buf, uint8_t nsamples)
     Vector3f accel_accum;
 
     for (uint8_t j = 0; j < nsamples; j++) {
-        float p = buf[j];
-        float q = buf[j];
-        float r = buf[j];
-        Vector3f accel = Vector3f(p, q, r);
+        float p = buf[j*3];
+        float q = buf[j*3+1];
+        float r = buf[j*3+2];
 
-#if HAL_INS_TEMPERATURE_CAL_ENABLE
-        const float T = get_temperature();
-        sitl->imu_tcal[gyro_instance].sitl_apply_accel(T, accel);
-#endif
+        Vector3f accel = Vector3f(p, q, r);
 
         _notify_new_accel_sensor_rate_sample(accel_instance, accel);
 
@@ -466,6 +482,20 @@ void AP_InertialSensor_SITL::read_accel(const float* buf, uint8_t nsamples)
     _notify_new_accel_raw_sample(accel_instance, accel_accum, AP_HAL::micros64());
 
     _publish_temperature(accel_instance, get_temperature());
+}
+
+void AP_InertialSensor_SITL::write_accel_to_file(Vector3f accel)
+{
+
+    if (accel_fd == -1) {
+        char namebuf[32];
+        snprintf(namebuf, 32, "/tmp/accel%d.dat", accel_instance);
+        accel_fd = open(namebuf, O_WRONLY|O_TRUNC|O_CREAT, S_IRWXU|S_IRGRP|S_IROTH);
+    }
+
+    float buf[] { accel.x, accel.y, accel.z };
+
+    ::write(accel_fd, (void*)buf, sizeof(float) * 3);
 }
 
 #endif  // AP_SIM_INS_FILE_ENABLED

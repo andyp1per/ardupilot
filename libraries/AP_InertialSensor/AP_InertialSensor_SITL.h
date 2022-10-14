@@ -6,10 +6,6 @@
 
 #include "AP_InertialSensor_Backend.h"
 
-#ifndef AP_SIM_INS_FILE_ENABLED
-#define AP_SIM_INS_FILE_ENABLED 0
-#endif
-
 // simulated sensor rates in Hz. This matches a pixhawk1
 const uint16_t INS_SITL_SENSOR_A[] = { 1000, 1000 };
 const uint16_t INS_SITL_SENSOR_B[] = { 760, 800 };
@@ -39,8 +35,10 @@ private:
 #if AP_SIM_INS_FILE_ENABLED
     void read_gyro(const float* buf, uint8_t nsamples);
     void read_gyro_from_file();
+    void write_gyro_to_file(Vector3f gyro);
     void read_accel(const float* buf, uint8_t nsamples);
     void read_accel_from_file();
+    void write_accel_to_file(Vector3f accel);
 #endif
     SITL::SIM *sitl;
 
