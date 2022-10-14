@@ -398,7 +398,7 @@ void AP_InertialSensor_SITL::read_gyro_from_file()
 
     uint8_t nsamples = enable_fast_sampling(gyro_instance) ? 8 : 1;
     ssize_t ret = ::read(gyro_fd, buf, nsamples * 3 * sizeof(float));
-    if (ret == nsamples * 3 * sizeof(float)) {
+    if (ret == (ssize_t)(nsamples * 3 * sizeof(float))) {
         read_gyro(buf, nsamples);
     }
 
@@ -437,7 +437,9 @@ void AP_InertialSensor_SITL::write_gyro_to_file(Vector3f gyro)
 
     float buf[] { gyro.x, gyro.y, gyro.z };
 
-    ::write(gyro_fd, (void*)buf, sizeof(float) * 3);
+    if (::write(gyro_fd, (void*)buf, sizeof(float) * 3) < 0) {
+        ::printf("Could not write to file\n");
+    }
 }
 
 void AP_InertialSensor_SITL::read_accel_from_file()
@@ -452,7 +454,7 @@ void AP_InertialSensor_SITL::read_accel_from_file()
 
     uint8_t nsamples = enable_fast_sampling(accel_instance) ? 4 : 1;
     ssize_t ret = ::read(accel_fd, buf, nsamples * 3 * sizeof(float));
-    if (ret == nsamples * 3 * sizeof(float)) {
+    if (ret == (ssize_t)(nsamples * 3 * sizeof(float))) {
         read_accel(buf, nsamples);
     }
 
@@ -495,7 +497,9 @@ void AP_InertialSensor_SITL::write_accel_to_file(Vector3f accel)
 
     float buf[] { accel.x, accel.y, accel.z };
 
-    ::write(accel_fd, (void*)buf, sizeof(float) * 3);
+    if (::write(accel_fd, (void*)buf, sizeof(float) * 3) < 0) {
+        ::printf("Could not write to file\n");
+    }
 }
 
 #endif  // AP_SIM_INS_FILE_ENABLED
