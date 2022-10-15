@@ -13,7 +13,7 @@
 #include <AP_Arming/AP_Arming.h>
 #include <SITL/SITL.h>
 
-#if HAL_WITH_DSP
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 const AP_HAL::HAL &hal = AP_HAL::get_HAL();
 
 static const uint32_t LOOP_RATE_HZ = 400;
