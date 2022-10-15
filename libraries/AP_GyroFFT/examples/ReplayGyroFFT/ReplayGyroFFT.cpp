@@ -73,6 +73,7 @@ public:
             if (!fft.pre_arm_check(buf, 32)) {
                 hal.console->printf("%s\n", buf);
             } else {
+                logger.PrepForArming();
                 arming.arm(AP_Arming::Method::RUDDER);
                 logger.set_vehicle_armed(true);
             }
@@ -106,6 +107,7 @@ void loop()
 
     ins.update();
     logger.periodic_tasks();
+    ins.Write_IMU();
     replay.loop();
 
     hal.scheduler->delay_microseconds(LOOP_DELTA_US);
