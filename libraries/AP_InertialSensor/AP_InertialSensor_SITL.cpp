@@ -392,6 +392,9 @@ void AP_InertialSensor_SITL::read_gyro_from_file()
         char namebuf[32];
         snprintf(namebuf, 32, "/tmp/gyro%d.dat", gyro_instance);
         gyro_fd = open(namebuf, O_RDONLY|O_CLOEXEC);
+        if (gyro_fd == -1) {
+            AP_HAL::panic("gyro data file %s not found", namebuf);
+        }
     }
 
     float buf[8 * 3 * sizeof(float)];
@@ -448,6 +451,9 @@ void AP_InertialSensor_SITL::read_accel_from_file()
         char namebuf[32];
         snprintf(namebuf, 32, "/tmp/accel%d.dat", accel_instance);
         accel_fd = open(namebuf, O_RDONLY|O_CLOEXEC);
+        if (accel_fd == -1) {
+            AP_HAL::panic("accel data file %s not found", namebuf);
+        }
     }
 
     float buf[4*3*sizeof(float)];
