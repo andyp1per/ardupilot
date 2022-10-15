@@ -5909,6 +5909,7 @@ class AutoTestCopter(AutoTest):
                 "SIM_VIB_FREQ_X": 250,  # create another peak at 250hz
                 "SIM_VIB_FREQ_Y": 250,
                 "SIM_VIB_FREQ_Z": 250,
+                "SIM_GYR_FILE_RW":2,
             })
             self.reboot_sitl()
 
