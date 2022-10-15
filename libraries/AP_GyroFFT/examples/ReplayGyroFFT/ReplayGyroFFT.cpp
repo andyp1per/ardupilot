@@ -37,8 +37,12 @@ static AP_Scheduler scheduler;
 // create fake gcs object
 GCS_Dummy _gcs;
 
+const struct LogStructure log_structure[] = {
+    LOG_COMMON_STRUCTURES
+};
+
 const AP_Param::GroupInfo GCS_MAVLINK_Parameters::var_info[] = {
-        AP_GROUPEND
+    AP_GROUPEND
 };
 
 class Arming : public AP_Arming {
@@ -70,8 +74,10 @@ public:
                 hal.console->printf("%s\n", buf);
             } else {
                 arming.arm(AP_Arming::Method::RUDDER);
+                logger.set_vehicle_armed(true);
             }
         }
+        fft.write_log_messages();
     }
     AP_GyroFFT fft;
 };
@@ -84,6 +90,8 @@ void setup()
     board_config.init();   
     serial_manager.init();
     sitl.gyro_file_rw.set(1);
+    logger_bitmask.set(128); // IMU
+    logger.Init(log_structure, ARRAY_SIZE(log_structure));
     ins.init(LOOP_RATE_HZ);
     baro.init();
 
@@ -97,6 +105,7 @@ void loop()
     }
 
     ins.update();
+    logger.periodic_tasks();
     replay.loop();
 
     hal.scheduler->delay_microseconds(LOOP_DELTA_US);
