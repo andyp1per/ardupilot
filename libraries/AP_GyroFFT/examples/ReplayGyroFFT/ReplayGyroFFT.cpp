@@ -58,16 +58,20 @@ public:
         fft._enable.set(1);
         fft.init(LOOP_RATE_HZ);
         fft.update_parameters();
-        char buf[32];
-        if (!fft.pre_arm_check(buf, 32)) {
-            hal.console->printf("%s", buf);
-        }
-        arming.arm(AP_Arming::Method::RUDDER);
     }
 
     void loop() {
         fft.sample_gyros();
         fft.update();
+        // calibrate the FFT
+        if (!arming.is_armed()) {
+            char buf[32];
+            if (!fft.pre_arm_check(buf, 32)) {
+                hal.console->printf("%s\n", buf);
+            } else {
+                arming.arm(AP_Arming::Method::RUDDER);
+            }
+        }
     }
     AP_GyroFFT fft;
 };
