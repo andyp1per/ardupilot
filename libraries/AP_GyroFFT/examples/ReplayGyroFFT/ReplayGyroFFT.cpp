@@ -59,11 +59,11 @@ static Arming arming;
 class ReplayGyroFFT {
 public:
     void init() {
-        fft._enable.set(1);
-        fft._window_size.set(64);
-        fft._snr_threshold_db.set(10);
-        fft._fft_min_hz.set(50);
-        fft._fft_max_hz.set(450);
+        fft._enable.set(1);             // FFT_ENABLE
+        fft._window_size.set(64);       // FFT_WINDOW_SIZE
+        fft._snr_threshold_db.set(10);  // FFT_SNR_REF
+        fft._fft_min_hz.set(50);        // FFT_MINHZ
+        fft._fft_max_hz.set(450);       // FFT_MAXHZ
 
         fft.init(LOOP_RATE_HZ);
         fft.update_parameters();
@@ -106,10 +106,12 @@ void setup()
     board_config.init();   
     serial_manager.init();
     //sitl.gyro_file_rw.set(1);
-    sitl.vibe_freq.set(Vector3f(250,250,250));
-    //sitl.throttle = 0.0f;
-    //sitl.ins_noise_throttle_min.set(0.5f);
-    logger_bitmask.set(128); // IMU
+    sitl.vibe_freq.set(Vector3f(250,250,250));  // SIM_VIB_FREQ
+    sitl.speedup.set(100);      // SIM_SPEEDUP
+    sitl.drift_speed.set(0);    // SIM_DRIFT_SPEED
+    sitl.drift_time.set(0);     // SIM_DRIFT_TIME
+    sitl.gyro_noise[0].set(20); // SIM_GYR1_RND
+    logger_bitmask.set(128);    // IMU
     logger.Init(log_structure, ARRAY_SIZE(log_structure));
     ins.init(LOOP_RATE_HZ);
     baro.init();
@@ -123,13 +125,19 @@ void loop()
         return;
     }
 
+    ins.wait_for_sample();
+    uint32_t sample_time_us = AP_HAL::micros();
+
     ins.update();
     ins.periodic();
     logger.periodic_tasks();
     ins.Write_IMU();
     replay.loop();
 
-    hal.scheduler->delay_microseconds(LOOP_DELTA_US);
+    uint32_t elapsed = AP_HAL::micros() - sample_time_us;
+    if (elapsed < LOOP_DELTA_US) {
+        hal.scheduler->delay_microseconds(LOOP_DELTA_US - elapsed);
+    }
 }
 
 AP_HAL_MAIN();
