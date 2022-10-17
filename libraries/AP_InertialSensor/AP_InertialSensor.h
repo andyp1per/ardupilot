@@ -29,7 +29,7 @@
 // The maximum we need to store is gyro-rate / loop-rate, worst case ArduCopter with BMI088 is 2000/400
 #define INS_MAX_GYRO_WINDOW_SAMPLES 8
 
-#define DEFAULT_IMU_LOG_BAT_MASK 0
+#define DEFAULT_IMU_LOG_BAT_MASK 3
 
 #ifndef HAL_INS_TEMPERATURE_CAL_ENABLE
 #define HAL_INS_TEMPERATURE_CAL_ENABLE !HAL_MINIMIZE_FEATURES && BOARD_FLASH_SIZE > 1024
