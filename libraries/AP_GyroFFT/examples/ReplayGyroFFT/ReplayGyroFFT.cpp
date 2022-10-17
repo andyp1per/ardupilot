@@ -60,6 +60,11 @@ class ReplayGyroFFT {
 public:
     void init() {
         fft._enable.set(1);
+        fft._window_size.set(64);
+        fft._snr_threshold_db.set(10);
+        fft._fft_min_hz.set(50);
+        fft._fft_max_hz.set(450);
+
         fft.init(LOOP_RATE_HZ);
         fft.update_parameters();
     }
@@ -68,19 +73,29 @@ public:
         fft.sample_gyros();
         fft.update();
         // calibrate the FFT
+        uint32_t now = AP_HAL::millis();
         if (!arming.is_armed()) {
             char buf[32];
             if (!fft.pre_arm_check(buf, 32)) {
-                hal.console->printf("%s\n", buf);
+                if (now - last_output_ms > 1000) {
+                    hal.console->printf("%s\n", buf);
+                    last_output_ms = now;
+                }
             } else {
                 logger.PrepForArming();
                 arming.arm(AP_Arming::Method::RUDDER);
                 logger.set_vehicle_armed(true);
             }
+        } else {
+            if (now - last_output_ms > 1000) {
+                hal.console->printf(".");
+                last_output_ms = now;
+            }
         }
         fft.write_log_messages();
     }
     AP_GyroFFT fft;
+    uint32_t last_output_ms;
 };
 
 static ReplayGyroFFT replay;
@@ -90,7 +105,10 @@ void setup()
     hal.console->printf("ReplayGyroFFT\n");
     board_config.init();   
     serial_manager.init();
-    sitl.gyro_file_rw.set(1);
+    //sitl.gyro_file_rw.set(1);
+    sitl.vibe_freq.set(Vector3f(250,250,250));
+    //sitl.throttle = 0.0f;
+    //sitl.ins_noise_throttle_min.set(0.5f);
     logger_bitmask.set(128); // IMU
     logger.Init(log_structure, ARRAY_SIZE(log_structure));
     ins.init(LOOP_RATE_HZ);
@@ -106,6 +124,7 @@ void loop()
     }
 
     ins.update();
+    ins.periodic();
     logger.periodic_tasks();
     ins.Write_IMU();
     replay.loop();
