@@ -59,6 +59,7 @@ class ParamGetSetCb;
 class ParamExecuteOpcodeCb;
 class AP_PoolAllocator;
 class AP_UAVCAN_DNA_Server;
+class AP_UAVCAN_Serial;
 
 #if defined(__GNUC__) && (__GNUC__ > 8)
 #define DISABLE_W_CAST_FUNCTION_TYPE_PUSH \
@@ -224,6 +225,9 @@ public:
     // This will be needed to implement if UAVCAN is used with multithreading
     // Such cases will be firmware update, etc.
     class RaiiSynchronizer {};
+
+    // find driver index where we saw the node in healthy state
+    static int8_t find_node_driver_index(uint8_t node_id);
 
 private:
     void loop(void);
