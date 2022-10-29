@@ -111,12 +111,17 @@ void setup()
     hal.console->printf("ReplayGyroFFT\n");
     board_config.init();   
     serial_manager.init();
-    //sitl.gyro_file_rw.set(1); // SIM_GYR_FILE_RW
-    sitl.vibe_freq.set(Vector3f(250,250,250));  // SIM_VIB_FREQ
-    sitl.speedup.set(100);      // SIM_SPEEDUP
-    sitl.drift_speed.set(0);    // SIM_DRIFT_SPEED
-    sitl.drift_time.set(0);     // SIM_DRIFT_TIME
-    sitl.gyro_noise[0].set(20); // SIM_GYR1_RND
+
+    const bool generate = false;
+    if (generate) {
+        sitl.vibe_freq.set(Vector3f(250,250,250));  // SIM_VIB_FREQ
+        sitl.drift_speed.set(0);    // SIM_DRIFT_SPEED
+        sitl.drift_time.set(0);     // SIM_DRIFT_TIME
+        sitl.gyro_noise[0].set(20); // SIM_GYR1_RND
+    } else {
+        sitl.speedup.set(100);      // SIM_SPEEDUP
+        sitl.gyro_file_rw.set(1);   // SIM_GYR_FILE_RW
+    }
     logger_bitmask.set(128);    // IMU
     logger.Init(log_structure, ARRAY_SIZE(log_structure));
     ins.init(LOOP_RATE_HZ);
