@@ -5909,7 +5909,7 @@ class AutoTestCopter(AutoTest):
                 "SIM_VIB_FREQ_X": 250,  # create another peak at 250hz
                 "SIM_VIB_FREQ_Y": 250,
                 "SIM_VIB_FREQ_Z": 250,
-                "SIM_GYR_FILE_RW":2,    # write data to a file
+                "SIM_GYR_FILE_RW": 2,   # write data to a file
             })
             self.reboot_sitl()
 
@@ -5943,8 +5943,8 @@ class AutoTestCopter(AutoTest):
                 "SIM_VIB_FREQ_Y": 0,
                 "SIM_VIB_FREQ_Z": 0,
                 "SIM_VIB_MOT_MULT": 1.0,
-                "SIM_GYR_FILE_RW":0,
-                "FFT_ENABLE": 0,    # stop writing data
+                "SIM_GYR_FILE_RW": 0,  # stop writing data
+                "FFT_ENABLE": 0,
             })
             self.reboot_sitl()
 
