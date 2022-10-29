@@ -18,6 +18,8 @@ const AP_HAL::HAL &hal = AP_HAL::get_HAL();
 
 static const uint32_t LOOP_RATE_HZ = 400;
 static const uint32_t LOOP_DELTA_US = 1000000 / LOOP_RATE_HZ;
+static const uint32_t RUN_TIME = 120;   // 2 mins
+static const uint32_t LOOP_ITERATIONS = LOOP_RATE_HZ * RUN_TIME;
 
 void setup();
 void loop();
@@ -85,6 +87,10 @@ public:
                 logger.PrepForArming();
                 arming.arm(AP_Arming::Method::RUDDER);
                 logger.set_vehicle_armed(true);
+                // apply throttle values to motors to make sure the fake IMU generates energetic enough data
+                for (uint8_t i=0; i<4; i++) {
+                    hal.rcout->write(i, 1500);
+                }
             }
         } else {
             if (now - last_output_ms > 1000) {
@@ -105,7 +111,7 @@ void setup()
     hal.console->printf("ReplayGyroFFT\n");
     board_config.init();   
     serial_manager.init();
-    //sitl.gyro_file_rw.set(1);
+    //sitl.gyro_file_rw.set(1); // SIM_GYR_FILE_RW
     sitl.vibe_freq.set(Vector3f(250,250,250));  // SIM_VIB_FREQ
     sitl.speedup.set(100);      // SIM_SPEEDUP
     sitl.drift_speed.set(0);    // SIM_DRIFT_SPEED
@@ -118,6 +124,8 @@ void setup()
 
     replay.init();
 }
+
+static uint32_t loop_iter = LOOP_ITERATIONS;
 
 void loop()
 {
@@ -137,6 +145,11 @@ void loop()
     uint32_t elapsed = AP_HAL::micros() - sample_time_us;
     if (elapsed < LOOP_DELTA_US) {
         hal.scheduler->delay_microseconds(LOOP_DELTA_US - elapsed);
+    }
+
+    if (loop_iter-- == 0) {
+        hal.console->printf("\n");
+        exit(0);
     }
 }
 
