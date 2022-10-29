@@ -380,6 +380,15 @@ void AP_InertialSensor_SITL::start()
     }
     bus_id++;
     hal.scheduler->register_timer_process(FUNCTOR_BIND_MEMBER(&AP_InertialSensor_SITL::timer_update, void));
+
+#if AP_SIM_INS_FILE_ENABLED
+    if (sitl->accel_file_rw == SITL::SIM::INSFileMode::INS_FILE_READ) {
+        hal.console->printf("Reading accel data from file for IMU[%u]\n", accel_instance);
+    }
+    if (sitl->gyro_file_rw == SITL::SIM::INSFileMode::INS_FILE_READ) {
+        hal.console->printf("Reading gyro data from file for IMU[%u]\n", gyro_instance);
+    }
+#endif
 }
 
 /*
@@ -430,7 +439,7 @@ void AP_InertialSensor_SITL::read_gyro(const float* buf, uint8_t nsamples)
     _notify_new_gyro_raw_sample(gyro_instance, gyro_accum, AP_HAL::micros64());
 }
 
-void AP_InertialSensor_SITL::write_gyro_to_file(Vector3f gyro)
+void AP_InertialSensor_SITL::write_gyro_to_file(const Vector3f& gyro)
 {
     if (gyro_fd == -1) {
         char namebuf[32];
@@ -492,7 +501,7 @@ void AP_InertialSensor_SITL::read_accel(const float* buf, uint8_t nsamples)
     _publish_temperature(accel_instance, get_temperature());
 }
 
-void AP_InertialSensor_SITL::write_accel_to_file(Vector3f accel)
+void AP_InertialSensor_SITL::write_accel_to_file(const Vector3f& accel)
 {
 
     if (accel_fd == -1) {

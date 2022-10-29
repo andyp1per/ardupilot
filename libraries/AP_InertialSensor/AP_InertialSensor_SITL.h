@@ -35,10 +35,10 @@ private:
 #if AP_SIM_INS_FILE_ENABLED
     void read_gyro(const float* buf, uint8_t nsamples);
     void read_gyro_from_file();
-    void write_gyro_to_file(Vector3f gyro);
+    void write_gyro_to_file(const Vector3f& gyro);
     void read_accel(const float* buf, uint8_t nsamples);
     void read_accel_from_file();
-    void write_accel_to_file(Vector3f accel);
+    void write_accel_to_file(const Vector3f& accel);
 #endif
     SITL::SIM *sitl;
 
