@@ -59,7 +59,7 @@ class ParamGetSetCb;
 class ParamExecuteOpcodeCb;
 class AP_PoolAllocator;
 class AP_UAVCAN_DNA_Server;
-class AP_UAVCAN_Serial;
+class AP_DroneCAN_Serial;
 
 #if defined(__GNUC__) && (__GNUC__ > 8)
 #define DISABLE_W_CAST_FUNCTION_TYPE_PUSH \

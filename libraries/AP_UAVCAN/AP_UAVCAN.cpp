@@ -64,7 +64,7 @@
 #include <AP_OpticalFlow/AP_OpticalFlow_HereFlow.h>
 #include <AP_ADSB/AP_ADSB.h>
 #include "AP_UAVCAN_DNA_Server.h"
-#include "AP_UAVCAN_Serial.h"
+#include "AP_DroneCAN_Serial.h"
 #include <AP_Logger/AP_Logger.h>
 #include <AP_Notify/AP_Notify.h>
 #include <AP_OpenDroneID/AP_OpenDroneID.h>
@@ -386,7 +386,7 @@ void AP_UAVCAN::init(uint8_t driver_index, bool enable_filters)
     AP_EFI_DroneCAN::subscribe_msgs(this);
 #endif
 #if AP_SERIAL_EXTENSION_ENABLED
-    AP_UAVCAN_Serial::subscribe_msgs(this);
+    AP_DroneCAN_Serial::subscribe_msgs(this);
 #endif
 
 #if AP_PROXIMITY_DRONECAN_ENABLED
@@ -556,7 +556,6 @@ void AP_UAVCAN::loop(void)
 #if AP_OPENDRONEID_ENABLED
         AP::opendroneid().dronecan_send(this);
 #endif
-<<<<<<< HEAD
 
 #if AP_DRONECAN_SEND_GPS
         if (option_is_set(AP_UAVCAN::Options::SEND_GNSS) && !AP_GPS_UAVCAN::instance_exists(this)) {
@@ -567,11 +566,9 @@ void AP_UAVCAN::loop(void)
 #endif
 
         logging();
-=======
 #if AP_SERIAL_EXTENSION_ENABLED
-        AP::serialmanager().uavcan_loop();
+        AP::serialmanager().dronecan_loop();
 #endif
->>>>>>> AP_UAVCAN: add support for serial tunnel over DroneCAN
     }
 }
 
@@ -1518,6 +1515,8 @@ void AP_UAVCAN::logging(void)
                                 _srv_send_count,
                                 _fail_send_count);
 #endif // HAL_LOGGING_ENABLED
+}
+
 // find driver index where we saw the node in healthy state
 int8_t AP_UAVCAN::find_node_driver_index(uint8_t node_id)
 {
