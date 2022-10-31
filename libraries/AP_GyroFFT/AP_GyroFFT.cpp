@@ -471,6 +471,27 @@ uint16_t AP_GyroFFT::run_cycle()
     _thread_state._last_output_us[_update_axis] = AP_HAL::micros();
     _output_cycle_micros = _thread_state._last_output_us[_update_axis] - now;
 
+#if AP_SIM_ENABLED
+    // extra logging when running simulations
+    AP::logger().WriteStreaming(
+        "FTN3",
+        "TimeUS,Id,Pk1,Pk2,Pk3,Bw1,Bw2,Bw3,En1,En2,En3",
+        "s#zzzzzz---",
+        "F----------",
+        "QBfffffffff",
+        AP_HAL::micros64(),
+        _update_axis,
+        _state->_peak_data[0]._freq_hz,
+        _state->_peak_data[1]._freq_hz,
+        _state->_peak_data[2]._freq_hz,
+        _state->_peak_data[0]._noise_width_hz,
+        _state->_peak_data[1]._noise_width_hz,
+        _state->_peak_data[2]._noise_width_hz,
+        _state->_freq_bins[_state->_peak_data[0]._bin],
+        _state->_freq_bins[_state->_peak_data[1]._bin],
+        _state->_freq_bins[_state->_peak_data[2]._bin]);
+#endif
+
     // move onto the next axis
     _update_axis = (_update_axis + 1) % XYZ_AXIS_COUNT;
 
