@@ -189,6 +189,7 @@ private:
     void calculate_noise(bool calibrating, const EngineConfig& config);
     // calculate noise peaks based on energy and history
     uint8_t calculate_tracking_peaks(float& weighted_peak_freq_hz, bool calibrating, const EngineConfig& config);
+    uint8_t calculate_tracking_peaks(float& weighted_center_freq_hz, const FrequencyData& freqs, const EngineConfig& config);
     // calculate noise peak frequency characteristics
     bool calculate_filtered_noise(FrequencyPeak target_peak, FrequencyPeak source_peak, const FrequencyData& freqs, const EngineConfig& config);
     void update_snr_values(const FrequencyData& freqs);
@@ -307,7 +308,7 @@ private:
     uint16_t _fft_sampling_rate_hz;
     // number of cycles without a detected signal
     uint8_t _missed_cycles[XYZ_AXIS_COUNT][FrequencyPeak::MAX_TRACKED_PEAKS];
-    // number of cycles without a detected signal
+    // number of cycles where peaks have swapped places
     uint8_t _distorted_cycles[XYZ_AXIS_COUNT];
     // whether the analyzer initialized correctly
     bool _initialized;
