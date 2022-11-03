@@ -53,7 +53,7 @@ extern const AP_HAL::HAL& hal;
 #define FFT_MIN_SAMPLES_PER_FRAME   16
 #define FFT_HARMONIC_FIT_DEFAULT    10
 #define FFT_HARMONIC_FIT_FILTER_HZ  15.0f
-#define FFT_HARMONIC_FIT_MULT       200.0f
+#define FFT_HARMONIC_FIT_MULT       50.0f
 #define FFT_HARMONIC_FIT_TRACK_ROLL    4
 #define FFT_HARMONIC_FIT_TRACK_PITCH   5
 
@@ -475,22 +475,25 @@ uint16_t AP_GyroFFT::run_cycle()
     // extra logging when running simulations
     AP::logger().WriteStreaming(
         "FTN3",
-        "TimeUS,Id,Pk1,Pk2,Pk3,Bw1,Bw2,Bw3,En1,En2,En3",
-        "s#zzzzzz---",
-        "F----------",
-        "QBfffffffff",
+        "TimeUS,Id,Pk1,Pk2,Pk3,En1,En2,En3,Tp1,Tp2,Tp3,PF1,PF2,PF3",
+        "s#zzz------zzz",
+        "F-------------",
+        "QBffffffBBBfff",
         AP_HAL::micros64(),
         _update_axis,
         _state->_peak_data[0]._freq_hz,
         _state->_peak_data[1]._freq_hz,
         _state->_peak_data[2]._freq_hz,
-        _state->_peak_data[0]._noise_width_hz,
-        _state->_peak_data[1]._noise_width_hz,
-        _state->_peak_data[2]._noise_width_hz,
         _state->_freq_bins[_state->_peak_data[0]._bin],
         _state->_freq_bins[_state->_peak_data[1]._bin],
-        _state->_freq_bins[_state->_peak_data[2]._bin]);
-#endif
+        _state->_freq_bins[_state->_peak_data[2]._bin],
+        _thread_state._peak_order[0][_update_axis],
+        _thread_state._peak_order[1][_update_axis],
+        _thread_state._peak_order[2][_update_axis],
+        _thread_state._center_freq_hz_filtered[0][_update_axis],
+        _thread_state._center_freq_hz_filtered[1][_update_axis],
+        _thread_state._center_freq_hz_filtered[2][_update_axis]);
+    #endif
 
     // move onto the next axis
     _update_axis = (_update_axis + 1) % XYZ_AXIS_COUNT;
@@ -761,12 +764,12 @@ AP_GyroFFT::FrequencyPeak AP_GyroFFT::get_tracked_noise_peak() const
         switch (_harmonic_peak) {
         case FFT_HARMONIC_FIT_TRACK_ROLL:
             if (_global_state._harmonic_fit.x < _harmonic_fit) {
-                return FrequencyPeak(_global_state._tracked_peak.x);
+                return FrequencyPeak(_global_state._peak_order[FrequencyPeak::CENTER].x);
             }
             break;
         case FFT_HARMONIC_FIT_TRACK_PITCH:
             if (_global_state._harmonic_fit.y < _harmonic_fit) {
-                return FrequencyPeak(_global_state._tracked_peak.y);
+                return FrequencyPeak(_global_state._peak_order[FrequencyPeak::CENTER].y);
             }
             break;
         default:
@@ -782,7 +785,7 @@ AP_GyroFFT::FrequencyPeak AP_GyroFFT::get_tracked_noise_peak() const
     // required fit of 10% is fairly conservative when testing in SITL, testing shows that it's safer to
     // require both tracked axes to fit - biasing towards the highest energy peak
     if (_global_state._harmonic_fit.x < _harmonic_fit && _global_state._harmonic_fit.y < _harmonic_fit) {
-        return FrequencyPeak(_global_state._tracked_peak.x);
+        return FrequencyPeak(_global_state._peak_order[FrequencyPeak::CENTER].x);
     }
 
     return FrequencyPeak::CENTER;
@@ -1047,8 +1050,8 @@ void AP_GyroFFT::calculate_noise(bool calibrating, const EngineConfig& config)
         _thread_state._health_ms[_update_axis] = 0;
     }
     _thread_state._health[_update_axis] = num_peaks;
-    FrequencyPeak tracked_peak = FrequencyPeak::CENTER;
 
+    FrequencyPeak tracked_peak = FrequencyPeak(_thread_state._peak_order[FrequencyPeak::CENTER][_update_axis]);
     // record the tracked peak for harmonic fit, but only if we have more than one noise peak
     if (num_peaks > 1 && _tracked_peaks > 1 && !is_zero(get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis))) {
         if (get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis) > get_tl_noise_center_freq_hz(FrequencyPeak::LOWER_SHOULDER, _update_axis)
@@ -1062,12 +1065,12 @@ void AP_GyroFFT::calculate_noise(bool calibrating, const EngineConfig& config)
         }
     }
 
-    _thread_state._tracked_peak[_update_axis] = tracked_peak;
+    _thread_state._peak_order[FrequencyPeak::CENTER][_update_axis] = tracked_peak;
 
     // if targetting more than one harmonic then make sure we get the fundamental
     // on larger copters the second harmonic often has more energy
     // if the highest peak is above the second highest then check for harmonic fit
-    if (_thread_state._tracked_peak[_update_axis] != FrequencyPeak::CENTER) {
+    if (_thread_state._peak_order[FrequencyPeak::CENTER][_update_axis] != FrequencyPeak::CENTER) {
         // calculate the fit and filter at 10hz
         const float harmonic_fit = 100.0f * fabsf(get_tl_noise_center_freq_hz(FrequencyPeak::CENTER, _update_axis)
             - get_tl_noise_center_freq_hz(tracked_peak, _update_axis) * _harmonic_multiplier)
@@ -1138,7 +1141,10 @@ uint8_t AP_GyroFFT::calculate_tracking_peaks(float& weighted_center_freq_hz, boo
             center = FrequencyPeak::NONE;
         }
         weighted_center_freq_hz = freqs.get_weighted_frequency(center);
-        _thread_state._tracked_peak[_update_axis] = center;
+        // record the order of the tracking peaks
+        _thread_state._peak_order[FrequencyPeak::CENTER][_update_axis] = center;
+        _thread_state._peak_order[FrequencyPeak::LOWER_SHOULDER][_update_axis] = lower;
+        _thread_state._peak_order[FrequencyPeak::UPPER_SHOULDER][_update_axis] = upper;
         update_snr_values(freqs);
         // if two adjacent peaks have simply swapped, we will allow this to continue indefinitely
         // as there is no loss of fidelity
@@ -1170,7 +1176,11 @@ uint8_t AP_GyroFFT::calculate_tracking_peaks(float& weighted_center_freq_hz, con
     // record the number of cycles where something was tracked
     _distorted_cycles[_update_axis] = constrain_int16(_distorted_cycles[_update_axis] + 1, 0, FFT_MAX_MISSED_UPDATES);
     weighted_center_freq_hz = freqs.get_weighted_frequency(FrequencyPeak::CENTER);
-    _thread_state._tracked_peak[_update_axis] = FrequencyPeak::CENTER;
+    // tracking peak order is standard
+    _thread_state._peak_order[FrequencyPeak::CENTER][_update_axis] = FrequencyPeak::CENTER;
+    _thread_state._peak_order[FrequencyPeak::LOWER_SHOULDER][_update_axis] = FrequencyPeak::LOWER_SHOULDER;
+    _thread_state._peak_order[FrequencyPeak::UPPER_SHOULDER][_update_axis] = FrequencyPeak::UPPER_SHOULDER;
+
 
     update_snr_values(freqs);
 

@@ -236,14 +236,24 @@ private:
         Vector3ul _health_ms;
         // fft engine output rate
         uint32_t _output_cycle_ms;
-        // tracked frequency peak
-        Vector3<uint8_t> _tracked_peak;
+        // tracked frequency peak order
+        Vector3<uint8_t> _peak_order[FrequencyPeak::MAX_TRACKED_PEAKS];
+        FrequencyPeak center(uint8_t axis) const {
+            return FrequencyPeak(_peak_order[FrequencyPeak::CENTER][axis]); 
+        }
+        FrequencyPeak lower_shoulder(uint8_t axis) const {
+            return FrequencyPeak(_peak_order[FrequencyPeak::LOWER_SHOULDER][axis]);
+        }
+        FrequencyPeak upper_shoulder(uint8_t axis) const {
+            return FrequencyPeak(_peak_order[FrequencyPeak::UPPER_SHOULDER][axis]);
+        }
         // signal to noise ratio of PSD at each of the detected centre frequencies
         Vector3f _center_freq_snr[FrequencyPeak::MAX_TRACKED_PEAKS];
-        // filtered version of the peak frequency
-        Vector3f _center_freq_hz_filtered[FrequencyPeak::MAX_TRACKED_PEAKS];
         // when we last calculated a value
         Vector3ul _last_output_us;
+        // filtered FFT information ordered by tracking peak (which may be different the instantaneous energies)
+        // filtered version of the peak frequency
+        Vector3f _center_freq_hz_filtered[FrequencyPeak::MAX_TRACKED_PEAKS];
         // filtered energy of the detected peak frequency
         Vector3f _center_freq_energy_filtered[FrequencyPeak::MAX_TRACKED_PEAKS];
         // filtered detected peak width
