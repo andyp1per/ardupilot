@@ -20,6 +20,8 @@
 #include "hwdef/common/spi_hook.h"
 #include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_Filesystem/AP_Filesystem.h>
+#include "bouncebuffer.h"
+#include "stm32_util.h"
 
 extern const AP_HAL::HAL& hal;
 
@@ -31,7 +33,9 @@ static HAL_Semaphore sem;
 
 #if HAL_USE_SDC
 static SDCConfig sdcconfig = {
+#if !defined(STM32H7)
   NULL,
+#endif
   SDC_MODE_4BIT,
   0
 };
@@ -91,6 +95,11 @@ bool sdcard_init()
         return true;
     }
 #elif HAL_USE_MMC_SPI
+    if (MMCD1.buffer == nullptr) {
+        // allocate 16 byte non-cacheable buffer for microSD
+        MMCD1.buffer = (uint8_t*)malloc_axi_sram(MMC_BUFFER_SIZE);
+    }
+
     if (sdcard_running) {
         sdcard_stop();
     }
@@ -105,7 +114,7 @@ bool sdcard_init()
     }
     device->set_slowdown(sd_slowdown);
 
-    mmcObjectInit(&MMCD1);
+    mmcObjectInit(&MMCD1, MMCD1.buffer);
 
     mmcconfig.spip =
             static_cast<ChibiOS::SPIDevice*>(device.get())->get_driver();
