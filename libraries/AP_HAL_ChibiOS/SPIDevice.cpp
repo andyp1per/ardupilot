@@ -377,13 +377,17 @@ bool SPIDevice::acquire_bus(bool set, bool skip_cs)
         spiAcquireBus(spi_devices[device_desc.bus].driver);              /* Acquire ownership of the bus.    */
         bus.spicfg.ssport = PAL_PORT(device_desc.pal_line);
         bus.spicfg.sspad = PAL_PAD(device_desc.pal_line);
-#if defined(STM32H7)
-        bus.spicfg.cfg1 = freq_flag;
-        bus.spicfg.cfg2 = device_desc.mode;
 #ifdef HAL_LLD_SELECT_SPI_V2
         bus.spicfg.data_cb = nullptr;
         bus.spicfg.error_cb = nullptr;
         bus.spicfg.slave = false;
+#else
+        bus.spicfg.end_cb = nullptr;
+#endif
+#if defined(STM32H7)
+        bus.spicfg.cfg1 = freq_flag;
+        bus.spicfg.cfg2 = device_desc.mode;
+#ifdef HAL_LLD_SELECT_SPI_V2
         if (bus.spicfg.txsource == nullptr) {
             bus.spicfg.txsource = (uint32_t *)malloc_dma(4);
             memset(bus.spicfg.txsource, 0xFF, 4);
@@ -392,7 +396,6 @@ bool SPIDevice::acquire_bus(bool set, bool skip_cs)
             bus.spicfg.rxsink = (uint32_t *)malloc_dma(4);
         }
 #else
-        bus.spicfg.end_cb = nullptr;
         if (bus.spicfg.dummytx == nullptr) {
             bus.spicfg.dummytx = (uint32_t *)malloc_dma(4);
             memset(bus.spicfg.dummytx, 0xFF, 4);
