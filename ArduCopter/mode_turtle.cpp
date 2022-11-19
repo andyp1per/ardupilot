@@ -159,7 +159,7 @@ void ModeTurtle::run()
 
     // at this point we have a power value in the range 0..1
 
-    // notmalise the roll and pitch input to match the motors
+    // normalise the roll and pitch input to match the motors
     Vector2f input{sign_roll, sign_pitch};
     motors_input = input.normalized() * 0.5;
     // we bypass spin min and friends in the deadzone because we only want spin up when the sticks are moved
@@ -171,6 +171,11 @@ void ModeTurtle::output_to_motors()
 {
     // throttle needs to be raised
     if (is_zero(channel_throttle->norm_input_dz())) {
+        if (AP_HAL::millis() - last_output_ms > 5000) {
+            gcs().send_text(MAV_SEVERITY_WARNING, "Turtle mode initialized - raise throttle to arm\n");
+            last_output_ms = AP_HAL::millis();
+        }
+
         disarm_motors();
         return;
     }
