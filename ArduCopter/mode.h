@@ -1645,6 +1645,7 @@ private:
 
     float motors_output;
     Vector2f motors_input;
+    uint32_t last_output_ms;
 };
 #endif
 
