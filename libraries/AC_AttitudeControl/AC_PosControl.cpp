@@ -4,6 +4,7 @@
 #include <AP_Logger/AP_Logger.h>
 #include <AP_Motors/AP_Motors.h>    // motors library
 #include <AP_Vehicle/AP_Vehicle.h>
+#include <AP_Vehicle/AP_Vehicle_Type.h>
 #include <AP_InertialSensor/AP_InertialSensor.h>
 
 extern const AP_HAL::HAL& hal;
@@ -904,8 +905,12 @@ void AC_PosControl::update_pos_offset_z(float pos_offset_z)
 // is_active_z - returns true if the z position controller has been run in the previous 5 loop times
 bool AC_PosControl::is_active_z() const
 {
+<<<<<<< HEAD
     const uint32_t dt_us = AP::ins().get_last_update_usec() - _last_update_z_us;
     return dt_us <= _dt * 1500000.0;
+=======
+    return ((AP::ins().get_last_update_usec() - _last_update_z_us) <= _dt * 1500000.0);
+>>>>>>> AC_AttitudeControl: Support changing update period
 }
 
 /// update_z_controller - runs the vertical position controller correcting position, velocity and acceleration errors.
