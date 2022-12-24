@@ -807,9 +807,13 @@ float AP_GyroFFT::get_weighted_noise_center_freq_hz() const
 
     if (_health.is_zero()) {
 #if APM_BUILD_COPTER_OR_HELI || APM_BUILD_TYPE(APM_BUILD_ArduPlane)
+        // if we are post-filter sampling then throttle estimate will be useless
+        if (using_post_filter_samples()) {
+            return 0.0f;
+        }
         AP_Motors* motors = AP::motors();
         if (motors != nullptr && !is_zero(_throttle_ref)) {
-            // FFT is not healthy, fallback to throttle-based estimate
+            // FFT is not healthy, fallback to FFT's throttle-based estimate
             return constrain_float(_fft_min_hz * MAX(1.0f, sqrtf(motors->get_throttle_out() / _throttle_ref)), _fft_min_hz, _fft_max_hz);
         }
 #endif
@@ -839,9 +843,13 @@ uint8_t AP_GyroFFT::get_weighted_noise_center_frequencies_hz(uint8_t num_freqs, 
 
     if (_health.is_zero()) {
 #if APM_BUILD_COPTER_OR_HELI || APM_BUILD_TYPE(APM_BUILD_ArduPlane)
+        // if we are post-filter sampling then throttle estimate will be useless
+        if (using_post_filter_samples()) {
+            return 0;
+        }
         AP_Motors* motors = AP::motors();
         if (motors != nullptr) {
-            // FFT is not healthy, fallback to throttle-based estimate
+            // FFT is not healthy, fallback to FFT's throttle-based estimate
             freqs[0] = constrain_float(_fft_min_hz * MAX(1.0f, sqrtf(motors->get_throttle_out() / _throttle_ref)), _fft_min_hz, _fft_max_hz);
             return 1;
         }
