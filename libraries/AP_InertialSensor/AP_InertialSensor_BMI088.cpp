@@ -154,7 +154,8 @@ static const struct {
     uint8_t reg;
     uint8_t value;
 } accel_config[] = {
-    { REGA_CONF, 0xAC },
+    // OSR2 gives 234Hz LPF @ 1.6Khz ODR
+    { REGA_CONF, 0x9C },
     // setup 24g range (16g for BMI085)
     { REGA_RANGE, 0x03 },
     // disable low-power mode
@@ -254,8 +255,8 @@ bool AP_InertialSensor_BMI088::gyro_init()
         return false;
     }
 
-    // setup filter bandwidth 230Hz, no decimation
-    if (!dev_gyro->write_register(REGG_BW, 0x81, true)) {
+    // setup filter bandwidth 532Hz, no decimation
+    if (!dev_gyro->write_register(REGG_BW, 0x80, true)) {
         return false;
     }
 
