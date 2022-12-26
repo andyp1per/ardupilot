@@ -5945,7 +5945,6 @@ class AutoTestCopter(AutoTest):
                 "INS_HNTC2_OPTS": 18,   # triple-notch, notch-per-FFT peak
                 "FFT_ENABLE": 1,
                 "FFT_WINDOW_SIZE": 64,  # not the default, but makes the test more reliable
-                "FFT_SNR_REF": 10,
                 "FFT_OPTIONS": 1,
                 "FFT_MINHZ": 50,
                 "FFT_MAXHZ": 450,
@@ -6047,7 +6046,6 @@ class AutoTestCopter(AutoTest):
                 "INS_HNTC2_OPTS": 16,   # triple-notch
                 "FFT_ENABLE": 1,
                 "FFT_WINDOW_SIZE": 64,  # not the default, but makes the test more reliable
-                "FFT_SNR_REF": 10,
                 "FFT_OPTIONS": 3,
                 "FFT_MINHZ": 50,
                 "FFT_MAXHZ": 450,
