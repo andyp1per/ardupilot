@@ -48,7 +48,8 @@ extern const AP_HAL::HAL& hal;
 #endif
 #endif
 #define FFT_THR_REF_DEFAULT         0.35f   // the estimated throttle reference, 0 ~ 1
-#define FFT_SNR_DEFAULT            25.0f // a higher SNR is safer and this works quite well on a Pixracer
+#define FFT_SNR_DEFAULT             25.0f   // a higher SNR is safer and this works quite well on a Pixracer
+#define FFT_SNR_PFILT_DEFAULT       10.0f   // post-filter there is much less noise so default should be lower
 #define FFT_STACK_SIZE              1024
 #define FFT_MIN_SAMPLES_PER_FRAME   16
 #define FFT_HARMONIC_FIT_DEFAULT    10
@@ -342,6 +343,11 @@ void AP_GyroFFT::init(uint16_t loop_rate_hz)
         _center_freq_energy_filter[peak].set_cutoff_frequency(output_rate, output_rate * 0.25f * scale_factor);
         // smooth the bandwidth output more aggressively
         _center_bandwidth_filter[peak].set_cutoff_frequency(output_rate, output_rate * 0.25f * scale_factor);
+    }
+
+    // turn down the SNR threshold if examining post-filter
+    if (using_post_filter_samples()) {
+        _snr_threshold_db.set_default(FFT_SNR_PFILT_DEFAULT);
     }
 
     // the number of cycles required to have a proper noise reference
