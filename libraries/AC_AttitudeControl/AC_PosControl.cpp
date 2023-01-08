@@ -905,12 +905,8 @@ void AC_PosControl::update_pos_offset_z(float pos_offset_z)
 // is_active_z - returns true if the z position controller has been run in the previous 5 loop times
 bool AC_PosControl::is_active_z() const
 {
-<<<<<<< HEAD
     const uint32_t dt_us = AP::ins().get_last_update_usec() - _last_update_z_us;
     return dt_us <= _dt * 1500000.0;
-=======
-    return ((AP::ins().get_last_update_usec() - _last_update_z_us) <= _dt * 1500000.0);
->>>>>>> AC_AttitudeControl: Support changing update period
 }
 
 /// update_z_controller - runs the vertical position controller correcting position, velocity and acceleration errors.
