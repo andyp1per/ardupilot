@@ -37,7 +37,7 @@ PB6 QUADSPI_BK1_NCS QUADSPI1
 PB2 QUADSPI_CLK QUADSPI1
 
 # IFace  Device Name  Bus      QSPI Mode  Clk Freq  Size (Pow2)  NCS Delay
-QSPIDEV  w25q         QUADSPI1 MODE3      120*MHZ   23           2
+QSPIDEV  w25q         QUADSPI1 MODE3      50*MHZ   23           2
 
 # USART1
 PA10 USART1_RX USART1

@@ -10,6 +10,8 @@ APJ_BOARD_ID 1060
 # crystal frequency, setup to use external oscillator
 OSCILLATOR_HZ 8000000
 
+MCU_CLOCKRATE_MHZ 480
+
 # limited flash that can't be used
 FLASH_SIZE_KB 128
 FLASH_RESERVE_START_KB 0
@@ -47,7 +49,7 @@ PB10 QUADSPI_BK1_NCS QUADSPI1
 PB2 QUADSPI_CLK QUADSPI1
 
 # IFace  Device Name  Bus      QSPI Mode  Clk Freq  Size (Pow2)  NCS Delay
-QSPIDEV  w25q-dtr     QUADSPI1 MODE3      120*MHZ   24           2
+QSPIDEV  w25q-dtr     QUADSPI1 MODE3       66*MHZ   24           2
 
 define HAL_USE_EMPTY_STORAGE 1
 define HAL_STORAGE_SIZE 16384
