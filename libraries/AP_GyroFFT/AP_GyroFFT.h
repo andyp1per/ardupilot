@@ -106,6 +106,11 @@ public:
     float get_weighted_noise_center_bandwidth_hz() const;
     // log gyro fft messages
     void write_log_messages();
+    static float calculate_notch_frequency(float* freqs, uint16_t numpeaks, float harmonic_fit, uint8_t& harmonics);
+    static bool is_harmonic_of(float harmonic, float fundamental, uint8_t mult, float _fit) {
+        const float fit = 100.0f * fabsf(harmonic - fundamental * mult) / harmonic;
+        return (isfinite(fit) && fit < _fit);
+    }
 
     static const struct AP_Param::GroupInfo var_info[];
     static AP_GyroFFT *get_singleton() { return _singleton; }
