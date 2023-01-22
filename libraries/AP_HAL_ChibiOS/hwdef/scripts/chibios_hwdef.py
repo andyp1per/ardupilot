@@ -1434,6 +1434,11 @@ def write_QSPI_table(f):
 def write_QSPI_config(f):
     '''write SPI config defines'''
     global qspi_list
+    # only the bootloader must reset the QSPI clock otherwise it is not possible to 
+    # bootstrap into external flash
+    if not args.bootloader:
+        f.write('#define STM32_QSPI_NO_RESET TRUE\n')
+
     if len(qspidev) == 0:
         # nothing to do
         return
