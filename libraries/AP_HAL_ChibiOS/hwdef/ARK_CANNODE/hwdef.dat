@@ -1,0 +1,121 @@
+# hw definition file for processing by chibios_pins.py
+# hardware repository: https://github.com/ARK-Electronics/ARK_CANNODE
+
+# MCU class and specific type
+# note: the device is STM32F412CE, not all F412 pins are available
+MCU STM32F4xx STM32F412Rx
+
+# board ID for firmware load
+APJ_BOARD_ID 83
+
+env AP_PERIPH 1
+
+# crystal frequency
+OSCILLATOR_HZ 8000000
+
+# ChibiOS system timer
+STM32_ST_USE_TIMER 5
+
+# bootloader starts firmware at 64k
+FLASH_RESERVE_START_KB 64
+
+# assume 512k flash size
+FLASH_SIZE_KB 512
+
+# order of I2C buses
+I2C_ORDER I2C1
+
+# order of UARTs
+# SERIAL_ORDER can be empty - only used to update firmware with uart in addition to can
+SERIAL_ORDER USART2 USART1
+
+# pin definitions
+# Now we start defining some PWM pins. We also map these pins to GPIO
+# values, so users can set SERVOx_FUNCTION=-1 to determine which
+# PWM outputs on the primary MCU are set up as GPIOs.
+# To match HAL_PX4 we number the GPIOs for the PWM outputs
+# starting at 50.
+PA0  TIM2_CH1 TIM2 PWM(1) GPIO(50)
+PA1  TIM2_CH2 TIM2 PWM(2) GPIO(51)
+PB10 TIM2_CH3 TIM2 PWM(3) GPIO(52)
+PB4  TIM3_CH1 TIM3 PWM(4) GPIO(53)
+PB5  TIM3_CH2 TIM3 PWM(5) GPIO(54)
+PB0  TIM3_CH3 TIM3 PWM(6) GPIO(55)
+PB1  TIM3_CH4 TIM3 PWM(7) GPIO(56)
+PB7  TIM4_CH2 TIM4 PWM(8) GPIO(58)
+
+# USART1 serial 1
+PA15 USART1_TX USART1
+PB3 USART1_RX USART1
+
+# USART2 debug
+PA2 USART2_TX USART2
+PA3 USART2_RX USART2
+
+# SPI bus
+PA5 SPI1_SCK SPI1
+PA6 SPI1_MISO SPI1
+PA7 SPI1_MOSI SPI1
+
+# LEDs
+PA8  LED_R1 OUTPUT OPENDRAIN HIGH GPIO(0)
+PA9  LED_G1 OUTPUT OPENDRAIN LOW GPIO(1)
+PA10 LED_B1 OUTPUT OPENDRAIN LOW GPIO(2)
+
+define HAL_GPIO_A_LED_PIN 0
+define HAL_GPIO_B_LED_PIN 1
+define HAL_GPIO_C_LED_PIN 2
+
+define HAL_GPIO_LED_ON  0
+define HAL_GPIO_LED_OFF 1
+
+# use pixracer style 3-LED indicators
+define HAL_HAVE_PIXRACER_LED
+
+# CAN bus
+PA11 CAN1_RX CAN1
+PA12 CAN1_TX CAN1
+
+# pins for SWD debugging with a STlink or black-magic probe.
+PA13 JTMS-SWDIO SWD
+PA14 JTCK-SWCLK SWD
+
+# CS and DRDY
+PA4 IMU1_CS CS
+PB2 MPU_DRDY INPUT
+
+# SPI1 FSYNC for ICM42688p
+# PB8 TIM10_CH1 TIM10
+
+PC14 GPIO_CAN1_SILENT OUTPUT PUSHPULL SPEED_LOW LOW
+
+# store parameters in pages 2 and 3
+STORAGE_FLASH_PAGE 2
+define HAL_STORAGE_SIZE 8192
+
+# no ADC pins
+define HAL_USE_ADC FALSE
+
+# SPI2
+PB12 IMU2_CS SPI2
+#PC13 EXT_CS2 SPI2
+PB13 SPI2_SCK SPI2
+PB14 SPI2_MISO SPI2
+PB15 SPI2_MOSI SPI2
+
+# I2C port
+PB6 I2C1_SCL I2C1
+PB9 I2C1_SDA I2C1
+
+# SPI device table
+SPIDEV icm42688 SPI1 DEVID1 IMU1_CS MODE3  2*MHZ  8*MHZ
+
+define HAL_USE_SPI TRUE
+
+define HAL_PERIPH_ENABLE_GPS
+define HAL_PERIPH_ENABLE_MAG
+define HAL_PERIPH_ENABLE_BARO
+define HAL_PERIPH_ENABLE_RC_OUT
+define HAL_PERIPH_ENABLE_NOTIFY
+
+define CAN_APP_NODE_NAME "org.ardupilot.ARK_CANNODE"
