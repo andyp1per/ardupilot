@@ -77,6 +77,13 @@ bool sdcard_init()
     }
 
     const uint8_t tries = 3;
+    // allocate non-cacheable scratch buffers
+    if (sdcd.buf == nullptr) {
+        sdcd.buf = (uint8_t*)malloc_axi_sram(MMCSD_BLOCK_SIZE);
+    }
+    if (sdcd.resp == nullptr) {
+        sdcd.resp = (uint32_t*)malloc_axi_sram(sizeof(uint32_t));
+    }
     for (uint8_t i=0; i<tries; i++) {
         sdcconfig.slowdown = sd_slowdown;
         sdcStart(&sdcd, &sdcconfig);
