@@ -37,6 +37,12 @@ extern const AP_HAL::HAL& hal;
 // time between tries to open log
 #define LOGGER_FILE_REOPEN_MS 5000
 
+uint32_t failed_writes = 0;
+uint32_t zero_writes = 0;
+uint32_t total_write_time = 0;
+uint32_t total_write_bytes = 0;
+uint32_t num_writes = 0;
+uint32_t num_ticks = 0;
 /*
   constructor
  */
@@ -157,6 +163,19 @@ void AP_Logger_File::periodic_1Hz()
     if (rate_limiter == nullptr && (_front._params.file_ratemax > 0 || _front._log_pause)) {
         // setup rate limiting if log rate max > 0Hz or log pause of streaming entries is requested
         rate_limiter = new AP_Logger_RateLimiter(_front, _front._params.file_ratemax);
+    }  
+
+    hal.console->printf("Zero: %u, Failed: %u, Avg: %u, Ticks/s: %u Bytes/Avg: %u\n", unsigned(zero_writes), unsigned(failed_writes),
+        unsigned(total_write_time / num_writes), unsigned(total_write_time / num_ticks), unsigned(total_write_bytes / num_writes));
+    if (start_new_log_pending) {
+        hal.console->printf("log not open\n");
+    }
+
+    if (total_write_time > 5000000) {
+        total_write_time = 0;
+        total_write_bytes = 0;
+        num_ticks = 0;
+        num_writes = 0;
     }
 }
 
@@ -780,26 +799,39 @@ void AP_Logger_File::start_new_log(void)
     // precautions.  We will reset _open_error if we actually manage
     // to open the log...
     _open_error_ms = AP_HAL::millis();
+    uint32_t now = _open_error_ms;
 
     stop_logging();
 
+    hal.console->printf("1: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
+
     start_new_log_reset_variables();
+
+    hal.console->printf("2: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
 
     if (_read_fd != -1) {
         AP::FS().close(_read_fd);
         _read_fd = -1;
     }
 
+    hal.console->printf("3: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
+
     if (disk_space_avail() < _free_space_min_avail && disk_space() > 0) {
         DEV_PRINTF("Out of space for logging\n");
         return;
     }
 
+    hal.console->printf("4: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
+
     uint16_t log_num = find_last_log();
     // re-use empty logs if possible
+
+    hal.console->printf("4a: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
     if (_get_log_size(log_num) > 0 || log_num == 0) {
         log_num++;
     }
+    hal.console->printf("5: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
+
     if (log_num > MAX_LOG_FILES) {
         log_num = 1;
     }
@@ -815,6 +847,7 @@ void AP_Logger_File::start_new_log(void)
         write_fd_semaphore.give();
         return;
     }
+    hal.console->printf("6: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
     // remember if we had utc time when we opened the file
@@ -824,10 +857,12 @@ void AP_Logger_File::start_new_log(void)
 
     // create the log directory if need be
     ensure_log_directory_exists();
+    hal.console->printf("7: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
 
     EXPECT_DELAY_MS(3000);
     _write_fd = AP::FS().open(_write_filename, O_WRONLY|O_CREAT|O_TRUNC);
     _cached_oldest_log = 0;
+    hal.console->printf("8: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
 
     if (_write_fd == -1) {
         write_fd_semaphore.give();
@@ -840,6 +875,8 @@ void AP_Logger_File::start_new_log(void)
         }
         return;
     }
+    hal.console->printf("9: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
+
     _last_write_ms = AP_HAL::millis();
     _open_error_ms = 0;
     _write_offset = 0;
@@ -848,6 +885,7 @@ void AP_Logger_File::start_new_log(void)
 
     // now update lastlog.txt with the new log number
     char *fname = _lastlog_file_name();
+    hal.console->printf("10: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
 
     EXPECT_DELAY_MS(3000);
     int fd = AP::FS().open(fname, O_WRONLY|O_CREAT);
@@ -856,12 +894,14 @@ void AP_Logger_File::start_new_log(void)
         _open_error_ms = AP_HAL::millis();
         return;
     }
+    hal.console->printf("11: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
 
     char buf[30];
     snprintf(buf, sizeof(buf), "%u\r\n", (unsigned)log_num);
     const ssize_t to_write = strlen(buf);
     const ssize_t written = AP::FS().write(fd, buf, to_write);
     AP::FS().close(fd);
+    hal.console->printf("12: %lu\n", AP_HAL::millis() - now); now = AP_HAL::millis();
 
     if (written < to_write) {
         _open_error_ms = AP_HAL::millis();
@@ -905,6 +945,7 @@ void AP_Logger_File::io_timer(void)
 {
     uint32_t tnow = AP_HAL::millis();
     _io_timer_heartbeat = tnow;
+    num_ticks++;
 
     if (start_new_log_pending) {
         start_new_log();
@@ -970,7 +1011,18 @@ void AP_Logger_File::io_timer(void)
         write_fd_semaphore.give();
         return;
     }
+    
+    uint32_t now = AP_HAL::micros();
     ssize_t nwritten = AP::FS().write(_write_fd, head, nbytes);
+    if (nwritten == 0) {
+        zero_writes++;
+    } else if (nwritten < 0) {
+        failed_writes++;
+    } else {
+        total_write_time += (AP_HAL::micros() - now);
+        total_write_bytes += nwritten;
+        num_writes++;
+    }
     last_io_operation = "";
     if (nwritten <= 0) {
         if ((tnow - _last_write_ms)/1000U > unsigned(_front._params.file_timeout)) {

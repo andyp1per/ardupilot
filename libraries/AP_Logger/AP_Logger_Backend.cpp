@@ -666,6 +666,9 @@ void AP_Logger_Backend::df_stats_clear() {
 
 void AP_Logger_Backend::df_stats_log() {
     Write_AP_Logger_Stats_File(stats);
+
+    hal.console->printf("DSF.Dp: %u, DSF.FMx: %u, DSF.FMn: %u\n", unsigned(_dropped), unsigned(stats.buf_space_max), unsigned(stats.buf_space_min));
+
     df_stats_clear();
 }
 

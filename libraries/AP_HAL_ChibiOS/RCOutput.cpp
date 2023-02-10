@@ -140,9 +140,23 @@ void RCOutput::init()
     hal.gpio->pinMode(56, 1);
     hal.gpio->pinMode(57, 1);
 #endif
+    hal.gpio->pinMode(50, 1);
+    hal.gpio->pinMode(51, 1);
+    hal.gpio->pinMode(52, 1);
 
     hal.scheduler->register_timer_process(FUNCTOR_BIND(this, &RCOutput::safety_update, void));
     _initialised = true;
+}
+
+
+extern "C" void log_tx_start(uint8_t pin) {
+    hal.gpio->write(49 + pin, 0);
+    hal.gpio->write(49 + pin, 1);
+    hal.gpio->write(49 + pin, 0);
+}
+
+extern "C" void log_tx_end(uint8_t pin) {
+    hal.gpio->write(49 + pin, 1);
 }
 
 /*
