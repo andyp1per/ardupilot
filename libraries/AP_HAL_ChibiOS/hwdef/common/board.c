@@ -251,6 +251,13 @@ void __early_init(void) {
                      MPU_RASR_ATTR_NON_CACHEABLE |
                      MPU_RASR_SIZE_64K |
                      MPU_RASR_ENABLE);
+  // disable cache on AXI RAM IDMA region so that we can use it for SDMMC
+  mpuConfigureRegion(MPU_REGION_6,
+                     0x24078000,
+                     MPU_RASR_ATTR_AP_RW_RW |
+                     MPU_RASR_ATTR_NON_CACHEABLE |
+                     MPU_RASR_SIZE_32K |
+                     MPU_RASR_ENABLE);
 #endif
 }
 
