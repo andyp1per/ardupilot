@@ -33,9 +33,6 @@ static HAL_Semaphore sem;
 
 #if HAL_USE_SDC
 static SDCConfig sdcconfig = {
-#if !defined(STM32H7)
-  NULL,
-#endif
   SDC_MODE_4BIT,
   0
 };
