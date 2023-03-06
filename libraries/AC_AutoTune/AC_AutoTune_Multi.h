@@ -167,4 +167,5 @@ private:
     AP_Int8  axis_bitmask;        // axes to be tuned
     AP_Float aggressiveness;      // aircraft response aggressiveness to be tuned
     AP_Float min_d;               // minimum rate d gain allowed during tuning
+    AP_Int8  yaw_d_tune;
 };

@@ -49,6 +49,7 @@
 #define AUTOTUNE_RD_MAX                  0.200f     // maximum Rate D value
 #define AUTOTUNE_RLPF_MIN                  1.0f     // minimum Rate Yaw filter value
 #define AUTOTUNE_RLPF_MAX                  5.0f     // maximum Rate Yaw filter value
+#define AUTOTUNE_FLTE_MIN                  2.5f     // minimum Rate Yaw error filter value
 #define AUTOTUNE_RP_MIN                   0.01f     // minimum Rate P value
 #define AUTOTUNE_RP_MAX                    2.0f     // maximum Rate P value
 #define AUTOTUNE_SP_MAX                   40.0f     // maximum Stab P value
@@ -97,6 +98,13 @@ const AP_Param::GroupInfo AC_AutoTune_Multi::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("MIN_D", 3, AC_AutoTune_Multi, min_d,  0.001f),
 
+    // @Param: YAW_D
+    // @DisplayName: AutoTune Yaw using D-term
+    // @Description: If set to 1.0, autotune will tune the Yaw D-term rather than the FLTE
+    // @Values: 0.0 1.0
+    // @User: Advanced
+    AP_GROUPINFO("YAW_D", 4, AC_AutoTune_Multi, yaw_d_tune,  0.0),
+
     AP_GROUPEND
 };
 
@@ -113,7 +121,7 @@ void AC_AutoTune_Multi::do_gcs_announcements()
     if (now - announce_time < AUTOTUNE_ANNOUNCE_INTERVAL_MS) {
         return;
     }
-    gcs().send_text(MAV_SEVERITY_INFO, "AutoTune: %s %s %u%%", axis_string(), type_string(), (counter * (100/AUTOTUNE_SUCCESS_COUNT)) );
+    gcs().send_text(MAV_SEVERITY_INFO, "AutoTune: %s %s %u%%", axis_string(), type_string(), (counter * (100/AUTOTUNE_SUCCESS_COUNT)));
     announce_time = now;
 }
 
@@ -174,7 +182,17 @@ void AC_AutoTune_Multi::backup_gains_and_initialise()
     orig_yaw_accel = attitude_control->get_accel_yaw_max_cdss();
     orig_yaw_sp = attitude_control->get_angle_yaw_p().kP();
     tune_yaw_rp = attitude_control->get_rate_yaw_pid().kP();
-    tune_yaw_rLPF = attitude_control->get_rate_yaw_pid().filt_E_hz();
+    if (yaw_d_tune) {
+        tune_yaw_rd = attitude_control->get_rate_yaw_pid().kD();
+        if (is_zero(tune_yaw_rd)) {
+            tune_yaw_rd = min_d;
+        }
+    } else {
+        tune_yaw_rLPF = attitude_control->get_rate_yaw_pid().filt_E_hz();
+        if (is_zero(tune_yaw_rLPF)) {
+            tune_yaw_rLPF = AUTOTUNE_FLTE_MIN;
+        }
+    }
     tune_yaw_sp = attitude_control->get_angle_yaw_p().kP();
     tune_yaw_accel = attitude_control->get_accel_yaw_max_cdss();
 
@@ -257,9 +275,12 @@ void AC_AutoTune_Multi::load_tuned_gains()
         if (!is_zero(tune_yaw_rp)) {
             attitude_control->get_rate_yaw_pid().kP(tune_yaw_rp);
             attitude_control->get_rate_yaw_pid().kI(tune_yaw_rp*AUTOTUNE_YAW_PI_RATIO_FINAL);
-            attitude_control->get_rate_yaw_pid().kD(0.0f);
+            if (yaw_d_tune) {
+                attitude_control->get_rate_yaw_pid().kD(tune_yaw_rd);
+            } else {
+                attitude_control->get_rate_yaw_pid().filt_E_hz(tune_yaw_rLPF);
+            }
             attitude_control->get_rate_yaw_pid().ff(orig_yaw_rff);
-            attitude_control->get_rate_yaw_pid().filt_E_hz(tune_yaw_rLPF);
             attitude_control->get_angle_yaw_p().kP(tune_yaw_sp);
             attitude_control->set_accel_yaw_max_cdss(tune_yaw_accel);
         }
@@ -329,9 +350,12 @@ void AC_AutoTune_Multi::load_test_gains()
     case YAW:
         attitude_control->get_rate_yaw_pid().kP(tune_yaw_rp);
         attitude_control->get_rate_yaw_pid().kI(tune_yaw_rp*0.01f);
-        attitude_control->get_rate_yaw_pid().kD(0.0f);
         attitude_control->get_rate_yaw_pid().ff(0.0f);
-        attitude_control->get_rate_yaw_pid().filt_E_hz(tune_yaw_rLPF);
+        if (yaw_d_tune) {
+            attitude_control->get_rate_pitch_pid().kD(tune_yaw_rd);
+        } else {
+            attitude_control->get_rate_yaw_pid().filt_E_hz(tune_yaw_rLPF);
+        }
         attitude_control->get_rate_yaw_pid().filt_T_hz(0.0f);
         attitude_control->get_rate_yaw_pid().slew_limit(0.0f);
         attitude_control->get_angle_yaw_p().kP(tune_yaw_sp);
@@ -411,11 +435,14 @@ void AC_AutoTune_Multi::save_tuning_gains()
         // rate yaw gains
         attitude_control->get_rate_yaw_pid().kP(tune_yaw_rp);
         attitude_control->get_rate_yaw_pid().kI(tune_yaw_rp*AUTOTUNE_YAW_PI_RATIO_FINAL);
-        attitude_control->get_rate_yaw_pid().kD(0.0f);
         attitude_control->get_rate_yaw_pid().ff(orig_yaw_rff);
         attitude_control->get_rate_yaw_pid().filt_T_hz(orig_yaw_fltt);
         attitude_control->get_rate_yaw_pid().slew_limit(orig_yaw_smax);
-        attitude_control->get_rate_yaw_pid().filt_E_hz(tune_yaw_rLPF);
+        if (yaw_d_tune) {
+            attitude_control->get_rate_yaw_pid().kD(tune_yaw_rd);
+        } else {
+            attitude_control->get_rate_yaw_pid().filt_E_hz(tune_yaw_rLPF);
+        }
         attitude_control->get_rate_yaw_pid().save_gains();
 
         // stabilize yaw
@@ -453,7 +480,7 @@ void AC_AutoTune_Multi::report_final_gains(AxisType test_axis) const
             report_axis_gains("Pitch", tune_pitch_rp, tune_pitch_rp*AUTOTUNE_PI_RATIO_FINAL, tune_pitch_rd, tune_pitch_sp, tune_pitch_accel);
             break;
         case YAW:
-            report_axis_gains("Yaw", tune_yaw_rp, tune_yaw_rp*AUTOTUNE_YAW_PI_RATIO_FINAL, 0, tune_yaw_sp, tune_yaw_accel);
+            report_axis_gains("Yaw", tune_yaw_rp, tune_yaw_rp*AUTOTUNE_YAW_PI_RATIO_FINAL, yaw_d_tune ? tune_yaw_rd : 0, tune_yaw_sp, tune_yaw_accel);
             break;
     }
 }
@@ -600,7 +627,11 @@ void AC_AutoTune_Multi::updating_rate_p_up_all(AxisType test_axis)
         updating_rate_p_up_d_down(tune_pitch_rd, min_d, AUTOTUNE_RD_STEP, tune_pitch_rp, AUTOTUNE_RP_MIN, AUTOTUNE_RP_MAX, AUTOTUNE_RP_STEP, target_rate, test_rate_min, test_rate_max);
         break;
     case YAW:
-        updating_rate_p_up_d_down(tune_yaw_rLPF, AUTOTUNE_RLPF_MIN, AUTOTUNE_RD_STEP, tune_yaw_rp, AUTOTUNE_RP_MIN, AUTOTUNE_RP_MAX, AUTOTUNE_RP_STEP, target_rate, test_rate_min, test_rate_max);
+        if(yaw_d_tune) {
+            updating_rate_p_up_d_down(tune_yaw_rd, min_d, AUTOTUNE_RD_STEP, tune_yaw_rp, AUTOTUNE_RP_MIN, AUTOTUNE_RP_MAX, AUTOTUNE_RP_STEP, target_rate, test_rate_min, test_rate_max);
+        } else {
+            updating_rate_p_up_d_down(tune_yaw_rLPF, AUTOTUNE_RLPF_MIN, AUTOTUNE_RD_STEP, tune_yaw_rp, AUTOTUNE_RP_MIN, AUTOTUNE_RP_MAX, AUTOTUNE_RP_STEP, target_rate, test_rate_min, test_rate_max);
+        }
         break;
     }
 }
@@ -616,7 +647,11 @@ void AC_AutoTune_Multi::updating_rate_d_up_all(AxisType test_axis)
         updating_rate_d_up(tune_pitch_rd, min_d, AUTOTUNE_RD_MAX, AUTOTUNE_RD_STEP, tune_pitch_rp, AUTOTUNE_RP_MIN, AUTOTUNE_RP_MAX, AUTOTUNE_RP_STEP, target_rate, test_rate_min, test_rate_max);
         break;
     case YAW:
-        updating_rate_d_up(tune_yaw_rLPF, AUTOTUNE_RLPF_MIN, AUTOTUNE_RLPF_MAX, AUTOTUNE_RD_STEP, tune_yaw_rp, AUTOTUNE_RP_MIN, AUTOTUNE_RP_MAX, AUTOTUNE_RP_STEP, target_rate, test_rate_min, test_rate_max);
+        if (yaw_d_tune) {
+            updating_rate_d_up(tune_yaw_rd, min_d, AUTOTUNE_RD_MAX, AUTOTUNE_RD_STEP, tune_yaw_rp, AUTOTUNE_RP_MIN, AUTOTUNE_RP_MAX, AUTOTUNE_RP_STEP, target_rate, test_rate_min, test_rate_max);
+        } else {
+            updating_rate_d_up(tune_yaw_rLPF, AUTOTUNE_RLPF_MIN, AUTOTUNE_RLPF_MAX, AUTOTUNE_RD_STEP, tune_yaw_rp, AUTOTUNE_RP_MIN, AUTOTUNE_RP_MAX, AUTOTUNE_RP_STEP, target_rate, test_rate_min, test_rate_max);
+        }
         break;
     }
 }
@@ -632,7 +667,11 @@ void AC_AutoTune_Multi::updating_rate_d_down_all(AxisType test_axis)
         updating_rate_d_down(tune_pitch_rd, min_d, AUTOTUNE_RD_STEP, tune_pitch_rp, AUTOTUNE_RP_MIN, AUTOTUNE_RP_MAX, AUTOTUNE_RP_STEP, target_rate, test_rate_min, test_rate_max);
         break;
     case YAW:
-        updating_rate_d_down(tune_yaw_rLPF, AUTOTUNE_RLPF_MIN, AUTOTUNE_RD_STEP, tune_yaw_rp, AUTOTUNE_RP_MIN, AUTOTUNE_RP_MAX, AUTOTUNE_RP_STEP, target_rate, test_rate_min, test_rate_max);
+        if (yaw_d_tune) {
+            updating_rate_d_down(tune_yaw_rd, min_d, AUTOTUNE_RD_STEP, tune_yaw_rp, AUTOTUNE_RP_MIN, AUTOTUNE_RP_MAX, AUTOTUNE_RP_STEP, target_rate, test_rate_min, test_rate_max);
+        } else {
+            updating_rate_d_down(tune_yaw_rLPF, AUTOTUNE_RLPF_MIN, AUTOTUNE_RD_STEP, tune_yaw_rp, AUTOTUNE_RP_MIN, AUTOTUNE_RP_MAX, AUTOTUNE_RP_STEP, target_rate, test_rate_min, test_rate_max);
+        }
         break;
     }
 }
@@ -686,7 +725,11 @@ void AC_AutoTune_Multi::set_gains_post_tune(AxisType test_axis)
             tune_pitch_rp = MAX(AUTOTUNE_RP_MIN, tune_pitch_rp * AUTOTUNE_RD_BACKOFF);
             break;
         case YAW:
-            tune_yaw_rLPF = MAX(AUTOTUNE_RLPF_MIN, tune_yaw_rLPF * AUTOTUNE_RD_BACKOFF);
+            if (yaw_d_tune) {
+                tune_yaw_rd = MAX(min_d, tune_yaw_rd * AUTOTUNE_RD_BACKOFF);
+            } else {
+                tune_yaw_rLPF = MAX(AUTOTUNE_RLPF_MIN, tune_yaw_rLPF * AUTOTUNE_RD_BACKOFF);
+            }
             tune_yaw_rp = MAX(AUTOTUNE_RP_MIN, tune_yaw_rp * AUTOTUNE_RD_BACKOFF);
             break;
         }
@@ -962,7 +1005,7 @@ void AC_AutoTune_Multi::Log_AutoTune()
             Log_Write_AutoTune(axis, tune_type, target_angle, test_angle_min, test_angle_max, tune_pitch_rp, tune_pitch_rd, tune_pitch_sp, test_accel_max);
             break;
         case YAW:
-            Log_Write_AutoTune(axis, tune_type, target_angle, test_angle_min, test_angle_max, tune_yaw_rp, tune_yaw_rLPF, tune_yaw_sp, test_accel_max);
+            Log_Write_AutoTune(axis, tune_type, target_angle, test_angle_min, test_angle_max, tune_yaw_rp, yaw_d_tune ? tune_yaw_rd : tune_yaw_rLPF, tune_yaw_sp, test_accel_max);
             break;
         }
     } else {
@@ -974,7 +1017,7 @@ void AC_AutoTune_Multi::Log_AutoTune()
             Log_Write_AutoTune(axis, tune_type, target_rate, test_rate_min, test_rate_max, tune_pitch_rp, tune_pitch_rd, tune_pitch_sp, test_accel_max);
             break;
         case YAW:
-            Log_Write_AutoTune(axis, tune_type, target_rate, test_rate_min, test_rate_max, tune_yaw_rp, tune_yaw_rLPF, tune_yaw_sp, test_accel_max);
+            Log_Write_AutoTune(axis, tune_type, target_rate, test_rate_min, test_rate_max, tune_yaw_rp, yaw_d_tune ? tune_yaw_rd : tune_yaw_rLPF, tune_yaw_sp, test_accel_max);
             break;
         }
     }
@@ -1062,7 +1105,11 @@ void AC_AutoTune_Multi::twitch_test_init()
         target_max_rate = MAX(AUTOTUNE_TARGET_MIN_RATE_RLLPIT_CDS, step_scaler*AUTOTUNE_TARGET_RATE_YAW_CDS);
         target_rate = constrain_float(ToDeg(attitude_control->max_rate_step_bf_yaw()*0.75f)*100.0f, AUTOTUNE_TARGET_MIN_RATE_YAW_CDS, target_max_rate);
         target_angle = constrain_float(ToDeg(attitude_control->max_angle_step_bf_yaw()*0.75f)*100.0f, AUTOTUNE_TARGET_MIN_ANGLE_YAW_CD, AUTOTUNE_TARGET_ANGLE_YAW_CD);
-        rotation_rate_filt.set_cutoff_frequency(AUTOTUNE_Y_FILT_FREQ);
+        if (yaw_d_tune) {
+            rotation_rate_filt.set_cutoff_frequency(attitude_control->get_rate_yaw_pid().filt_D_hz()*2.0f);
+        } else {
+            rotation_rate_filt.set_cutoff_frequency(AUTOTUNE_Y_FILT_FREQ);
+        }
         break;
     }
     }
@@ -1098,7 +1145,7 @@ void AC_AutoTune_Multi::twitch_test_run(AxisType test_axis, const float dir_sign
                 attitude_control->input_angle_step_bf_roll_pitch_yaw(0.0f, dir_sign * target_angle, 0.0f);
                 break;
             case YAW:
-                // request pitch to 20deg
+                // request yaw to 20deg
                 attitude_control->input_angle_step_bf_roll_pitch_yaw(0.0f, 0.0f, dir_sign * target_angle);
                 break;
             }
