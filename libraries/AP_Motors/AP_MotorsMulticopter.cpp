@@ -215,6 +215,13 @@ const AP_Param::GroupInfo AP_MotorsMulticopter::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("SAFE_TIME", 42, AP_MotorsMulticopter, _safe_time, AP_MOTORS_SAFE_TIME_DEFAULT),
 
+    // @Param: OPTIONS
+    // @DisplayName: Motor options
+    // @Description: Motor options
+    // @Bitmask: 0:Raw battery voltage compensation
+    // @User: Advanced
+    AP_GROUPINFO("OPTIONS", 43, AP_MotorsMulticopter, _options, 0),
+
     AP_GROUPEND
 };
 
@@ -409,8 +416,9 @@ void AP_MotorsMulticopter::update_lift_max_from_batt_voltage()
 {
     // sanity check battery_voltage_min is not too small
     // if disabled or misconfigured exit immediately
-    float _batt_voltage_resting_estimate = AP::battery().voltage_resting_estimate(_batt_idx);
-    if ((_batt_voltage_max <= 0) || (_batt_voltage_min >= _batt_voltage_max) || (_batt_voltage_resting_estimate < 0.25f * _batt_voltage_min)) {
+    float _batt_voltage = has_option(MotorOptions::BATT_RAW_VOLTAGE) ? AP::battery().voltage(_batt_idx) : AP::battery().voltage_resting_estimate(_batt_idx);
+
+    if ((_batt_voltage_max <= 0) || (_batt_voltage_min >= _batt_voltage_max) || (_batt_voltage < 0.25f * _batt_voltage_min)) {
         _batt_voltage_filt.reset(1.0f);
         _lift_max = 1.0f;
         return;
@@ -418,15 +426,20 @@ void AP_MotorsMulticopter::update_lift_max_from_batt_voltage()
 
     _batt_voltage_min.set(MAX(_batt_voltage_min, _batt_voltage_max * 0.6f));
 
-    // contrain resting voltage estimate (resting voltage is actual voltage with sag removed based on current draw and resistance)
-    _batt_voltage_resting_estimate = constrain_float(_batt_voltage_resting_estimate, _batt_voltage_min, _batt_voltage_max);
+    // constrain resting voltage estimate (resting voltage is actual voltage with sag removed based on current draw and resistance)
+    _batt_voltage = constrain_float(_batt_voltage, _batt_voltage_min, _batt_voltage_max);
 
-    // filter at 0.5 Hz
-    float batt_voltage_filt = _batt_voltage_filt.apply(_batt_voltage_resting_estimate / _batt_voltage_max, _dt);
+    if (!has_option(MotorOptions::BATT_RAW_VOLTAGE)) {
+        // filter at 0.5 Hz
+        _batt_voltage_filt.apply(_batt_voltage / _batt_voltage_max, _dt);
+    } else {
+        // reset is equivalent to no filtering
+        _batt_voltage_filt.reset(_batt_voltage / _batt_voltage_max);
+    }
 
     // calculate lift max
     float thrust_curve_expo = constrain_float(_thrust_curve_expo, -1.0f, 1.0f);
-    _lift_max = batt_voltage_filt * (1 - thrust_curve_expo) + thrust_curve_expo * batt_voltage_filt * batt_voltage_filt;
+    _lift_max = _batt_voltage_filt.get() * (1 - thrust_curve_expo) + thrust_curve_expo * _batt_voltage_filt.get() * _batt_voltage_filt.get();
 }
 
 // 10hz logging of voltage scaling and max trust

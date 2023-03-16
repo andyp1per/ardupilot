@@ -346,6 +346,13 @@ protected:
     bool                _thrust_balanced;       // true when output thrust is well balanced
     float               _thrust_boost_ratio;    // choice between highest and second highest motor output for output mixing (0 ~ 1). Zero is normal operation
 
+    // motor options
+    AP_Int8             _options;
+    enum MotorOptions : uint8_t {
+        BATT_RAW_VOLTAGE = (0 << 1U)
+    };
+    bool has_option(MotorOptions option) { return _options.get() & uint8_t(option); }
+
     MAV_TYPE _mav_type; // MAV_TYPE_GENERIC = 0;
 
     enum pwm_type { PWM_TYPE_NORMAL     = 0,
