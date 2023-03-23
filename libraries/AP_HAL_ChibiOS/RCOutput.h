@@ -30,6 +30,14 @@
 #define DISABLE_DSHOT
 #endif
 
+#ifdef AP_RCOUT_USE_64BIT_TIME
+typedef uint64_t rcout_timer_t;
+#define rcout_micros() AP_HAL::micros64()
+#else
+typedef uint32_t rcout_timer_t;
+#define rcout_micros() AP_HAL::micros()
+#endif
+
 #define RCOU_DSHOT_TIMING_DEBUG 0
 
 class ChibiOS::RCOutput : public AP_HAL::RCOutput
@@ -102,12 +110,12 @@ public:
     /*
       timer push (for oneshot min rate)
      */
-    void timer_tick(uint64_t last_run_us);
+    void timer_tick(rcout_timer_t cycle_start_us, rcout_timer_t timeout_period_us);
 
     /*
       LED push
      */
-    void led_timer_tick(uint64_t last_run_us);
+    void led_timer_tick(rcout_timer_t cycle_start_us, rcout_timer_t timeout_period_us);
 
     /*
       setup for serial output to a set of ESCs, using the given
@@ -325,9 +333,9 @@ private:
         uint32_t bit_width_mul;
         uint32_t rc_frequency;
         bool in_serial_dma;
-        uint64_t last_dmar_send_us;
-        uint64_t dshot_pulse_time_us;
-        uint64_t dshot_pulse_send_time_us;
+        rcout_timer_t last_dmar_send_us;
+        rcout_timer_t dshot_pulse_time_us;
+        rcout_timer_t dshot_pulse_send_time_us;
         virtual_timer_t dma_timeout;
 
         // serial LED support
@@ -374,7 +382,7 @@ private:
 #if RCOU_DSHOT_TIMING_DEBUG
             uint16_t telem_rate[4];
             uint16_t telem_err_rate[4];
-            uint64_t last_print;  // debug
+            rcout_timer_t last_print;  // debug
 #endif
 #endif
         } bdshot;
@@ -508,7 +516,7 @@ private:
     } _bdshot;
 
     // dshot period
-    uint32_t _dshot_period_us = 400;
+    rcout_timer_t _dshot_period_us = 400;
     // dshot rate as a multiple of loop rate or 0 for 1Khz
     uint8_t _dshot_rate;
     // dshot periods since the last push()
@@ -549,8 +557,8 @@ private:
     // mask of active ESCs
     uint32_t _active_escs_mask;
 
-    // min time to trigger next pulse to prevent overlap
-    uint64_t min_pulse_trigger_us;
+    // last time pulse was triggererd used to prevent overlap
+    rcout_timer_t last_pulse_trigger_us;
 
     // mutex for oneshot triggering
     mutex_t trigger_mutex;
@@ -619,19 +627,19 @@ private:
     uint16_t create_dshot_packet(const uint16_t value, bool telem_request, bool bidir_telem);
     void fill_DMA_buffer_dshot(uint32_t *buffer, uint8_t stride, uint16_t packet, uint16_t clockmul);
 
-    void dshot_send_groups(uint64_t time_out_us);
-    void dshot_send(pwm_group &group, uint64_t time_out_us);
+    void dshot_send_groups(rcout_timer_t cycle_start_us, rcout_timer_t timeout_us);
+    void dshot_send(pwm_group &group, rcout_timer_t cycle_start_us, rcout_timer_t timeout_us);
     bool dshot_send_command(pwm_group &group, uint8_t command, uint8_t chan);
     static void dshot_update_tick(void* p);
     static void dshot_send_next_group(void* p);
     // release locks on the groups that are pending in reverse order
-    void dshot_collect_dma_locks(uint64_t last_run_us, bool led_thread = false);
+    void dshot_collect_dma_locks(rcout_timer_t cycle_start_us, rcout_timer_t timeout_period_us, bool led_thread = false);
     static void dma_up_irq_callback(void *p, uint32_t flags);
     static void dma_unlock(void *p);
     void dma_cancel(pwm_group& group);
     bool mode_requires_dma(enum output_mode mode) const;
     bool setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_width, bool active_high,
-                         const uint16_t buffer_length, uint32_t pulse_time_us,
+                         const uint16_t buffer_length, rcout_timer_t pulse_time_us,
                          bool is_dshot);
     void send_pulses_DMAR(pwm_group &group, uint32_t buffer_length);
     void set_group_mode(pwm_group &group);
