@@ -179,18 +179,17 @@ void RCOutput::rcout_thread()
 
         // if DMA sharing is in effect there can be quite a delay between the request to begin the cycle and
         // actually sending out data - thus we need to work out how much time we have left to collect the locks
-        uint64_t time_out_us = (_dshot_cycle + 1) * _dshot_period_us + last_cycle_run_us;
-        if (!_dshot_rate) {
-            time_out_us = last_thread_run_us + _dshot_period_us;
-        }
+        const uint32_t timeout_period_us = _dshot_rate ? (_dshot_cycle + 1) * _dshot_period_us : _dshot_period_us;
+        // timeout is measured from the beginning of the push() that initiated it to preserve periodicity
+        const uint32_t cycle_start_us = _dshot_rate ? last_cycle_run_us : last_thread_run_us;
 
         // main thread requested a new dshot send or we timed out - if we are not running
         // as a multiple of loop rate then ignore EVT_PWM_SEND events to preserve periodicity
         if (!serial_group && have_pwm_event) {
-            dshot_send_groups(time_out_us);
+            dshot_send_groups(cycle_start_us, timeout_period_us);
 
             // now unlock everything
-            dshot_collect_dma_locks(time_out_us);
+            dshot_collect_dma_locks(cycle_start_us, timeout_period_us);
 
             if (_dshot_rate > 0) {
                 _dshot_cycle = (_dshot_cycle + 1) % _dshot_rate;
@@ -198,7 +197,7 @@ void RCOutput::rcout_thread()
         }
 
         // process any pending RC output requests
-        timer_tick(time_out_us);
+        timer_tick(cycle_start_us, timeout_period_us);
 #if RCOU_DSHOT_TIMING_DEBUG
         static bool output_masks = true;
         if (AP_HAL::millis() > 5000 && output_masks) {
@@ -226,7 +225,7 @@ __RAMFUNC__ void RCOutput::dshot_update_tick(void* p)
 
 #if AP_HAL_SHARED_DMA_ENABLED
 // release locks on the groups that are pending in reverse order
-void RCOutput::dshot_collect_dma_locks(uint64_t time_out_us)
+void RCOutput::dshot_collect_dma_locks(uint32_t cycle_start_us, uint32_t timeout_period_us)
 {
     if (NUM_GROUPS == 0) {
         return;
@@ -240,8 +239,8 @@ void RCOutput::dshot_collect_dma_locks(uint64_t time_out_us)
             eventmask_t mask = 0;
             const uint64_t pulse_elapsed_us = now - group.last_dmar_send_us;
             uint32_t wait_us = 0;
-            if (now < time_out_us) {
-                wait_us = time_out_us - now;
+            if (now < (cycle_start_us + timeout_period_us)) {
+                wait_us = (cycle_start_us + timeout_period_us) - now;
             }
             if (pulse_elapsed_us < group.dshot_pulse_send_time_us) {
                 // better to let the burst write in progress complete rather than cancelling mid way through
@@ -1220,21 +1219,21 @@ void RCOutput::trigger_groups(void)
   periodic timer. This is used for oneshot and dshot modes, plus for
   safety switch update. Runs every 1000us.
  */
-void RCOutput::timer_tick(uint64_t time_out_us)
+void RCOutput::timer_tick(uint32_t cycle_start_us, uint32_t timeout_period_us)
 {
     if (serial_group) {
         return;
     }
 
     // if we have enough time left send out LED data
-    if (serial_led_pending && (time_out_us > (AP_HAL::micros64() + (_dshot_period_us >> 1)))) {
+    if (serial_led_pending && ((cycle_start_us + timeout_period_us) > (AP_HAL::micros() + (_dshot_period_us >> 1)))) {
         serial_led_pending = false;
         for (auto &group : pwm_group_list) {
             serial_led_pending |= !serial_led_send(group);
         }
 
         // release locks on the groups that are pending in reverse order
-        dshot_collect_dma_locks(time_out_us);
+        dshot_collect_dma_locks(cycle_start_us, timeout_period_us);
     }
 
     if (min_pulse_trigger_us == 0) {
@@ -1251,7 +1250,7 @@ void RCOutput::timer_tick(uint64_t time_out_us)
 }
 
 // send dshot for all groups that support it
-void RCOutput::dshot_send_groups(uint64_t time_out_us)
+void RCOutput::dshot_send_groups(uint32_t cycle_start_us, uint32_t timeout_period_us)
 {
 #ifndef DISABLE_DSHOT
     if (serial_group) {
@@ -1272,7 +1271,7 @@ void RCOutput::dshot_send_groups(uint64_t time_out_us)
             command_sent = dshot_send_command(group, _dshot_current_command.command, _dshot_current_command.chan);
         // actually do a dshot send
         } else if (group.can_send_dshot_pulse()) {
-            dshot_send(group, time_out_us);
+            dshot_send(group, cycle_start_us, timeout_period_us);
         }
     }
 
@@ -1380,7 +1379,7 @@ void RCOutput::fill_DMA_buffer_dshot(uint32_t *buffer, uint8_t stride, uint16_t 
   This call be called in blocking mode from the timer, in which case it waits for the DMA lock.
   In normal operation it doesn't wait for the DMA lock.
  */
-void RCOutput::dshot_send(pwm_group &group, uint64_t time_out_us)
+void RCOutput::dshot_send(pwm_group &group, uint32_t cycle_start_us, uint32_t timeout_period_us)
 {
 #ifndef DISABLE_DSHOT
     if (irq.waiter || (group.dshot_state != DshotState::IDLE && group.dshot_state != DshotState::RECV_COMPLETE)) {
@@ -1394,8 +1393,7 @@ void RCOutput::dshot_send(pwm_group &group, uint64_t time_out_us)
 
     // if we are sharing UP channels then it might have taken a long time to get here,
     // if there's not enough time to actually send a pulse then cancel
-
-    if (AP_HAL::micros64() + group.dshot_pulse_time_us > time_out_us) {
+    if (AP_HAL::micros() + group.dshot_pulse_time_us > (cycle_start_us + timeout_period_us)) {
         group.dma_handle->unlock();
         return;
     }
