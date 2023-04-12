@@ -39,6 +39,7 @@ public:
         AUTOROTATE =   26,  // Autonomous autorotation
         AUTO_RTL =     27,  // Auto RTL, this is not a true mode, AUTO will report as this mode if entered to perform a DO_LAND_START Landing sequence
         TURTLE =       28,  // Flip over after crash
+        RC_CAR_MODE =  29,
 
         // Mode number 127 reserved for the "drone show mode" in the Skybrush
         // fork at https://github.com/skybrush-io/ardupilot
@@ -1914,3 +1915,38 @@ private:
 
 };
 #endif
+
+class ModeRCCar : public Mode {
+public:
+   // inherit constructor
+   using Mode::Mode;
+   bool init(bool ignore_checks) override;
+   void run() override;
+   bool requires_GPS() const override { return false; }
+   bool has_manual_throttle() const override { return true; }
+   bool allows_arming(bool from_gcs) const override { return true; };
+   bool is_autopilot() const override { return false; }
+
+protected:
+   const char *name() const override { return "RCCAR"; }
+   const char *name4() const override { return "RCAR"; }
+private:
+    float get_throttle_assist(float velz, float pilot_throttle_scaled);
+
+}
+
+// class Mode2DPos : public Mode {
+// public:
+//    // inherit constructor
+//    using Mode::Mode;
+//    bool init(bool ignore_checks) override;
+//    void run() override;
+//    bool requires_GPS() const override { return false; }
+//    bool has_manual_throttle() const override { return true; }
+//    bool allows_arming(bool from_gcs) const override { return true; };
+//    bool is_autopilot() const override { return false; }
+
+// protected:
+//    const char *name() const override { return "2DPOSHOLD"; }
+//    const char *name4() const override { return "2POS"; }
+// }
