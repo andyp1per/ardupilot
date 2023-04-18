@@ -344,7 +344,7 @@ protected:
     // motor options
     AP_Int8             _options;
     enum MotorOptions : uint8_t {
-        BATT_RAW_VOLTAGE = (0 << 1U)
+        BATT_RAW_VOLTAGE = (1 << 0U)
     };
     bool has_option(MotorOptions option) { return _options.get() & uint8_t(option); }
 
