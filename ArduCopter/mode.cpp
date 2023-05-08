@@ -177,6 +177,8 @@ Mode *Copter::mode_from_mode_num(const Mode::Number mode)
         case Mode::Number::RCCAR:
             ret = &mode_rccar;
             break;
+        case Mode::Number::TWODPOSHOLD:
+            ret = &mode_2dposhold;
 
         default:
             break;

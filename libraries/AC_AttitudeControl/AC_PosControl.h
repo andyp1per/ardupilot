@@ -235,7 +235,7 @@ public:
     ///     Kinematically consistent target position and desired velocity and accelerations should be provided before calling this function
     void update_z_controller();
 
-
+    void use_z_control(bool val);
 
     ///
     /// Accessors
@@ -476,6 +476,8 @@ protected:
 
     // angle max override, if zero then use ANGLE_MAX parameter
     float       _angle_max_override_cd;
+
+    bool        use_z;                 //Use z pos control or not
 
     // return true if on a real vehicle or SITL with lock-step scheduling
     bool has_good_timing(void) const;

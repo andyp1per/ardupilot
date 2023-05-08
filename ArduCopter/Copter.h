@@ -225,7 +225,8 @@ public:
     friend class ModeZigZag;
     friend class ModeAutorotate;
     friend class ModeTurtle;
-    friend class ModeRCCar
+    friend class ModeRCCar;
+    friend class Mode2DPos;
 
     Copter(void);
 
@@ -1020,6 +1021,7 @@ private:
     ModeTurtle mode_turtle;
 #endif
     ModeRCCar mode_rccar;
+    Mode2DPos mode_2dposhold;
 
     // mode.cpp
     Mode *mode_from_mode_num(const Mode::Number mode);

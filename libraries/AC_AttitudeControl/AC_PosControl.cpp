@@ -908,6 +908,11 @@ bool AC_PosControl::is_active_z() const
     return dt_ticks <= 1;
 }
 
+void AC_PosControl::use_z_control(bool val)
+{
+    use_z = val;
+}
+
 /// update_z_controller - runs the vertical position controller correcting position, velocity and acceleration errors.
 ///     Position and velocity errors are converted to velocity and acceleration targets using PID objects
 ///     Desired velocity and accelerations are added to these corrections as they are calculated
@@ -957,13 +962,19 @@ void AC_PosControl::update_z_controller()
         _pid_accel_z.imax(_motors.get_throttle_hover() * 1000.0f);
     }
     float thr_out;
-    if (_vibe_comp_enabled) {
-        thr_out = get_throttle_with_vibration_override();
+    if (use_z) {
+        if (_vibe_comp_enabled) {
+            thr_out = get_throttle_with_vibration_override();
+        } else {
+            thr_out = _pid_accel_z.update_all(_accel_target.z, z_accel_meas, _dt, (_motors.limit.throttle_lower || _motors.limit.throttle_upper)) * 0.001f;
+            thr_out += _pid_accel_z.get_ff() * 0.001f;
+        }
+        thr_out += _motors.get_throttle_hover();
     } else {
-        thr_out = _pid_accel_z.update_all(_accel_target.z, z_accel_meas, _dt, (_motors.limit.throttle_lower || _motors.limit.throttle_upper)) * 0.001f;
-        thr_out += _pid_accel_z.get_ff() * 0.001f;
+        thr_out = 0;
     }
-    thr_out += _motors.get_throttle_hover();
+    use_z_control(false);
+    // throttle control?
 
     // Actuator commands
 
