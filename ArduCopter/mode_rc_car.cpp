@@ -140,10 +140,10 @@ void ModeRCCar::run()
     case AltHold_Flying:
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-#if AC_AVOID_ENABLED == ENABLED
+// #if AC_AVOID_ENABLED == ENABLED
         // apply avoidance
-        copter.avoid.adjust_roll_pitch(target_roll, target_pitch, copter.aparm.angle_max);
-#endif
+        // copter.avoid.adjust_roll_pitch(target_roll, target_pitch, copter.aparm.angle_max);
+// #endif
 
         // get avoidance adjusted climb rate
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
@@ -152,7 +152,9 @@ void ModeRCCar::run()
         copter.surface_tracking.update_surface_offset();
 
         // Send the commanded climb rate to the position controller
-        pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
+        float alt_target = channel_throttle->get_control_in() * 0.8 + 50;
+        pos_control->set_pos_target_z_cm(alt_target);
+        // pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
         break;
     }
 
