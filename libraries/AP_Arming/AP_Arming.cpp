@@ -520,7 +520,7 @@ bool AP_Arming::compass_checks(bool report)
         }
 
         if (!_compass.healthy()) {
-            check_failed(ARMING_CHECK_COMPASS, report, "Compass not healthy");
+            check_failed(ARMING_CHECK_COMPASS, report, "Compass not healthy"); //unhealthy compass
             return false;
         }
         // check compass learning is on or offsets have been set

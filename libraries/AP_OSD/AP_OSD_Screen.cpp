@@ -1293,13 +1293,22 @@ float AP_OSD_AbstractScreen::u_scale(enum unit_type unit, float value)
 
 void AP_OSD_Screen::draw_available_modes(uint8_t x, uint8_t y)
 {
-    // if (armed)
-    // bool gpsReady = arming.gps_checks(false);
-    // bool compassReady = arming.compass_checks(false);
-    // bool rangefinder_ready = arming.rangefinder_checks(false);
+    // if (!armed)
+    const AP_GPS &gps = AP::gps();
+    Compass &_compass = AP::compass();
+    const AP_InertialSensor &ins = AP::ins();
 
-    backend->write(x, y, false, "MODE 1: READY");
-    backend->write(x, y+1, false, "MODE 2: READY");
+    // const RangeFinder *rangefinder = AP::rangefinder();
+    bool isAccelGyroReady = ins.accel_calibrated_ok_all() && ins.get_accel_health_all() && ins.gyro_calibrated_ok_all() && ins.get_gyro_health_all();
+    bool isCompassReady = _compass.healthy() && _compass.consistent();
+    bool isGPSReady = gps.num_sensors() >= 1 && gps.status(0) >= AP_GPS::GPS_OK_FIX_3D && gps.is_healthy();
+    bool isRangeFinderReady = true;
+    backend->write(x, y, false, isAccelGyroReady&& isCompassReady && isGPSReady & isRangeFinderReady ?    "RC CAR:   READY" : "RC CAR:   WAITING");
+    backend->write(x, y+1, false, isAccelGyroReady && isCompassReady && isGPSReady & isRangeFinderReady ? "LEVEL 2:  READY" : "LEVEL 2:  WAITING");
+    backend->write(x, y+2, false, isAccelGyroReady && isCompassReady && isGPSReady & isRangeFinderReady ? "LEVEL 3:  READY" : "LEVEL 3:  WAITING");
+    backend->write(x, y+3, false, isAccelGyroReady && isCompassReady && isGPSReady & isRangeFinderReady ? "THR TRNR: READY" : "THR TRNR: WAITING");
+    backend->write(x, y+4, false, isAccelGyroReady ?                                                      "ACR TRNR: READY" : "ACR TRNR: WAITING");
+    backend->write(x, y+5, false, isAccelGyroReady ?                                                      "ACRO:     READY" : "ACRO:     WAITING");
 }
 
 void AP_OSD_Screen::draw_altitude(uint8_t x, uint8_t y)

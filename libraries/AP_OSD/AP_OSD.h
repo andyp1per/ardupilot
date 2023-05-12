@@ -184,29 +184,29 @@ private:
     AP_OSD_Setting avgcellvolt{false, 24, 3};
     AP_OSD_Setting avgcellrestvolt{false, 24, 4};
     AP_OSD_Setting current{false, 25, 2};
-    AP_OSD_Setting batused{true, 23, 3};
+    AP_OSD_Setting batused{false, 23, 3};
     AP_OSD_Setting sats{true, 1, 3};
     AP_OSD_Setting fltmode{true, 2, 8};
     AP_OSD_Setting message{true, 2, 6};
-    AP_OSD_Setting gspeed{true, 2, 14};
+    AP_OSD_Setting gspeed{false, 2, 14};
     AP_OSD_Setting horizon{true, 14, 8};
-    AP_OSD_Setting home{true, 14, 1};
+    AP_OSD_Setting home{false, 14, 1};
     AP_OSD_Setting throttle{true, 2, 11};
-    AP_OSD_Setting heading{true, 13, 2};
-    AP_OSD_Setting compass{true, 15, 3};
+    AP_OSD_Setting heading{false, 13, 2};
+    AP_OSD_Setting compass{false, 15, 3};
     AP_OSD_Setting wind{false, 2, 12};
     AP_OSD_Setting aspeed{false, 2, 13};
     AP_OSD_Setting aspd1;
     AP_OSD_Setting aspd2;
     AP_OSD_Setting vspeed{false, 24, 9};
-    AP_OSD_Setting available_modes{true,23,8};
+    AP_OSD_Setting available_modes{true,11,8};
 #if HAL_WITH_ESC_TELEM
     AP_OSD_Setting esc_temp {false, 24, 13};
     AP_OSD_Setting esc_rpm{false, 22, 12};
     AP_OSD_Setting esc_amps{false, 24, 14};
 #endif
-    AP_OSD_Setting gps_latitude{true, 9, 13};
-    AP_OSD_Setting gps_longitude{true, 9, 14};
+    AP_OSD_Setting gps_latitude{false, 9, 13};
+    AP_OSD_Setting gps_longitude{false, 9, 14};
     AP_OSD_Setting roll_angle;
     AP_OSD_Setting pitch_angle;
     AP_OSD_Setting temp;
@@ -238,11 +238,11 @@ private:
 
     // MSP OSD only
     AP_OSD_Setting crosshair;
-    AP_OSD_Setting home_dist{true, 1, 1};
-    AP_OSD_Setting home_dir{true, 1, 1};
-    AP_OSD_Setting power{true, 1, 1};
+    AP_OSD_Setting home_dist{false, 1, 1};
+    AP_OSD_Setting home_dir{false, 1, 1};
+    AP_OSD_Setting power{false, 1, 1};
     AP_OSD_Setting cell_volt{true, 1, 1};
-    AP_OSD_Setting batt_bar{true, 1, 1};
+    AP_OSD_Setting batt_bar{false, 1, 1};
     AP_OSD_Setting arming{true, 1, 1};
 #ifdef HAL_WITH_MSP_DISPLAYPORT
     // Per screen HD resolution options (currently supported only by DisplayPort)
