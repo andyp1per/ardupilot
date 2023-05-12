@@ -291,6 +291,10 @@ bool RC_Channel_Copter::do_aux_function(const aux_func_t ch_option, const AuxSwi
                     copter.g.rccar_unlimited_height.set(0);
                     // AP::logger().Write_Event(LogEvent::ACRO_TRAINER_OFF);
                     break;
+                 case AuxSwitchPos::MIDDLE:
+                    copter.g.rccar_unlimited_height.set(0);
+                    // AP::logger().Write_Event(LogEvent::ACRO_TRAINER_OFF);
+                    break;
                 case AuxSwitchPos::HIGH:
                     copter.g.rccar_unlimited_height.set(1);
                     // AP::logger().Write_Event(LogEvent::ACRO_TRAINER_LEVELING);
