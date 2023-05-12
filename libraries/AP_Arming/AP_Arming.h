@@ -137,6 +137,7 @@ public:
         return (_arming_options & uint32_t(option)) != 0;
     }
 
+
 protected:
 
     // Parameters

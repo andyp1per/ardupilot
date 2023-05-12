@@ -1291,6 +1291,17 @@ float AP_OSD_AbstractScreen::u_scale(enum unit_type unit, float value)
     return value * scale[units][unit] + (offsets[units]?offsets[units][unit]:0);
 }
 
+void AP_OSD_Screen::draw_available_modes(uint8_t x, uint8_t y)
+{
+    // if (armed)
+    // bool gpsReady = arming.gps_checks(false);
+    // bool compassReady = arming.compass_checks(false);
+    // bool rangefinder_ready = arming.rangefinder_checks(false);
+
+    backend->write(x, y, false, "MODE 1: READY");
+    backend->write(x, y+1, false, "MODE 2: READY");
+}
+
 void AP_OSD_Screen::draw_altitude(uint8_t x, uint8_t y)
 {
     float alt;
@@ -2285,6 +2296,7 @@ void AP_OSD_Screen::draw(void)
     DRAW_SETTING(eff);
     DRAW_SETTING(callsign);
     DRAW_SETTING(current2);
+    DRAW_SETTING(available_modes);
 }
 #endif
 #endif // OSD_ENABLED

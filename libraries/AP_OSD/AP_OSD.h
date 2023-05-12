@@ -176,14 +176,14 @@ private:
         RESTING_CELL,
     };
 
-    AP_OSD_Setting altitude{true, 23, 8};
+    AP_OSD_Setting altitude{false, 23, 8};
     AP_OSD_Setting bat_volt{true, 24, 1};
-    AP_OSD_Setting rssi{true, 1, 1};
+    AP_OSD_Setting rssi{false, 1, 1};
     AP_OSD_Setting link_quality{false,1,1};
     AP_OSD_Setting restvolt{false, 24, 2};
     AP_OSD_Setting avgcellvolt{false, 24, 3};
     AP_OSD_Setting avgcellrestvolt{false, 24, 4};
-    AP_OSD_Setting current{true, 25, 2};
+    AP_OSD_Setting current{false, 25, 2};
     AP_OSD_Setting batused{true, 23, 3};
     AP_OSD_Setting sats{true, 1, 3};
     AP_OSD_Setting fltmode{true, 2, 8};
@@ -191,14 +191,15 @@ private:
     AP_OSD_Setting gspeed{true, 2, 14};
     AP_OSD_Setting horizon{true, 14, 8};
     AP_OSD_Setting home{true, 14, 1};
-    AP_OSD_Setting throttle{true, 24, 11};
+    AP_OSD_Setting throttle{true, 2, 11};
     AP_OSD_Setting heading{true, 13, 2};
     AP_OSD_Setting compass{true, 15, 3};
     AP_OSD_Setting wind{false, 2, 12};
     AP_OSD_Setting aspeed{false, 2, 13};
     AP_OSD_Setting aspd1;
     AP_OSD_Setting aspd2;
-    AP_OSD_Setting vspeed{true, 24, 9};
+    AP_OSD_Setting vspeed{false, 24, 9};
+    AP_OSD_Setting available_modes{true,23,8};
 #if HAL_WITH_ESC_TELEM
     AP_OSD_Setting esc_temp {false, 24, 13};
     AP_OSD_Setting esc_rpm{false, 22, 12};
@@ -243,13 +244,12 @@ private:
     AP_OSD_Setting cell_volt{true, 1, 1};
     AP_OSD_Setting batt_bar{true, 1, 1};
     AP_OSD_Setting arming{true, 1, 1};
-
 #ifdef HAL_WITH_MSP_DISPLAYPORT
     // Per screen HD resolution options (currently supported only by DisplayPort)
     AP_Int8 txt_resolution;
     AP_Int8 font_index;
 #endif
-
+    void draw_available_modes(uint8_t x, uint8_t y);
     void draw_altitude(uint8_t x, uint8_t y);
     void draw_bat_volt(uint8_t instance,VoltageType  type,uint8_t x, uint8_t y);
     void draw_bat_volt(uint8_t x, uint8_t y);
