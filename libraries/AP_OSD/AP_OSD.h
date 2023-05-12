@@ -199,7 +199,7 @@ private:
     AP_OSD_Setting aspd1;
     AP_OSD_Setting aspd2;
     AP_OSD_Setting vspeed{false, 24, 9};
-    AP_OSD_Setting available_modes{true,11,8};
+    AP_OSD_Setting available_modes{true,11,2};
 #if HAL_WITH_ESC_TELEM
     AP_OSD_Setting esc_temp {false, 24, 13};
     AP_OSD_Setting esc_rpm{false, 22, 12};
