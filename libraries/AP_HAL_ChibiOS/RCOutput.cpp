@@ -1762,10 +1762,10 @@ void RCOutput::send_pulses_DMAR(pwm_group &group, uint32_t buffer_length)
     dmaStreamSetMode(group.dma,
                      STM32_DMA_CR_CHSEL(group.dma_up_channel) |
                      STM32_DMA_CR_DIR_M2P | STM32_DMA_CR_PSIZE_WORD | 
-#if STM32_DMA_ADVANCED
-                     STM32_DMA_CR_MSIZE_WORD |
-#else
+#if defined(IOMCU_FW)
                      STM32_DMA_CR_MSIZE_BYTE |
+#else
+                     STM32_DMA_CR_MSIZE_WORD |
 #endif
                      STM32_DMA_CR_MINC | STM32_DMA_CR_PL(3) |
                      STM32_DMA_CR_TEIE | STM32_DMA_CR_TCIE);

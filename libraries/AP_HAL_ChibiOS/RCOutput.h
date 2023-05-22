@@ -16,20 +16,19 @@
  */
 #pragma once
 
+#include <hal.h>
 #include "AP_HAL_ChibiOS.h"
 #include <AP_HAL/Semaphores.h>
 #include <AP_ESC_Telem/AP_ESC_Telem.h>
 
 #include "shared_dma.h"
-#include "ch.h"
-#include "hal.h"
 
 #if HAL_USE_PWM == TRUE
 
-#if STM32_DMA_ADVANCED
-typedef uint32_t dmar_uint_t;
+#if defined(IOMCU_FW)
+typedef uint8_t dmar_uint_t; // save memory to allow dshot on IOMCU
 #else
-typedef uint8_t dmar_uint_t;
+typedef uint32_t dmar_uint_t;
 #endif
 
 #define RCOU_DSHOT_TIMING_DEBUG 0
@@ -327,7 +326,7 @@ private:
         // mask of channels that are enabled and active
         uint32_t en_mask;
         const stm32_dma_stream_t *dma;
-#if STM32_DMA_ADVANCED
+#if AP_HAL_SHARED_DMA_ENABLED
         Shared_DMA *dma_handle;
 #endif
         dmar_uint_t *dma_buffer;
@@ -677,16 +676,14 @@ private:
     void _set_profiled_rgb_data(pwm_group *grp, uint8_t idx, uint8_t led, uint8_t red, uint8_t green, uint8_t blue);
     void _set_profiled_clock(pwm_group *grp, uint8_t idx, uint8_t led);
     void _set_profiled_blank_frame(pwm_group *grp, uint8_t idx, uint8_t led);
-
+#if AP_HAL_SHARED_DMA_ENABLED
     // serial output support
     bool serial_write_byte(uint8_t b);
     bool serial_read_byte(uint8_t &b);
-    void fill_DMA_buffer_byte(uint32_t *buffer, uint8_t stride, uint8_t b , uint32_t bitval);
+    void fill_DMA_buffer_byte(dmar_uint_t *buffer, uint8_t stride, uint8_t b , uint32_t bitval);
     static void serial_bit_irq(void);
     static void serial_byte_timeout(virtual_timer_t* vt, void *ctx);
-
-    // RC Update
-
+#endif
 };
 
 #if RCOU_DSHOT_TIMING_DEBUG

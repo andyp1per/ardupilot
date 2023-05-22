@@ -162,5 +162,5 @@ void RCOutput::update_channel_masks() {
 #endif
 }
 
-#endif // DISABLE_DSHOT
+#endif // HAL_ENABLE_DSHOT
 #endif // HAL_USE_PWM
