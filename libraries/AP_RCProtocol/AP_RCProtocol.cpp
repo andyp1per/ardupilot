@@ -72,7 +72,7 @@ void AP_RCProtocol::init()
 #if AP_RCPROTOCOL_FPORT2_ENABLED
     backend[AP_RCProtocol::FPORT2] = new AP_RCProtocol_FPort2(*this, true);
 #endif
-#if AP_RCPROTOCOL_ST24_ENABLED && !defined(IOMCU_FW) && HAL_ENABLE_DSHOT
+#if AP_RCPROTOCOL_ST24_ENABLED
     backend[AP_RCProtocol::ST24] = new AP_RCProtocol_ST24(*this);
 #endif
 #if AP_RCPROTOCOL_FPORT_ENABLED
