@@ -293,7 +293,7 @@ private:
     static const uint8_t dshot_pre = 1;
     static const uint8_t dshot_post = 2;
     static const uint16_t dshot_bit_length = 16 + dshot_pre + dshot_post;
-    static const uint16_t DSHOT_BUFFER_LENGTH = dshot_bit_length*4*sizeof(dmar_uint_t);
+    static const uint16_t DSHOT_BUFFER_LENGTH = dshot_bit_length * 4 * sizeof(dmar_uint_t);
     static const uint16_t MIN_GCR_BIT_LEN = 7;
     static const uint16_t MAX_GCR_BIT_LEN = 22;
     static const uint16_t GCR_TELEMETRY_BIT_LEN = MAX_GCR_BIT_LEN;

@@ -887,8 +887,6 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
 #if !AP_HAL_SHARED_DMA_ENABLED
     if (group.dma == nullptr) {
         // we don't do dma sharing in non advanced mode
-        // we do use the locking interface though, 
-        // that's why we initialise Shared_DMA but with empty alloc and dealloc methods
         chSysLock();
         group.dma = dmaStreamAllocI(group.dma_up_stream_id, 10, dma_up_irq_callback, &group);
         chSysUnlock();
@@ -944,17 +942,9 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
         pwmStop(group.pwm_drv);
         group.pwm_started = false;
     }
-    const uint32_t clock_hz = group.pwm_drv->clock;
     const uint32_t target_frequency = bitrate * bit_width;
     const uint32_t prescaler = calculate_bitrate_prescaler(group.pwm_drv->clock, target_frequency, is_dshot);
-    if (clock_hz < target_frequency) {
-#if AP_HAL_SHARED_DMA_ENABLED
-        group.dma_handle->unlock();
-#endif
-        print_group_setup_error(group, "failed to match clock speed");
-        return false;
-    }
-    if (prescaler > 0x8000) {
+    if (prescaler == 0 || prescaler > 0x8000) {
 #if AP_HAL_SHARED_DMA_ENABLED
         group.dma_handle->unlock();
 #endif
@@ -962,7 +952,7 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
         return false;
     }
 
-    const uint32_t freq = group.pwm_drv->clock / (prescaler + 1);
+    const uint32_t freq = group.pwm_drv->clock / prescaler;
     group.pwm_cfg.frequency = freq;
     group.pwm_cfg.period = bit_width;
     group.pwm_cfg.dier = TIM_DIER_UDE;
@@ -1137,9 +1127,9 @@ void RCOutput::set_output_mode(uint32_t mask, const enum output_mode mode)
     }
 #if HAL_WITH_IO_MCU
     if ((mode == MODE_PWM_ONESHOT ||
-        mode == MODE_PWM_ONESHOT125 ||
-        mode == MODE_PWM_BRUSHED ||
-        (mode >= MODE_PWM_DSHOT150 && mode <= MODE_PWM_DSHOT600)) &&
+         mode == MODE_PWM_ONESHOT125 ||
+         mode == MODE_PWM_BRUSHED ||
+         (mode >= MODE_PWM_DSHOT150 && mode <= MODE_PWM_DSHOT600)) &&
         (mask & ((1U<<chan_offset)-1)) &&
         AP_BoardConfig::io_enabled()) {
         iomcu_mode = mode;
@@ -1373,9 +1363,6 @@ void RCOutput::timer_tick()
         dshot_timer_setup = true;
     }
 
-    volatile uint32_t free_mem = unsigned(stack_free(dshot_thread_wa));
-    (void)free_mem;
-
     if (min_pulse_trigger_us == 0 ||
         serial_group != nullptr) {
         return;
@@ -1391,8 +1378,7 @@ void RCOutput::dshot_send_trampoline(void *p)
 {
     while(true) {
         RCOutput *rcout = (RCOutput *)p;
-        for (uint8_t i = 0; i < NUM_GROUPS; i++ ) {
-            pwm_group &group = pwm_group_list[i];
+        for (auto &group : pwm_group_list) {
             if (is_dshot_protocol(group.current_mode)) {
                 rcout->dshot_send(group, 0);
             }
