@@ -179,6 +179,14 @@ public:
      */
     void set_dshot_rate(uint8_t dshot_rate, uint16_t loop_rate_hz) override;
 
+#if defined(IOMCU_FW)
+    /*
+      Get/Set the dshot period in us, only for use by the IOMCU
+     */
+    void set_dshot_period_us(uint32_t period_us) override { _dshot_period_us = period_us; }
+    uint32_t get_dshot_period_us() const override { return _dshot_period_us; }
+#endif
+
 #if HAL_ENABLE_DSHOT
     /*
       Set/get the dshot esc_type

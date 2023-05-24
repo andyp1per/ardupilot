@@ -496,6 +496,12 @@ void RCOutput::set_default_rate(uint16_t freq_hz)
  */
 void RCOutput::set_dshot_rate(uint8_t dshot_rate, uint16_t loop_rate_hz)
 {
+#if HAL_WITH_IO_MCU
+    if (AP_BoardConfig::io_dshot()) {
+        iomcu.set_dshot_period_us(1000UL);
+    }
+#endif
+
     // for low loop rates simply output at 1Khz on a timer
     if (loop_rate_hz <= 100 || dshot_rate == 0) {
         _dshot_period_us = 1000UL;
@@ -528,6 +534,11 @@ void RCOutput::set_dshot_rate(uint8_t dshot_rate, uint16_t loop_rate_hz)
         drate = _dshot_rate * loop_rate_hz;
     }
     _dshot_period_us = 1000000UL / drate;
+#if HAL_WITH_IO_MCU
+    if (AP_BoardConfig::io_dshot()) {
+        iomcu.set_dshot_period_us(_dshot_period_us);
+    }
+#endif
 }
 
 #if HAL_ENABLE_DSHOT
@@ -1383,7 +1394,7 @@ void RCOutput::dshot_send_trampoline(void *p)
                 rcout->dshot_send(group, 0);
             }
         }
-        chThdSleepMicroseconds(400);
+        chThdSleepMicroseconds(rcout->get_dshot_period_us());
     }
 }
 #endif // IOMCU_FW && DISABLE_DSHOT
