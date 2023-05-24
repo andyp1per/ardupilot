@@ -308,6 +308,12 @@ public:
     virtual void set_dshot_rate(uint8_t dshot_rate, uint16_t loop_rate_hz) {}
 
     /*
+      Set the dshot period in us, only for use by the IOMCU
+     */
+    virtual void set_dshot_period_us(uint32_t period_us) {}
+    virtual uint32_t get_dshot_period_us() const { return 0; }
+
+    /*
       Set the dshot ESC type
      */
     virtual void set_dshot_esc_type(DshotEscType esc_type) {}
