@@ -67,7 +67,12 @@ public:
         uint16_t ignore_safety;
         uint16_t heater_duty_cycle = 0xFFFFU;
         uint16_t pwm_altclock = 1;
+        uint16_t dshot_period_us;
+        uint16_t dshot_rate;
+        uint16_t channel_mask;
     } reg_setup;
+
+    uint16_t last_channel_mask;
 
     // CONFIG values
     struct page_config config;
@@ -115,6 +120,9 @@ public:
     struct page_GPIO GPIO;
     uint8_t last_GPIO_channel_mask;
     void GPIO_write();
+
+    // DSHOT runtime
+    struct page_dshot dshot;
 
     // true when override channel active
     bool override_active;
