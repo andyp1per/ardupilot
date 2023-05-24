@@ -100,6 +100,9 @@ public:
     // set output mode
     void set_output_mode(uint16_t mask, uint16_t mode);
 
+    // set dshot output period
+    void set_dshot_period_us(uint16_t period_us);
+
     // check if IO is healthy
     bool healthy(void);
 
@@ -228,6 +231,7 @@ private:
     struct {
         uint16_t mask;
         uint16_t mode;
+        uint16_t dshot_period_us;
     } mode_out;
 
     // IMU heater duty cycle

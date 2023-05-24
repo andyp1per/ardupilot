@@ -38,7 +38,7 @@ enum ioevents {
     IOEVENT_SET_SAFETY_MASK,
     IOEVENT_MIXING,
     IOEVENT_GPIO,
-    IOEVENT_SET_OUTPUT_MODE
+    IOEVENT_SET_OUTPUT_MODE,
 };
 
 // max number of consecutve protocol failures we accept before raising
@@ -804,6 +804,13 @@ void AP_IOMCU::set_output_mode(uint16_t mask, uint16_t mode)
 {
     mode_out.mask = mask;
     mode_out.mode = mode;
+    trigger_event(IOEVENT_SET_OUTPUT_MODE);
+}
+
+// set output mode
+void AP_IOMCU::set_dshot_period_us(uint16_t period_us)
+{
+    mode_out.dshot_period_us = period_us;
     trigger_event(IOEVENT_SET_OUTPUT_MODE);
 }
 

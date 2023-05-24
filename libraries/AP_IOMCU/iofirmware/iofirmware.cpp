@@ -544,6 +544,7 @@ bool AP_IOMCU_FW::handle_code_write()
         case PAGE_REG_SETUP_OUTPUT_MODE:
             mode_out.mask = rx_io_packet.regs[0];
             mode_out.mode = rx_io_packet.regs[1];
+            mode_out.dshot_period_us = rx_io_packet.regs[2];
             break;
 
         case PAGE_REG_SETUP_HEATER_DUTY_CYCLE:
@@ -769,6 +770,7 @@ void AP_IOMCU_FW::rcout_mode_update(void)
     if (use_dshot && !dshot_enabled) {
         dshot_enabled = true;
         hal.rcout->set_output_mode(mode_out.mask, (AP_HAL::RCOutput::output_mode)mode_out.mode);
+        hal.rcout->set_dshot_period_us(mode_out.dshot_period_us);
     }
     bool use_oneshot = mode_out.mode == AP_HAL::RCOutput::MODE_PWM_ONESHOT;
     if (use_oneshot && !oneshot_enabled) {

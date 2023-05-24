@@ -106,6 +106,7 @@ public:
      struct {
          uint16_t mask;
          uint16_t mode;
+         uint16_t dshot_period_us;
      } mode_out;
 
     // MIXER values
