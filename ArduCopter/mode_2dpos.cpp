@@ -196,12 +196,12 @@ void Mode2DPos::run()
 
         // Send the commanded climb rate to the position controller
         // pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
+        pos_control->use_z_control(false);
+        pos_control->update_throttle(channel_throttle->get_control_in());
         break;
     }
 
     // run the vertical position controller and set output throttle
-    pos_control->use_z_control(false);
-    pos_control->update_throttle(channel_throttle->get_control_in());
     pos_control->update_z_controller();
 }
 
