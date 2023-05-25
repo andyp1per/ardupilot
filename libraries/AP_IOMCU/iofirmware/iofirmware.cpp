@@ -513,6 +513,10 @@ bool AP_IOMCU_FW::handle_code_write()
             reg_setup.pwm_defaultrate = rx_io_packet.regs[0];
             update_default_rate = true;
             break;
+        case PAGE_REG_SETUP_DSHOT_PERIOD:
+            reg_setup.dshot_period_us = rx_io_packet.regs[0];
+            hal.rcout->set_dshot_period_us(reg_setup.dshot_period_us);
+            break;
         case PAGE_REG_SETUP_SBUS_RATE:
             reg_setup.sbus_rate = rx_io_packet.regs[0];
             sbus_interval_ms = MAX(1000U / reg_setup.sbus_rate,3);
@@ -544,7 +548,6 @@ bool AP_IOMCU_FW::handle_code_write()
         case PAGE_REG_SETUP_OUTPUT_MODE:
             mode_out.mask = rx_io_packet.regs[0];
             mode_out.mode = rx_io_packet.regs[1];
-            mode_out.dshot_period_us = rx_io_packet.regs[2];
             break;
 
         case PAGE_REG_SETUP_HEATER_DUTY_CYCLE:
@@ -766,11 +769,11 @@ void AP_IOMCU_FW::safety_update(void)
  */
 void AP_IOMCU_FW::rcout_mode_update(void)
 {
-    bool use_dshot = mode_out.mode >= AP_HAL::RCOutput::MODE_PWM_DSHOT150 && mode_out.mode <= AP_HAL::RCOutput::MODE_PWM_DSHOT600;
+    bool use_dshot = mode_out.mode >= AP_HAL::RCOutput::MODE_PWM_DSHOT150 
+        && mode_out.mode <= AP_HAL::RCOutput::MODE_PWM_DSHOT600;
     if (use_dshot && !dshot_enabled) {
         dshot_enabled = true;
         hal.rcout->set_output_mode(mode_out.mask, (AP_HAL::RCOutput::output_mode)mode_out.mode);
-        hal.rcout->set_dshot_period_us(mode_out.dshot_period_us);
     }
     bool use_oneshot = mode_out.mode == AP_HAL::RCOutput::MODE_PWM_ONESHOT;
     if (use_oneshot && !oneshot_enabled) {
@@ -786,8 +789,6 @@ void AP_IOMCU_FW::rcout_mode_update(void)
         hal.rcout->set_output_mode(mode_out.mask, AP_HAL::RCOutput::MODE_PWM_BRUSHED);
         hal.rcout->set_freq(mode_out.mask, reg_setup.pwm_altrate);
     }
-    mode_out.mask = 0;
-    mode_out.mode = 0;
 }
 
 /*

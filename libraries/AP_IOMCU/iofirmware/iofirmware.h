@@ -67,6 +67,7 @@ public:
         uint16_t ignore_safety;
         uint16_t heater_duty_cycle = 0xFFFFU;
         uint16_t pwm_altclock = 1;
+        uint16_t dshot_period_us;
     } reg_setup;
 
     // CONFIG values
@@ -106,7 +107,6 @@ public:
      struct {
          uint16_t mask;
          uint16_t mode;
-         uint16_t dshot_period_us;
      } mode_out;
 
     // MIXER values

@@ -39,6 +39,7 @@ enum ioevents {
     IOEVENT_MIXING,
     IOEVENT_GPIO,
     IOEVENT_SET_OUTPUT_MODE,
+    IOEVENT_SET_DSHOT_PERIOD,
 };
 
 // max number of consecutve protocol failures we accept before raising
@@ -55,7 +56,7 @@ AP_IOMCU::AP_IOMCU(AP_HAL::UARTDriver &_uart) :
     singleton = this;
 }
 
-#define IOMCU_DEBUG_ENABLE 0
+#define IOMCU_DEBUG_ENABLE 1
 
 #if IOMCU_DEBUG_ENABLE
 #include <stdio.h>
@@ -216,6 +217,15 @@ void AP_IOMCU::thread_main(void)
             }
         }
         mask &= ~EVENT_MASK(IOEVENT_SET_DEFAULT_RATE);
+
+        if (mask & EVENT_MASK(IOEVENT_SET_DSHOT_PERIOD)) {
+            if (!write_register(PAGE_SETUP, PAGE_REG_SETUP_DSHOT_PERIOD, rate.dshot_period_us)) {
+                event_failed(mask);
+                continue;
+            }
+        }
+        mask &= ~EVENT_MASK(IOEVENT_SET_DSHOT_PERIOD);
+
 
         if (mask & EVENT_MASK(IOEVENT_SET_ONESHOT_ON)) {
             if (!modify_register(PAGE_SETUP, PAGE_REG_SETUP_FEATURES, 0, P_SETUP_FEATURES_ONESHOT)) {
@@ -427,6 +437,7 @@ void AP_IOMCU::write_log()
                   reg_status.err_write,
                   reg_status.err_uart,
                   num_delayed);
+            debug("mask=0x%x, mode=%u, period=%u\n", mode_out.mask, mode_out.mode, rate.dshot_period_us);
         }
 #endif // IOMCU_DEBUG_ENABLE
     }
@@ -800,17 +811,17 @@ void AP_IOMCU::set_brushed_mode(void)
 }
 
 // set output mode
+void AP_IOMCU::set_dshot_period_us(uint16_t period_us)
+{
+    rate.dshot_period_us = period_us;
+    trigger_event(IOEVENT_SET_DSHOT_PERIOD);
+}
+
+// set output mode
 void AP_IOMCU::set_output_mode(uint16_t mask, uint16_t mode)
 {
     mode_out.mask = mask;
     mode_out.mode = mode;
-    trigger_event(IOEVENT_SET_OUTPUT_MODE);
-}
-
-// set output mode
-void AP_IOMCU::set_dshot_period_us(uint16_t period_us)
-{
-    mode_out.dshot_period_us = period_us;
     trigger_event(IOEVENT_SET_OUTPUT_MODE);
 }
 
@@ -1112,6 +1123,7 @@ void AP_IOMCU::check_iomcu_reset(void)
     }
     trigger_event(IOEVENT_SET_RATES);
     trigger_event(IOEVENT_SET_DEFAULT_RATE);
+    trigger_event(IOEVENT_SET_DSHOT_PERIOD);
     if (rate.oneshot_enabled) {
         trigger_event(IOEVENT_SET_ONESHOT_ON);
     }

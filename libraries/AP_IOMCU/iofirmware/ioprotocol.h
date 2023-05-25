@@ -86,6 +86,7 @@ enum iopage {
 #define PAGE_REG_SETUP_HEATER_DUTY_CYCLE 21
 #define PAGE_REG_SETUP_DSM_BIND     22
 #define PAGE_REG_SETUP_RC_PROTOCOLS 23 // uses 2 slots, 23 and 24
+#define PAGE_REG_SETUP_DSHOT_PERIOD 25
 
 // config page registers
 #define PAGE_CONFIG_PROTOCOL_VERSION  0

@@ -224,6 +224,7 @@ private:
         uint16_t sbus_rate_hz;
         bool oneshot_enabled;
         bool brushed_enabled;
+        uint16_t dshot_period_us;
     } rate;
 
     struct page_GPIO GPIO;
@@ -231,7 +232,6 @@ private:
     struct {
         uint16_t mask;
         uint16_t mode;
-        uint16_t dshot_period_us;
     } mode_out;
 
     // IMU heater duty cycle
