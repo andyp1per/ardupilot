@@ -219,7 +219,7 @@ void AP_IOMCU::thread_main(void)
         mask &= ~EVENT_MASK(IOEVENT_SET_DEFAULT_RATE);
 
         if (mask & EVENT_MASK(IOEVENT_SET_DSHOT_PERIOD)) {
-            if (!write_register(PAGE_SETUP, PAGE_REG_SETUP_DSHOT_PERIOD, rate.dshot_period_us)) {
+            if (!write_registers(PAGE_SETUP, PAGE_REG_SETUP_DSHOT_PERIOD, sizeof(dshot_rate)/2, (const uint16_t *)&dshot_rate)) {
                 event_failed(mask);
                 continue;
             }
@@ -437,7 +437,6 @@ void AP_IOMCU::write_log()
                   reg_status.err_write,
                   reg_status.err_uart,
                   num_delayed);
-            debug("mask=0x%x, mode=%u, period=%u\n", mode_out.mask, mode_out.mode, rate.dshot_period_us);
         }
 #endif // IOMCU_DEBUG_ENABLE
     }
@@ -811,9 +810,10 @@ void AP_IOMCU::set_brushed_mode(void)
 }
 
 // set output mode
-void AP_IOMCU::set_dshot_period_us(uint16_t period_us)
+void AP_IOMCU::set_dshot_period(uint16_t period_us, uint8_t drate)
 {
-    rate.dshot_period_us = period_us;
+    dshot_rate.period_us = period_us;
+    dshot_rate.rate = drate;
     trigger_event(IOEVENT_SET_DSHOT_PERIOD);
 }
 

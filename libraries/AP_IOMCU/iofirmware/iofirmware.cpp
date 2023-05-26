@@ -515,7 +515,8 @@ bool AP_IOMCU_FW::handle_code_write()
             break;
         case PAGE_REG_SETUP_DSHOT_PERIOD:
             reg_setup.dshot_period_us = rx_io_packet.regs[0];
-            hal.rcout->set_dshot_period_us(reg_setup.dshot_period_us);
+            reg_setup.dshot_rate = rx_io_packet.regs[1];
+            hal.rcout->set_dshot_period(reg_setup.dshot_period_us, reg_setup.dshot_rate);
             break;
         case PAGE_REG_SETUP_SBUS_RATE:
             reg_setup.sbus_rate = rx_io_packet.regs[0];

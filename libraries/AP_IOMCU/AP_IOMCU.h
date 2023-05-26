@@ -101,7 +101,7 @@ public:
     void set_output_mode(uint16_t mask, uint16_t mode);
 
     // set dshot output period
-    void set_dshot_period_us(uint16_t period_us);
+    void set_dshot_period(uint16_t period_us, uint8_t drate);
 
     // check if IO is healthy
     bool healthy(void);
@@ -224,8 +224,12 @@ private:
         uint16_t sbus_rate_hz;
         bool oneshot_enabled;
         bool brushed_enabled;
-        uint16_t dshot_period_us;
     } rate;
+
+    struct {
+        uint16_t period_us;
+        uint16_t rate;
+    } dshot_rate;
 
     struct page_GPIO GPIO;
     // output mode values

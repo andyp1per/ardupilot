@@ -68,6 +68,7 @@ public:
         uint16_t heater_duty_cycle = 0xFFFFU;
         uint16_t pwm_altclock = 1;
         uint16_t dshot_period_us;
+        uint16_t dshot_rate;
     } reg_setup;
 
     // CONFIG values
