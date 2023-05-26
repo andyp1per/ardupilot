@@ -310,7 +310,7 @@ public:
     /*
       Set the dshot period in us, only for use by the IOMCU
      */
-    virtual void set_dshot_period_us(uint32_t period_us) {}
+    virtual void set_dshot_period(uint32_t period_us, uint8_t dshot_rate) {}
     virtual uint32_t get_dshot_period_us() const { return 0; }
 
     /*

@@ -286,6 +286,18 @@
 #define HAL_DSHOT_ALARM_ENABLED 0
 #endif
 
+#ifndef HAL_ENABLE_DSHOT
+#define HAL_ENABLE_DSHOT 1
+#endif
+
+#ifndef HAL_SERIALLED_ENABLED
+#define HAL_SERIALLED_ENABLED 1
+#endif
+
+#ifndef HAL_RCOUTSERIAL_ENABLED
+#define HAL_RCOUTSERIAL_ENABLED 1
+#endif
+
 #ifndef HAL_HNF_MAX_FILTERS
 // On an F7 The difference in CPU load between 1 notch and 24 notches is about 2%
 // The difference in CPU load between 1Khz backend and 2Khz backend is about 10%
@@ -317,10 +329,6 @@
 
 #ifndef HAL_USE_OCTOSPI
 #define HAL_USE_OCTOSPI 0
-#endif
-
-#ifndef HAL_ENABLE_DSHOT
-#define HAL_ENABLE_DSHOT 1
 #endif
 
 #ifndef __RAMFUNC__
