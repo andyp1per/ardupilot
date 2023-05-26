@@ -1167,6 +1167,11 @@ void RCOutput::set_output_mode(uint32_t mask, const enum output_mode mode)
  */
 void RCOutput::set_telem_request_mask(uint32_t mask)
 {
+#if HAL_WITH_IO_MCU
+    if (AP_BoardConfig::io_enabled() && (mask & ((1U<<chan_offset)-1))) {
+        iomcu.set_telem_request_mask(mask);
+    }
+#endif
     telem_request_mask = (mask >> chan_offset);
 }
 
