@@ -69,6 +69,7 @@ public:
         uint16_t pwm_altclock = 1;
         uint16_t dshot_period_us;
         uint16_t dshot_rate;
+        uint16_t dshot_telem_mask;
     } reg_setup;
 
     // CONFIG values

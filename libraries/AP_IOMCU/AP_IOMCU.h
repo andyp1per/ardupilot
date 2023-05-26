@@ -103,6 +103,9 @@ public:
     // set dshot output period
     void set_dshot_period(uint16_t period_us, uint8_t drate);
 
+    // set telem request mask
+    void set_telem_request_mask(uint32_t mask);
+
     // check if IO is healthy
     bool healthy(void);
 
@@ -209,6 +212,7 @@ private:
         uint16_t failsafe_pwm[IOMCU_MAX_CHANNELS];
         uint8_t failsafe_pwm_set;
         uint8_t failsafe_pwm_sent;
+        uint16_t dshot_telem_mask;
     } pwm_out;
 
     // read back pwm values

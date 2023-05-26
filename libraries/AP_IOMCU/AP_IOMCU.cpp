@@ -40,6 +40,7 @@ enum ioevents {
     IOEVENT_GPIO,
     IOEVENT_SET_OUTPUT_MODE,
     IOEVENT_SET_DSHOT_PERIOD,
+    IOEVENT_SET_DSHOT_TELEM,
 };
 
 // max number of consecutve protocol failures we accept before raising
@@ -56,7 +57,7 @@ AP_IOMCU::AP_IOMCU(AP_HAL::UARTDriver &_uart) :
     singleton = this;
 }
 
-#define IOMCU_DEBUG_ENABLE 1
+#define IOMCU_DEBUG_ENABLE 0
 
 #if IOMCU_DEBUG_ENABLE
 #include <stdio.h>
@@ -226,6 +227,13 @@ void AP_IOMCU::thread_main(void)
         }
         mask &= ~EVENT_MASK(IOEVENT_SET_DSHOT_PERIOD);
 
+        if (mask & EVENT_MASK(IOEVENT_SET_DSHOT_TELEM)) {
+            if (!write_register(PAGE_SETUP, PAGE_REG_SETUP_DSHOT_TELEM, pwm_out.dshot_telem_mask)) {
+                event_failed(mask);
+                continue;
+            }
+        }
+        mask &= ~EVENT_MASK(IOEVENT_SET_DSHOT_TELEM);
 
         if (mask & EVENT_MASK(IOEVENT_SET_ONESHOT_ON)) {
             if (!modify_register(PAGE_SETUP, PAGE_REG_SETUP_FEATURES, 0, P_SETUP_FEATURES_ONESHOT)) {
@@ -815,6 +823,13 @@ void AP_IOMCU::set_dshot_period(uint16_t period_us, uint8_t drate)
     dshot_rate.period_us = period_us;
     dshot_rate.rate = drate;
     trigger_event(IOEVENT_SET_DSHOT_PERIOD);
+}
+
+// set output mode
+void AP_IOMCU::set_telem_request_mask(uint32_t mask)
+{
+    pwm_out.dshot_telem_mask = mask;
+    trigger_event(IOEVENT_SET_DSHOT_TELEM);
 }
 
 // set output mode

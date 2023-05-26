@@ -518,6 +518,10 @@ bool AP_IOMCU_FW::handle_code_write()
             reg_setup.dshot_rate = rx_io_packet.regs[1];
             hal.rcout->set_dshot_period(reg_setup.dshot_period_us, reg_setup.dshot_rate);
             break;
+        case PAGE_REG_SETUP_DSHOT_TELEM:
+            reg_setup.dshot_telem_mask = rx_io_packet.regs[0];
+            hal.rcout->set_telem_request_mask(reg_setup.dshot_telem_mask);
+            break;
         case PAGE_REG_SETUP_SBUS_RATE:
             reg_setup.sbus_rate = rx_io_packet.regs[0];
             sbus_interval_ms = MAX(1000U / reg_setup.sbus_rate,3);
