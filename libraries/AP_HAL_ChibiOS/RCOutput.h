@@ -120,7 +120,7 @@ public:
       databits. This is used for ESC configuration and firmware
       flashing
      */
-#if AP_HAL_SHARED_DMA_ENABLED
+#if HAL_RCOUTSERIAL_ENABLED
     bool setup_serial_output(uint32_t chan_mask, ByteBuffer *buffer, uint32_t baudrate);
 
     /*
@@ -183,7 +183,10 @@ public:
     /*
       Get/Set the dshot period in us, only for use by the IOMCU
      */
-    void set_dshot_period_us(uint32_t period_us) override { _dshot_period_us = period_us; }
+    void set_dshot_period(uint32_t period_us, uint8_t dshot_rate) override {
+      _dshot_period_us = period_us;
+      _dshot_rate = dshot_rate;
+    }
     uint32_t get_dshot_period_us() const override { return _dshot_period_us; }
 #endif
 
@@ -255,7 +258,7 @@ public:
       setup serial LED output for a given channel number, with
       the given max number of LEDs in the chain.
      */
-#if AP_HAL_SHARED_DMA_ENABLED
+#if HAL_SERIALLED_ENABLED
     bool set_serial_led_num_LEDs(const uint16_t chan, uint8_t num_leds, output_mode mode = MODE_PWM_NONE, uint32_t clock_mask = 0) override;
 
     /*
@@ -347,7 +350,7 @@ private:
         uint64_t dshot_pulse_time_us;
         uint64_t dshot_pulse_send_time_us;
         virtual_timer_t dma_timeout;
-
+#if HAL_SERIALLED_ENABLED
         // serial LED support
         volatile uint8_t serial_nleds;
         uint8_t clock_mask;
@@ -358,10 +361,11 @@ private:
         // structure to hold serial LED data until it can be transferred
         // to the DMA buffer
         SerialLed* serial_led_data[4];
+#endif
 
         eventmask_t dshot_event_mask;
         thread_t* dshot_waiter;
-
+#if HAL_RCOUTSERIAL_ENABLED
         // serial output
         struct {
             // expected time per bit
@@ -373,6 +377,7 @@ private:
             // thread waiting for byte to be written
             thread_t *waiter;
         } serial;
+#endif
 
         // support for bi-directional dshot
         volatile DshotState dshot_state;
@@ -436,6 +441,7 @@ private:
      */
     thread_t *rcout_thread_ctx;
 
+#if HAL_SERIALLED_ENABLED
     /*
       timer thread for use by led events
      */
@@ -446,7 +452,9 @@ private:
      */
     HAL_Semaphore led_thread_sem;
     bool led_thread_created;
+#endif
 
+#if HAL_RCOUTSERIAL_ENABLED
     /*
       structure for IRQ handler for soft-serial input
      */
@@ -480,11 +488,27 @@ private:
         bool timed_out;
     } irq;
 
-
     // the group being used for serial output
     struct pwm_group *serial_group;
     thread_t *serial_thread;
     tprio_t serial_priority;
+#endif
+
+    static bool soft_serial_waiting() {
+#if HAL_RCOUTSERIAL_ENABLED
+      return irq.waiter != nullptr;
+#else
+      return false;
+#endif
+    }
+
+    bool in_soft_serial() const {
+#if HAL_RCOUTSERIAL_ENABLED
+      return serial_group != nullptr;
+#else
+      return false;
+#endif
+    }
 
     static pwm_group pwm_group_list[];
     static const uint8_t NUM_GROUPS;
