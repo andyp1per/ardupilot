@@ -110,7 +110,7 @@ public:
      */
     void led_timer_tick(uint64_t last_run_us);
 
-#if defined(IOMCU_FW) && HAL_ENABLE_DSHOT
+#if defined(IOMCU_FW) && HAL_DSHOT_ENABLED
     void timer_tick() override;
     static void dshot_send_trampoline(void *p);
 #endif
@@ -120,7 +120,7 @@ public:
       databits. This is used for ESC configuration and firmware
       flashing
      */
-#if HAL_RCOUTSERIAL_ENABLED
+#if HAL_SERIAL_ESC_COMM_ENABLED
     bool setup_serial_output(uint32_t chan_mask, ByteBuffer *buffer, uint32_t baudrate);
 
     /*
@@ -190,7 +190,7 @@ public:
     uint32_t get_dshot_period_us() const override { return _dshot_period_us; }
 #endif
 
-#if HAL_ENABLE_DSHOT
+#if HAL_DSHOT_ENABLED
     /*
       Set/get the dshot esc_type
      */
@@ -214,7 +214,7 @@ public:
      */
     void set_safety_mask(uint32_t mask) { safety_mask = mask; }
 
-#if HAL_ENABLE_DSHOT
+#if HAL_DSHOT_ENABLED
     /*
      * mark the channels in chanmask as reversible. This is needed for some ESC types (such as Dshot)
      * so that output scaling can be performed correctly. The chanmask passed is added (ORed) into any existing mask.
@@ -365,7 +365,7 @@ private:
 
         eventmask_t dshot_event_mask;
         thread_t* dshot_waiter;
-#if HAL_RCOUTSERIAL_ENABLED
+#if HAL_SERIAL_ESC_COMM_ENABLED
         // serial output
         struct {
             // expected time per bit
@@ -454,7 +454,7 @@ private:
     bool led_thread_created;
 #endif
 
-#if HAL_RCOUTSERIAL_ENABLED
+#if HAL_SERIAL_ESC_COMM_ENABLED
     /*
       structure for IRQ handler for soft-serial input
      */
@@ -495,7 +495,7 @@ private:
 #endif
 
     static bool soft_serial_waiting() {
-#if HAL_RCOUTSERIAL_ENABLED
+#if HAL_SERIAL_ESC_COMM_ENABLED
       return irq.waiter != nullptr;
 #else
       return false;
@@ -503,7 +503,7 @@ private:
     }
 
     bool in_soft_serial() const {
-#if HAL_RCOUTSERIAL_ENABLED
+#if HAL_SERIAL_ESC_COMM_ENABLED
       return serial_group != nullptr;
 #else
       return false;
@@ -558,7 +558,7 @@ private:
     // virtual timer for post-push() pulses
     virtual_timer_t _dshot_rate_timer;
 
-#if HAL_ENABLE_DSHOT
+#if HAL_DSHOT_ENABLED
     // dshot commands
     // RingBuffer to store outgoing request.
     struct DshotCommandPacket {

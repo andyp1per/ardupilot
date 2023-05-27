@@ -21,7 +21,7 @@
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
 #if HAL_USE_PWM == TRUE
-#if HAL_ENABLE_DSHOT
+#if HAL_DSHOT_ENABLED
 
 using namespace ChibiOS;
 
@@ -162,5 +162,5 @@ void RCOutput::update_channel_masks() {
 #endif
 }
 
-#endif // HAL_ENABLE_DSHOT
+#endif // HAL_DSHOT_ENABLED
 #endif // HAL_USE_PWM
