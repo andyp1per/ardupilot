@@ -910,8 +910,10 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
         group.dma = dmaStreamAllocI(group.dma_up_stream_id, 10, dma_up_irq_callback, &group);
         chSysUnlock();
         if (group.dma == nullptr) {
+            print_group_setup_error(group, "failed to allocate DMA");
             return false;
         }
+    }
 #else
     if (!group.dma_handle) {
         group.dma_handle = new Shared_DMA(group.dma_up_stream_id, SHARED_DMA_NONE,
@@ -922,8 +924,8 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
             print_group_setup_error(group, "failed to allocate DMA");
             return false;
         }
-#endif
     }
+#endif
 
     // hold the lock during setup, to ensure there isn't a DMA operation ongoing
 #if AP_HAL_SHARED_DMA_ENABLED
@@ -1374,6 +1376,10 @@ void RCOutput::led_timer_tick(uint64_t time_out_us)
 THD_WORKING_AREA(dshot_thread_wa, 32);
 void RCOutput::timer_tick()
 {
+    if (dshot_timer_setup) {
+        return;
+    }
+
     bool dshot_enabled = false;
     for (uint8_t i = 0; i < NUM_GROUPS; i++ ) {
         pwm_group &group = pwm_group_list[i];
@@ -1416,11 +1422,7 @@ void RCOutput::rcout_thread() {
         // main thread requested a new dshot send or we timed out - if we are not running
         // as a multiple of loop rate then ignore EVT_PWM_SEND events to preserve periodicity
         if (have_pwm_event) {
-            for (auto &group : pwm_group_list) {
-                if (is_dshot_protocol(group.current_mode)) {
-                    dshot_send(group, 0);
-                }
-            }
+            dshot_send_groups(0);
 
             if (_dshot_rate > 0) {
                 _dshot_cycle = (_dshot_cycle + 1) % _dshot_rate;
