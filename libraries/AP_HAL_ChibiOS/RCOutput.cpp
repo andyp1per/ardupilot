@@ -14,6 +14,10 @@
  *
  * Code by Andrew Tridgell and Siddharth Bharat Purohit
  * Bi-directional dshot based on Betaflight, code by Andy Piper and Siddharth Bharat Purohit
+ * 
+ * There really is no dshot reference. For information try these resources:
+ * https://blck.mn/2016/11/dshot-the-new-kid-on-the-block/
+ * https://www.swallenhardware.io/battlebots/2019/4/20/a-developers-guide-to-dshot-escs
  */
 
 #include <hal.h>
@@ -1785,7 +1789,7 @@ void RCOutput::send_pulses_DMAR(pwm_group &group, uint32_t buffer_length)
     dmaStreamSetPeripheral(group.dma, &(group.pwm_drv->tim->DMAR));
     stm32_cacheBufferFlush(group.dma_buffer, buffer_length);
     dmaStreamSetMemory0(group.dma, group.dma_buffer);
-    dmaStreamSetTransactionSize(group.dma, buffer_length/sizeof(dmar_uint_t));
+    dmaStreamSetTransactionSize(group.dma, buffer_length / sizeof(dmar_uint_t));
 #if STM32_DMA_ADVANCED
     dmaStreamSetFIFO(group.dma, STM32_DMA_FCR_DMDIS | STM32_DMA_FCR_FTH_FULL);
 #endif
@@ -1802,6 +1806,7 @@ void RCOutput::send_pulses_DMAR(pwm_group &group, uint32_t buffer_length)
 
     // setup for burst strided transfers into the timers 4 CCR registers
     const uint8_t ccr_ofs = offsetof(stm32_tim_t, CCR)/4;
+    // burst address (BA) of the CCR register, burst length (BL) of 4 (0b11)
     group.pwm_drv->tim->DCR = STM32_TIM_DCR_DBA(ccr_ofs) | STM32_TIM_DCR_DBL(3);
     group.dshot_state = DshotState::SEND_START;
 
