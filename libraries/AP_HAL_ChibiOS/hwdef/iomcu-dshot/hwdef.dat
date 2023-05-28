@@ -30,7 +30,8 @@ define HAL_WITH_DSP FALSE
 define HAL_DSHOT_ENABLED TRUE
 define HAL_SERIALLED_ENABLED FALSE
 
-# the iomcu interrupts are pretty small apart from dshot
+# ChibiOS already correctly sets stack sizes and considers 64 extra as conservative
 define PORT_INT_REQUIRED_STACK 64
 # "main" stack is only used for exceptions and ISR
-MAIN_STACK 0x100
+# sizeof(port_intctx) == 36, sizeof(port_extctx) == 32, 2*32+36+64 == 164 should be sufficient
+MAIN_STACK 0xA4
