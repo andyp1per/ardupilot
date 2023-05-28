@@ -32,6 +32,5 @@ define HAL_SERIALLED_ENABLED FALSE
 
 # ChibiOS already correctly sets stack sizes and considers 64 extra as conservative
 define PORT_INT_REQUIRED_STACK 64
-# "main" stack is only used for exceptions and ISR
-# sizeof(port_intctx) == 36, sizeof(port_extctx) == 32, 2*32+36+64 == 164 should be sufficient
-MAIN_STACK 0xA4
+# "main" stack is only used for exceptions and ISR, but they can be nested
+MAIN_STACK 0x100

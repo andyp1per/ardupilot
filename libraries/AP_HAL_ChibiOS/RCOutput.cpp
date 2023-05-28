@@ -228,6 +228,7 @@ void RCOutput::rcout_thread()
     while (true) {
         const auto mask = chEvtWaitOne(EVT_PWM_SEND | EVT_PWM_SYNTHETIC_SEND);
         const bool have_pwm_event = (mask & (EVT_PWM_SEND | EVT_PWM_SYNTHETIC_SEND)) != 0;
+
         // start the clock
         last_thread_run_us = AP_HAL::micros64();
 
@@ -266,9 +267,9 @@ void RCOutput::rcout_thread()
         static bool output_masks = true;
         if (AP_HAL::millis() > 5000 && output_masks) {
             output_masks = false;
-            hal.console->printf("bdmask 0x%x, en_mask 0x%lx, 3dmask 0x%x:\n", _bdshot.mask, en_mask, _reversible_mask);
+            hal.console->printf("bdmask 0x%lx, en_mask 0x%lx, 3dmask 0x%lx:\n", _bdshot.mask, en_mask, _reversible_mask);
             for (auto &group : pwm_group_list) {
-                hal.console->printf("  timer %u: ch_mask 0x%x, en_mask 0x%x\n", group.timer_id, group.ch_mask, group.en_mask);
+                hal.console->printf("  timer %u: ch_mask 0x%lx, en_mask 0x%lx\n", group.timer_id, group.ch_mask, group.en_mask);
             }
         }
 #endif
@@ -642,6 +643,12 @@ uint16_t RCOutput::get_freq(uint8_t chan)
 
 void RCOutput::enable_ch(uint8_t chan)
 {
+#if HAL_WITH_IO_MCU
+    if (chan < chan_offset && AP_BoardConfig::io_enabled()) {
+        iomcu.enable_ch(chan);
+        return;
+    }
+#endif
     uint8_t i;
     pwm_group *grp = find_chan(chan, i);
     if (grp) {
@@ -652,6 +659,12 @@ void RCOutput::enable_ch(uint8_t chan)
 
 void RCOutput::disable_ch(uint8_t chan)
 {
+#if HAL_WITH_IO_MCU
+    if (chan < chan_offset && AP_BoardConfig::io_enabled()) {
+        iomcu.disable_ch(chan);
+        return;
+    }
+#endif
     uint8_t i;
     pwm_group *grp = find_chan(chan, i);
     if (grp) {
@@ -663,7 +676,6 @@ void RCOutput::disable_ch(uint8_t chan)
 
 void RCOutput::write(uint8_t chan, uint16_t period_us)
 {
-
     if (chan >= max_channels) {
         return;
     }
@@ -1545,6 +1557,10 @@ uint16_t RCOutput::create_dshot_packet(const uint16_t value, bool telem_request,
 
 /*
   fill in a DMA buffer for dshot
+  the buffer format is (stride is always 4 for 4 channels):
+  [ch0b0][ch1b0][ch2b0][ch3b0][ch0b1][ch1b1][ch2b1][ch3b1]...[ch0bN][ch1bN][ch2bN][ch3bN]
+  where N = dshot_bit_length - 1
+  each value is a number of beats for the DMA engine to send in burst via DMAR to the 4 CCR registers
  */
 void RCOutput::fill_DMA_buffer_dshot(dmar_uint_t *buffer, uint8_t stride, uint16_t packet, uint16_t clockmul)
 {
