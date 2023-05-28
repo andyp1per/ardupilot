@@ -140,11 +140,6 @@ void setup(void)
 {
     hal.rcin->init();
     hal.rcout->init();
-
-    for (uint8_t i = 0; i< 14; i++) {
-        hal.rcout->enable_ch(i);
-    }
-
     iomcu.init();
 
     iomcu.calculate_fw_crc();
@@ -193,6 +188,24 @@ void AP_IOMCU_FW::init()
     }
 }
 
+
+static uint16_t sysExceptionStackCheck(void) {
+#if CH_DBG_ENABLE_STACK_CHECK == TRUE
+  extern uint32_t __main_stack_base__[];
+  extern uint32_t __main_stack_end__[];
+  uint32_t stklimit = (uint32_t)__main_stack_end__;
+  uint32_t stkbase  = (uint32_t)__main_stack_base__;
+  uint32_t *crawl   = (uint32_t *)stkbase;
+
+  while (*crawl == 0x55555555 && crawl < (uint32_t *)stklimit) {
+    crawl++;
+  }
+  uint32_t free = (uint32_t)crawl - stkbase;
+  chDbgAssert(free > 0, "Stack exhausted");
+  return (uint16_t)free;
+#endif /* CH_DBG_ENABLE_STACK_CHECK == TRUE */
+  return 0U;
+}
 
 void AP_IOMCU_FW::update()
 {
@@ -263,6 +276,7 @@ void AP_IOMCU_FW::update()
             dsm_bind_step();
         }
         GPIO_write();
+        reg_status.freemstack = sysExceptionStackCheck();
     }
 }
 
@@ -522,6 +536,19 @@ bool AP_IOMCU_FW::handle_code_write()
             reg_setup.dshot_telem_mask = rx_io_packet.regs[0];
             hal.rcout->set_telem_request_mask(reg_setup.dshot_telem_mask);
             break;
+        case PAGE_REG_SETUP_CHANNEL_MASK:
+            reg_setup.channel_mask = rx_io_packet.regs[0];
+            if (last_channel_mask != reg_setup.channel_mask) {
+                for (uint8_t i=0; i<IOMCU_MAX_CHANNELS; i++) {
+                    if (reg_setup.channel_mask & 1U << i) {
+                        hal.rcout->enable_ch(i);
+                    } else {
+                        hal.rcout->disable_ch(i);
+                    }
+                }
+                last_channel_mask = reg_setup.channel_mask;
+            }
+            break;
         case PAGE_REG_SETUP_SBUS_RATE:
             reg_setup.sbus_rate = rx_io_packet.regs[0];
             sbus_interval_ms = MAX(1000U / reg_setup.sbus_rate,3);
@@ -779,6 +806,8 @@ void AP_IOMCU_FW::rcout_mode_update(void)
     if (use_dshot && !dshot_enabled) {
         dshot_enabled = true;
         hal.rcout->set_output_mode(mode_out.mask, (AP_HAL::RCOutput::output_mode)mode_out.mode);
+        // enabling dshot changes the memory allocation
+        reg_status.freemem = hal.util->available_memory();
     }
     bool use_oneshot = mode_out.mode == AP_HAL::RCOutput::MODE_PWM_ONESHOT;
     if (use_oneshot && !oneshot_enabled) {
@@ -794,6 +823,7 @@ void AP_IOMCU_FW::rcout_mode_update(void)
         hal.rcout->set_output_mode(mode_out.mask, AP_HAL::RCOutput::MODE_PWM_BRUSHED);
         hal.rcout->set_freq(mode_out.mask, reg_setup.pwm_altrate);
     }
+
 }
 
 /*

@@ -106,6 +106,10 @@ public:
     // set telem request mask
     void set_telem_request_mask(uint32_t mask);
 
+    // setup channels
+    void     enable_ch(uint8_t ch);
+    void     disable_ch(uint8_t ch);
+
     // check if IO is healthy
     bool healthy(void);
 
@@ -213,6 +217,7 @@ private:
         uint8_t failsafe_pwm_set;
         uint8_t failsafe_pwm_sent;
         uint16_t dshot_telem_mask;
+        uint16_t channel_mask;
     } pwm_out;
 
     // read back pwm values

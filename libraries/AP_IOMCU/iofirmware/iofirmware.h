@@ -70,7 +70,10 @@ public:
         uint16_t dshot_period_us;
         uint16_t dshot_rate;
         uint16_t dshot_telem_mask;
+        uint16_t channel_mask;
     } reg_setup;
+
+    uint16_t last_channel_mask;
 
     // CONFIG values
     struct page_config config;

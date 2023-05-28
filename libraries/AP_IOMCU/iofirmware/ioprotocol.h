@@ -88,6 +88,7 @@ enum iopage {
 #define PAGE_REG_SETUP_RC_PROTOCOLS 23 // uses 2 slots, 23 and 24
 #define PAGE_REG_SETUP_DSHOT_PERIOD 25
 #define PAGE_REG_SETUP_DSHOT_TELEM  27
+#define PAGE_REG_SETUP_CHANNEL_MASK 28
 
 // config page registers
 #define PAGE_CONFIG_PROTOCOL_VERSION  0
@@ -120,6 +121,7 @@ struct page_reg_status {
     uint8_t err_read;
     uint8_t err_write;
     uint8_t err_uart;
+    uint16_t freemstack;
 };
 
 struct page_rc_input {
