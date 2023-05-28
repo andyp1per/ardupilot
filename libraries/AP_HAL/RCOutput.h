@@ -374,7 +374,7 @@ public:
      * Options are (ticks, percentage):
      * 20/7/14, 35/70
      * 11/4/8, 36/72
-     * 8/3/6, 37/75
+     * 8/3/6, 37/75 <-- this is the preferred duty cycle and has some support on the interwebs
      */
     // bitwidths: 8/3/6 == 37%/75%
     static constexpr uint32_t DSHOT_BIT_WIDTH_TICKS_DEFAULT = 8;
