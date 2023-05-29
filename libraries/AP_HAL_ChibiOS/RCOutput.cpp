@@ -989,15 +989,20 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
         return false;
     }
 
-    const uint32_t freq = group.pwm_drv->clock / prescaler;
+    const uint32_t freq = group.pwm_drv->clock / (prescaler + 1);
+    // PSC is calculated by ChibiOS as (pwm_drv.clock / pwm_cfg.frequency) - 1;
     group.pwm_cfg.frequency = freq;
-    group.pwm_cfg.period = bit_width;
     group.pwm_cfg.dier = TIM_DIER_UDE;
     group.pwm_cfg.cr2 = 0;
     group.bit_width_mul = (freq + (target_frequency/2)) / target_frequency;
+    // ARR is calculated by ChibiOS as pwm_cfg.period -1
+    group.pwm_cfg.period = bit_width * group.bit_width_mul;
 
     //hal.console->printf("CLOCK=%u BW=%u FREQ=%u BR=%u MUL=%u PRE=%u\n", unsigned(group.pwm_drv->clock), unsigned(bit_width), unsigned(group.pwm_cfg.frequency),
     //    unsigned(bitrate), unsigned(group.bit_width_mul), unsigned(prescaler));
+    //static char clock_setup[64];
+    //hal.util->snprintf(clock_setup, 64, "CLOCK=%u BW=%u FREQ=%u BR=%u MUL=%u PRE=%u\n", unsigned(group.pwm_drv->clock), unsigned(bit_width), unsigned(group.pwm_cfg.frequency),
+    //        unsigned(bitrate), unsigned(group.bit_width_mul), unsigned(prescaler));
 
     for (uint8_t j=0; j<4; j++) {
         pwmmode_t mode = group.pwm_cfg.channels[j].mode;
