@@ -238,6 +238,8 @@ public:
       DSHOT_3D_OFF = 9,
       DSHOT_3D_ON = 10,
       DSHOT_SAVE = 12,
+      DSHOT_EXTENDED_TELEMETRY_ENABLE = 13,
+      DSHOT_EXTENDED_TELEMETRY_DISABLE = 14,
       DSHOT_NORMAL = 20,
       DSHOT_REVERSE = 21,
       // The following options are only available on BLHeli32
@@ -256,7 +258,9 @@ public:
     enum DshotEscType {
       DSHOT_ESC_NONE = 0,
       DSHOT_ESC_BLHELI = 1,
-      DSHOT_ESC_BLHELI_S = 2
+      DSHOT_ESC_BLHELI_S = 2,
+      DSHOT_ESC_BLHELI_EDT = 3,
+      DSHOT_ESC_BLHELI_EDT_S = 4
     };
 
     virtual void    set_output_mode(uint32_t mask, enum output_mode mode) {}
