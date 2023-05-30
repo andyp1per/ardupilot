@@ -825,12 +825,13 @@ void AP_IOMCU_FW::rcout_mode_update(void)
         // enabling dshot changes the memory allocation
         reg_status.freemem = hal.util->available_memory();
     }
-    bool use_oneshot = mode_out.mode == AP_HAL::RCOutput::MODE_PWM_ONESHOT;
+    bool use_oneshot = (mode_out.mode == AP_HAL::RCOutput::MODE_PWM_ONESHOT
+        || mode_out.mode == AP_HAL::RCOutput::MODE_PWM_ONESHOT125);
     if (use_oneshot && !oneshot_enabled) {
         oneshot_enabled = true;
         // setup to use a 1Hz frequency, so we only get output when we trigger
         hal.rcout->set_freq(mode_out.mask, 1);
-        hal.rcout->set_output_mode(mode_out.mask, AP_HAL::RCOutput::MODE_PWM_ONESHOT);
+        hal.rcout->set_output_mode(mode_out.mask, (AP_HAL::RCOutput::output_mode)mode_out.mode);
     }
     bool use_brushed = mode_out.mode == AP_HAL::RCOutput::MODE_PWM_BRUSHED;
     if (use_brushed && !brushed_enabled) {
