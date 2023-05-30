@@ -250,6 +250,7 @@ void AP_IOMCU::thread_main(void)
                 continue;
             }
         }
+        mask &= ~EVENT_MASK(IOEVENT_SET_OUTPUT_MODE);
 
         if (mask & EVENT_MASK(IOEVENT_SET_CHANNEL_MASK)) {
             if (!write_register(PAGE_SETUP, PAGE_REG_SETUP_CHANNEL_MASK, pwm_out.channel_mask)) {

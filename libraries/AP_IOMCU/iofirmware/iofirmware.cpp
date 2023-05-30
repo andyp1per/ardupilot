@@ -828,6 +828,8 @@ void AP_IOMCU_FW::rcout_mode_update(void)
     bool use_oneshot = mode_out.mode == AP_HAL::RCOutput::MODE_PWM_ONESHOT;
     if (use_oneshot && !oneshot_enabled) {
         oneshot_enabled = true;
+        // setup to use a 1Hz frequency, so we only get output when we trigger
+        hal.rcout->set_freq(mode_out.mask, 1);
         hal.rcout->set_output_mode(mode_out.mask, AP_HAL::RCOutput::MODE_PWM_ONESHOT);
     }
     bool use_brushed = mode_out.mode == AP_HAL::RCOutput::MODE_PWM_BRUSHED;
