@@ -16,12 +16,18 @@
 #include <hal.h>
 #include "RCOutput.h"
 #include <AP_Math/AP_Math.h>
+#include <AP_BoardConfig/AP_BoardConfig.h>
 #include "hwdef/common/stm32_util.h"
 #include <AP_InternalError/AP_InternalError.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
 #if HAL_USE_PWM == TRUE
 #if HAL_DSHOT_ENABLED
+
+#if HAL_WITH_IO_MCU
+#include <AP_IOMCU/AP_IOMCU.h>
+extern AP_IOMCU iomcu;
+#endif
 
 using namespace ChibiOS;
 
@@ -103,6 +109,11 @@ void RCOutput::send_dshot_command(uint8_t command, uint8_t chan, uint32_t comman
     }
     // not an FMU channel
     if (chan < chan_offset) {
+#if HAL_WITH_IO_MCU
+        if (AP_BoardConfig::io_dshot()) {
+            iomcu.send_dshot_command(command, chan, command_timeout_ms, repeat_count, priority);
+        }
+#endif
         return;
     }
 
