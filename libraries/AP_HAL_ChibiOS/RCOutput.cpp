@@ -1191,7 +1191,7 @@ void RCOutput::set_output_mode(uint32_t mask, const enum output_mode mode)
 void RCOutput::set_telem_request_mask(uint32_t mask)
 {
 #if HAL_WITH_IO_MCU
-    if (AP_BoardConfig::io_enabled() && (mask & ((1U<<chan_offset)-1))) {
+    if (AP_BoardConfig::io_dshot() && (mask & ((1U<<chan_offset)-1))) {
         iomcu.set_telem_request_mask(mask);
     }
 #endif
@@ -1426,14 +1426,18 @@ void RCOutput::dshot_send_trampoline(void *p)
   thread for handling RCOutput send on IOMCU
  */
 void RCOutput::rcout_thread() {
+    // don't start outputting until fully configured
+    while (!hal.scheduler->is_system_initialized()) {
+        hal.scheduler->delay_microseconds(1000);
+    }
+
     rcout_thread_ctx = chThdGetSelfX();
 
     while (true) {
-        const auto mask = chEvtWaitOne(EVT_PWM_SEND | EVT_PWM_SYNTHETIC_SEND);
-        const bool have_pwm_event = (mask & (EVT_PWM_SEND | EVT_PWM_SYNTHETIC_SEND)) != 0;
+        chEvtWaitOne(EVT_PWM_SEND | EVT_PWM_SYNTHETIC_SEND);
 
         // this is when the cycle is supposed to start
-        if (_dshot_cycle == 0 && have_pwm_event) {
+        if (_dshot_cycle == 0) {
             // register a timer for the next tick if push() will not be providing it
             if (_dshot_rate != 1) {
                 chVTSet(&_dshot_rate_timer, chTimeUS2I(_dshot_period_us), dshot_update_tick, this);
@@ -1442,12 +1446,10 @@ void RCOutput::rcout_thread() {
 
         // main thread requested a new dshot send or we timed out - if we are not running
         // as a multiple of loop rate then ignore EVT_PWM_SEND events to preserve periodicity
-        if (have_pwm_event) {
-            dshot_send_groups(0);
+        dshot_send_groups(0);
 
-            if (_dshot_rate > 0) {
-                _dshot_cycle = (_dshot_cycle + 1) % _dshot_rate;
-            }
+        if (_dshot_rate > 0) {
+            _dshot_cycle = (_dshot_cycle + 1) % _dshot_rate;
         }
     }
 }
