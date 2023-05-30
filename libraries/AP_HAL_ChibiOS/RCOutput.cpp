@@ -27,6 +27,7 @@
 #include <AP_HAL/utility/RingBuffer.h>
 #include "GPIO.h"
 #include "Util.h"
+#include "Scheduler.h"
 #include "hwdef/common/stm32_util.h"
 #include "hwdef/common/watchdog.h"
 #include <AP_InternalError/AP_InternalError.h>
@@ -35,7 +36,7 @@
 #ifndef HAL_NO_UARTDRIVER
 #include <GCS_MAVLink/GCS.h>
 #endif
-#include "Scheduler.h"
+
 #if AP_SIM_ENABLED
 #include <AP_HAL/SIMState.h>
 #endif
@@ -228,7 +229,6 @@ void RCOutput::rcout_thread()
     while (true) {
         const auto mask = chEvtWaitOne(EVT_PWM_SEND | EVT_PWM_SYNTHETIC_SEND);
         const bool have_pwm_event = (mask & (EVT_PWM_SEND | EVT_PWM_SYNTHETIC_SEND)) != 0;
-
         // start the clock
         last_thread_run_us = AP_HAL::micros64();
 
@@ -676,6 +676,7 @@ void RCOutput::disable_ch(uint8_t chan)
 
 void RCOutput::write(uint8_t chan, uint16_t period_us)
 {
+
     if (chan >= max_channels) {
         return;
     }
@@ -737,11 +738,9 @@ void RCOutput::push_local(void)
 
     bool safety_on = hal.util->safety_switch_state() == AP_HAL::Util::SAFETY_DISARMED;
     for (auto &group : pwm_group_list) {
-
         if (in_soft_serial()) {
             continue;
         }
-
         if (!group.pwm_started) {
             continue;
         }
@@ -935,7 +934,6 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
         group.dma_handle = new Shared_DMA(group.dma_up_stream_id, SHARED_DMA_NONE,
                                           FUNCTOR_BIND_MEMBER(&RCOutput::dma_allocate, void, Shared_DMA *),
                                           FUNCTOR_BIND_MEMBER(&RCOutput::dma_deallocate, void, Shared_DMA *));
-
         if (!group.dma_handle) {
             print_group_setup_error(group, "failed to allocate DMA");
             return false;
