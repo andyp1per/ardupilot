@@ -2487,7 +2487,7 @@ void RCOutput::_set_neopixel_rgb_data(pwm_group *grp, uint8_t idx, uint8_t led, 
     const uint8_t pad_start_bits = 1;
     const uint8_t neopixel_bit_length = 24;
     const uint8_t stride = 4;
-    uint32_t *buf = grp->dma_buffer + (led * neopixel_bit_length + pad_start_bits) * stride + idx;
+    dmar_uint_t *buf = grp->dma_buffer + (led * neopixel_bit_length + pad_start_bits) * stride + idx;
     uint32_t bits = (green<<16) | (red<<8) | blue;
     const uint32_t BIT_0 = NEOP_BIT_0_TICKS * grp->bit_width_mul;
     const uint32_t BIT_1 = NEOP_BIT_1_TICKS * grp->bit_width_mul;
@@ -2506,7 +2506,7 @@ void RCOutput::_set_profiled_rgb_data(pwm_group *grp, uint8_t idx, uint8_t led, 
     const uint8_t pad_start_bits = 1;
     const uint8_t bit_length = 25;
     const uint8_t stride = 4;
-    uint32_t *buf = grp->dma_buffer + (led * bit_length + pad_start_bits) * stride + idx;
+    dmar_uint_t *buf = grp->dma_buffer + (led * bit_length + pad_start_bits) * stride + idx;
     uint32_t bits = 0x1000000 | (blue<<16) | (red<<8) | green;
     const uint32_t BIT_1 = PROFI_BIT_1_TICKS * grp->bit_width_mul;
     for (uint16_t b=0; b < bit_length; b++) {
@@ -2524,7 +2524,7 @@ void RCOutput::_set_profiled_blank_frame(pwm_group *grp, uint8_t idx, uint8_t le
     const uint8_t pad_start_bits = 1;
     const uint8_t bit_length = 25;
     const uint8_t stride = 4;
-    uint32_t *buf = grp->dma_buffer + (led * bit_length + pad_start_bits) * stride + idx;
+    dmar_uint_t *buf = grp->dma_buffer + (led * bit_length + pad_start_bits) * stride + idx;
     const uint32_t BIT_1 = PROFI_BIT_1_TICKS * grp->bit_width_mul;
     for (uint16_t b=0; b < bit_length; b++) {
         buf[b * stride] = BIT_1;
@@ -2539,7 +2539,7 @@ void RCOutput::_set_profiled_clock(pwm_group *grp, uint8_t idx, uint8_t led)
     const uint8_t pad_start_bits = 1;
     const uint8_t bit_length = 25;
     const uint8_t stride = 4;
-    uint32_t *buf = grp->dma_buffer + (led * bit_length + pad_start_bits) * stride + idx;
+    dmar_uint_t *buf = grp->dma_buffer + (led * bit_length + pad_start_bits) * stride + idx;
     const uint32_t BIT_1 = PROFI_BIT_0_TICKS * grp->bit_width_mul;
     for (uint16_t b=0; b < bit_length; b++) {
         buf[b * stride] = BIT_1;
