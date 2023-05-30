@@ -343,8 +343,8 @@ void AP_IOMCU::send_servo_out()
             n = MIN(n, IOMCU_MAX_CHANNELS);
         }
         uint32_t now = AP_HAL::micros();
-        if (now - last_servo_out_us >= 2000) {
-            // don't send data at more than 500Hz
+        if (now - last_servo_out_us >= 2000 || AP_BoardConfig::io_dshot()) {
+            // don't send data at more than 500Hz except when using dshot which is more timing sensitive
             if (write_registers(PAGE_DIRECT_PWM, 0, n, pwm_out.pwm)) {
                 last_servo_out_us = now;
             }

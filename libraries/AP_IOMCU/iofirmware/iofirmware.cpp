@@ -209,9 +209,13 @@ static uint16_t sysExceptionStackCheck(void) {
 
 void AP_IOMCU_FW::update()
 {
+#if CH_CFG_ST_FREQUENCY == 1000000
+    eventmask_t mask = chEvtWaitAnyTimeout(~0, TIME_US2I(1000));
+#else
     // we are not running any other threads, so we can use an
     // immediate timeout here for lowest latency
     eventmask_t mask = chEvtWaitAnyTimeout(~0, TIME_IMMEDIATE);
+#endif
 
     // we get the timestamp once here, and avoid fetching it
     // within the DMA callbacks
