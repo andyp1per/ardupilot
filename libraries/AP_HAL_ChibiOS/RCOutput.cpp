@@ -692,13 +692,7 @@ void RCOutput::write(uint8_t chan, uint16_t period_us)
 #if HAL_WITH_IO_MCU
     // handle IO MCU channels
     if (AP_BoardConfig::io_enabled()) {
-        uint16_t io_period_us = period_us;
-        if ((iomcu_mode == MODE_PWM_ONESHOT125) && ((1U<<chan) & io_fast_channel_mask)) {
-            // the iomcu only has one oneshot setting, so we need to scale by a factor
-            // of 8 here for oneshot125
-            io_period_us /= 8;
-        }
-        iomcu.write_channel(chan, io_period_us);
+        iomcu.write_channel(chan, period_us);
     }
 #endif
     if (chan < chan_offset) {
@@ -819,12 +813,7 @@ uint16_t RCOutput::read(uint8_t chan)
     }
 #if HAL_WITH_IO_MCU
     if (chan < chan_offset) {
-        uint16_t period_us = iomcu.read_channel(chan);
-        if ((iomcu_mode == MODE_PWM_ONESHOT125) && ((1U<<chan) & io_fast_channel_mask)) {
-            // convert back to 1000 - 2000 range
-            period_us *= 8;
-        }
-        return period_us;
+        return iomcu.read_channel(chan);
     }
 #endif
     chan -= chan_offset;
@@ -839,10 +828,6 @@ void RCOutput::read(uint16_t* period_us, uint8_t len)
 #if HAL_WITH_IO_MCU
     for (uint8_t i=0; i<MIN(len, chan_offset); i++) {
         period_us[i] = iomcu.read_channel(i);
-        if ((iomcu_mode == MODE_PWM_ONESHOT125) && ((1U<<i) & io_fast_channel_mask)) {
-            // convert back to 1000 - 2000 range
-            period_us[i] *= 8;
-        }
     }
 #endif
     if (len <= chan_offset) {
