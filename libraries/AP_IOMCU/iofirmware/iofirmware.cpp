@@ -536,10 +536,6 @@ bool AP_IOMCU_FW::handle_code_write()
             reg_setup.dshot_rate = rx_io_packet.regs[1];
             hal.rcout->set_dshot_period(reg_setup.dshot_period_us, reg_setup.dshot_rate);
             break;
-        case PAGE_REG_SETUP_DSHOT_TELEM:
-            reg_setup.dshot_telem_mask = rx_io_packet.regs[0];
-            hal.rcout->set_telem_request_mask(reg_setup.dshot_telem_mask);
-            break;
         case PAGE_REG_SETUP_CHANNEL_MASK:
             reg_setup.channel_mask = rx_io_packet.regs[0];
             if (last_channel_mask != reg_setup.channel_mask) {
@@ -689,6 +685,22 @@ bool AP_IOMCU_FW::handle_code_write()
             last_GPIO_channel_mask = GPIO.channel_mask;
         }
         break;
+
+    case PAGE_DSHOT: {
+        uint16_t offset = rx_io_packet.offset, num_values = rx_io_packet.count;
+        if (offset + num_values > sizeof(dshot)/2) {
+            return false;
+        }
+        memcpy(((uint16_t *)&dshot)+offset, &rx_io_packet.regs[0], num_values*2);
+        if(dshot.telem_mask) {
+            hal.rcout->set_telem_request_mask(dshot.telem_mask);
+        }
+        if (dshot.command) {
+            hal.rcout->send_dshot_command(dshot.command, dshot.chan, dshot.command_timeout_ms, dshot.repeat_count, dshot.priority);
+        }
+
+        break;
+    }
 
     default:
         break;

@@ -69,7 +69,6 @@ public:
         uint16_t pwm_altclock = 1;
         uint16_t dshot_period_us;
         uint16_t dshot_rate;
-        uint16_t dshot_telem_mask;
         uint16_t channel_mask;
     } reg_setup;
 
@@ -121,6 +120,9 @@ public:
     struct page_GPIO GPIO;
     uint8_t last_GPIO_channel_mask;
     void GPIO_write();
+
+    // DSHOT runtime
+    struct page_dshot dshot;
 
     // true when override channel active
     bool override_active;

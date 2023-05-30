@@ -40,8 +40,8 @@ enum ioevents {
     IOEVENT_GPIO,
     IOEVENT_SET_OUTPUT_MODE,
     IOEVENT_SET_DSHOT_PERIOD,
-    IOEVENT_SET_DSHOT_TELEM,
     IOEVENT_SET_CHANNEL_MASK,
+    IOEVENT_DSHOT,
 };
 
 // max number of consecutve protocol failures we accept before raising
@@ -58,7 +58,7 @@ AP_IOMCU::AP_IOMCU(AP_HAL::UARTDriver &_uart) :
     singleton = this;
 }
 
-#define IOMCU_DEBUG_ENABLE 0
+#define IOMCU_DEBUG_ENABLE 1
 
 #if IOMCU_DEBUG_ENABLE
 #include <stdio.h>
@@ -228,14 +228,6 @@ void AP_IOMCU::thread_main(void)
         }
         mask &= ~EVENT_MASK(IOEVENT_SET_DSHOT_PERIOD);
 
-        if (mask & EVENT_MASK(IOEVENT_SET_DSHOT_TELEM)) {
-            if (!write_register(PAGE_SETUP, PAGE_REG_SETUP_DSHOT_TELEM, pwm_out.dshot_telem_mask)) {
-                event_failed(mask);
-                continue;
-            }
-        }
-        mask &= ~EVENT_MASK(IOEVENT_SET_DSHOT_TELEM);
-
         if (mask & EVENT_MASK(IOEVENT_SET_ONESHOT_ON)) {
             if (!modify_register(PAGE_SETUP, PAGE_REG_SETUP_FEATURES, 0, P_SETUP_FEATURES_ONESHOT)) {
                 event_failed(mask);
@@ -284,6 +276,15 @@ void AP_IOMCU::thread_main(void)
             }
             mask &= ~EVENT_MASK(IOEVENT_GPIO);
         }
+
+        if (mask & EVENT_MASK(IOEVENT_DSHOT)) {
+            if (!write_registers(PAGE_DSHOT, 0, sizeof(dshot)/sizeof(uint16_t), (const uint16_t*)&dshot)) {
+                memset(&dshot, 0, sizeof(dshot));
+                event_failed(mask);
+                continue;
+            }
+        }
+        mask &= ~EVENT_MASK(IOEVENT_DSHOT);
 
         // check for regular timed events
         uint32_t now = AP_HAL::millis();
@@ -827,6 +828,7 @@ void AP_IOMCU::set_brushed_mode(void)
     rate.brushed_enabled = true;
 }
 
+#if HAL_DSHOT_ENABLED
 // set output mode
 void AP_IOMCU::set_dshot_period(uint16_t period_us, uint8_t drate)
 {
@@ -838,9 +840,20 @@ void AP_IOMCU::set_dshot_period(uint16_t period_us, uint8_t drate)
 // set output mode
 void AP_IOMCU::set_telem_request_mask(uint32_t mask)
 {
-    pwm_out.dshot_telem_mask = mask;
-    trigger_event(IOEVENT_SET_DSHOT_TELEM);
+    dshot.telem_mask = mask;
+    trigger_event(IOEVENT_DSHOT);
 }
+
+void AP_IOMCU::send_dshot_command(uint8_t command, uint8_t chan, uint32_t command_timeout_ms, uint16_t repeat_count, bool priority)
+{
+    dshot.command = command;
+    dshot.chan = chan;
+    dshot.command_timeout_ms = command_timeout_ms;
+    dshot.repeat_count = repeat_count;
+    dshot.priority = priority;
+    trigger_event(IOEVENT_DSHOT);
+}
+#endif
 
 // set output mode
 void AP_IOMCU::set_output_mode(uint16_t mask, uint16_t mode)

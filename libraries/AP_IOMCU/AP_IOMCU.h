@@ -100,12 +100,16 @@ public:
     // set output mode
     void set_output_mode(uint16_t mask, uint16_t mode);
 
+#if HAL_DSHOT_ENABLED
     // set dshot output period
     void set_dshot_period(uint16_t period_us, uint8_t drate);
 
     // set telem request mask
     void set_telem_request_mask(uint32_t mask);
 
+    // send a dshot command
+    void send_dshot_command(uint8_t command, uint8_t chan, uint32_t command_timeout_ms, uint16_t repeat_count, bool priority);
+#endif
     // setup channels
     void     enable_ch(uint8_t ch);
     void     disable_ch(uint8_t ch);
@@ -216,7 +220,6 @@ private:
         uint16_t failsafe_pwm[IOMCU_MAX_CHANNELS];
         uint8_t failsafe_pwm_set;
         uint8_t failsafe_pwm_sent;
-        uint16_t dshot_telem_mask;
         uint16_t channel_mask;
     } pwm_out;
 
@@ -239,6 +242,8 @@ private:
         uint16_t period_us;
         uint16_t rate;
     } dshot_rate;
+
+    struct page_dshot dshot;
 
     struct page_GPIO GPIO;
     // output mode values
