@@ -31,6 +31,7 @@ define HAL_WITH_DSP FALSE
 define HAL_DSHOT_ENABLED TRUE
 define HAL_SERIALLED_ENABLED FALSE
 
+# Tickless mode is required in order for the virtual timers used by dshot to work correctly
 STM32_ST_USE_TIMER 15
 define CH_CFG_ST_RESOLUTION 16
 define CH_CFG_ST_TIMEDELTA 2
