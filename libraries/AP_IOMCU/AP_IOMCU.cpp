@@ -444,11 +444,12 @@ void AP_IOMCU::write_log()
         static uint32_t last_io_print;
         if (now - last_io_print >= 5000) {
             last_io_print = now;
-            debug("t=%lu num=%lu mem=%u mstack=%u terr=%lu nerr=%lu crc=%u opcode=%u rd=%u wr=%u ur=%u ndel=%lu\n",
+            debug("t=%lu num=%lu mem=%u mstack=%u pstack=%u terr=%lu nerr=%lu crc=%u opcode=%u rd=%u wr=%u ur=%u ndel=%lu\n",
                   now,
                   reg_status.total_pkts,
                   reg_status.freemem,
                   reg_status.freemstack,
+                  reg_status.freepstack,
                   total_errors,
                   reg_status.num_errors,
                   reg_status.err_crc,

@@ -110,6 +110,8 @@ struct page_config {
 
 struct page_reg_status {
     uint16_t freemem;
+    uint16_t freemstack;
+    uint16_t freepstack;
     uint32_t timestamp_ms;
     uint16_t vservo;
     uint16_t vrssi;
@@ -121,7 +123,6 @@ struct page_reg_status {
     uint8_t err_read;
     uint8_t err_write;
     uint8_t err_uart;
-    uint16_t freemstack;
 };
 
 struct page_rc_input {

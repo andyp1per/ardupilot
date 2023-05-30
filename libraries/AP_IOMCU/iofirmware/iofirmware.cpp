@@ -189,23 +189,35 @@ void AP_IOMCU_FW::init()
 }
 
 
-static uint16_t sysExceptionStackCheck(void) {
 #if CH_DBG_ENABLE_STACK_CHECK == TRUE
-  extern uint32_t __main_stack_base__[];
-  extern uint32_t __main_stack_end__[];
-  uint32_t stklimit = (uint32_t)__main_stack_end__;
-  uint32_t stkbase  = (uint32_t)__main_stack_base__;
-  uint32_t *crawl   = (uint32_t *)stkbase;
+static void stackCheck(uint16_t& mstack, uint16_t& pstack) {
+    extern uint32_t __main_stack_base__[];
+    extern uint32_t __main_stack_end__[];
+    uint32_t stklimit = (uint32_t)__main_stack_end__;
+    uint32_t stkbase  = (uint32_t)__main_stack_base__;
+    uint32_t *crawl   = (uint32_t *)stkbase;
 
-  while (*crawl == 0x55555555 && crawl < (uint32_t *)stklimit) {
-    crawl++;
-  }
-  uint32_t free = (uint32_t)crawl - stkbase;
-  chDbgAssert(free > 0, "Stack exhausted");
-  return (uint16_t)free;
-#endif /* CH_DBG_ENABLE_STACK_CHECK == TRUE */
-  return 0U;
+    while (*crawl == 0x55555555 && crawl < (uint32_t *)stklimit) {
+        crawl++;
+    }
+    uint32_t free = (uint32_t)crawl - stkbase;
+    chDbgAssert(free > 0, "mstack exhausted");
+    mstack = (uint16_t)free;
+
+    extern uint32_t __main_thread_stack_base__[];
+    extern uint32_t __main_thread_stack_end__[];
+    stklimit = (uint32_t)__main_thread_stack_end__;
+    stkbase  = (uint32_t)__main_thread_stack_base__;
+    crawl   = (uint32_t *)stkbase;
+
+    while (*crawl == 0x55555555 && crawl < (uint32_t *)stklimit) {
+        crawl++;
+    }
+    free = (uint32_t)crawl - stkbase;
+    chDbgAssert(free > 0, "pstack exhausted");
+    pstack = (uint16_t)free;
 }
+#endif /* CH_DBG_ENABLE_STACK_CHECK == TRUE */
 
 void AP_IOMCU_FW::update()
 {
@@ -280,7 +292,9 @@ void AP_IOMCU_FW::update()
             dsm_bind_step();
         }
         GPIO_write();
-        reg_status.freemstack = sysExceptionStackCheck();
+#if CH_DBG_ENABLE_STACK_CHECK == TRUE
+        stackCheck(reg_status.freemstack, reg_status.freepstack);
+#endif
     }
 }
 
