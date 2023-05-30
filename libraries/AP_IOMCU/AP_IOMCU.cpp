@@ -1166,6 +1166,8 @@ void AP_IOMCU::check_iomcu_reset(void)
     trigger_event(IOEVENT_SET_RATES);
     trigger_event(IOEVENT_SET_DEFAULT_RATE);
     trigger_event(IOEVENT_SET_DSHOT_PERIOD);
+    trigger_event(IOEVENT_SET_OUTPUT_MODE);
+    trigger_event(IOEVENT_SET_CHANNEL_MASK);
     if (rate.oneshot_enabled) {
         trigger_event(IOEVENT_SET_ONESHOT_ON);
     }
