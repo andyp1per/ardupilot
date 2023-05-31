@@ -30,7 +30,7 @@ public:
     bool handle_code_read();
     void schedule_reboot(uint32_t time_ms);
     void safety_update();
-    void rcout_mode_update();
+    void rcout_config_update();
     void rcin_serial_init();
     void rcin_serial_update();
     void page_status_update(void);

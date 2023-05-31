@@ -56,7 +56,7 @@ enum ioevents {
 
 static void dma_rx_end_cb(UARTDriver *uart)
 {
-    osalSysLockFromISR();
+    chSysLockFromISR();
     uart->usart->CR3 &= ~(USART_CR3_DMAT | USART_CR3_DMAR);
 
     (void)uart->usart->SR;
@@ -80,7 +80,7 @@ static void dma_rx_end_cb(UARTDriver *uart)
                      STM32_DMA_CR_MINC | STM32_DMA_CR_TCIE);
     dmaStreamEnable(uart->dmatx);
     uart->usart->CR3 |= USART_CR3_DMAT;
-    osalSysUnlockFromISR();
+    chSysUnlockFromISR();
 }
 
 static void idle_rx_handler(UARTDriver *uart)
@@ -92,7 +92,7 @@ static void idle_rx_handler(UARTDriver *uart)
               USART_SR_FE |
               USART_SR_PE)) {		/* framing error - start/stop bit lost or line break */
         /* send a line break - this will abort transmission/reception on the other end */
-        osalSysLockFromISR();
+        chSysLockFromISR();
         uart->usart->SR = ~USART_SR_LBD;
         uart->usart->CR1 |= USART_CR1_SBK;
         iomcu.reg_status.num_errors++;
@@ -110,7 +110,7 @@ static void idle_rx_handler(UARTDriver *uart)
                          STM32_DMA_CR_MINC | STM32_DMA_CR_TCIE);
         dmaStreamEnable(uart->dmarx);
         uart->usart->CR3 |= USART_CR3_DMAR;
-        osalSysUnlockFromISR();
+        chSysUnlockFromISR();
         return;
     }
 
@@ -285,7 +285,7 @@ void AP_IOMCU_FW::update()
         heater_update();
         rcin_update();
         safety_update();
-        rcout_mode_update();
+        rcout_config_update();
         rcin_serial_update();
         hal.rcout->timer_tick();
         if (dsm_bind_state) {
@@ -552,16 +552,6 @@ bool AP_IOMCU_FW::handle_code_write()
             break;
         case PAGE_REG_SETUP_CHANNEL_MASK:
             reg_setup.channel_mask = rx_io_packet.regs[0];
-            if (last_channel_mask != reg_setup.channel_mask) {
-                for (uint8_t i=0; i<IOMCU_MAX_CHANNELS; i++) {
-                    if (reg_setup.channel_mask & 1U << i) {
-                        hal.rcout->enable_ch(i);
-                    } else {
-                        hal.rcout->disable_ch(i);
-                    }
-                }
-                last_channel_mask = reg_setup.channel_mask;
-            }
             break;
         case PAGE_REG_SETUP_SBUS_RATE:
             reg_setup.sbus_rate = rx_io_packet.regs[0];
@@ -687,17 +677,6 @@ bool AP_IOMCU_FW::handle_code_write()
             return false;
         }
         memcpy(&GPIO, &rx_io_packet.regs[0] + rx_io_packet.offset, sizeof(GPIO));
-        if (GPIO.channel_mask != last_GPIO_channel_mask) {
-            for (uint8_t i=0; i<8; i++) {
-                if ((GPIO.channel_mask & (1U << i)) != 0) {
-                    hal.rcout->disable_ch(i);
-                    hal.gpio->pinMode(101+i, HAL_GPIO_OUTPUT);
-                } else {
-                    hal.rcout->enable_ch(i);
-                }
-            }
-            last_GPIO_channel_mask = GPIO.channel_mask;
-        }
         break;
 
     case PAGE_DSHOT: {
@@ -829,8 +808,33 @@ void AP_IOMCU_FW::safety_update(void)
 /*
   update hal.rcout mode if needed
  */
-void AP_IOMCU_FW::rcout_mode_update(void)
+void AP_IOMCU_FW::rcout_config_update(void)
 {
+    // channels cannot be changed from within a lock zone
+    // so needs to be done here
+    if (GPIO.channel_mask != last_GPIO_channel_mask) {
+        for (uint8_t i=0; i<8; i++) {
+            if ((GPIO.channel_mask & (1U << i)) != 0) {
+                hal.rcout->disable_ch(i);
+                hal.gpio->pinMode(101+i, HAL_GPIO_OUTPUT);
+            } else {
+                hal.rcout->enable_ch(i);
+            }
+        }
+        last_GPIO_channel_mask = GPIO.channel_mask;
+    }
+
+    if (last_channel_mask != reg_setup.channel_mask) {
+        for (uint8_t i=0; i<IOMCU_MAX_CHANNELS; i++) {
+            if (reg_setup.channel_mask & 1U << i) {
+                hal.rcout->enable_ch(i);
+            } else {
+                hal.rcout->disable_ch(i);
+            }
+        }
+        last_channel_mask = reg_setup.channel_mask;
+    }
+
     bool use_dshot = mode_out.mode >= AP_HAL::RCOutput::MODE_PWM_DSHOT150 
         && mode_out.mode <= AP_HAL::RCOutput::MODE_PWM_DSHOT600;
     if (use_dshot && !dshot_enabled) {
@@ -856,7 +860,6 @@ void AP_IOMCU_FW::rcout_mode_update(void)
         hal.rcout->set_output_mode(mode_out.mask, AP_HAL::RCOutput::MODE_PWM_BRUSHED);
         hal.rcout->set_freq(mode_out.mask, reg_setup.pwm_altrate);
     }
-
 }
 
 /*
