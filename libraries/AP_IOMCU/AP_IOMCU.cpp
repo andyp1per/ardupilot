@@ -58,7 +58,7 @@ AP_IOMCU::AP_IOMCU(AP_HAL::UARTDriver &_uart) :
     singleton = this;
 }
 
-#define IOMCU_DEBUG_ENABLE 0
+#define IOMCU_DEBUG_ENABLE 1
 
 #if IOMCU_DEBUG_ENABLE
 #include <stdio.h>

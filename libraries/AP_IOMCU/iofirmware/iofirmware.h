@@ -5,9 +5,12 @@
 #include <AP_Common/AP_Common.h>
 #include <AP_RCProtocol/AP_RCProtocol.h>
 
-
 #include "ch.h"
 #include "ioprotocol.h"
+
+#if AP_HAL_SHARED_DMA_ENABLED
+#include <AP_HAL_ChibiOS/shared_dma.h>
+#endif
 
 #define PWM_IGNORE_THIS_CHANNEL UINT16_MAX
 #define SERVO_COUNT 8
@@ -123,6 +126,13 @@ public:
 
     // DSHOT runtime
     struct page_dshot dshot;
+
+#if AP_HAL_SHARED_DMA_ENABLED
+    void tx_dma_allocate(ChibiOS::Shared_DMA *ctx);
+    void tx_dma_deallocate(ChibiOS::Shared_DMA *ctx);
+
+    ChibiOS::Shared_DMA* tx_dma_handle;
+#endif
 
     // true when override channel active
     bool override_active;

@@ -54,6 +54,22 @@ enum ioevents {
     IOEVENT_PWM=1,
 };
 
+static void uart_lld_serve_tx_end_irq(UARTDriver *uart, uint32_t flags) {
+  /* DMA errors handling.*/
+#if defined(STM32_UART_DMA_ERROR_HOOK)
+  if ((flags & (STM32_DMA_ISR_TEIF | STM32_DMA_ISR_DMEIF)) != 0) {
+    STM32_UART_DMA_ERROR_HOOK(uartp);
+  }
+#else
+  (void)flags;
+#endif
+
+  dmaStreamDisable(uart->dmatx);
+
+  /* A callback is generated, if enabled, after a completed transfer.*/
+  _uart_tx1_isr_code(uart);
+}
+
 static void dma_rx_end_cb(UARTDriver *uart)
 {
     chSysLockFromISR();
@@ -73,7 +89,12 @@ static void dma_rx_end_cb(UARTDriver *uart)
                      STM32_DMA_CR_MINC | STM32_DMA_CR_TCIE);
     dmaStreamEnable(uart->dmarx);
     uart->usart->CR3 |= USART_CR3_DMAR;
+    chSysUnlockFromISR();
 
+#if AP_HAL_SHARED_DMA_ENABLED
+    iomcu.tx_dma_handle->lock();
+#endif
+    chSysLockFromISR();
     dmaStreamSetMemory0(uart->dmatx, &iomcu.tx_io_packet);
     dmaStreamSetTransactionSize(uart->dmatx, iomcu.tx_io_packet.get_size());
     dmaStreamSetMode(uart->dmatx, uart->dmatxmode    | STM32_DMA_CR_DIR_M2P |
@@ -81,6 +102,13 @@ static void dma_rx_end_cb(UARTDriver *uart)
     dmaStreamEnable(uart->dmatx);
     uart->usart->CR3 |= USART_CR3_DMAT;
     chSysUnlockFromISR();
+}
+
+static void dma_tx_end_cb(UARTDriver *uart)
+{
+#if AP_HAL_SHARED_DMA_ENABLED
+    iomcu.tx_dma_handle->unlock();
+#endif
 }
 
 static void idle_rx_handler(UARTDriver *uart)
@@ -119,11 +147,42 @@ static void idle_rx_handler(UARTDriver *uart)
     }
 }
 
+using namespace ChibiOS;
+
+#if AP_HAL_SHARED_DMA_ENABLED
+void AP_IOMCU_FW::tx_dma_allocate(Shared_DMA *ctx)
+{
+    chSysLock();
+    // deallocate the stream that the UART code allocated
+    if (UARTD2.dmatx != nullptr) {
+        dmaStreamFreeI(UARTD2.dmatx);
+    }
+    UARTD2.dmatx = dmaStreamAllocI(STM32_UART_USART2_TX_DMA_STREAM,
+                                    STM32_UART_USART2_IRQ_PRIORITY,
+                                    (stm32_dmaisr_t)uart_lld_serve_tx_end_irq,
+                                    (void *)&UARTD2);
+    chSysUnlock();
+}
+
+/*
+  deallocate DMA channel
+ */
+void AP_IOMCU_FW::tx_dma_deallocate(Shared_DMA *ctx)
+{
+    if (UARTD2.dmatx != nullptr) {
+        chSysLock();
+        dmaStreamFreeI(UARTD2.dmatx);
+        UARTD2.dmatx = nullptr;
+        chSysUnlock();
+    }
+}
+#endif // AP_HAL_SHARED_DMA_ENABLED
+
 /*
  * UART driver configuration structure.
  */
 static UARTConfig uart_cfg = {
-    nullptr,
+    dma_tx_end_cb,
     nullptr,
     dma_rx_end_cb,
     nullptr,
@@ -143,6 +202,7 @@ void setup(void)
     iomcu.init();
 
     iomcu.calculate_fw_crc();
+
     uartStart(&UARTD2, &uart_cfg);
     uartStartReceive(&UARTD2, sizeof(iomcu.rx_io_packet), &iomcu.rx_io_packet);
 }
@@ -160,6 +220,12 @@ void AP_IOMCU_FW::init()
     config.protocol_version2 = IOMCU_PROTOCOL_VERSION2;
 
     thread_ctx = chThdGetSelfX();
+
+#if AP_HAL_SHARED_DMA_ENABLED
+    tx_dma_handle = new ChibiOS::Shared_DMA(STM32_UART_USART2_TX_DMA_STREAM, SHARED_DMA_NONE,
+                        FUNCTOR_BIND_MEMBER(&AP_IOMCU_FW::tx_dma_allocate, void, Shared_DMA *),
+                        FUNCTOR_BIND_MEMBER(&AP_IOMCU_FW::tx_dma_deallocate, void, Shared_DMA *));
+#endif
 
     if (palReadLine(HAL_GPIO_PIN_IO_HW_DETECT1) == 1 && palReadLine(HAL_GPIO_PIN_IO_HW_DETECT2) == 0) {
         has_heater = true;
