@@ -1431,6 +1431,8 @@ void RCOutput::rcout_thread() {
         // as a multiple of loop rate then ignore EVT_PWM_SEND events to preserve periodicity
         dshot_send_groups(0);
 
+        dshot_collect_dma_locks(0);
+
         if (_dshot_rate > 0) {
             _dshot_cycle = (_dshot_cycle + 1) % _dshot_rate;
         }
@@ -1590,7 +1592,7 @@ void RCOutput::dshot_send(pwm_group &group, uint64_t time_out_us)
     // if we are sharing UP channels then it might have taken a long time to get here,
     // if there's not enough time to actually send a pulse then cancel
 #if AP_HAL_SHARED_DMA_ENABLED
-    if (AP_HAL::micros64() + group.dshot_pulse_time_us > time_out_us) {
+    if (time_out_us > 0 && AP_HAL::micros64() + group.dshot_pulse_time_us > time_out_us) {
         group.dma_handle->unlock();
         return;
     }
