@@ -641,6 +641,9 @@ void Copter::one_hz_loop()
 #endif
 
     AP_Notify::flags.flying = !ap.land_complete;
+    if (arming.armed) {
+        check_outdoors_ready();
+    }
 }
 
 void Copter::init_simple_bearing()
@@ -771,6 +774,27 @@ bool Copter::get_rate_ef_targets(Vector3f& rate_ef_targets) const
         rate_ef_targets = attitude_control->get_rate_ef_targets();
     }
     return true;
+}
+
+void Copter::check_outdoors_ready() {
+    bool optflow_good = optflow.enabled() && optflow.healthy();
+    // bool rangefinder_good = rangefinder_alt_ok();
+
+    // float gps_speed_accuracy = 0;
+    // gps.speed_accuracy(0, gps_speed_accuracy);
+    // bool gps_good = copter.gps.is_healthy() && gps_speed_accuracy < 4 && gps.status() >= AP_GPS::GPS_OK_FIX_3D && ahrs.home_is_set();
+    bool gps_good = arming.gps_checks_indoor_mode(false);
+    if (!gps_good && optflow_good) {
+        ahrs.set_posvelyaw_source_set(1);
+        outdoors_ready = false;
+    } else {
+        ahrs.set_posvelyaw_source_set(0);
+        outdoors_ready = true;
+    }
+}
+
+bool Copter::is_outdoors_ready() {
+    return outdoors_ready;
 }
 
 /*
