@@ -1298,21 +1298,23 @@ void AP_OSD_Screen::draw_available_modes(uint8_t x, uint8_t y)
         Compass &_compass = AP::compass();
         const AP_InertialSensor &ins = AP::ins();
         AP_Arming &arming_obj = AP::arming();
+        AP_AHRS &ahrs_obj = AP::ahrs();
+        const AP_OpticalFlow &opflow_obj = *(AP::opticalflow());
         // RangeFinder &rangefinder = AP::rangefinder();
 
+        bool indoors_mode = ahrs_obj.get_posvelyaw_source_set() == 1;
         bool isAccelGyroReady = ins.accel_calibrated_ok_all() && ins.get_accel_health_all() && ins.gyro_calibrated_ok_all() && ins.get_gyro_health_all();
-        bool isCompassReady = _compass.healthy() && _compass.consistent();
-        bool isGPSReady = arming_obj.gps_checks(false); //gps.num_sensors() >= 1 && gps.status(0) >= AP_GPS::GPS_OK_FIX_3D && gps.is_healthy() && AP::ahrs().home_is_set();
-        bool isRangeFinderReady = true;
-        backend->write(x, y, false, "AVAILABLE MODES:");
-        backend->write(x, y+1, false, isAccelGyroReady&& isCompassReady && isGPSReady & isRangeFinderReady ?    "RC CAR:   READY" : "RC CAR:   WAITING");
-        backend->write(x, y+2, false, isAccelGyroReady && isCompassReady && isGPSReady & isRangeFinderReady ? "LEVEL 2:  READY" : "LEVEL 2:  WAITING");
-        backend->write(x, y+3, false, isAccelGyroReady && isCompassReady && isGPSReady & isRangeFinderReady ? "LEVEL 3:  READY" : "LEVEL 3:  WAITING");
-        backend->write(x, y+4, false, isAccelGyroReady && isCompassReady && isGPSReady & isRangeFinderReady ? "THR TRNR: READY" : "THR TRNR: WAITING");
-        backend->write(x, y+5, false, isAccelGyroReady ?                                                      "ACR TRNR: READY" : "ACR TRNR: WAITING");
-        backend->write(x, y+6, false, isAccelGyroReady ?                                                      "ACRO:     READY" : "ACRO:     WAITING");
-        // backend->write(x, y+7, false, "INDOORS");
-    
+        bool isCompassReady = indoors_mode ? true : (_compass.healthy() && _compass.consistent());
+        bool isGPSReady = indoors_mode ? true : arming_obj.gps_checks_indoor_mode(false); //gps.num_sensors() >= 1 && gps.status(0) >= AP_GPS::GPS_OK_FIX_3D && gps.is_healthy() && AP::ahrs().home_is_set();
+        bool isFlowReady = opflow_obj.enabled() && opflow_obj.healthy();
+        bool autonomousModesReady = isAccelGyroReady && (indoors_mode ? isFlowReady : (isCompassReady && isGPSReady));
+        backend->write(x, y, false, "MODE: %s", indoors_mode ? "INDOORS" : "OUTDOORS");
+        backend->write(x, y+1, false, autonomousModesReady ?                  "RC CAR:    READY" : "RC CAR:    WAITING");
+        backend->write(x, y+2, false, autonomousModesReady ?                  "RC CAR UNL:READY" : "RC CAR UNL:WAITING");
+        backend->write(x, y+3, false, autonomousModesReady ?                  "LEVEL:     READY" : "LEVEL:     WAITING");
+        backend->write(x, y+4, false, autonomousModesReady && !indoors_mode ? "THR TRNR:  READY" : "THR TRNR:  WAITING");
+        backend->write(x, y+5, false, isAccelGyroReady ?                      "ACR TRNR:  READY" : "ACR TRNR:  WAITING");
+        backend->write(x, y+6, false, isAccelGyroReady ?                      "ACRO:      READY" : "ACRO:      WAITING");    
     }
 }
 
