@@ -117,7 +117,6 @@ static void dma_setup_transaction(UARTDriver *uart)
                      STM32_DMA_CR_MINC | STM32_DMA_CR_TCIE);
     dmaStreamEnable(uart->dmatx);
     uart->usart->CR3 |= USART_CR3_DMAT;
-    //uart->usart->CR1 &= ~USART_CR1_IDLEIE; /* switching to TX phase so disable IDLE irq */
 
     dmaStreamSetMemory0(uart->dmarx, &iomcu.rx_io_packet);
     dmaStreamSetTransactionSize(uart->dmarx, sizeof(iomcu.rx_io_packet));
@@ -384,6 +383,11 @@ void AP_IOMCU_FW::update()
 #endif
     }
 
+    // the main firmware sends a packet always expecting a reply. As soon as the reply comes it
+    // it will send another. Since most of the time the IOMCU has what it needs as soon as it 
+    // has received a request we can delay the response until the end of the tick to prevent 
+    // data being sent while we are not ready to receive it. The processing can be done without the
+    // tx lock being held, giving dshot a chance to run on shared channels
     tx_dma_handle->lock();
     dma_setup_transaction(&UARTD2);
 }
