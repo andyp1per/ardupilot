@@ -117,6 +117,8 @@ struct page_reg_status {
     uint16_t vrssi;
     uint32_t num_errors;
     uint32_t total_pkts;
+    uint32_t total_ticks;
+    uint32_t total_events;
     uint8_t flag_safety_off;
     uint8_t err_crc;
     uint8_t err_bad_opcode;

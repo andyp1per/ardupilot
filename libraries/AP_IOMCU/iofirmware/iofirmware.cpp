@@ -55,6 +55,10 @@ enum ioevents {
     IOEVENT_TX_END=2,
 };
 
+/*
+ copy of uart_lld_serve_tx_end_irq() from ChibiOS hal_uart_lld
+ that is re-instated upon switching the DMA channel
+ */
 static void uart_lld_serve_tx_end_irq(UARTDriver *uart, uint32_t flags) {
   /* DMA errors handling.*/
 #if defined(STM32_UART_DMA_ERROR_HOOK)
@@ -71,19 +75,57 @@ static void uart_lld_serve_tx_end_irq(UARTDriver *uart, uint32_t flags) {
   _uart_tx1_isr_code(uart);
 }
 
+static void setup_rx_dma(UARTDriver* uart)
+{
+    uart->usart->CR3 &= ~USART_CR3_DMAR;
+    dmaStreamDisable(uart->dmarx);
+    dmaStreamSetMemory0(uart->dmarx, &iomcu.rx_io_packet);
+    dmaStreamSetTransactionSize(uart->dmarx, sizeof(iomcu.rx_io_packet));
+    dmaStreamSetMode(uart->dmarx, uart->dmarxmode    | STM32_DMA_CR_DIR_P2M |
+                     STM32_DMA_CR_MINC | STM32_DMA_CR_TCIE);
+    dmaStreamEnable(uart->dmarx);
+    uart->usart->CR3 |= USART_CR3_DMAR;
+}
+
+static void setup_tx_dma(UARTDriver* uart)
+{
+    uart->usart->CR3 &= ~USART_CR3_DMAT;
+    dmaStreamDisable(uart->dmatx);
+    dmaStreamSetMemory0(uart->dmatx, &iomcu.tx_io_packet);
+    dmaStreamSetTransactionSize(uart->dmatx, iomcu.tx_io_packet.get_size());
+    dmaStreamSetMode(uart->dmatx, uart->dmatxmode    | STM32_DMA_CR_DIR_M2P |
+                     STM32_DMA_CR_MINC | STM32_DMA_CR_TCIE);
+    dmaStreamEnable(uart->dmatx);
+    uart->usart->CR3 |= USART_CR3_DMAT;
+}
+
 static void dma_rx_end_cb(UARTDriver *uart)
 {
     chSysLockFromISR();
     uart->usart->CR3 &= ~USART_CR3_DMAR;
+    uart->usart->CR1 &= ~USART_CR1_IDLEIE; // switching to TX phase so disable IDLE irq
 
-    (void)uart->usart->SR;
+    (void)uart->usart->SR;  // sequence to clear IDLE status
     (void)uart->usart->DR;
     (void)uart->usart->DR;
     dmaStreamDisable(uart->dmarx);
 
-    uart->usart->CR1 &= ~USART_CR1_IDLEIE; /* switching to TX phase so disable IDLE irq */
-
     iomcu.process_io_packet();
+
+    setup_tx_dma(uart);
+
+    chSysUnlockFromISR();
+}
+
+static void dma_tx_end_cb(UARTDriver *uart)
+{
+    chSysLockFromISR();
+    uart->usart->CR3 &= ~USART_CR3_DMAT;
+
+    (void)uart->usart->SR;
+    (void)uart->usart->DR;
+    (void)uart->usart->DR;
+    dmaStreamDisable(uart->dmatx);
 
     uint32_t mask = EVENT_MASK(IOEVENT_TX_END);
     if (iomcu.pwm_update_pending) {
@@ -108,23 +150,10 @@ static void dma_setup_transaction(UARTDriver *uart)
     (void)uart->usart->SR;
     (void)uart->usart->DR;
     (void)uart->usart->DR;
-    dmaStreamDisable(uart->dmarx);
-    dmaStreamDisable(uart->dmatx);
 
-    dmaStreamSetMemory0(uart->dmatx, &iomcu.tx_io_packet);
-    dmaStreamSetTransactionSize(uart->dmatx, iomcu.tx_io_packet.get_size());
-    dmaStreamSetMode(uart->dmatx, uart->dmatxmode    | STM32_DMA_CR_DIR_M2P |
-                     STM32_DMA_CR_MINC | STM32_DMA_CR_TCIE);
-    dmaStreamEnable(uart->dmatx);
-    uart->usart->CR3 |= USART_CR3_DMAT;
-
-    dmaStreamSetMemory0(uart->dmarx, &iomcu.rx_io_packet);
-    dmaStreamSetTransactionSize(uart->dmarx, sizeof(iomcu.rx_io_packet));
-    dmaStreamSetMode(uart->dmarx, uart->dmarxmode    | STM32_DMA_CR_DIR_P2M |
-                     STM32_DMA_CR_MINC | STM32_DMA_CR_TCIE);
-    dmaStreamEnable(uart->dmarx);
-    uart->usart->CR3 |= USART_CR3_DMAR;
+    setup_rx_dma(uart);
     uart->usart->CR1 |= USART_CR1_IDLEIE; /* re-enable IDLE isr */
+
     chSysUnlock();
 }
 
@@ -144,14 +173,13 @@ static void idle_rx_handler(UARTDriver *uart)
         iomcu.reg_status.err_uart++;
 
         uart->usart->CR3 &= ~(USART_CR3_DMAT | USART_CR3_DMAR);
-        uart->usart->CR1 &= ~USART_CR1_IDLEIE; /* prevent further IDLE isrs */
 
         (void)uart->usart->SR;  // clears ORE | FE
         (void)uart->usart->DR;
         (void)uart->usart->DR;
-        dmaStreamDisable(uart->dmarx);
+        dmaStreamDisable(uart->dmatx);
+        setup_rx_dma(uart);
 
-        chEvtSignalI(iomcu.thread_ctx, EVENT_MASK(IOEVENT_TX_END)); /* have another go */
         chSysUnlockFromISR();
         return;
     }
@@ -198,7 +226,7 @@ void AP_IOMCU_FW::tx_dma_deallocate(Shared_DMA *ctx)
  * UART driver configuration structure.
  */
 static UARTConfig uart_cfg = {
-    nullptr,
+    dma_tx_end_cb,
     nullptr,
     dma_rx_end_cb,
     nullptr,
@@ -307,12 +335,29 @@ static void stackCheck(uint16_t& mstack, uint16_t& pstack) {
 void AP_IOMCU_FW::update()
 {
 #if CH_CFG_ST_FREQUENCY == 1000000
-    eventmask_t mask = chEvtWaitAny(~0);
+    eventmask_t mask = chEvtWaitAnyTimeout(~0, TIME_US2I(1000));
 #else
     // we are not running any other threads, so we can use an
     // immediate timeout here for lowest latency
     eventmask_t mask = chEvtWaitAnyTimeout(~0, TIME_IMMEDIATE);
 #endif
+    iomcu.reg_status.total_ticks++;
+    if (mask) {
+        iomcu.reg_status.total_events++;
+    } else {
+        // nothing was received, shut down the receiver until the end of the cycle
+        chSysLock();
+        UARTD2.usart->CR3 &= ~(USART_CR3_DMAT | USART_CR3_DMAR);
+        UARTD2.usart->CR1 &= ~USART_CR1_IDLEIE;
+
+        (void)UARTD2.usart->SR;  // clears ORE | FE | IDLE
+        (void)UARTD2.usart->DR;
+        (void)UARTD2.usart->DR;
+        dmaStreamDisable(UARTD2.dmarx);
+        dmaStreamDisable(UARTD2.dmatx);
+        chSysUnlock();
+    }
+
     tx_dma_handle->unlock();
 
     // we get the timestamp once here, and avoid fetching it
