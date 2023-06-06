@@ -119,12 +119,14 @@ struct page_reg_status {
     uint32_t total_pkts;
     uint32_t total_ticks;
     uint32_t total_events;
+    uint32_t deferred_locks;
     uint8_t flag_safety_off;
     uint8_t err_crc;
     uint8_t err_bad_opcode;
     uint8_t err_read;
     uint8_t err_write;
     uint8_t err_uart;
+    uint8_t err_lock;
 };
 
 struct page_rc_input {

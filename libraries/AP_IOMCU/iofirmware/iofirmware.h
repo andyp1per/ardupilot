@@ -142,6 +142,10 @@ public:
     uint32_t sbus_interval_ms;
 
     uint32_t fmu_data_received_time;
+
+    // events that will be signaled on transaction completion;
+    eventmask_t fmu_events;
+
     bool pwm_update_pending;
     uint32_t last_heater_ms;
     uint32_t reboot_time;

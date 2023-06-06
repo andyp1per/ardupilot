@@ -41,6 +41,9 @@ void loop();
 
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
+#undef TOGGLE_PIN_DEBUG
+#define TOGGLE_PIN_DEBUG(pin) do { palToggleLine(HAL_GPIO_LINE_GPIO ## pin); } while (0)
+
 /*
  enable testing of IOMCU reset using safety switch
  a value of 0 means normal operation
@@ -51,8 +54,9 @@ const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
 // pending events on the main thread
 enum ioevents {
-    IOEVENT_PWM=1,
-    IOEVENT_TX_END=2,
+    IOEVENT_PWM = EVENT_MASK(1),
+    IOEVENT_TX_BEGIN = EVENT_MASK(2),
+    IOEVENT_TX_END = EVENT_MASK(3),
 };
 
 /*
@@ -96,6 +100,7 @@ static void setup_tx_dma(UARTDriver* uart)
     dmaStreamSetMode(uart->dmatx, uart->dmatxmode    | STM32_DMA_CR_DIR_M2P |
                      STM32_DMA_CR_MINC | STM32_DMA_CR_TCIE);
     dmaStreamEnable(uart->dmatx);
+
     uart->usart->CR3 |= USART_CR3_DMAT;
 }
 
@@ -103,7 +108,6 @@ static void dma_rx_end_cb(UARTDriver *uart)
 {
     chSysLockFromISR();
     uart->usart->CR3 &= ~USART_CR3_DMAR;
-    uart->usart->CR1 &= ~USART_CR1_IDLEIE; // switching to TX phase so disable IDLE irq
 
     (void)uart->usart->SR;  // sequence to clear IDLE status
     (void)uart->usart->DR;
@@ -112,27 +116,40 @@ static void dma_rx_end_cb(UARTDriver *uart)
 
     iomcu.process_io_packet();
 
-    setup_tx_dma(uart);
+    TOGGLE_PIN_DEBUG(108);
+    TOGGLE_PIN_DEBUG(108);
+
+    setup_rx_dma(uart);
+
+    if (iomcu.tx_dma_handle->is_locked()) {    // if we have the tx lock then setup the response
+        setup_tx_dma(uart);
+    } else {                             // otherwise indicate that a response needs to be sent
+        uint32_t mask = chEvtGetAndClearEventsI(IOEVENT_TX_BEGIN);
+        if (mask) {
+            iomcu.reg_status.err_lock++;
+        }
+        // the FMU code waits 10ms for a reply so this should be easily fast enough
+        chEvtSignalI(iomcu.thread_ctx, IOEVENT_TX_BEGIN);
+    }
 
     chSysUnlockFromISR();
 }
 
 static void dma_tx_end_cb(UARTDriver *uart)
 {
+    // DMA stream has already been disabled at this point
     chSysLockFromISR();
     uart->usart->CR3 &= ~USART_CR3_DMAT;
 
     (void)uart->usart->SR;
     (void)uart->usart->DR;
     (void)uart->usart->DR;
-    dmaStreamDisable(uart->dmatx);
 
-    uint32_t mask = EVENT_MASK(IOEVENT_TX_END);
-    if (iomcu.pwm_update_pending) {
-        mask |= EVENT_MASK(IOEVENT_PWM);
-        iomcu.pwm_update_pending = false;
-    }
-    chEvtSignalI(iomcu.thread_ctx, mask);
+    TOGGLE_PIN_DEBUG(106);
+    TOGGLE_PIN_DEBUG(106);
+
+    chEvtSignalI(iomcu.thread_ctx, iomcu.fmu_events | IOEVENT_TX_END);
+    iomcu.fmu_events = 0;
 
     chSysUnlockFromISR();
 }
@@ -141,18 +158,12 @@ static void dma_setup_transaction(UARTDriver *uart)
 {
     chSysLock();
 
-    if (!iomcu.tx_dma_handle->is_locked()) {
-        return;
+    uint32_t mask = chEvtGetAndClearEventsI(IOEVENT_TX_BEGIN);
+
+    if (mask) {
+        iomcu.reg_status.deferred_locks++;
+        setup_tx_dma(uart);
     }
-
-    uart->usart->CR3 &= ~(USART_CR3_DMAR | USART_CR3_DMAT);
-
-    (void)uart->usart->SR;
-    (void)uart->usart->DR;
-    (void)uart->usart->DR;
-
-    setup_rx_dma(uart);
-    uart->usart->CR1 |= USART_CR1_IDLEIE; /* re-enable IDLE isr */
 
     chSysUnlock();
 }
@@ -335,29 +346,25 @@ static void stackCheck(uint16_t& mstack, uint16_t& pstack) {
 void AP_IOMCU_FW::update()
 {
 #if CH_CFG_ST_FREQUENCY == 1000000
-    eventmask_t mask = chEvtWaitAnyTimeout(~0, TIME_US2I(1000));
+    eventmask_t mask = chEvtWaitAnyTimeout(IOEVENT_PWM | IOEVENT_TX_END, TIME_US2I(1000));
 #else
     // we are not running any other threads, so we can use an
     // immediate timeout here for lowest latency
-    eventmask_t mask = chEvtWaitAnyTimeout(~0, TIME_IMMEDIATE);
+    eventmask_t mask = chEvtWaitAnyTimeout(IOEVENT_PWM | IOEVENT_TX_END, TIME_IMMEDIATE);
 #endif
+
+    TOGGLE_PIN_DEBUG(107);
+    TOGGLE_PIN_DEBUG(107);
+    TOGGLE_PIN_DEBUG(107);
     iomcu.reg_status.total_ticks++;
     if (mask) {
         iomcu.reg_status.total_events++;
-    } else {
-        // nothing was received, shut down the receiver until the end of the cycle
-        chSysLock();
-        UARTD2.usart->CR3 &= ~(USART_CR3_DMAT | USART_CR3_DMAR);
-        UARTD2.usart->CR1 &= ~USART_CR1_IDLEIE;
-
-        (void)UARTD2.usart->SR;  // clears ORE | FE | IDLE
-        (void)UARTD2.usart->DR;
-        (void)UARTD2.usart->DR;
-        dmaStreamDisable(UARTD2.dmarx);
-        dmaStreamDisable(UARTD2.dmatx);
-        chSysUnlock();
     }
 
+    // make sure we are not about to clobber a running transaction
+    if (!(mask & IOEVENT_TX_END)) {
+        while (UARTD2.usart->CR3 & USART_CR3_DMAT);
+    }
     tx_dma_handle->unlock();
 
     // we get the timestamp once here, and avoid fetching it
@@ -369,8 +376,7 @@ void AP_IOMCU_FW::update()
         hal.scheduler->reboot(true);
         while (true) {}
     }
-
-    if ((mask & EVENT_MASK(IOEVENT_PWM)) ||
+    if ((mask & IOEVENT_PWM) ||
         (last_safety_off != reg_status.flag_safety_off)) {
         last_safety_off = reg_status.flag_safety_off;
         pwm_out_update();
@@ -378,7 +384,6 @@ void AP_IOMCU_FW::update()
 
     uint32_t now = last_ms;
     reg_status.timestamp_ms = last_ms;
-
     // output SBUS if enabled
     if ((reg_setup.features & P_SETUP_FEATURES_SBUS1_OUT) &&
         reg_status.flag_safety_off &&
@@ -387,13 +392,12 @@ void AP_IOMCU_FW::update()
         sbus_last_ms = now;
         sbus_out_write(reg_servo.pwm, IOMCU_MAX_CHANNELS);
     }
-
     // handle FMU failsafe
     if (now - fmu_data_received_time > 200) {
         // we are not getting input from the FMU. Fill in failsafe values at 100Hz
         if (now - last_failsafe_ms > 10) {
             fill_failsafe_pwm();
-            chEvtSignal(thread_ctx, EVENT_MASK(IOEVENT_PWM));
+            chEvtSignal(thread_ctx, IOEVENT_PWM);
             last_failsafe_ms = now;
         }
         // turn amber on
@@ -403,16 +407,17 @@ void AP_IOMCU_FW::update()
         // turn amber off
         AMBER_SET(0);
     }
-
     // update status page at 20Hz
     if (now - last_status_ms > 50) {
         last_status_ms = now;
         page_status_update();
     }
-
-    // run remaining functions at 1kHz
-    if (now != last_loop_ms) {
+    // run remaining functions at 100Hz
+    // these are all relatively expensive and take ~10ms to complete
+    // so there is no way they can effectively be run faster than 100Hz
+    if (now - last_loop_ms > 10) {
         last_loop_ms = now;
+        TOGGLE_PIN_DEBUG(105);
         heater_update();
         rcin_update();
         safety_update();
@@ -423,17 +428,18 @@ void AP_IOMCU_FW::update()
             dsm_bind_step();
         }
         GPIO_write();
+        TOGGLE_PIN_DEBUG(105);
 #if CH_DBG_ENABLE_STACK_CHECK == TRUE
         stackCheck(reg_status.freemstack, reg_status.freepstack);
 #endif
     }
-
     // the main firmware sends a packet always expecting a reply. As soon as the reply comes it
     // it will send another. Since most of the time the IOMCU has what it needs as soon as it 
     // has received a request we can delay the response until the end of the tick to prevent 
     // data being sent while we are not ready to receive it. The processing can be done without the
     // tx lock being held, giving dshot a chance to run on shared channels
     tx_dma_handle->lock();
+    TOGGLE_PIN_DEBUG(107);
     dma_setup_transaction(&UARTD2);
 }
 
@@ -512,7 +518,7 @@ void AP_IOMCU_FW::rcin_update()
         if (override_active) {
             fill_failsafe_pwm();
         }
-        chEvtSignal(thread_ctx, EVENT_MASK(IOEVENT_PWM));
+        chEvtSignal(thread_ctx, IOEVENT_PWM);
     }
 }
 
@@ -789,8 +795,7 @@ bool AP_IOMCU_FW::handle_code_write()
             i++;
         }
         fmu_data_received_time = last_ms;
-        pwm_update_pending = true;
-        //chEvtSignalI(thread_ctx, EVENT_MASK(IOEVENT_PWM));
+        fmu_events |= IOEVENT_PWM;
         break;
     }
 
