@@ -20,7 +20,6 @@
 #include <AP_Math/AP_Math.h>
 #include <AP_Math/crc.h>
 #include "iofirmware.h"
-#include "hal.h"
 #include <AP_HAL_ChibiOS/RCInput.h>
 #include <AP_HAL_ChibiOS/RCOutput.h>
 #include "analog.h"
@@ -64,21 +63,8 @@ enum ioevents {
     IOEVENT_TX_END = EVENT_MASK(3),
 };
 
-/*
- copy of uart_lld_serve_tx_end_irq() from ChibiOS hal_uart_lld
- that is re-instated upon switching the DMA channel
- */
-static void uart_lld_serve_tx_end_irq(hal_uart_driver *uart, uint32_t flags) {
-    /* DMA errors handling.*/
-    if ((flags & (STM32_DMA_ISR_TEIF | STM32_DMA_ISR_DMEIF)) != 0) {
-    }
-
-    dmaStreamDisable(uart->dmatx);
-
-    /* A callback is generated, if enabled, after a completed transfer.*/
-    _uart_tx1_isr_code(uart);
-}
-
+// see https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx for a discussion of how to run
+// separate tx and rx streams
 static void setup_rx_dma(hal_uart_driver* uart)
 {
     uart->usart->CR3 &= ~USART_CR3_DMAR;
@@ -125,6 +111,7 @@ static void dma_rx_end_cb(hal_uart_driver *uart)
 
     setup_rx_dma(uart);
 
+#if AP_HAL_SHARED_DMA_ENABLED
 #if IOMCU_SEND_TX_FROM_RX
     // if we have the tx lock then setup the response
     if (iomcu.tx_dma_handle->is_locked()) {
@@ -140,7 +127,9 @@ static void dma_rx_end_cb(hal_uart_driver *uart)
     }
     // the FMU code waits 10ms for a reply so this should be easily fast enough
     chEvtSignalI(iomcu.thread_ctx, IOEVENT_TX_BEGIN);
-
+#else
+    setup_tx_dma(uart);
+#endif
     chSysUnlockFromISR();
 }
 
@@ -158,20 +147,6 @@ static void dma_tx_end_cb(hal_uart_driver *uart)
 
     chEvtSignalI(iomcu.thread_ctx, iomcu.fmu_events | IOEVENT_TX_END);
     iomcu.fmu_events = 0;
-}
-
-static void dma_setup_transaction(hal_uart_driver *uart, eventmask_t mask)
-{
-    chSysLock();
-
-    mask = chEvtGetAndClearEventsI(IOEVENT_TX_BEGIN) | mask;
-
-    if (mask & IOEVENT_TX_BEGIN) {
-        iomcu.reg_status.deferred_locks++;
-        setup_tx_dma(uart);
-    }
-
-    chSysUnlock();
 }
 
 /* replacement for ChibiOS uart_lld_serve_interrupt() */
@@ -227,6 +202,35 @@ static void idle_rx_handler(hal_uart_driver *uart)
 using namespace ChibiOS;
 
 #if AP_HAL_SHARED_DMA_ENABLED
+/*
+ copy of uart_lld_serve_tx_end_irq() from ChibiOS hal_uart_lld
+ that is re-instated upon switching the DMA channel
+ */
+static void uart_lld_serve_tx_end_irq(hal_uart_driver *uart, uint32_t flags) {
+    /* DMA errors handling.*/
+    if ((flags & (STM32_DMA_ISR_TEIF | STM32_DMA_ISR_DMEIF)) != 0) {
+    }
+
+    dmaStreamDisable(uart->dmatx);
+
+    /* A callback is generated, if enabled, after a completed transfer.*/
+    _uart_tx1_isr_code(uart);
+}
+
+void AP_IOMCU_FW::dma_setup_transaction(hal_uart_driver *uart, eventmask_t mask)
+{
+    chSysLock();
+
+    mask = chEvtGetAndClearEventsI(IOEVENT_TX_BEGIN) | mask;
+
+    if (mask & IOEVENT_TX_BEGIN) {
+        reg_status.deferred_locks++;
+        setup_tx_dma(uart);
+    }
+
+    chSysUnlock();
+}
+
 void AP_IOMCU_FW::tx_dma_allocate(Shared_DMA *ctx)
 {
     hal_uart_driver *uart = &UARTD2;
@@ -392,6 +396,7 @@ void AP_IOMCU_FW::update()
         iomcu.reg_status.total_events++;
     }
 
+#if AP_HAL_SHARED_DMA_ENABLED
     // make sure we are not about to clobber a tx already in progress
     chSysLock();
     if (UARTD2.usart->CR3 & USART_CR3_DMAT) {
@@ -402,6 +407,7 @@ void AP_IOMCU_FW::update()
     chSysUnlock();
 
     tx_dma_handle->unlock();
+#endif
 
     // we get the timestamp once here, and avoid fetching it
     // within the DMA callbacks
@@ -472,11 +478,12 @@ void AP_IOMCU_FW::update()
     // has received a request we can delay the response until the end of the tick to prevent 
     // data being sent while we are not ready to receive it. The processing can be done without the
     // tx lock being held, giving dshot a chance to run on shared channels
+#if AP_HAL_SHARED_DMA_ENABLED
     tx_dma_handle->lock();
 
-    TOGGLE_PIN_DEBUG(107);
-
     dma_setup_transaction(&UARTD2, mask);
+#endif
+    TOGGLE_PIN_DEBUG(107);
 }
 
 void AP_IOMCU_FW::pwm_out_update()

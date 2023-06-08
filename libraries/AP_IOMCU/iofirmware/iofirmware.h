@@ -5,6 +5,7 @@
 #include <AP_Common/AP_Common.h>
 #include <AP_RCProtocol/AP_RCProtocol.h>
 
+#include "hal.h"
 #include "ch.h"
 #include "ioprotocol.h"
 
@@ -130,6 +131,7 @@ public:
 #if AP_HAL_SHARED_DMA_ENABLED
     void tx_dma_allocate(ChibiOS::Shared_DMA *ctx);
     void tx_dma_deallocate(ChibiOS::Shared_DMA *ctx);
+    void dma_setup_transaction(hal_uart_driver *uart, eventmask_t mask);
 
     ChibiOS::Shared_DMA* tx_dma_handle;
 #endif
