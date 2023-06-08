@@ -337,9 +337,7 @@ private:
         // mask of channels that are enabled and active
         uint32_t en_mask;
         const stm32_dma_stream_t *dma;
-#if AP_HAL_SHARED_DMA_ENABLED
         Shared_DMA *dma_handle;
-#endif
         dmar_uint_t *dma_buffer;
         uint16_t dma_buffer_len;
         bool pwm_started;
@@ -705,7 +703,7 @@ private:
     void _set_profiled_rgb_data(pwm_group *grp, uint8_t idx, uint8_t led, uint8_t red, uint8_t green, uint8_t blue);
     void _set_profiled_clock(pwm_group *grp, uint8_t idx, uint8_t led);
     void _set_profiled_blank_frame(pwm_group *grp, uint8_t idx, uint8_t led);
-#if AP_HAL_SHARED_DMA_ENABLED
+#if HAL_SERIAL_ESC_COMM_ENABLED
     // serial output support
     bool serial_write_byte(uint8_t b);
     bool serial_read_byte(uint8_t &b);

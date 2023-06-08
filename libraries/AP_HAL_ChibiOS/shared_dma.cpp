@@ -17,16 +17,44 @@
 
 #include <hal.h>
 #include "shared_dma.h"
+#include <AP_Common/ExpandingString.h>
+
+using namespace ChibiOS;
 
 /*
   code to handle sharing of DMA channels between peripherals
  */
 
-#if CH_CFG_USE_MUTEXES == TRUE && AP_HAL_SHARED_DMA_ENABLED
+#if !AP_HAL_SHARED_DMA_ENABLED || CH_CFG_USE_MUTEXES == FALSE
+// constructor
+Shared_DMA::Shared_DMA(uint8_t _stream_id1,
+                       uint8_t _stream_id2,
+                       dma_allocate_fn_t _allocate,
+                       dma_deallocate_fn_t _deallocate)
+{
+    chMtxObjectInit(&mutex);
+    _allocate(this);
+    deallocate = _deallocate;
+}
 
-#include <AP_Common/ExpandingString.h>
+Shared_DMA::~Shared_DMA() 
+{
+    this->deallocate(this);
+}
 
-using namespace ChibiOS;
+// lock the DMA channels, blocking method
+void Shared_DMA::lock(void) {
+    chMtxLock(&mutex);
+    have_lock = true;
+}
+
+void Shared_DMA::unlock(bool success) {
+    have_lock = false;
+    chMtxUnlock(&mutex);
+}
+
+#else
+
 extern const AP_HAL::HAL& hal;
 
 Shared_DMA::dma_lock Shared_DMA::locks[SHARED_DMA_MAX_STREAM_ID+1];
@@ -54,6 +82,8 @@ Shared_DMA::Shared_DMA(uint8_t _stream_id1,
     allocate = _allocate;
     deallocate = _deallocate;
 }
+
+Shared_DMA::~Shared_DMA() {}
 
 /*
   return true if a stream ID is shared between two peripherals

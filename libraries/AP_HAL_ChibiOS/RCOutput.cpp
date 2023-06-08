@@ -903,18 +903,6 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
 {
 #if HAL_DSHOT_ENABLED
     // for dshot we setup for DMAR based output
-#if !AP_HAL_SHARED_DMA_ENABLED
-    if (group.dma == nullptr) {
-        // we don't do dma sharing in non advanced mode
-        chSysLock();
-        group.dma = dmaStreamAllocI(group.dma_up_stream_id, 10, dma_up_irq_callback, &group);
-        chSysUnlock();
-        if (group.dma == nullptr) {
-            print_group_setup_error(group, "failed to allocate DMA");
-            return false;
-        }
-    }
-#else
     if (!group.dma_handle) {
         group.dma_handle = new Shared_DMA(group.dma_up_stream_id, SHARED_DMA_NONE,
                                           FUNCTOR_BIND_MEMBER(&RCOutput::dma_allocate, void, Shared_DMA *),
@@ -924,12 +912,10 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
             return false;
         }
     }
-#endif
 
     // hold the lock during setup, to ensure there isn't a DMA operation ongoing
-#if AP_HAL_SHARED_DMA_ENABLED
     group.dma_handle->lock();
-#endif
+
     if (!group.dma_buffer || buffer_length != group.dma_buffer_len) {
         if (group.dma_buffer) {
             hal.util->free_type(group.dma_buffer, group.dma_buffer_len, AP_HAL::Util::MEM_DMA_SAFE);
@@ -937,9 +923,7 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
         }
         group.dma_buffer = (dmar_uint_t *)hal.util->malloc_type(buffer_length, AP_HAL::Util::MEM_DMA_SAFE);
         if (!group.dma_buffer) {
-#if AP_HAL_SHARED_DMA_ENABLED
             group.dma_handle->unlock();
-#endif
             print_group_setup_error(group, "failed to allocate DMA buffer");
             return false;
         }
@@ -965,9 +949,7 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
     const uint32_t target_frequency = bitrate * bit_width;
     const uint32_t prescaler = calculate_bitrate_prescaler(group.pwm_drv->clock, target_frequency, is_dshot);
     if (prescaler == 0 || prescaler > 0x8000) {
-#if AP_HAL_SHARED_DMA_ENABLED
         group.dma_handle->unlock();
-#endif
         print_group_setup_error(group, "failed to match clock speed");
         return false;
     }
@@ -1007,9 +989,7 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
         }
     }
 
-#if AP_HAL_SHARED_DMA_ENABLED
     group.dma_handle->unlock();
-#endif
     return true;
 #else
     return false;
@@ -1430,9 +1410,9 @@ void RCOutput::rcout_thread() {
         // main thread requested a new dshot send or we timed out - if we are not running
         // as a multiple of loop rate then ignore EVT_PWM_SEND events to preserve periodicity
         dshot_send_groups(0);
-
+#if AP_HAL_SHARED_DMA_ENABLED
         dshot_collect_dma_locks(0);
-
+#endif
         if (_dshot_rate > 0) {
             _dshot_cycle = (_dshot_cycle + 1) % _dshot_rate;
         }
@@ -1484,7 +1464,6 @@ __RAMFUNC__ void RCOutput::dshot_send_next_group(void* p)
 /*
   allocate DMA channel
  */
-#if AP_HAL_SHARED_DMA_ENABLED
 void RCOutput::dma_allocate(Shared_DMA *ctx)
 {
     for (auto &group : pwm_group_list) {
@@ -1527,7 +1506,6 @@ void RCOutput::dma_deallocate(Shared_DMA *ctx)
         }
     }
 }
-#endif // AP_HAL_SHARED_DMA_ENABLED
 
 /*
   create a DSHOT 16 bit packet. Based on prepareDshotPacket from betaflight
@@ -1596,19 +1574,16 @@ void RCOutput::dshot_send(pwm_group &group, uint64_t time_out_us)
         return;
     }
 
-#if AP_HAL_SHARED_DMA_ENABLED
     // first make sure we have the DMA channel before anything else
     osalDbgAssert(!group.dma_handle->is_locked(), "DMA handle is already locked");
     group.dma_handle->lock();
-#endif
+
     // if we are sharing UP channels then it might have taken a long time to get here,
     // if there's not enough time to actually send a pulse then cancel
-#if AP_HAL_SHARED_DMA_ENABLED
     if (time_out_us > 0 && AP_HAL::micros64() + group.dshot_pulse_time_us > time_out_us) {
         group.dma_handle->unlock();
         return;
     }
-#endif
 
     // only the timer thread releases the locks
     group.dshot_waiter = rcout_thread_ctx;

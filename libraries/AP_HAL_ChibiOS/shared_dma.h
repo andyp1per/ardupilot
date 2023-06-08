@@ -23,8 +23,6 @@
 // DMA stream ID for stream_id2 when only one is needed
 #define SHARED_DMA_NONE 255
 
-#if AP_HAL_SHARED_DMA_ENABLED
-
 class ChibiOS::Shared_DMA
 {
 public:
@@ -37,19 +35,25 @@ public:
                dma_allocate_fn_t allocate,
                dma_allocate_fn_t deallocate);
 
-    // initialise the stream locks
-    static void init(void);
+    ~Shared_DMA();
 
     // blocking lock call
     void lock(void);
-
-    // non-blocking lock call
-    bool lock_nonblock(void);
 
     // unlock call. The DMA channel will not be immediately
     // deallocated. Instead it will be deallocated if another driver
     // needs it
     void unlock(bool success = true);
+
+    // is this DMA channel locked?
+    bool is_locked(void) const { return have_lock; }
+
+#if AP_HAL_SHARED_DMA_ENABLED
+    // initialise the stream locks
+    static void init(void);
+
+    // non-blocking lock call
+    bool lock_nonblock(void);
 
     //should be called inside the destructor of Shared DMA participants
     void unregister(void);
@@ -58,8 +62,6 @@ public:
     // by multiple drivers
     bool has_contention(void) const { return contention; }
 
-    // is this DMA channel locked?
-    bool is_locked(void) const { return have_lock; }
 
     // lock all shared DMA channels. Used on reboot
     static void lock_all(void);
@@ -72,10 +74,8 @@ public:
 
 private:
     dma_allocate_fn_t allocate;
-    dma_allocate_fn_t deallocate;
     uint8_t stream_id1;
     uint8_t stream_id2;
-    bool have_lock;
 
     // we set the contention flag if two drivers are fighting over a DMA channel.
     // the UART driver uses this to change its max transmit size to reduce latency
@@ -112,6 +112,11 @@ private:
         uint32_t uncontended_locks;
         uint32_t transactions;
     } *_contention_stats;
+#else
+private:
+    mutex_t mutex;
+#endif // AP_HAL_SHARED_DMA_ENABLED
+    bool have_lock;
+    dma_allocate_fn_t deallocate;
 };
 
-#endif // AP_HAL_SHARED_DMA_ENABLED
