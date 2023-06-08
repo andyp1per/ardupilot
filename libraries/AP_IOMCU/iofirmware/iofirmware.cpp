@@ -41,9 +41,6 @@ void loop();
 
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
-#undef TOGGLE_PIN_DEBUG
-#define TOGGLE_PIN_DEBUG(pin) do { palToggleLine(HAL_GPIO_LINE_GPIO ## pin); } while (0)
-
 /*
  enable testing of IOMCU reset using safety switch
  a value of 0 means normal operation
@@ -51,7 +48,14 @@ const AP_HAL::HAL& hal = AP_HAL::get_HAL();
  a value of 2 means test with reboot
 */
 #define IOMCU_ENABLE_RESET_TEST 0
-#define SEND_TX_FROM_RX 1
+#ifndef IOMCU_SEND_TX_FROM_RX
+#define IOMCU_SEND_TX_FROM_RX 1
+#endif
+// enable timing GPIO pings
+#ifdef IOMCU_LOOP_TIMING_DEBUG
+#undef TOGGLE_PIN_DEBUG
+#define TOGGLE_PIN_DEBUG(pin) do { palToggleLine(HAL_GPIO_LINE_GPIO ## pin); } while (0)
+#endif
 
 // pending events on the main thread
 enum ioevents {
@@ -81,6 +85,7 @@ static void setup_rx_dma(UARTDriver* uart)
     dmaStreamDisable(uart->dmarx);
     dmaStreamSetMemory0(uart->dmarx, &iomcu.rx_io_packet);
     dmaStreamSetTransactionSize(uart->dmarx, sizeof(iomcu.rx_io_packet));
+    dmaStreamSetPeripheral(uart->dmarx, &(uart->usart->DR));
     dmaStreamSetMode(uart->dmarx, uart->dmarxmode    | STM32_DMA_CR_DIR_P2M |
                      STM32_DMA_CR_MINC | STM32_DMA_CR_TCIE);
     dmaStreamEnable(uart->dmarx);
@@ -93,6 +98,8 @@ static void setup_tx_dma(UARTDriver* uart)
     dmaStreamDisable(uart->dmatx);
     dmaStreamSetMemory0(uart->dmatx, &iomcu.tx_io_packet);
     dmaStreamSetTransactionSize(uart->dmatx, iomcu.tx_io_packet.get_size());
+    // starting the UART allocates the peripheral statically, so we need to reinstate it after swapping
+    dmaStreamSetPeripheral(uart->dmatx, &(uart->usart->DR));
     dmaStreamSetMode(uart->dmatx, uart->dmatxmode    | STM32_DMA_CR_DIR_M2P |
                      STM32_DMA_CR_MINC | STM32_DMA_CR_TCIE);
     // enable transmission complete interrupt
@@ -118,7 +125,7 @@ static void dma_rx_end_cb(UARTDriver *uart)
 
     setup_rx_dma(uart);
 
-#if SEND_TX_FROM_RX
+#if IOMCU_SEND_TX_FROM_RX
     // if we have the tx lock then setup the response
     if (iomcu.tx_dma_handle->is_locked()) {
         setup_tx_dma(uart);
@@ -140,7 +147,6 @@ static void dma_rx_end_cb(UARTDriver *uart)
 static void dma_tx_end_cb(UARTDriver *uart)
 {
     // DMA stream has already been disabled at this point
-    chSysLockFromISR();
     uart->usart->CR3 &= ~USART_CR3_DMAT;
 
     (void)uart->usart->SR;
@@ -152,8 +158,6 @@ static void dma_tx_end_cb(UARTDriver *uart)
 
     chEvtSignalI(iomcu.thread_ctx, iomcu.fmu_events | IOEVENT_TX_END);
     iomcu.fmu_events = 0;
-
-    chSysUnlockFromISR();
 }
 
 static void dma_setup_transaction(UARTDriver *uart, eventmask_t mask)
@@ -207,10 +211,10 @@ static void idle_rx_handler(UARTDriver *uart)
         uart->usart->SR &= ~USART_SR_TC;
         uart->usart->CR1 = cr1 & ~USART_CR1_TCIE;
 
-        chSysUnlockFromISR();
-
         /* End of transmission, a callback is generated.*/
         _uart_tx2_isr_code(uart);
+
+        chSysUnlockFromISR();
     }
 
     if (sr & USART_SR_IDLE) {
@@ -231,8 +235,6 @@ void AP_IOMCU_FW::tx_dma_allocate(Shared_DMA *ctx)
                                         STM32_UART_USART2_IRQ_PRIORITY,
                                         (stm32_dmaisr_t)uart_lld_serve_tx_end_irq,
                                         (void *)&UARTD2);
-        // starting the UART allocates the peripheral statically, so we need to reinstate it after swapping
-        dmaStreamSetPeripheral(UARTD2.dmatx, &UARTD2.usart->DR);
     }
     chSysUnlock();
 }
@@ -282,6 +284,11 @@ void setup(void)
 
     uartStart(&UARTD2, &uart_cfg);
     uartStartReceive(&UARTD2, sizeof(iomcu.rx_io_packet), &iomcu.rx_io_packet);
+
+    // disable the pieces from the UART which will get enabled later
+    chSysLock();
+    UARTD2.usart->CR3 &= ~USART_CR3_DMAT;
+    chSysUnlock();
 }
 
 void loop(void)
@@ -383,12 +390,13 @@ void AP_IOMCU_FW::update()
     }
 
     // make sure we are not about to clobber a tx already in progress
+    chSysLock();
     if (UARTD2.usart->CR3 & USART_CR3_DMAT) {
-        chSysLock();
-        dmaWaitCompletion(UARTD2.dmatx);
-        UARTD2.usart->CR3 &= ~USART_CR3_DMAT;
+        chEvtSignal(thread_ctx, mask & ~IOEVENT_TX_END);
         chSysUnlock();
+        return;
     }
+    chSysUnlock();
 
     tx_dma_handle->unlock();
 
