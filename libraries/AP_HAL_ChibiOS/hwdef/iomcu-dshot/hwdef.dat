@@ -44,3 +44,9 @@ define CH_CFG_ST_FREQUENCY 1000000
 define PORT_INT_REQUIRED_STACK 64
 # "main" stack is only used for exceptions and ISR, but they can be nested
 MAIN_STACK 0x100
+
+# defines to allow the loop timing to be observed with a Saleae
+#define IOMCU_LOOP_TIMING_DEBUG 1
+#undef PB0 PB1
+#PB0 PINIO1 OUTPUT GPIO(107) LOW
+#PB1 PINIO2 OUTPUT GPIO(108) LOW
