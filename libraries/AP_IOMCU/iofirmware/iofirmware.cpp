@@ -68,7 +68,7 @@ enum ioevents {
  copy of uart_lld_serve_tx_end_irq() from ChibiOS hal_uart_lld
  that is re-instated upon switching the DMA channel
  */
-static void uart_lld_serve_tx_end_irq(UARTDriver *uart, uint32_t flags) {
+static void uart_lld_serve_tx_end_irq(hal_uart_driver *uart, uint32_t flags) {
     /* DMA errors handling.*/
     if ((flags & (STM32_DMA_ISR_TEIF | STM32_DMA_ISR_DMEIF)) != 0) {
     }
@@ -79,7 +79,7 @@ static void uart_lld_serve_tx_end_irq(UARTDriver *uart, uint32_t flags) {
     _uart_tx1_isr_code(uart);
 }
 
-static void setup_rx_dma(UARTDriver* uart)
+static void setup_rx_dma(hal_uart_driver* uart)
 {
     uart->usart->CR3 &= ~USART_CR3_DMAR;
     dmaStreamDisable(uart->dmarx);
@@ -92,7 +92,7 @@ static void setup_rx_dma(UARTDriver* uart)
     uart->usart->CR3 |= USART_CR3_DMAR;
 }
 
-static void setup_tx_dma(UARTDriver* uart)
+static void setup_tx_dma(hal_uart_driver* uart)
 {
     uart->usart->CR3 &= ~USART_CR3_DMAT;
     dmaStreamDisable(uart->dmatx);
@@ -111,7 +111,7 @@ static void setup_tx_dma(UARTDriver* uart)
     uart->usart->CR3 |= USART_CR3_DMAT;
 }
 
-static void dma_rx_end_cb(UARTDriver *uart)
+static void dma_rx_end_cb(hal_uart_driver *uart)
 {
     chSysLockFromISR();
     uart->usart->CR3 &= ~USART_CR3_DMAR;
@@ -144,7 +144,7 @@ static void dma_rx_end_cb(UARTDriver *uart)
     chSysUnlockFromISR();
 }
 
-static void dma_tx_end_cb(UARTDriver *uart)
+static void dma_tx_end_cb(hal_uart_driver *uart)
 {
     // DMA stream has already been disabled at this point
     uart->usart->CR3 &= ~USART_CR3_DMAT;
@@ -160,7 +160,7 @@ static void dma_tx_end_cb(UARTDriver *uart)
     iomcu.fmu_events = 0;
 }
 
-static void dma_setup_transaction(UARTDriver *uart, eventmask_t mask)
+static void dma_setup_transaction(hal_uart_driver *uart, eventmask_t mask)
 {
     chSysLock();
 
@@ -175,7 +175,7 @@ static void dma_setup_transaction(UARTDriver *uart, eventmask_t mask)
 }
 
 /* replacement for ChibiOS uart_lld_serve_interrupt() */
-static void idle_rx_handler(UARTDriver *uart)
+static void idle_rx_handler(hal_uart_driver *uart)
 {
     volatile uint16_t sr;
     sr = uart->usart->SR; /* SR reset step 1.*/
@@ -229,12 +229,13 @@ using namespace ChibiOS;
 #if AP_HAL_SHARED_DMA_ENABLED
 void AP_IOMCU_FW::tx_dma_allocate(Shared_DMA *ctx)
 {
+    hal_uart_driver *uart = &UARTD2;
     chSysLock();
-    if (UARTD2.dmatx == nullptr) {
-        UARTD2.dmatx = dmaStreamAllocI(STM32_UART_USART2_TX_DMA_STREAM,
+    if (uart->dmatx == nullptr) {
+        uart->dmatx = dmaStreamAllocI(STM32_UART_USART2_TX_DMA_STREAM,
                                         STM32_UART_USART2_IRQ_PRIORITY,
                                         (stm32_dmaisr_t)uart_lld_serve_tx_end_irq,
-                                        (void *)&UARTD2);
+                                        (void *)uart);
     }
     chSysUnlock();
 }
@@ -244,14 +245,15 @@ void AP_IOMCU_FW::tx_dma_allocate(Shared_DMA *ctx)
  */
 void AP_IOMCU_FW::tx_dma_deallocate(Shared_DMA *ctx)
 {
+    hal_uart_driver *uart = &UARTD2;
     chSysLock();
-    if (UARTD2.dmatx != nullptr) {
+    if (uart->dmatx != nullptr) {
         // defensively make sure the DMA is fully shutdown before swapping
-        UARTD2.usart->CR3 &= ~USART_CR3_DMAT;
-        dmaWaitCompletion(UARTD2.dmatx);
-        dmaStreamSetPeripheral(UARTD2.dmatx, nullptr);
-        dmaStreamFreeI(UARTD2.dmatx);
-        UARTD2.dmatx = nullptr;
+        uart->usart->CR3 &= ~USART_CR3_DMAT;
+        dmaStreamDisable(uart->dmatx);
+        dmaStreamSetPeripheral(uart->dmatx, nullptr);
+        dmaStreamFreeI(uart->dmatx);
+        uart->dmatx = nullptr;
     }
     chSysUnlock();
 }
@@ -375,7 +377,8 @@ static void stackCheck(uint16_t& mstack, uint16_t& pstack) {
 void AP_IOMCU_FW::update()
 {
 #if CH_CFG_ST_FREQUENCY == 1000000
-    eventmask_t mask = chEvtWaitAnyTimeout(IOEVENT_PWM | IOEVENT_TX_END | IOEVENT_TX_BEGIN, TIME_US2I(1000));
+    // run the main loop at 10Khz, the allows dshot timing to be much more precise due to increased lock availability
+    eventmask_t mask = chEvtWaitAnyTimeout(IOEVENT_PWM | IOEVENT_TX_END | IOEVENT_TX_BEGIN, TIME_US2I(100));
 #else
     // we are not running any other threads, so we can use an
     // immediate timeout here for lowest latency
