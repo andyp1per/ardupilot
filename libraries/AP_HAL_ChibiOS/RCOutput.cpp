@@ -1491,6 +1491,11 @@ void RCOutput::dma_allocate(Shared_DMA *ctx)
         if (group.dma_handle == ctx && group.dma == nullptr) {
             chSysLock();
             group.dma = dmaStreamAllocI(group.dma_up_stream_id, 10, dma_up_irq_callback, &group);
+#if defined(IOMCU_FW)
+            if (group.pwm_started) {
+                pwmStart(group.pwm_drv, &group.pwm_cfg);
+            }
+#endif
             chSysUnlock();
 #if STM32_DMA_SUPPORTS_DMAMUX
             if (group.dma) {
@@ -1509,6 +1514,13 @@ void RCOutput::dma_deallocate(Shared_DMA *ctx)
     for (auto &group : pwm_group_list) {
         if (group.dma_handle == ctx && group.dma != nullptr) {
             chSysLock();
+#if defined(IOMCU_FW)
+            // leaving the peripheral running on IOMCU plays havoc with the UART that is
+            // also sharing this channel
+            if (group.pwm_started) {
+                pwmStop(group.pwm_drv);
+            }
+#endif
             dmaStreamFreeI(group.dma);
             group.dma = nullptr;
             chSysUnlock();
@@ -1790,7 +1802,9 @@ void RCOutput::send_pulses_DMAR(pwm_group &group, uint32_t buffer_length)
       datasheet. Many thanks to the betaflight developers for coming
       up with this great method.
      */
+#ifdef HAL_GPIO_LINE_GPIO54
     TOGGLE_PIN_DEBUG(54);
+#endif
 #if STM32_DMA_SUPPORTS_DMAMUX
     dmaSetRequestSource(group.dma, group.dma_up_channel);
 #endif
@@ -1817,8 +1831,9 @@ void RCOutput::send_pulses_DMAR(pwm_group &group, uint32_t buffer_length)
     // burst address (BA) of the CCR register, burst length (BL) of 4 (0b11)
     group.pwm_drv->tim->DCR = STM32_TIM_DCR_DBA(ccr_ofs) | STM32_TIM_DCR_DBL(3);
     group.dshot_state = DshotState::SEND_START;
-
+#ifdef HAL_GPIO_LINE_GPIO54
     TOGGLE_PIN_DEBUG(54);
+#endif
 
     dmaStreamEnable(group.dma);
     // record when the transaction was started
