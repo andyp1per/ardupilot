@@ -768,6 +768,16 @@ void NavEKF3_core::readBaroData()
         // save baro measurement to buffer to be fused later
         storedBaro.push(baroDataNew);
     }
+
+    // Check the buffer for measurements that have been overtaken by the fusion time horizon and need to be fused
+    baroDataToFuse = storedBaro.recall(baroDataDelayed,imuDataDelayed.time_ms);
+
+    // Allow use of a default value if enabled
+    if (!useBaro() &&
+        imuDataDelayed.time_ms - baroDataDelayed.time_ms > 200) {
+        baroDataDelayed.hgt = 0.0f;
+        baroDataDelayed.time_ms = 0;
+    }
 }
 
 // calculate filtered offset between baro height measurement and EKF height estimate

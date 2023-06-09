@@ -153,6 +153,10 @@ public:
         return _RFRN.ahrs_airspeed_sensor_enabled;
     }
 
+    bool baro_enabled(void) const {
+        return _baro.num_instances() > 0;
+    }
+
     // this replaces AP::ahrs()->EAS2TAS(), which should probably go
     // away in favour of just using the Baro method.
     // get apparent to true airspeed ratio

@@ -841,6 +841,9 @@ private:
     // return true if we should use the airspeed sensor
     bool useAirspeed(void) const;
 
+    // return true if we should use the baro
+    bool useBaro(void) const;
+
     // return true if the vehicle code has requested the filter to be ready for flight
     bool readyToUseGPS(void) const;
 

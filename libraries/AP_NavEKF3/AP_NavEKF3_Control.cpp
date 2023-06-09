@@ -493,6 +493,12 @@ bool NavEKF3_core::useAirspeed(void) const
     return dal.airspeed_sensor_enabled();
 }
 
+// return true if we should use the baro
+bool NavEKF3_core::useBaro(void) const
+{
+    return dal.baro_enabled();
+}
+
 // return true if we should use the range finder sensor
 bool NavEKF3_core::useRngFinder(void) const
 {
