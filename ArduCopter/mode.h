@@ -75,6 +75,7 @@ public:
     // return a string for this flightmode
     virtual const char *name() const = 0;
     virtual const char *name4() const = 0;
+    // virtual char *sprout_name() {return (char *)(name()); }
 
     bool do_user_takeoff(float takeoff_alt_cm, bool must_navigate);
     virtual bool is_taking_off() const;
@@ -801,32 +802,6 @@ private:
     // Circle
     bool speed_changing = false;     // true when the roll stick is being held to facilitate stopping at 0 rate
 };
-
-// class ModeRCCar : public Mode {
-
-// public:
-//     // inherit constructor
-//     using Mode::Mode;
-//     Number mode_number() const override { return Number::RCCAR; }
-
-//     bool init(bool ignore_checks) override;
-//     void run() override;
-
-//     bool requires_GPS() const override { return true; }
-//     bool has_manual_throttle() const override { return false; }
-//     bool allows_arming(AP_Arming::Method method) const override { return true; };
-//     bool is_autopilot() const override { return false; }
-
-// protected:
-
-//     const char *name() const override { return "RCCAR"; }
-//     const char *name4() const override { return "RCAR"; }
-
-// private:
-
-//     float get_throttle_assist(float velz, float pilot_throttle_scaled);
-
-// };
 
 class ModeDrift : public Mode {
 
@@ -2003,8 +1978,10 @@ public:
 
 protected:
 
-    const char *name() const override { return "RCCAR"; }
+    const char *name() const override { return "RC CAR"; }
     const char *name4() const override { return "RCAR"; }
+    // char *sprout_name() override;
+    
 
 // private:
 

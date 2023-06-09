@@ -777,16 +777,18 @@ bool Copter::get_rate_ef_targets(Vector3f& rate_ef_targets) const
 }
 
 void Copter::check_outdoors_ready() {
-    // bool optflow_good = optflow.enabled() && optflow.healthy();
-    // bool gps_good = arming.gps_checks_indoor_mode(false);
-    // if (!gps_good && optflow_good) {
-    //     ahrs.set_posvelyaw_source_set(1);
-    //     outdoors_ready = false;
-    // } else {
-    //     ahrs.set_posvelyaw_source_set(0);
-    //     outdoors_ready = true;
-    // }
-    outdoors_ready = ahrs.get_posvelyaw_source_set() == 2;
+    if (!(arming.armed)) { //Only update mode when disarmed
+        bool optflow_good = optflow.enabled() && optflow.healthy();
+        bool gps_good = arming.gps_checks_indoor_mode(false) && (gps.num_sats() >= 9 && gps.get_hdop() < 1.2f);
+        if (!gps_good && optflow_good) {
+            ahrs.set_posvelyaw_source_set(1);
+            outdoors_ready = false;
+        } else {
+            ahrs.set_posvelyaw_source_set(0);
+            outdoors_ready = true;
+        }
+    }
+    // outdoors_ready = ahrs.get_posvelyaw_source_set() == 2;
 }
 
 bool Copter::is_outdoors_ready() {

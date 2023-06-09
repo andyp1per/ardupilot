@@ -201,6 +201,7 @@ private:
     AP_OSD_Setting aspd2;
     AP_OSD_Setting vspeed{false, 24, 9};
     AP_OSD_Setting available_modes{true,9,2};
+    AP_OSD_Setting selected_mode{true,0,0};
 #if HAL_WITH_ESC_TELEM
     AP_OSD_Setting esc_temp {false, 24, 13};
     AP_OSD_Setting esc_rpm{false, 22, 12};
@@ -251,6 +252,7 @@ private:
     AP_Int8 font_index;
 #endif
     void draw_available_modes(uint8_t x, uint8_t y);
+    void draw_selected_mode(uint8_t x, uint8_t y);
     void draw_altitude(uint8_t x, uint8_t y);
     void draw_bat_volt(uint8_t instance,VoltageType  type,uint8_t x, uint8_t y);
     void draw_bat_volt(uint8_t x, uint8_t y);

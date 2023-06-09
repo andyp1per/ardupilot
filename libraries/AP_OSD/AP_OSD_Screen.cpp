@@ -1291,6 +1291,12 @@ float AP_OSD_AbstractScreen::u_scale(enum unit_type unit, float value)
     return value * scale[units][unit] + (offsets[units]?offsets[units][unit]:0);
 }
 
+void AP_OSD_Screen::draw_selected_mode(uint8_t x, uint8_t y) 
+{
+    AP_Notify * notify = AP_Notify::get_singleton();
+    backend->write(x, y, false, "SELECTED MODE: %s", notify->get_flight_mode_str());
+}
+
 void AP_OSD_Screen::draw_available_modes(uint8_t x, uint8_t y)
 {
     if (!hal.util->get_soft_armed()) {
@@ -2313,6 +2319,7 @@ void AP_OSD_Screen::draw(void)
     DRAW_SETTING(callsign);
     DRAW_SETTING(current2);
     DRAW_SETTING(available_modes);
+    DRAW_SETTING(selected_mode);
 }
 #endif
 #endif // OSD_ENABLED

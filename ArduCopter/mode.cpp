@@ -413,6 +413,7 @@ void Copter::notify_flight_mode() {
     AP_Notify::flags.autopilot_mode = flightmode->is_autopilot();
     AP_Notify::flags.flight_mode = (uint8_t)flightmode->mode_number();
     notify.set_flight_mode_str(flightmode->name4());
+    // notify.set_sprout_flight_mode_str(flightmode->sprout_name());
 }
 
 // get_pilot_desired_angle - transform pilot's roll or pitch input into a desired lean angle
