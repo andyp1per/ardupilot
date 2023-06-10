@@ -132,9 +132,15 @@ CSRC += $(HWDEF)/common/stubs.c \
 	   $(HWDEF)/common/flash.c \
 	   $(HWDEF)/common/malloc.c \
 	   $(HWDEF)/common/hrt.c \
-       $(HWDEF)/common/stm32_util.c \
-       $(HWDEF)/common/bouncebuffer.c \
-       $(HWDEF)/common/watchdog.c
+     $(HWDEF)/common/stm32_util.c \
+     $(HWDEF)/common/bouncebuffer.c \
+     $(HWDEF)/common/watchdog.c
+
+ifeq ($(USE_LITTLEFS),yes)
+include $(CHIBIOS)/os/various/littlefs_bindings/littlefs.mk
+ALLCSRC += $(CHIBIOS)/os/hal/lib/complex/serial_nor/hal_serial_nor.c
+ALLINC += $(CHIBIOS)/os/hal/lib/complex/serial_nor
+endif
 
 ifeq ($(USE_USB_MSD),yes)
 CSRC += $(CHIBIOS)/os/various/scsi_bindings/lib_scsi.c \

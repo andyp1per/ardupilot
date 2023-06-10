@@ -742,6 +742,12 @@ def has_sdcard_spi():
             return True
     return False
 
+def has_snor_spi():
+    '''check for serial nor connected to spi bus'''
+    for dev in spidev:
+        if(dev[0] == 'snor'):
+            return True
+    return False
 
 def get_ram_map():
     '''get RAM_MAP. May be different for bootloader'''
@@ -920,6 +926,10 @@ def write_mcu_config(f):
         f.write('#define HAL_USE_SDC FALSE\n')
         build_flags.append('USE_FATFS=no')
         env_vars['DISABLE_SCRIPTING'] = True
+        if has_snor_spi():
+            env_vars['USE_LIITLEFS'] = True
+            build_flags.append('USE_LITTLEFS=yes')
+
     if 'OTG1' in bytype:
         if get_mcu_config('STM32_OTG2_IS_OTG1', False) is not None:
             f.write('#define STM32_USB_USE_OTG2                  TRUE\n')
@@ -1499,8 +1509,10 @@ def write_SPI_config(f):
 def write_WSPI_table(f):
     '''write SPI device table'''
     f.write('\n// WSPI device table\n')
+    print('FOOO')
     devlist = []
     for dev in wspidev:
+        print(dev)
         if len(dev) != 6:
             print("Badly formed WSPIDEV line %s" % dev)
         name = '"' + dev[0] + '"'
@@ -1509,8 +1521,8 @@ def write_WSPI_table(f):
         speed = dev[3]
         size_pow2 = dev[4]
         ncs_clk_delay = dev[5]
-        if not bus.startswith('QUADSPI') and not bus.startswith('OCTOSPI') or bus not in wspi_list:
-            error("Bad QUADSPI/OCTOSPI bus in QSPIDEV line %s" % dev)
+        if not bus.startswith('QUADSPI') and not bus.startswith('OCTOSPI') and not bus.startswith('SPI') or bus not in wspi_list:
+            error("Bad QUADSPI/OCTOSPI/SPI bus in QSPIDEV/OSPIDEV/WSPIDEV line %s" % dev)
         if mode not in ['MODE1', 'MODE3']:
             error("Bad MODE in WSPIDEV line %s" % dev)
         if not speed.endswith('*MHZ') and not speed.endswith('*KHZ'):
@@ -1525,9 +1537,9 @@ def write_WSPI_table(f):
     for dev in wspidev:
         f.write("#define HAL_HAS_WSPI_%s 1\n" % dev[0].upper().replace("-", "_"))
         if dev[1].startswith('QUADSPI'):
-            f.write("#define HAL_QSPI%d_CLK (%s)" % (int(bus[7:]), speed))
+            f.write("#define HAL_QSPI%d_CLK (%s)" % (int(bus[-1:]), speed))
         else:
-            f.write("#define HAL_OSPI%d_CLK (%s)" % (int(bus[7:]), speed))
+            f.write("#define HAL_OSPI%d_CLK (%s)" % (int(bus[-1:]), speed))
     f.write("\n")
 
 
@@ -1540,13 +1552,14 @@ def write_WSPI_config(f):
         if (t.startswith('QUADSPI') or t.startswith('OCTOSPI')) and not args.bootloader:
             f.write('#define HAL_XIP_ENABLED TRUE\n')
 
+    print(wspidev)
     if len(wspidev) == 0:
         # nothing else to do
         return
 
     for t in list(bytype.keys()) + list(alttype.keys()):
-        print(t)
-        if t.startswith('QUADSPI') or t.startswith('OCTOSPI'):
+        if t.startswith('QUADSPI') or t.startswith('OCTOSPI') or (t.startswith('SPI') and t in [c[1] for c in wspidev]):
+            print(t)
             wspi_list.append(t)
 
     wspi_list = sorted(wspi_list)
@@ -1555,7 +1568,7 @@ def write_WSPI_config(f):
     f.write('#define HAL_USE_WSPI TRUE\n')
     devlist = []
     for dev in wspi_list:
-        n = int(dev[7:])
+        n = int(dev[-1:])
         devlist.append('HAL_WSPI%u_CONFIG' % n)
         f.write(
             '#define HAL_WSPI%u_CONFIG { &WSPID%u, %u}\n'
@@ -2914,6 +2927,8 @@ def process_line(line):
     elif a[0] == 'QSPIDEV':
         wspidev.append(a[1:])
     elif a[0] == 'OSPIDEV':
+        wspidev.append(a[1:])
+    elif a[0] == 'WSPIDEV':
         wspidev.append(a[1:])
     elif a[0] == 'IMU':
         imu_list.append(a[1:])

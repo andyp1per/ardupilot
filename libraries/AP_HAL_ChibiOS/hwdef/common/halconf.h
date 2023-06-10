@@ -584,6 +584,44 @@
 #define WSPI_USE_MUTUAL_EXCLUSION           TRUE
 #endif
 
+/*===========================================================================*/
+/* SNOR driver related settings.                                             */
+/*===========================================================================*/
 
+/**
+ * @brief   Physical transport interface.
+ */
+#if !defined(SNOR_BUS_DRIVER) || defined(__DOXYGEN__)
+#define SNOR_BUS_DRIVER                     SNOR_BUS_DRIVER_SPI
+#endif
+
+/**
+ * @brief   Shared bus switch.
+ * @details If set to @p TRUE the device acquires bus ownership
+ *          on each transaction.
+ * @note    Requires @p SPI_USE_MUTUAL_EXCLUSION or
+ *          @p WSPI_USE_MUTUAL_EXCLUSION depending on mode selected
+ *          with @p SNOR_BUS_MODE.
+ */
+#if !defined(SNOR_SHARED_BUS) || defined(__DOXYGEN__)
+#define SNOR_SHARED_BUS                     TRUE
+#endif
+
+/**
+ * @brief   Exclusive access control.
+ * @note    Disabling this option saves both code and data space.
+ */
+#if !defined(SNOR_USE_MUTUAL_EXCLUSION) || defined(__DOXYGEN__)
+#define SNOR_USE_MUTUAL_EXCLUSION           TRUE
+#endif
+
+/**
+ * @brief   SPI 4-bytes address switch
+ * @details If set to @p TRUE the device will use 4-bytes address
+ *          in SPI bus, only relevant if SPI is used
+ */
+#if !defined(SNOR_SPI_4BYTES_ADDRESS) || defined(__DOXYGEN__)
+#define SNOR_SPI_4BYTES_ADDRESS             FALSE
+#endif
 
 /** @} */

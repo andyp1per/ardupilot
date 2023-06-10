@@ -21,7 +21,6 @@
 #include "hwdef/common/spi_hook.h"
 #include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_Filesystem/AP_Filesystem.h>
-#include "bouncebuffer.h"
 #include "stm32_util.h"
 
 extern const AP_HAL::HAL& hal;
