@@ -537,7 +537,7 @@ void* get_addr_mem_region_end_addr(void *addr)
     return 0;
 }
 
-#ifdef USE_POSIX
+#ifdef USE_POSIX_FATFS
 /*
   allocation functions for FATFS
  */
@@ -567,4 +567,4 @@ void ff_memfree(void* mblock)
 {
     free(mblock);
 }
-#endif // USE_POSIX
+#endif // USE_POSIX_FATFS

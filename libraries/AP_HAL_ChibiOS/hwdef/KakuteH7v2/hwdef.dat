@@ -5,9 +5,6 @@ include ../KakuteH7-bdshot/hwdef.dat
 undef sdcard
 undef mpu6000
 undef IMU
-undef HAL_OS_FATFS_IO
-undef HAL_BOARD_LOG_DIRECTORY
-undef HAL_BOARD_TERRAIN_DIRECTORY
 undef PA3 PA0 PA2 PC8 PC9 PD8 PD9 PD0 PD1 PC6 PC7 PE7 PE8
 
 MCU_CLOCKRATE_MHZ 480
@@ -66,8 +63,10 @@ DMA_NOSHARE *UP SPI1*
 
 # Motor order implies Betaflight/X for standard ESCs
 define HAL_FRAME_TYPE_DEFAULT 12
-define HAL_LOGGING_DATAFLASH_ENABLED 1
-define HAL_LOGGING_DATAFLASH_DRIVER AP_Logger_W25N01GV
+
+# Enable LittleFS filesystem support (needs internal flash memory)
+undef HAL_OS_FATFS_IO
+define HAL_OS_LITTLEFS_IO 1
 
 define DEFAULT_NTF_LED_TYPES 257
 
