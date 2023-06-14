@@ -321,7 +321,7 @@ private:
     void draw_fence(uint8_t x, uint8_t y);
 #endif
     void draw_rngf(uint8_t x, uint8_t y);
-
+    const char *convert_num_to_sprout_mode_name(uint8_t mode_number);
     struct {
         bool load_attempted;
         const char *str;
@@ -612,6 +612,9 @@ public:
     bool is_readonly_screen() const { return current_screen < AP_OSD_NUM_DISPLAY_SCREENS; }
     // get the current screen
     uint8_t get_current_screen() const { return current_screen; };
+
+    void set_sprout_mode_name(char *name_to_set);
+
 #endif // OSD_ENABLED
 #if OSD_PARAM_ENABLED
     AP_OSD_ParamScreen param_screen[AP_OSD_NUM_PARAM_SCREENS] { 0, 1 };

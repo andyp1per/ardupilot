@@ -188,8 +188,8 @@ public:
     void set_flight_mode_str(const char *str);
     const char* get_flight_mode_str() const { return _flight_mode_str; }
 
-    void set_sprout_flight_mode_str(const char *str);
-    const char* get_sprout_flight_mode_str() const { return _sprout_flight_mode_str; }
+    uint8_t get_flight_mode_number() { return _flight_mode_number; }
+    void set_flight_mode_number(uint8_t num);
 
     // send text to display
     void send_text(const char *str);
@@ -231,7 +231,7 @@ private:
     char _send_text[NOTIFY_TEXT_BUFFER_SIZE];
     uint32_t _send_text_updated_millis; // last time text changed
     char _flight_mode_str[5];
-    char _sprout_flight_mode_str[17];
+    uint8_t _flight_mode_number = 0;
 
     static NotifyDevice* _devices[];
     static uint8_t _num_devices;

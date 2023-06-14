@@ -178,7 +178,7 @@ void ModeRCCar::run()
 
             // Send the commanded climb rate to the position controller
             // pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
-            if (copter.g.rccar_unlimited_height == 0) {	
+            if (copter.g.rccar_unlimited_height == 0) {
                 float alt_target = channel_throttle->get_control_in() * 0.2;	
                 pos_control->set_pos_target_z_cm(alt_target);	
             } else {	

@@ -1294,7 +1294,36 @@ float AP_OSD_AbstractScreen::u_scale(enum unit_type unit, float value)
 void AP_OSD_Screen::draw_selected_mode(uint8_t x, uint8_t y) 
 {
     AP_Notify * notify = AP_Notify::get_singleton();
-    backend->write(x, y, false, "SELECTED MODE: %s", notify->get_flight_mode_str());
+    backend->write(x, y, false, "MODE: %s", convert_num_to_sprout_mode_name(notify->get_flight_mode_number()));
+}
+
+const char *AP_OSD_Screen::convert_num_to_sprout_mode_name(uint8_t mode_number) {
+        switch (mode_number) {
+        case 29:
+            return "RC CAR";
+        break;
+        case 31:
+            return "RC CAR UNLIMITED";
+        break;
+        case 0:
+            return "STABILIZE";
+        break;
+        case 2:
+            return "ALTITUDE HOLD";
+        break;
+        case 30:
+            return "THROTTLE TRAIN";
+        break;
+        case 32:
+            return "ACRO TRAIN";
+        break;
+        case 1:
+            return "ACRO";
+        break;
+        default:
+            return "";
+    }
+    return "";
 }
 
 void AP_OSD_Screen::draw_available_modes(uint8_t x, uint8_t y)

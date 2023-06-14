@@ -41,6 +41,8 @@ public:
         TURTLE =       28,  // Flip over after crash
         RCCAR =        29,
         TWODPOSHOLD =  30,
+        RCCAR_UNLIMITED_THROTTLE = 31,
+        ACRO_WITH_TRAINER_SPROUT = 32,
 
         // Mode number 127 reserved for the "drone show mode" in the Skybrush
         // fork at https://github.com/skybrush-io/ardupilot
