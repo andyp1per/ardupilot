@@ -414,9 +414,10 @@ void Copter::notify_flight_mode() {
     AP_Notify::flags.flight_mode = (uint8_t)flightmode->mode_number();
     notify.set_flight_mode_str(flightmode->name4());
     uint8_t mode_number = (uint8_t)flightmode->mode_number();
-    if (mode_number == 29 && copter.g.rccar_unlimited_height != 0) {
+    // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "booty %d", g.rccar_unlimited_height.get());
+    if (mode_number == 29 && g.rccar_unlimited_height.get() != 0) {
         mode_number = 31;
-    } else if (mode_number == 1 && copter.g.acro_trainer != (uint8_t)ModeAcro::Trainer::OFF) {
+    } else if (mode_number == 1 && g.acro_trainer.get() != 0) {
         mode_number = 32;
     }
     notify.set_flight_mode_number(mode_number);

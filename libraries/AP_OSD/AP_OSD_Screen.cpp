@@ -1298,30 +1298,33 @@ void AP_OSD_Screen::draw_selected_mode(uint8_t x, uint8_t y)
 }
 
 const char *AP_OSD_Screen::convert_num_to_sprout_mode_name(uint8_t mode_number) {
-        switch (mode_number) {
-        case 29:
-            return "RC CAR";
-        break;
-        case 31:
-            return "RC CAR UNLIMITED";
-        break;
-        case 0:
-            return "STABILIZE";
-        break;
-        case 2:
-            return "ALTITUDE HOLD";
-        break;
-        case 30:
-            return "THROTTLE TRAIN";
-        break;
-        case 32:
-            return "ACRO TRAIN";
-        break;
-        case 1:
-            return "ACRO";
-        break;
-        default:
-            return "";
+    switch (mode_number) {
+    case 29:
+        return "RC CAR";
+    break;
+    case 31:
+        return "RC CAR UNLIMITED";
+    break;
+    case 0:
+        return "STABILIZE";
+    break;
+    case 2:
+        return "ALTITUDE HOLD";
+    break;
+    case 30:
+        return "THROTTLE TRAIN";
+    break;
+    case 32:
+        return "ACRO TRAIN";
+    break;
+    case 1:
+        return "ACRO";
+    break;
+    default:
+        return "";
+        // char str[4];
+        // snprintf(str, "%d", mode_number);
+        // return str;
     }
     return "";
 }
