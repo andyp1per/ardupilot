@@ -785,18 +785,18 @@ void Copter::check_outdoors_ready() {
         // if (!(arming.armed)) { //Only update mode when disarmed
         bool optflow_good = optflow.enabled() && optflow.healthy();
         bool gps_good = arming.gps_checks_indoor_mode(false) && (gps.num_sats() >= 9 && gps.get_hdop() < 140);
-        // GCS_SEND_TEXT(MAV_SEVERITY_INFO, "%d %d %d %d", gps_good, arming.gps_checks_indoor_mode(false), gps.get_hdop(), gps.num_sats());
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "%d %d", gps_good, optflow_good);
         bool new_outdoors_ready = gps_good || !optflow_good;
         if (outdoors_ready != new_outdoors_ready) {
             outdoors_ready = new_outdoors_ready;
             if (new_outdoors_ready) {
-                ahrs.set_posvelyaw_source_set(0);
-            } else {
                 ahrs.set_posvelyaw_source_set(1);
+            } else {
+                ahrs.set_posvelyaw_source_set(0);
             }
         }
     } else {
-        outdoors_ready = ahrs.get_posvelyaw_source_set() == 1;
+        outdoors_ready = ahrs.get_posvelyaw_source_set() == 0;
     }
 }
 

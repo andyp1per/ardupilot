@@ -1335,7 +1335,7 @@ void AP_OSD_Screen::draw_available_modes(uint8_t x, uint8_t y)
         const AP_OpticalFlow &opflow_obj = *(AP::opticalflow());
         // RangeFinder &rangefinder = AP::rangefinder();
 
-        bool indoors_mode = ahrs_obj.get_posvelyaw_source_set() == 1;
+        bool indoors_mode = ahrs_obj.get_posvelyaw_source_set() == 0;
         bool isAccelGyroReady = ins.accel_calibrated_ok_all() && ins.get_accel_health_all() && ins.gyro_calibrated_ok_all() && ins.get_gyro_health_all();
         bool isCompassReady = indoors_mode ? true : (_compass.healthy() && _compass.consistent());
         bool isGPSReady = indoors_mode ? true : arming_obj.gps_checks_indoor_mode(false); //gps.num_sensors() >= 1 && gps.status(0) >= AP_GPS::GPS_OK_FIX_3D && gps.is_healthy() && AP::ahrs().home_is_set();
