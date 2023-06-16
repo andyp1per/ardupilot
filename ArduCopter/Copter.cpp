@@ -609,6 +609,8 @@ void Copter::three_hz_loop()
 
     // check if avoidance should be enabled based on alt
     low_alt_avoidance();
+
+    notify_flight_mode();
 }
 
 // one_hz_loop - runs at 1Hz
@@ -645,7 +647,6 @@ void Copter::one_hz_loop()
     if (!arming.armed) {
         check_outdoors_ready();
     }
-    notify_flight_mode();
 }
 
 void Copter::init_simple_bearing()

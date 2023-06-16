@@ -110,12 +110,9 @@ void ModeRCCar::run()
     // gain scheduling for yaw	
     float pitch_vel2 = MIN(fabsf(pitch_vel), 2000);	
     float target_yaw_rate = pilot_yaw_rate;
-    if (fabsf(pitch_vel) > 20 && fabsf(target_pitch) > 1000) { //greater than 20 cm/s
+    // if (fabsf(pitch_vel) > 20 && fabsf(target_pitch) > 1000) { //greater than 20 cm/s
         target_yaw_rate += (pitch_vel/fabsf(pitch_vel)) * target_roll * (1.0f - (pitch_vel2 / 5000.0f)) * g2.command_model_acro_y.get_rate() / 45.0;	
-    }
-
-    // get pilot's desired yaw rate
-    //float target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->norm_input_dz());
+    // }
 
     // get pilot desired climb rate (for alt-hold mode and take-off)
     float target_climb_rate = get_pilot_desired_climb_rate(channel_throttle->get_control_in());

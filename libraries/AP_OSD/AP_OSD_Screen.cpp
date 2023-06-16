@@ -1350,7 +1350,11 @@ void AP_OSD_Screen::draw_available_modes(uint8_t x, uint8_t y)
         backend->write(x, y+1, false, autonomousModesReady ?                  "RC CAR:    READY" : "RC CAR:    WAITING");
         backend->write(x, y+2, false, autonomousModesReady ?                  "RC CAR UNL:READY" : "RC CAR UNL:WAITING");
         backend->write(x, y+3, false, autonomousModesReady ?                  "LEVEL:     READY" : "LEVEL:     WAITING");
-        backend->write(x, y+4, false, autonomousModesReady && !indoors_mode ? "THR TRNR:  READY" : "THR TRNR:  WAITING");
+        if (indoors_mode) {
+            backend->write(x, y+4, false, "THR TRNR:  N/A INDRS");
+        } else {
+            backend->write(x, y+4, false, autonomousModesReady ?                  "THR TRNR:  READY" : "THR TRNR:  WAITING");
+        }
         backend->write(x, y+5, false, isAccelGyroReady ?                      "ACR TRNR:  READY" : "ACR TRNR:  WAITING");
         backend->write(x, y+6, false, isAccelGyroReady ?                      "ACRO:      READY" : "ACRO:      WAITING");    
     }
