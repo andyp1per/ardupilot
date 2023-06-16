@@ -1320,13 +1320,8 @@ const char *AP_OSD_Screen::convert_num_to_sprout_mode_name(uint8_t mode_number) 
     case 1:
         return "ACRO";
     break;
-    default:
-        return "";
-        // char str[4];
-        // snprintf(str, "%d", mode_number);
-        // return str;
     }
-    return "";
+    return "NON-SPROUT MODE";
 }
 
 void AP_OSD_Screen::draw_available_modes(uint8_t x, uint8_t y)
@@ -1350,11 +1345,11 @@ void AP_OSD_Screen::draw_available_modes(uint8_t x, uint8_t y)
         backend->write(x, y+1, false, autonomousModesReady ?                  "RC CAR:    READY" : "RC CAR:    WAITING");
         backend->write(x, y+2, false, autonomousModesReady ?                  "RC CAR UNL:READY" : "RC CAR UNL:WAITING");
         backend->write(x, y+3, false, autonomousModesReady ?                  "LEVEL:     READY" : "LEVEL:     WAITING");
-        if (indoors_mode) {
-            backend->write(x, y+4, false, "THR TRNR:  N/A INDRS");
-        } else {
+        // if (indoors_mode) {
+        //     backend->write(x, y+4, false,                                         "THR TRNR:  N/A INDRS");
+        // } else {
             backend->write(x, y+4, false, autonomousModesReady ?                  "THR TRNR:  READY" : "THR TRNR:  WAITING");
-        }
+        // }
         backend->write(x, y+5, false, isAccelGyroReady ?                      "ACR TRNR:  READY" : "ACR TRNR:  WAITING");
         backend->write(x, y+6, false, isAccelGyroReady ?                      "ACRO:      READY" : "ACRO:      WAITING");    
     }

@@ -300,6 +300,12 @@ bool Copter::set_mode(Mode::Number mode, ModeReason reason)
         mode_change_failed(new_flightmode, "init failed");
         return false;
     }
+    if ((uint8_t)(new_flightmode->mode_number()) == 30 && copter.arming.armed) {
+        // mode_change_failed(new_flightmode, "land to use throttle trainer");
+        gcs().send_text(MAV_SEVERITY_INFO, "LAND TO USE THROTTLE TRAINER");
+        // new_flightmode = flightmode;
+        return true;
+    }
 
     // perform any cleanup required by previous flight mode
     exit_mode(flightmode, new_flightmode);
