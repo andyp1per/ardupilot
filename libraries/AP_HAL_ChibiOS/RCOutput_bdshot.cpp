@@ -24,6 +24,11 @@
 
 #ifdef HAL_WITH_BIDIR_DSHOT
 
+#if defined(IOMCU_FW)
+#undef INTERNAL_ERROR
+#define INTERNAL_ERROR(x) do {} while (0)
+#endif
+
 using namespace ChibiOS;
 
 extern const AP_HAL::HAL& hal;
@@ -98,6 +103,9 @@ bool RCOutput::bdshot_setup_group_ic_DMA(pwm_group &group)
         if (group.chan[i] != CHAN_DISABLED && _bdshot.mask & group.ch_mask) {
             // bi-directional dshot requires less than MID2 speed and PUSHPULL in order to avoid noise on the line
             // when switching from output to input
+#ifdef PAL_MODE_STM32_ALTERNATE_PUSHPULL
+            palSetLineMode(group.pal_lines[i], PAL_MODE_STM32_ALTERNATE_PUSHPULL);
+#else
             palSetLineMode(group.pal_lines[i], PAL_MODE_ALTERNATE(group.alt_functions[i])
                 | PAL_STM32_OTYPE_PUSHPULL | PAL_STM32_PUPDR_PULLUP |
 #ifdef PAL_STM32_OSPEED_MID1
@@ -108,6 +116,7 @@ bool RCOutput::bdshot_setup_group_ic_DMA(pwm_group &group)
 #error "Cannot set bdshot line speed"
 #endif
                 );
+#endif
         }
 
         if (!group.is_chan_enabled(i) || !(_bdshot.mask & (1 << group.chan[i]))) {
@@ -358,8 +367,14 @@ void RCOutput::bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t 
 
         // Select the Polarity as Both Edge and set the CC4E Bit
         MODIFY_REG(TIMx->CCER,
+#ifdef TIM_CCER_CC4NP
                     (TIM_CCER_CC4P | TIM_CCER_CC4NP | TIM_CCER_CC4E),
-                    (TIM_CCER_CC4P | TIM_CCER_CC4NP | TIM_CCER_CC4E));
+                    (TIM_CCER_CC4P | TIM_CCER_CC4NP | TIM_CCER_CC4E)
+#else
+                    (TIM_CCER_CC4P | TIM_CCER_CC4E),
+                    (TIM_CCER_CC4P | TIM_CCER_CC4E)
+#endif
+                    );
 
         MODIFY_REG(TIMx->DIER, TIM_DIER_CC4DE, TIM_DIER_CC4DE);
         break;
@@ -493,9 +508,11 @@ __RAMFUNC__ void RCOutput::dma_up_irq_callback(void *p, uint32_t flags)
     }
     dmaStreamDisable(group->dma);
 
-    if (group->in_serial_dma && irq.waiter) {
+    if (soft_serial_waiting()) {
+#if HAL_SERIAL_ESC_COMM_ENABLED
         // tell the waiting process we've done the DMA
         chEvtSignalI(irq.waiter, serial_event_mask);
+#endif
     } else if (!group->in_serial_dma && group->bdshot.enabled) {
         group->dshot_state = DshotState::SEND_COMPLETE;
         // sending is done, in 30us the ESC will send telemetry

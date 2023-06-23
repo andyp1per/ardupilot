@@ -1427,7 +1427,11 @@ void RCOutput::led_timer_tick(uint64_t time_out_us)
 }
 
 #if defined(IOMCU_FW) && HAL_DSHOT_ENABLED
+#ifdef HAL_WITH_BIDIR_DSHOT
+THD_WORKING_AREA(dshot_thread_wa, 256);
+#else
 THD_WORKING_AREA(dshot_thread_wa, 64);
+#endif
 void RCOutput::timer_tick()
 {
     if (dshot_timer_setup) {
