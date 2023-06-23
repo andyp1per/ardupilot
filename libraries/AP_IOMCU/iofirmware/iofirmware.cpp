@@ -1073,6 +1073,10 @@ void AP_IOMCU_FW::rcout_config_update(void)
     case AP_HAL::RCOutput::MODE_PWM_DSHOT600:
 #endif
         hal.rcout->set_output_mode(mode_out.mask, (AP_HAL::RCOutput::output_mode)mode_out.mode);
+#ifdef HAL_WITH_BIDIR_DSHOT
+        hal.rcout->set_bidir_dshot_mask(mode_out.mask);
+        hal.rcout->set_motor_poles(14);
+#endif
         // enabling dshot changes the memory allocation
         reg_status.freemem = hal.util->available_memory();
         last_output_mode_mask |= mode_out.mask;

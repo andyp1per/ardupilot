@@ -10,6 +10,7 @@ def build(bld):
         'AP_HAL',
         'AP_HAL_Empty',
         'AP_Math',
+        'AP_ESC_Telem',
         'AP_RCProtocol',
         'AP_BoardConfig',
         'AP_SBusOut'
