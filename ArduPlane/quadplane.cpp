@@ -279,6 +279,7 @@ const AP_Param::GroupInfo QuadPlane::var_info[] = {
     // @Bitmask: 19: CompleteTransition-to fixed wing if Q_TRANS_FAIL timer times out instead of QLAND
     // @Bitmask: 20: Force RTL mode-forces RTL mode on rc failsafe in VTOL modes overriding bit 5(USE_QRTL)
     // @Bitmask: 21: Tilt rotor-tilt motors up when disarmed in FW modes (except manual) to prevent ground strikes.
+    // @Bitmask: 22: Scale FF by the ratio of VTOL/plane angle P gains in VTOL modes rather than reducing VTOL angle P based on airspeed.
     AP_GROUPINFO("OPTIONS", 58, QuadPlane, options, 0),
 
     AP_SUBGROUPEXTENSION("",59, QuadPlane, var_info2),
@@ -2683,7 +2684,9 @@ void QuadPlane::vtol_position_controller(void)
         disable_yaw_rate_time_constant();
 
         // setup scaling of roll and pitch angle P gains to match fixed wing gains
-        setup_rp_fw_angle_gains();
+        if (!option_is_set(QuadPlane::OPTION::SCALE_FF_ANGLE_P)) {
+            setup_rp_fw_angle_gains();
+        }
 
         if (have_target_yaw) {
             attitude_control->input_euler_angle_roll_pitch_yaw(plane.nav_roll_cd,
