@@ -204,6 +204,52 @@ const AP_Param::GroupInfo AC_PosControl::var_info[] = {
     // @Increment: 0.5
     // @User: Advanced
 
+    // @Param: _ACCZ_D_FF
+    // @DisplayName: Accel (vertical) Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+
+    // @Param: _ACCZ_NTF
+    // @DisplayName: Accel (vertical) Target notch Filter center frequency
+    // @Description: Accel (vertical) Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _ACCZ_NTBW
+    // @DisplayName: Accel (vertical) Target notch Filter bandwidth
+    // @Description: Accel (vertical) Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _ACCZ_NTAT
+    // @DisplayName: Accel (vertical) Target notch Filter attenuation
+    // @Description: Accel (vertical) Target notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: _ACCZ_NEF
+    // @DisplayName: Accel (vertical) Error notch Filter center frequency
+    // @Description: Accel (vertical) Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _ACCZ_NEBW
+    // @DisplayName: Accel (vertical) Error notch Filter bandwidth
+    // @Description: Accel (vertical) Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _ACCZ_NEAT
+    // @DisplayName: Accel (vertical) Error notch Filter attenuation
+    // @Description: Accel (vertical) Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
     AP_SUBGROUPINFO(_pid_accel_z, "_ACCZ_", 4, AC_PosControl, AC_PID),
 
     // @Param: _POSXY_P
