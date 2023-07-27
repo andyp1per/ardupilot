@@ -104,7 +104,10 @@ public:
     void set_inverted_flight(bool inverted) override {
         _inverted_flight = inverted;
     }
-    
+
+    // set the PID notch sample rates
+    void set_notch_sample_rate(float sample_rate) override;
+
     // user settable parameters
     static const struct AP_Param::GroupInfo var_info[];
 
