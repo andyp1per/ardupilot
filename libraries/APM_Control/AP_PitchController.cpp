@@ -131,6 +131,56 @@ const AP_Param::GroupInfo AP_PitchController::var_info[] = {
     // @Increment: 0.5
     // @User: Advanced
 
+    // @Param: _RATE_D_FF
+    // @DisplayName: Pitch Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+    // @Range: 0 3.0
+    // @Increment: 0.001
+    // @User: Advanced
+
+    // @Param: _RATE_NTF
+    // @DisplayName: Pitch Target notch Filter center frequency
+    // @Description: Pitch Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _RATE_NTBW
+    // @DisplayName: Pitch Target notch Filter bandwidth
+    // @Description: Pitch Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _RATE_NTAT
+    // @DisplayName: Pitch Target notch Filter attenuation
+    // @Description: Pitch Target notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: _RATE_NEF
+    // @DisplayName: Pitch Error notch Filter center frequency
+    // @Description: Pitch Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _RATE_NEBW
+    // @DisplayName: Pitch Error notch Filter bandwidth
+    // @Description: Pitch Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _RATE_NEAT
+    // @DisplayName: Pitch Error notch Filter attenuation
+    // @Description: Pitch Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+
     AP_SUBGROUPINFO(rate_pid, "_RATE_", 11, AP_PitchController, AC_PID),
 
     AP_GROUPEND

@@ -141,6 +141,55 @@ const AP_Param::GroupInfo AR_AttitudeControl::var_info[] = {
     // @Increment: 0.5
     // @User: Advanced
 
+    // @Param: _STR_RAT_D_FF
+    // @DisplayName: Steering control Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+    // @Range: 0 3.0
+    // @Increment: 0.001
+    // @User: Advanced
+
+    // @Param: _STR_RAT_NTF
+    // @DisplayName: Steering control Target notch Filter center frequency
+    // @Description: Steering control Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _STR_RAT_NTBW
+    // @DisplayName: Steering control Target notch Filter bandwidth
+    // @Description: Steering control Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _STR_RAT_NTAT
+    // @DisplayName: Steering control Target notch Filter attenuation
+    // @Description: Steering control Target notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: _STR_RAT_NEF
+    // @DisplayName: Steering control Error notch Filter center frequency
+    // @Description: Steering control Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _STR_RAT_NEBW
+    // @DisplayName: Steering control Error notch Filter bandwidth
+    // @Description: Steering control Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _STR_RAT_NEAT
+    // @DisplayName: Steering control Error notch Filter attenuation
+    // @Description: Steering control Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
     AP_SUBGROUPINFO(_steer_rate_pid, "_STR_RAT_", 1, AR_AttitudeControl, AC_PID),
 
     // @Param: _SPEED_P
@@ -215,6 +264,55 @@ const AP_Param::GroupInfo AR_AttitudeControl::var_info[] = {
     // @Description: Sets an upper limit on the slew rate produced by the combined P and D gains. If the amplitude of the control action produced by the rate feedback exceeds this value, then the D+P gain is reduced to respect the limit. This limits the amplitude of high frequency oscillations caused by an excessive gain. The limit should be set to no more than 25% of the actuators maximum slew rate to allow for load effects. Note: The gain will not be reduced to less than 10% of the nominal value. A value of zero will disable this feature.
     // @Range: 0 200
     // @Increment: 0.5
+    // @User: Advanced
+
+    // @Param: _SPEED_D_FF
+    // @DisplayName: Speed control Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+    // @Range: 0 3.0
+    // @Increment: 0.001
+    // @User: Advanced
+
+    // @Param: _SPEED_NTF
+    // @DisplayName: Speed control Target notch Filter center frequency
+    // @Description: Speed control Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _SPEED_NTBW
+    // @DisplayName: Speed control Target notch Filter bandwidth
+    // @Description: Speed control Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _SPEED_NTAT
+    // @DisplayName: Speed control Target notch Filter attenuation
+    // @Description: Speed control Target notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: _SPEED_NEF
+    // @DisplayName: Speed control Error notch Filter center frequency
+    // @Description: Speed control Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _SPEED_NEBW
+    // @DisplayName: Speed control Error notch Filter bandwidth
+    // @Description: Speed control Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _SPEED_NEAT
+    // @DisplayName: Speed control Error notch Filter attenuation
+    // @Description: Speed control Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
     // @User: Advanced
 
     AP_SUBGROUPINFO(_throttle_speed_pid, "_SPEED_", 2, AR_AttitudeControl, AC_PID),
@@ -353,6 +451,55 @@ const AP_Param::GroupInfo AR_AttitudeControl::var_info[] = {
     // @Increment: 0.5
     // @User: Advanced
 
+    // @Param: _BAL_D_FF
+    // @DisplayName: Pitch control Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+    // @Range: 0 3.0
+    // @Increment: 0.001
+    // @User: Advanced
+
+    // @Param: _BAL_NTF
+    // @DisplayName: Pitch control Target notch Filter center frequency
+    // @Description: Pitch control Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _BAL_NTBW
+    // @DisplayName: Pitch control Target notch Filter bandwidth
+    // @Description: Pitch control Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _BAL_NTAT
+    // @DisplayName: Pitch control Target notch Filter attenuation
+    // @Description: Pitch control Target notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: _BAL_NEF
+    // @DisplayName: Pitch control Error notch Filter center frequency
+    // @Description: Pitch control Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _BAL_NEBW
+    // @DisplayName: Pitch control Error notch Filter bandwidth
+    // @Description: Pitch control Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _BAL_NEAT
+    // @DisplayName: Pitch control Error notch Filter attenuation
+    // @Description: Pitch control Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
     AP_SUBGROUPINFO(_pitch_to_throttle_pid, "_BAL_", 10, AR_AttitudeControl, AC_PID),
 
     // @Param: _BAL_PIT_FF
@@ -435,6 +582,55 @@ const AP_Param::GroupInfo AR_AttitudeControl::var_info[] = {
     // @Description: Sets an upper limit on the slew rate produced by the combined P and D gains. If the amplitude of the control action produced by the rate feedback exceeds this value, then the D+P gain is reduced to respect the limit. This limits the amplitude of high frequency oscillations caused by an excessive gain. The limit should be set to no more than 25% of the actuators maximum slew rate to allow for load effects. Note: The gain will not be reduced to less than 10% of the nominal value. A value of zero will disable this feature.
     // @Range: 0 200
     // @Increment: 0.5
+    // @User: Advanced
+
+    // @Param: _SAIL_D_FF
+    // @DisplayName: Sail Heel Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+    // @Range: 0 3.0
+    // @Increment: 0.001
+    // @User: Advanced
+
+    // @Param: _SAIL_NTF
+    // @DisplayName: Sail Heel Target notch Filter center frequency
+    // @Description: Sail Heel Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _SAIL_NTBW
+    // @DisplayName: Sail Heel Target notch Filter bandwidth
+    // @Description: Sail Heel Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _SAIL_NTAT
+    // @DisplayName: Sail Heel Target notch Filter attenuation
+    // @Description: Sail Heel Target notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: _SAIL_NEF
+    // @DisplayName: Sail Heel Error notch Filter center frequency
+    // @Description: Sail Heel Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _SAIL_NEBW
+    // @DisplayName: Sail Heel Error notch Filter bandwidth
+    // @Description: Sail Heel Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _SAIL_NEAT
+    // @DisplayName: Sail Heel Error notch Filter attenuation
+    // @Description: Sail Heel Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
     // @User: Advanced
 
     AP_SUBGROUPINFO(_sailboat_heel_pid, "_SAIL_", 12, AR_AttitudeControl, AC_PID),
@@ -975,4 +1171,13 @@ void AR_AttitudeControl::relax_I()
     _steer_rate_pid.reset_I();
     _throttle_speed_pid.reset_I();
     _pitch_to_throttle_pid.reset_I();
+}
+
+void AR_AttitudeControl::set_notch_sample_rate(float sample_rate)
+{
+#if AP_PID_NOTCH
+    _steer_rate_pid.set_notch_sample_rate(sample_rate);
+    _throttle_speed_pid.set_notch_sample_rate(sample_rate);
+    _pitch_to_throttle_pid.set_notch_sample_rate(sample_rate);
+#endif
 }
