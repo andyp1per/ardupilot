@@ -9,13 +9,6 @@
 class LR_MsgHandler : public MsgHandler {
 public:
     LR_MsgHandler(struct log_Format &f);
-    virtual void process_message(uint8_t *msg) = 0;
-    virtual void process_message(uint8_t *msg, uint8_t &core) {
-        // base implementation just ignores the core parameter;
-        // subclasses can override to fill the core in if they feel
-        // like it.
-        process_message(msg);
-    }
 };
 
 class LR_MsgHandler_RFRH : public LR_MsgHandler
