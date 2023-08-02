@@ -44,6 +44,14 @@ public:
     uint16_t require_field_uint16_t(uint8_t *msg, const char *label);
     int16_t require_field_int16_t(uint8_t *msg, const char *label);
 
+    virtual void process_message(uint8_t *msg) = 0;
+    virtual void process_message(uint8_t *msg, uint8_t &core) {
+        // base implementation just ignores the core parameter;
+        // subclasses can override to fill the core in if they feel
+        // like it.
+        process_message(msg);
+    }
+
 private:
 
     void add_field(const char *_label, uint8_t _type, uint8_t _offset,
