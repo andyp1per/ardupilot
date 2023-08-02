@@ -19,6 +19,14 @@
 
 #define streq(x, y) (!strcmp(x, y))
 
+LR_MsgHandler::LR_MsgHandler(struct log_Format &_f) :
+    MsgHandler(_f) {
+}
+
+void LR_MsgHandler::process_message(uint8_t *msg)
+{
+}
+
 LogReader::LogReader() :
     AP_LoggerFileReader() { }
 
@@ -52,18 +60,19 @@ bool LogReader::handle_log_format_msg(const struct log_Format &f)
     }
 
     // map from format name to a parser subclass:
-	if (streq(name, "PARM")) {
+	if (streq(name, "GYR")) {
+        msgparser[f.type] = new LR_MsgHandler(formats[f.type]);
+    } else if (streq(name, "FTN")) {
         msgparser[f.type] = new LR_MsgHandler(formats[f.type]);
     }
     return true;
 }
 
 bool LogReader::handle_msg(const struct log_Format &f, uint8_t *msg) {
-    // emit the output as we receive it:
-    AP::logger().WriteBlock(msg, f.length);
 
     MsgHandler *p = msgparser[f.type];
     if (p == NULL) {
+        AP::logger().WriteBlock(msg, f.length);
         return true;
     }
 

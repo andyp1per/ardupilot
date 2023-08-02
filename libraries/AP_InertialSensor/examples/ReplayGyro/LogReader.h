@@ -7,8 +7,7 @@
 class LR_MsgHandler : public MsgHandler {
 public:
     LR_MsgHandler(struct log_Format &f);
-    void process_message(uint8_t *msg) override {
-    }
+    void process_message(uint8_t *msg) override;
 };
 
 class LogReader : public AP_LoggerFileReader
@@ -28,8 +27,5 @@ public:
 protected:
 
 private:
-    struct LogStructure *_log_structure;
-    uint8_t _log_structure_count;
-
     class MsgHandler *msgparser[LOGREADER_MAX_FORMATS] {};
 };

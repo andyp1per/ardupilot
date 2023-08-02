@@ -11,6 +11,7 @@
 #include <AP_Scheduler/AP_Scheduler.h>
 #include <AP_Arming/AP_Arming.h>
 #include <SITL/SITL.h>
+#include "LogReader.h"
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 const AP_HAL::HAL &hal = AP_HAL::get_HAL();
@@ -54,10 +55,15 @@ public:
 };
 
 static Arming arming;
+const char *filename;
 
 class ReplayGyro {
 public:
     void init() {
+        if (!reader.open_log(filename)) {
+            ::printf("open(%s): %m\n", filename);
+            exit(1);
+        }
     }
 
     void loop() {
@@ -67,15 +73,30 @@ public:
             hal.console->printf(".");
             last_output_ms = now;
         }
+
+        if (!reader.update()) {
+            exit(0);
+        }
     }
     //AP_InertialSensor fft;
     uint32_t last_output_ms;
+
+    LogReader reader{};
 };
 
 static ReplayGyro replay;
 
 void setup()
 {
+    uint8_t argc;
+    char * const *argv;
+
+    hal.util->commandline_arguments(argc, argv);
+
+    if (argc > 0) {
+        filename = argv[0];
+    }
+
     hal.console->printf("ReplayGyro\n");
     board_config.init();   
     serial_manager.init();
