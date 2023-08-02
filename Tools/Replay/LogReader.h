@@ -1,7 +1,7 @@
 #pragma once
 
-#include "VehicleType.h"
-#include "DataFlashFileReader.h"
+#include <AP_LoggerFileReader/VehicleType.h>
+#include <AP_LoggerFileReader/AP_LoggerFileReader.h>
 #include "LR_MsgHandler.h"
 #include "Parameters.h"
 

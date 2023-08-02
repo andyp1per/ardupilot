@@ -30,7 +30,6 @@ private:
 
     uint64_t bytes_read = 0;
     uint32_t message_count = 0;
-    uint64_t start_micros;
 
     uint64_t packet_counts[LOGREADER_MAX_FORMATS] = {};
 };

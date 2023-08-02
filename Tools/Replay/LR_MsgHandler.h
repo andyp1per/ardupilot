@@ -1,6 +1,6 @@
 #pragma once
 
-#include "MsgHandler.h"
+#include <AP_LoggerFileReader/MsgHandler.h>
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_GPS/AP_GPS.h>
 #include <AP_NavEKF2/AP_NavEKF2.h>

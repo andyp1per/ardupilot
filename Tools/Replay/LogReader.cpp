@@ -1,6 +1,6 @@
 #include "LogReader.h"
 
-#include "MsgHandler.h"
+#include <AP_LoggerFileReader/MsgHandler.h>
 #include "Replay.h"
 
 #include <stdio.h>

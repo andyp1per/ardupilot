@@ -302,7 +302,7 @@ void LR_MsgHandler_REVH::process_message(uint8_t *msgbytes)
 }
 
 #include <AP_AHRS/AP_AHRS.h>
-#include "VehicleType.h"
+#include <AP_LoggerFileReader/VehicleType.h>
 
 bool LR_MsgHandler_PARM::set_parameter(const char *name, const float value)
 {
