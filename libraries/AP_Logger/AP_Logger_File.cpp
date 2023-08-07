@@ -26,6 +26,11 @@
 #include <GCS_MAVLink/GCS.h>
 #include <stdio.h>
 
+#if APM_BUILD_TYPE(APM_BUILD_Replay) || 1
+#define REPLAY_LOGGING 1
+#else
+#define REPLAY_LOGGING 0
+#endif
 
 extern const AP_HAL::HAL& hal;
 
@@ -457,7 +462,7 @@ bool AP_Logger_File::StartNewLogOK() const
     if (recent_open_error()) {
         return false;
     }
-#if !APM_BUILD_TYPE(APM_BUILD_Replay)
+#if !REPLAY_LOGGING
     if (hal.scheduler->in_main_thread()) {
         return false;
     }
@@ -475,7 +480,7 @@ bool AP_Logger_File::_WritePrioritisedBlock(const void *pBuffer, uint16_t size, 
         return false;
     }
 
-#if APM_BUILD_TYPE(APM_BUILD_Replay)
+#if REPLAY_LOGGING
     if (AP::FS().write(_write_fd, pBuffer, size) != size) {
         AP_HAL::panic("Short write");
     }
@@ -763,7 +768,7 @@ void AP_Logger_File::PrepForArming_start_logging()
         if (logging_started()) {
             break;
         }
-#if !APM_BUILD_TYPE(APM_BUILD_Replay) && AP_AHRS_ENABLED
+#if !REPLAY_LOGGING && AP_AHRS_ENABLED
         // keep the EKF ticking over
         AP::ahrs().update();
 #endif
@@ -896,7 +901,7 @@ bool AP_Logger_File::write_lastlog_file(uint16_t log_num)
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL || CONFIG_HAL_BOARD == HAL_BOARD_LINUX
 void AP_Logger_File::flush(void)
-#if APM_BUILD_TYPE(APM_BUILD_Replay)
+#if REPLAY_LOGGING
 {
     uint32_t tnow = AP_HAL::millis();
     while (_write_fd != -1 && _initialised && !recent_open_error() && _writebuf.available()) {
@@ -920,7 +925,7 @@ void AP_Logger_File::flush(void)
 {
     // flush is for replay and examples only
 }
-#endif // APM_BUILD_TYPE(APM_BUILD_Replay) || APM_BUILD_TYPE(APM_BUILD_UNKNOWN)
+#endif // REPLAY_LOGGING
 #endif
 
 void AP_Logger_File::io_timer(void)

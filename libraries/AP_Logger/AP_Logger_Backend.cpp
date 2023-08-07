@@ -12,6 +12,12 @@
     #include <AC_Fence/AC_Fence.h>
 #endif
 
+#if APM_BUILD_TYPE(APM_BUILD_Replay) || 1
+#define REPLAY_LOGGING 1
+#else
+#define REPLAY_LOGGING 0
+#endif
+
 extern const AP_HAL::HAL& hal;
 
 AP_Logger_Backend::AP_Logger_Backend(AP_Logger &front,
@@ -122,7 +128,7 @@ void AP_Logger_Backend::push_log_blocks() {
 // for other messages to go out to the log
 bool AP_Logger_Backend::WriteBlockCheckStartupMessages()
 {
-#if APM_BUILD_TYPE(APM_BUILD_Replay)
+#if REPLAY_LOGGING
     return true;
 #endif
 
@@ -157,7 +163,7 @@ bool AP_Logger_Backend::WriteBlockCheckStartupMessages()
 // source more messages from the startup message writer:
 void AP_Logger_Backend::WriteMoreStartupMessages()
 {
-#if APM_BUILD_TYPE(APM_BUILD_Replay)
+#if REPLAY_LOGGING
     return;
 #endif
 
@@ -177,7 +183,7 @@ void AP_Logger_Backend::WriteMoreStartupMessages()
 
 bool AP_Logger_Backend::Write_Emit_FMT(uint8_t msg_type)
 {
-#if APM_BUILD_TYPE(APM_BUILD_Replay)
+#if REPLAY_LOGGING
     if (msg_type < REPLAY_LOG_NEW_MSG_MIN || msg_type > REPLAY_LOG_NEW_MSG_MAX) {
         // don't re-emit FMU msgs unless they are in the replay range
         return true;
@@ -406,7 +412,7 @@ void AP_Logger_Backend::validate_WritePrioritisedBlock(const void *pBuffer,
 
 bool AP_Logger_Backend::WritePrioritisedBlock(const void *pBuffer, uint16_t size, bool is_critical, bool writev_streaming)
 {
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL && !APM_BUILD_TYPE(APM_BUILD_Replay)
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL && !REPLAY_LOGGING
     validate_WritePrioritisedBlock(pBuffer, size);
 #endif
     if (!ShouldLog(is_critical)) {
