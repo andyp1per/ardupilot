@@ -67,7 +67,6 @@ public:
     }
 
     void loop() {
-        // calibrate the FFT
         uint32_t now = AP_HAL::millis();
         if (now - last_output_ms > 1000) {
             hal.console->printf(".");
@@ -94,7 +93,7 @@ void setup()
     hal.util->commandline_arguments(argc, argv);
 
     if (argc > 0) {
-        filename = argv[0];
+        filename = argv[argc-1];
     }
 
     hal.console->printf("ReplayGyro\n");
@@ -103,6 +102,7 @@ void setup()
 
     logger_bitmask.set(128);    // IMU
     logger.Init(log_structure, ARRAY_SIZE(log_structure));
+
     ins.init(LOOP_RATE_HZ);
     baro.init();
 
