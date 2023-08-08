@@ -1,6 +1,7 @@
 #include "LogReader.h"
 
 #include <AP_LoggerFileReader/MsgHandler.h>
+#include <AP_InertialSensor/LogStructure.h>
 
 #include <stdio.h>
 #include <unistd.h>
@@ -19,12 +20,56 @@
 
 #define streq(x, y) (!strcmp(x, y))
 
-LR_MsgHandler::LR_MsgHandler(struct log_Format &_f) :
-    MsgHandler(_f) {
+extern const AP_HAL::HAL &hal;
+
+#define MSG_CREATE(sname,msgbytes) log_ ##sname msg; memcpy((void*)&msg, (msgbytes)+3, sizeof(msg));
+
+GYR_MsgHandler::GYR_MsgHandler(struct log_Format &_f, LogReader& _reader) :
+    MsgHandler(_f), reader(_reader) {
 }
 
-void LR_MsgHandler::process_message(uint8_t *msg)
+FTN_MsgHandler::FTN_MsgHandler(struct log_Format &_f, LogReader& _reader) :
+    MsgHandler(_f), reader(_reader) {
+}
+
+void GYR_MsgHandler::process_message(uint8_t *msgbytes)
 {
+    MSG_CREATE(GYR, msgbytes);
+//struct PACKED log_GYR {
+//    LOG_PACKET_HEADER;
+//    uint64_t time_us;
+//    uint8_t instance;
+//    uint64_t sample_us;
+//    float GyrX, GyrY, GyrZ;
+//};
+    reader.gyr = msg;
+    reader.new_gyr = true;
+}
+
+struct PACKED log_FTN {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint8_t instance;
+    uint8_t NDN;
+    float NF1;
+    float NF2;
+    float NF3;
+    float NF4;
+    float NF5;
+    float NF6;
+    float NF7;
+    float NF8;
+    float NF9;
+    float NF10;
+    float NF11;
+    float NF12;
+};
+
+void FTN_MsgHandler::process_message(uint8_t *msgbytes)
+{
+    MSG_CREATE(FTN, msgbytes);
+
+    reader.notchF = msg.NF1;
 }
 
 LogReader::LogReader() :
@@ -61,9 +106,9 @@ bool LogReader::handle_log_format_msg(const struct log_Format &f)
 
     // map from format name to a parser subclass:
 	if (streq(name, "GYR")) {
-        msgparser[f.type] = new LR_MsgHandler(formats[f.type]);
+        msgparser[f.type] = new GYR_MsgHandler(formats[f.type], *this);
     } else if (streq(name, "FTN")) {
-        msgparser[f.type] = new LR_MsgHandler(formats[f.type]);
+        msgparser[f.type] = new FTN_MsgHandler(formats[f.type], *this);
     }
     return true;
 }
@@ -71,14 +116,27 @@ bool LogReader::handle_log_format_msg(const struct log_Format &f)
 bool LogReader::handle_msg(const struct log_Format &f, uint8_t *msg) {
 
     MsgHandler *p = msgparser[f.type];
+    AP::logger().WriteBlock(msg, f.length);
     if (p == NULL) {
-        AP::logger().WriteBlock(msg, f.length);
         return true;
     }
 
     p->process_message(msg);
 
     return true;
+}
+
+const log_GYR& LogReader::get_next_gyr_msg() 
+{
+    while (!new_gyr) {
+        if (!update()) {
+            exit(0);
+        }
+    }
+
+    new_gyr = false;
+
+    return gyr;
 }
 
 bool LogReader::set_parameter(const char *name, float value)
