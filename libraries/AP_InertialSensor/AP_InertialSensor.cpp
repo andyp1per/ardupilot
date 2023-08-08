@@ -877,7 +877,7 @@ bool AP_InertialSensor::has_fft_notch() const
 #endif
 
 void
-AP_InertialSensor::init(uint16_t loop_rate)
+AP_InertialSensor::init(uint16_t loop_rate, AP_InertialSensor_Backend* backend)
 {
     // remember the sample rate
     _loop_rate = loop_rate;
@@ -887,6 +887,13 @@ AP_InertialSensor::init(uint16_t loop_rate)
     // time to be exposed outside of INS. Large deltat values can
     // cause divergence of state estimators
     _loop_delta_t_max = 10 * _loop_delta_t;
+
+    // optionally add a single static backend for testing
+    if (backend != nullptr) {
+        _gyro_count = _accel_count = 1;
+        _backends_detected = true;
+        _add_backend(backend);
+    }
 
     if (_gyro_count == 0 && _accel_count == 0) {
         _start_backends();

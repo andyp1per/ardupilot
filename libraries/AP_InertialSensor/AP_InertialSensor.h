@@ -72,7 +72,7 @@ public:
     ///
     /// @param style	The initialisation startup style.
     ///
-    void init(uint16_t sample_rate_hz);
+    void init(uint16_t sample_rate_hz, AP_InertialSensor_Backend* backend = nullptr);
 
     /// Register a new gyro/accel driver, allocating an instance
     /// number
@@ -94,6 +94,9 @@ public:
     ///       been called, as ::init may perform other work
     ///
     void init_gyro(void);
+
+    // set a single backend for testing
+    void set_backend(AP_InertialSensor_Backend* backend);
 
     // get startup messages to output to the GCS
     bool get_output_banner(uint8_t instance_id, char* banner, uint8_t banner_len);
