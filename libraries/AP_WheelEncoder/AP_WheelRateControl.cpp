@@ -86,6 +86,54 @@ const AP_Param::GroupInfo AP_WheelRateControl::var_info[] = {
     // @Increment: 0.5
     // @User: Advanced
 
+    // @Param: _RATE_D_FF
+    // @DisplayName: Wheel rate Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+    // @Range: 0.100 2.000
+    // @User: Advanced
+
+    // @Param: _RATE_NTF
+    // @DisplayName: Wheel rate Target notch Filter center frequency
+    // @Description: Wheel rate Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _RATE_NTBW
+    // @DisplayName: Wheel rate Target notch Filter bandwidth
+    // @Description: Wheel rate Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _RATE_NTAT
+    // @DisplayName: Wheel rate Target notch Filter attenuation
+    // @Description: Wheel rate Target notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: _RATE_NEF
+    // @DisplayName: Wheel rate Error notch Filter center frequency
+    // @Description: Wheel rate Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _RATE_NEBW
+    // @DisplayName: Wheel rate Error notch Filter bandwidth
+    // @Description: Wheel rate Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: _RATE_NEAT
+    // @DisplayName: Wheel rate Error notch Filter attenuation
+    // @Description: Wheel rate Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
     AP_SUBGROUPINFO(_rate_pid0, "_RATE_", 3, AP_WheelRateControl, AC_PID),
 
     // @Param: 2_RATE_FF
@@ -156,6 +204,54 @@ const AP_Param::GroupInfo AP_WheelRateControl::var_info[] = {
     // @Increment: 0.5
     // @User: Advanced
 
+    // @Param: 2_RATE_D_FF
+    // @DisplayName: Wheel rate Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+    // @Range: 0.100 2.000
+    // @User: Advanced
+
+    // @Param: 2_RATE_NTF
+    // @DisplayName: Wheel rate Target notch Filter center frequency
+    // @Description: Wheel rate Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: 2_RATE_NTBW
+    // @DisplayName: Wheel rate Target notch Filter bandwidth
+    // @Description: Wheel rate Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: 2_RATE_NTAT
+    // @DisplayName: Wheel rate Target notch Filter attenuation
+    // @Description: Wheel rate Target notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: 2_RATE_NEF
+    // @DisplayName: Wheel rate Error notch Filter center frequency
+    // @Description: Wheel rate Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: 2_RATE_NEBW
+    // @DisplayName: Wheel rate Error notch Filter bandwidth
+    // @Description: Wheel rate Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: 2_RATE_NEAT
+    // @DisplayName: Wheel rate Error notch Filter attenuation
+    // @Description: Wheel rate Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
     AP_SUBGROUPINFO(_rate_pid1, "2_RATE_", 4, AP_WheelRateControl, AC_PID),
 
     AP_GROUPEND
@@ -224,4 +320,12 @@ AC_PID& AP_WheelRateControl::get_pid(uint8_t instance)
     } else {
         return _rate_pid1;
     }
+}
+
+void AP_WheelRateControl::set_notch_sample_rate(float sample_rate)
+{
+#if AP_PID_NOTCH
+    _rate_pid0.set_notch_sample_rate(sample_rate);
+    _rate_pid1.set_notch_sample_rate(sample_rate);
+#endif
 }
