@@ -379,6 +379,55 @@ const AP_Param::Info Tracker::var_info[] = {
     // @Increment: 0.5
     // @User: Advanced
 
+    // @Param: PITCH2SRV_D_FF
+    // @DisplayName: Pitch Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+    // @Range: 0 0.5
+    // @Increment: 0.001
+    // @User: Advanced
+
+    // @Param: PITCH2SRV_NTF
+    // @DisplayName: Pitch Target notch Filter center frequency
+    // @Description: Pitch Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: PITCH2SRV_NTBW
+    // @DisplayName: Pitch Target notch Filter bandwidth
+    // @Description: Pitch Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: PITCH2SRV_NTAT
+    // @DisplayName: Pitch Target notch Filter attenuation
+    // @Description: Pitch Target notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: PITCH2SRV_NEF
+    // @DisplayName: Pitch Error notch Filter center frequency
+    // @Description: Pitch Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: PITCH2SRV_NEBW
+    // @DisplayName: Pitch Error notch Filter bandwidth
+    // @Description: Pitch Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: PITCH2SRV_NEAT
+    // @DisplayName: Pitch Error notch Filter attenuation
+    // @Description: Pitch Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
     GGROUP(pidPitch2Srv,       "PITCH2SRV_", AC_PID),
 
     // @Param: YAW2SRV_P
@@ -446,6 +495,55 @@ const AP_Param::Info Tracker::var_info[] = {
     // @Description: Sets an upper limit on the slew rate produced by the combined P and D gains. If the amplitude of the control action produced by the rate feedback exceeds this value, then the D+P gain is reduced to respect the limit. This limits the amplitude of high frequency oscillations caused by an excessive gain. The limit should be set to no more than 25% of the actuators maximum slew rate to allow for load effects. Note: The gain will not be reduced to less than 10% of the nominal value. A value of zero will disable this feature.
     // @Range: 0 200
     // @Increment: 0.5
+    // @User: Advanced
+
+    // @Param: YAW2SRV_D_FF
+    // @DisplayName: Yaw Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+    // @Range: 0 0.5
+    // @Increment: 0.001
+    // @User: Advanced
+
+    // @Param: YAW2SRV_NTF
+    // @DisplayName: Yaw Target notch Filter center frequency
+    // @Description: Yaw Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: YAW2SRV_NTBW
+    // @DisplayName: Yaw Target notch Filter bandwidth
+    // @Description: Yaw Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: YAW2SRV_NTAT
+    // @DisplayName: Yaw Target notch Filter attenuation
+    // @Description: Yaw Target notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: YAW2SRV_NEF
+    // @DisplayName: Yaw Error notch Filter center frequency
+    // @Description: Yaw Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: YAW2SRV_NEBW
+    // @DisplayName: Yaw Error notch Filter bandwidth
+    // @Description: Yaw Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: YAW2SRV_NEAT
+    // @DisplayName: Yaw Error notch Filter attenuation
+    // @Description: Yaw Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
     // @User: Advanced
 
     GGROUP(pidYaw2Srv,         "YAW2SRV_", AC_PID),
