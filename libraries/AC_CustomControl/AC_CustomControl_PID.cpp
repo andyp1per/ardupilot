@@ -94,6 +94,52 @@ const AP_Param::GroupInfo AC_CustomControl_PID::var_info[] = {
     // @Range: 0 200
     // @Increment: 0.5
     // @User: Advanced
+
+    // @Param: RAT_RLL_D_FF
+    // @DisplayName: Roll Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+
+    // @Param: RAT_RLL_NTF
+    // @DisplayName: Roll Target notch Filter center frequency
+    // @Description: Roll Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: RAT_RLL_NTBW
+    // @DisplayName: Roll Target notch Filter bandwidth
+    // @Description: Roll Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: RAT_RLL_NTAT
+    // @DisplayName: Roll Target notch Filter attenuation
+    // @Description: Roll Target notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: RAT_RLL_NEF
+    // @DisplayName: Roll Error notch Filter center frequency
+    // @Description: Roll Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: RAT_RLL_NEBW
+    // @DisplayName: Roll Error notch Filter bandwidth
+    // @Description: Roll Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: RAT_RLL_NEAT
+    // @DisplayName: Roll Error notch Filter attenuation
+    // @Description: Roll Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
     AP_SUBGROUPINFO(_pid_atti_rate_roll, "RAT_RLL_", 4, AC_CustomControl_PID, AC_PID),
 
     // @Param: RAT_PIT_P
@@ -160,6 +206,52 @@ const AP_Param::GroupInfo AC_CustomControl_PID::var_info[] = {
     // @Description: Sets an upper limit on the slew rate produced by the combined P and D gains. If the amplitude of the control action produced by the rate feedback exceeds this value, then the D+P gain is reduced to respect the limit. This limits the amplitude of high frequency oscillations caused by an excessive gain. The limit should be set to no more than 25% of the actuators maximum slew rate to allow for load effects. Note: The gain will not be reduced to less than 10% of the nominal value. A value of zero will disable this feature.
     // @Range: 0 200
     // @Increment: 0.5
+    // @User: Advanced
+
+    // @Param: RAT_PIT_D_FF
+    // @DisplayName: Pitch Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+
+    // @Param: RAT_PIT_NTF
+    // @DisplayName: Pitch Target notch Filter center frequency
+    // @Description: Pitch Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: RAT_PIT_NTBW
+    // @DisplayName: Pitch Target notch Filter bandwidth
+    // @Description: Pitch Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: RAT_PIT_NTAT
+    // @DisplayName: Pitch Target notch Filter attenuation
+    // @Description: Pitch Target notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: RAT_PIT_NEF
+    // @DisplayName: Pitch Error notch Filter center frequency
+    // @Description: Pitch Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: RAT_PIT_NEBW
+    // @DisplayName: Pitch Error notch Filter bandwidth
+    // @Description: Pitch Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: RAT_PIT_NEAT
+    // @DisplayName: Pitch Error notch Filter attenuation
+    // @Description: Pitch Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
     // @User: Advanced
     AP_SUBGROUPINFO(_pid_atti_rate_pitch, "RAT_PIT_", 5, AC_CustomControl_PID, AC_PID),
 
@@ -229,6 +321,53 @@ const AP_Param::GroupInfo AC_CustomControl_PID::var_info[] = {
     // @Range: 0 200
     // @Increment: 0.5
     // @User: Advanced
+
+    // @Param: RAT_YAW_D_FF
+    // @DisplayName: Yaw Derivative FeedForward Gain
+    // @Description: FF D Gain which produces an output that is proportional to the rate of change of the error
+
+    // @Param: RAT_YAW_NTF
+    // @DisplayName: Yaw Target notch Filter center frequency
+    // @Description: Yaw Target notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: RAT_YAW_NTBW
+    // @DisplayName: Yaw Target notch Filter bandwidth
+    // @Description: Yaw Target notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: RAT_YAW_NTAT
+    // @DisplayName: Yaw Target notch Filter attenuation
+    // @Description: Yaw ErrTargetor notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
+    // @Param: RAT_YAW_NEF
+    // @DisplayName: Yaw Error notch Filter center frequency
+    // @Description: Yaw Error notch Filter center frequency in Hz.
+    // @Range: 10 495
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: RAT_YAW_NEBW
+    // @DisplayName: Yaw Error notch Filter bandwidth
+    // @Description: Yaw Error notch Filter bandwidth in Hz.
+    // @Range: 5 250
+    // @Units: Hz
+    // @User: Advanced
+
+    // @Param: RAT_YAW_NEAT
+    // @DisplayName: Yaw Error notch Filter attenuation
+    // @Description: Yaw Error notch Filter attenuation in dB.
+    // @Range: 5 50
+    // @Units: dB
+    // @User: Advanced
+
     AP_SUBGROUPINFO(_pid_atti_rate_yaw, "RAT_YAW_", 6, AC_CustomControl_PID, AC_PID),
 
     AP_GROUPEND
@@ -308,6 +447,16 @@ void AC_CustomControl_PID::reset(void)
     _pid_atti_rate_roll.reset_filter();
     _pid_atti_rate_pitch.reset_filter();
     _pid_atti_rate_yaw.reset_filter();
+}
+
+
+void AC_CustomControl_PID::set_notch_sample_rate(float sample_rate)
+{
+#if AP_PID_NOTCH
+    _pid_atti_rate_roll.set_notch_sample_rate(sample_rate);
+    _pid_atti_rate_pitch.set_notch_sample_rate(sample_rate);
+    _pid_atti_rate_yaw.set_notch_sample_rate(sample_rate);
+#endif
 }
 
 #endif
