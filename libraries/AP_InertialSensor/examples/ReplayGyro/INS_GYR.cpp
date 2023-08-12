@@ -39,4 +39,9 @@ void INS_GYR::accumulate()
 
 void INS_GYR::start()
 {
+    for (uint8_t i=0; i<3; i++) {
+        uint8_t instance;
+        _imu.register_gyro(instance, 1000,
+                            AP_HAL::Device::make_bus_id(AP_HAL::Device::BUS_TYPE_SITL, 0, 1, DEVTYPE_SITL));
+    }
 }
