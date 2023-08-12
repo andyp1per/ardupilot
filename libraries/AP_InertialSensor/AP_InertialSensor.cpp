@@ -893,6 +893,7 @@ AP_InertialSensor::init(uint16_t loop_rate, AP_InertialSensor_Backend* backend)
         _gyro_count = _accel_count = 1;
         _backends_detected = true;
         _add_backend(backend);
+        _start_backends();
     }
 
     if (_gyro_count == 0 && _accel_count == 0) {
