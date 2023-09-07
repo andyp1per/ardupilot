@@ -2220,7 +2220,7 @@ uint32_t RCOutput::protocol_bitrate(const enum output_mode mode)
     case MODE_PWM_DSHOT1200:
         return 1200000;
     case MODE_NEOPIXEL:
-        return 800000;
+        return 400000;
     case MODE_PROFILED:
         return 1500000; // experiment winding this up 3000000 max from data sheet
     default:
