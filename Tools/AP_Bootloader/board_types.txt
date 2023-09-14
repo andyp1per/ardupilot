@@ -250,6 +250,7 @@ AP_HW_AR-F407SmartBat                1134
 AP_HW_SPEEDYBEEF4MINI                1135
 AP_HW_TMOTORH7                       1136
 AP_HW_FlywooF405Pro                  1137
+AP_HW_FURYF405_OSD                   1138
 
 AP_HW_ESP32_PERIPH                   1205
 AP_HW_ESP32S3_PERIPH                 1206
