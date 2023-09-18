@@ -159,8 +159,8 @@ define HAL_OSD_TYPE_DEFAULT 1
 # Font for the osd
 ROMFS_WILDCARD libraries/AP_OSD/fonts/font*.bin
 
-# To complementary channels work we define this
-#define STM32_PWM_USE_ADVANCED TRUE
+# Diatone's default VTX protocol is Tramp
+define AP_TRAMP_ENABLED TRUE
 
 # minimal drivers to reduce flash usage
 include ../include/minimal.inc
