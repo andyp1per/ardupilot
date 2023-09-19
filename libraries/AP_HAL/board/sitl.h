@@ -76,3 +76,7 @@
 #ifndef AC_PID_ADVANCED_ENABLED
 #define AC_PID_ADVANCED_ENABLED 1
 #endif
+
+#ifndef AP_FILTER_ENABLED
+#define AP_FILTER_ENABLED 1
+#endif
