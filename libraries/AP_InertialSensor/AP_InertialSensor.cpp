@@ -674,6 +674,13 @@ const AP_Param::GroupInfo AP_InertialSensor::var_info[] = {
     AP_SUBGROUPINFO(params[1], "5_", 55, AP_InertialSensor, AP_InertialSensor_Params),
 #endif
 
+    // @Param: _OPTIONS
+    // @DisplayName: Options for driver-specific configuration
+    // @Description: This enables optional driver features.
+    // @Bitmask: 0:High-resolution sampling
+    // @User: Advanced
+    AP_GROUPINFO("_OPTIONS", 56, AP_InertialSensor, _options, 0),
+
     /*
       NOTE: parameter indexes have gaps above. When adding new
       parameters check for conflicts carefully

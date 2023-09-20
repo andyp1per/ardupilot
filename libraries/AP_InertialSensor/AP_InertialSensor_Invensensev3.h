@@ -59,6 +59,9 @@ private:
     void fifo_reset();
     uint16_t calculate_fast_sampling_backend_rate(uint16_t base_odr, uint16_t max_odr) const;
 
+    // high-resolution operations
+    bool is_highres() const { return _imu.has_option(AP_InertialSensor::Options::HighResolution); }
+
     /* Read samples from FIFO */
     void read_fifo();
 
@@ -72,6 +75,7 @@ private:
     void register_write_bank_icm456xy(uint16_t bank_addr, uint16_t reg, uint8_t val);
 
     bool accumulate_samples(const struct FIFOData *data, uint8_t n_samples);
+    bool accumulate_highres_samples(const struct FIFODataHighRes *data, uint8_t n_samples);
 
     // instance numbers of accel and gyro data
     uint8_t gyro_instance;
@@ -113,7 +117,10 @@ private:
     enum Invensensev3_Type inv3_type;
 
     // buffer for fifo read
-    struct FIFOData *fifo_buffer;
+    union {
+      struct FIFOData *data;
+      struct FIFODataHighRes *highres_data;
+    } fifo_buffer;
 
     float temp_filtered;
     LowPassFilter2pFloat temp_filter;
