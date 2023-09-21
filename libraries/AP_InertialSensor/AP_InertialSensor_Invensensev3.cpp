@@ -236,20 +236,23 @@ void AP_InertialSensor_Invensensev3::start()
 
     // grab the used instances
     enum DevTypes devtype;
+    fifo_config1 = 0x07;
+    // optionally enable high resolution mode
+    if (is_highres()) {
+        fifo_config1 |= (1U<<4);  // FIFO_HIRES_EN
+    }
+
     switch (inv3_type) {
     case Invensensev3_Type::IIM42652:
         devtype = DEVTYPE_INS_IIM42652;
-        fifo_config1 = 0x07;
         temp_sensitivity = 1.0 / 2.07;
         break;
     case Invensensev3_Type::ICM42688:
         devtype = DEVTYPE_INS_ICM42688;
-        fifo_config1 = 0x07;
         temp_sensitivity = 1.0 / 2.07;
         break;
     case Invensensev3_Type::ICM42605:
         devtype = DEVTYPE_INS_ICM42605;
-        fifo_config1 = 0x07;
         temp_sensitivity = 1.0 / 2.07;
         break;
     case Invensensev3_Type::ICM40605:
@@ -273,7 +276,6 @@ void AP_InertialSensor_Invensensev3::start()
     default:
         devtype = DEVTYPE_INS_ICM40609;
         temp_sensitivity = 1.0 / 2.07;
-        fifo_config1 = 0x07;
         break;
     }
 
@@ -363,6 +365,8 @@ bool AP_InertialSensor_Invensensev3::accumulate_samples(const FIFOData *data, ui
 
         // we have a header to confirm we don't have FIFO corruption! no more mucking
         // about with the temperature registers
+        // ICM45686 - TMST_FIELD_EN bit 3 : 1
+        // ICM42688 - HEADER_TIMESTAMP_FSYNC bit 2-3 : 10
         if ((d.header & 0xFC) != 0x68) { // ACCEL_EN | GYRO_EN | TMST_FIELD_EN
             // no or bad data
             return false;
@@ -948,7 +952,12 @@ bool AP_InertialSensor_Invensensev3::hardware_init(void)
         register_write_bank(INV3REG_BANK_MREG1, INV3REG_MREG1_SENSOR_CONFIG3, 0x40);
 
         // use 16 bit data, gyro+accel
-        register_write_bank(INV3REG_BANK_MREG1, INV3REG_MREG1_FIFO_CONFIG5, 0x3);
+        uint8_t fifo_config = 0x03;
+        // optionally enable high resolution mode
+        if (is_highres()) {
+            fifo_config |= (1U<<3);  // FIFO_HIRES_EN
+        }
+        register_write_bank(INV3REG_BANK_MREG1, INV3REG_MREG1_FIFO_CONFIG5, fifo_config);
 
         // FIFO stop-on-full, disable bypass
         register_write(INV3REG_70_FIFO_CONFIG1, 0x2, true);
