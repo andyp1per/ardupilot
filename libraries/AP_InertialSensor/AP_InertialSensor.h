@@ -303,12 +303,6 @@ public:
         IMU_SENSOR_TYPE_GYRO = 1,
     };
 
-    enum class Options {
-        HighResolution = 1<<0
-    };
-
-    bool has_option(Options option) const { return _options & uint16_t(option); }
-
 #if AP_INERTIALSENSOR_BATCHSAMPLER_ENABLED
     class BatchSampler {
     public:
@@ -706,8 +700,8 @@ private:
     AP_Int8 _acc_body_aligned;
     AP_Int8 _trim_option;
 
-    // IMU options
-    AP_Int16 _options;
+    // High-resolution sampling mask
+    AP_Int8 _highres_sampling_mask;
 
     static AP_InertialSensor *_singleton;
     AP_AccelCal* _acal;

@@ -53,6 +53,10 @@
 #define HAL_DEFAULT_INS_FAST_SAMPLE 1
 #endif
 
+#ifndef HAL_DEFAULT_INS_HIGHRES_SAMPLE
+#define HAL_DEFAULT_INS_HIGHRES_SAMPLE 0
+#endif
+
 extern const AP_HAL::HAL& hal;
 
 
@@ -674,12 +678,12 @@ const AP_Param::GroupInfo AP_InertialSensor::var_info[] = {
     AP_SUBGROUPINFO(params[1], "5_", 55, AP_InertialSensor, AP_InertialSensor_Params),
 #endif
 
-    // @Param: _OPTIONS
-    // @DisplayName: Options for driver-specific configuration
-    // @Description: This enables optional driver features.
-    // @Bitmask: 0:High-resolution sampling
+    // @Param: _HIRES_SAMPLE
+    // @DisplayName: High resolution sampling mask
+    // @Description: Mask of IMUs to enable high resolution sampling on, if available
     // @User: Advanced
-    AP_GROUPINFO("_OPTIONS", 56, AP_InertialSensor, _options, 0),
+    // @Bitmask: 0:FirstIMU,1:SecondIMU,2:ThirdIMU
+    AP_GROUPINFO("_HIRES_SAMPLE",  56, AP_InertialSensor, _highres_sampling_mask,   HAL_DEFAULT_INS_HIGHRES_SAMPLE),
 
     /*
       NOTE: parameter indexes have gaps above. When adding new

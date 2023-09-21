@@ -119,6 +119,7 @@ extern const AP_HAL::HAL& hal;
 #define INV3REG_456_IREG_ADDRL      0x7D
 #define INV3REG_456_IREG_DATA       0x7E
 #define INV3REG_456_REG_MISC2       0x7F
+#define INV3REG_456_SREG_CTRL       0x63
 
 #define INV3BANK_456_IMEM_SRAM_ADDR 0x0000
 #define INV3BANK_456_IPREG_BAR_ADDR 0xA000
@@ -149,15 +150,19 @@ struct PACKED FIFOData {
 
 struct PACKED FIFODataHighRes {
     uint8_t header;
-    int16_t accel[3];
-    int16_t gyro[3];
+    uint8_t accel[6];
+    uint8_t gyro[6];
     int16_t temperature;
     uint16_t timestamp;
-    uint8_t ax : 4, gx : 4, ay : 4, gy : 4, az : 4, gz : 4;
+    uint8_t gx : 4, ax : 4, gy : 4, ay : 4, gz : 4, az : 4;
 };
 
 #define INV3_SAMPLE_SIZE sizeof(FIFOData)
 #define INV3_HIGHRES_SAMPLE_SIZE sizeof(FIFODataHighRes)
+
+static_assert(sizeof(FIFOData) == 16);
+static_assert(sizeof(FIFODataHighRes) == 20);
+
 #define INV3_FIFO_BUFFER_LEN 8
 
 AP_InertialSensor_Invensensev3::AP_InertialSensor_Invensensev3(AP_InertialSensor &imu,
@@ -171,13 +176,13 @@ AP_InertialSensor_Invensensev3::AP_InertialSensor_Invensensev3(AP_InertialSensor
 
 AP_InertialSensor_Invensensev3::~AP_InertialSensor_Invensensev3()
 {
-    if (is_highres()) {
-        if (fifo_buffer.highres_data != nullptr) {
-            hal.util->free_type((void*)fifo_buffer.highres_data, INV3_FIFO_BUFFER_LEN * INV3_HIGHRES_SAMPLE_SIZE, AP_HAL::Util::MEM_DMA_SAFE);
+    if (highres_sampling) {
+        if (fifo_buffer != nullptr) {
+            hal.util->free_type(fifo_buffer, INV3_FIFO_BUFFER_LEN * INV3_HIGHRES_SAMPLE_SIZE, AP_HAL::Util::MEM_DMA_SAFE);
         }
     } else {
-        if (fifo_buffer.data != nullptr) {
-            hal.util->free_type((void*)fifo_buffer.data, INV3_FIFO_BUFFER_LEN * INV3_SAMPLE_SIZE, AP_HAL::Util::MEM_DMA_SAFE);
+        if (fifo_buffer != nullptr) {
+            hal.util->free_type(fifo_buffer, INV3_FIFO_BUFFER_LEN * INV3_SAMPLE_SIZE, AP_HAL::Util::MEM_DMA_SAFE);
         }
     }
 }
@@ -234,13 +239,8 @@ void AP_InertialSensor_Invensensev3::start()
     // initially run the bus at low speed
     dev->set_speed(AP_HAL::Device::SPEED_LOW);
 
-    // grab the used instances
     enum DevTypes devtype;
     fifo_config1 = 0x07;
-    // optionally enable high resolution mode
-    if (is_highres()) {
-        fifo_config1 |= (1U<<4);  // FIFO_HIRES_EN
-    }
 
     switch (inv3_type) {
     case Invensensev3_Type::IIM42652:
@@ -266,17 +266,50 @@ void AP_InertialSensor_Invensensev3::start()
         break;
     case Invensensev3_Type::ICM45686:
         devtype = DEVTYPE_INS_ICM45686;
-        if (is_highres()) {
-            temp_sensitivity = 1.0 / 128.0;
-        } else {
-            temp_sensitivity = 1.0 / 2.0;
-        }
+        temp_sensitivity = 1.0 / 2.0;
+        gyro_scale = GYRO_SCALE_4000DPS;
+        accel_scale = ACCEL_SCALE_32G;
         break;
     case Invensensev3_Type::ICM40609:
     default:
         devtype = DEVTYPE_INS_ICM40609;
         temp_sensitivity = 1.0 / 2.07;
+        accel_scale = ACCEL_SCALE_32G;
         break;
+    }
+
+    // register the devices first to get an id, since various masks depend on this
+    if (!_imu.register_gyro(gyro_instance, 1000, dev->get_bus_id_devtype(devtype)) ||
+        !_imu.register_accel(accel_instance, 1000, dev->get_bus_id_devtype(devtype))) {
+        return;
+    }
+
+    // now we know who we are, other things can be checked for
+    if (enable_highres_sampling(accel_instance)) {
+        switch (inv3_type) {
+            case Invensensev3_Type::ICM42688: // HiRes 19bit
+            case Invensensev3_Type::IIM42652: // HiRes 19bit
+            case Invensensev3_Type::ICM42670: // HiRes 19bit
+            case Invensensev3_Type::ICM45686: // HiRes 20bit
+                highres_sampling = dev->bus_type() == AP_HAL::Device::BUS_TYPE_SPI;
+                break;
+            default:
+                break;
+        }
+    }
+
+    // optionally enable high resolution mode
+    if (highres_sampling) {
+        fifo_config1 |= (1U<<4);  // FIFO_HIRES_EN
+        gyro_scale = GYRO_SCALE_HIGHRES;
+        accel_scale = ACCEL_SCALE_HIGHRES_16G;
+        temp_sensitivity = 1.0 / 132.48;
+        if (inv3_type == Invensensev3_Type::ICM45686) {
+            temp_sensitivity = 1.0 / 128.0;
+            accel_scale = ACCEL_SCALE_HIGHRES_32G;
+        } else if (inv3_type == Invensensev3_Type::ICM42670) {
+            temp_sensitivity = 1.0 / 128.0;
+        }
     }
 
     // always use FIFO
@@ -294,12 +327,7 @@ void AP_InertialSensor_Invensensev3::start()
     // pre-calculate backend period
     backend_period_us = 1000000UL / backend_rate_hz;
 
-    if (!_imu.register_gyro(gyro_instance, backend_rate_hz, dev->get_bus_id_devtype(devtype)) ||
-        !_imu.register_accel(accel_instance, backend_rate_hz, dev->get_bus_id_devtype(devtype))) {
-        return;
-    }
-
-    // update backend sample rate
+    // update backend sample rates now that we know them
     _set_accel_raw_sample_rate(accel_instance, backend_rate_hz);
     _set_gyro_raw_sample_rate(gyro_instance, backend_rate_hz);
 
@@ -315,12 +343,12 @@ void AP_InertialSensor_Invensensev3::start()
     set_accel_orientation(accel_instance, rotation);
 
     // allocate fifo buffer
-    if (is_highres()) {
-        fifo_buffer.highres_data = (FIFODataHighRes*)hal.util->malloc_type(INV3_FIFO_BUFFER_LEN * INV3_HIGHRES_SAMPLE_SIZE, AP_HAL::Util::MEM_DMA_SAFE);
+    if (highres_sampling) {
+        fifo_buffer = hal.util->malloc_type(INV3_FIFO_BUFFER_LEN * INV3_HIGHRES_SAMPLE_SIZE, AP_HAL::Util::MEM_DMA_SAFE);
     } else {
-        fifo_buffer.data = (FIFOData*)hal.util->malloc_type(INV3_FIFO_BUFFER_LEN * INV3_SAMPLE_SIZE, AP_HAL::Util::MEM_DMA_SAFE);
+        fifo_buffer = hal.util->malloc_type(INV3_FIFO_BUFFER_LEN * INV3_SAMPLE_SIZE, AP_HAL::Util::MEM_DMA_SAFE);
     }
-    if (fifo_buffer.data == nullptr) {
+    if (fifo_buffer == nullptr) {
         AP_HAL::panic("Invensensev3: Unable to allocate FIFO buffer");
     }
 
@@ -331,8 +359,8 @@ void AP_InertialSensor_Invensensev3::start()
 // get a startup banner to output to the GCS
 bool AP_InertialSensor_Invensensev3::get_output_banner(char* banner, uint8_t banner_len) {
     if (fast_sampling) {
-        snprintf(banner, banner_len, "IMU%u: fast sampling enabled %.1fkHz",
-            gyro_instance, backend_rate_hz * 0.001);
+        snprintf(banner, banner_len, "IMU%u: fast%s sampling enabled %.1fkHz",
+            gyro_instance, highres_sampling ? ", high-resolution" : "" , backend_rate_hz * 0.001);
         return true;
     }
     return false;
@@ -357,6 +385,8 @@ void AP_InertialSensor_Invensensev3::accumulate()
 {
     // nothing to do
 }
+
+uint32_t last_op;
 
 bool AP_InertialSensor_Invensensev3::accumulate_samples(const FIFOData *data, uint8_t n_samples)
 {
@@ -383,7 +413,15 @@ bool AP_InertialSensor_Invensensev3::accumulate_samples(const FIFOData *data, ui
         // these four calls are about 40us
         _rotate_and_correct_accel(accel_instance, accel);
         _rotate_and_correct_gyro(gyro_instance, gyro);
-
+#if 0
+        if (AP_HAL::millis() - last_op > 1000 && inv3_type == Invensensev3_Type::ICM42688) {
+            last_op = AP_HAL::millis();
+            hal.console->printf("LR: %f %f %f, %f %f %f\n", accel.x, accel.y, accel.z, gyro.x, gyro.y, gyro.z);
+            uint8_t* x = (uint8_t*)(&data[i]);
+            hal.console->printf("%x %x %x %x %x %x %x %x\n", x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7]);
+            hal.console->printf("%x %x %x %x %x %x %x %x\n", x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15]);
+        }
+#endif
         _notify_new_accel_raw_sample(accel_instance, accel, 0);
         _notify_new_gyro_raw_sample(gyro_instance, gyro);
 
@@ -391,6 +429,25 @@ bool AP_InertialSensor_Invensensev3::accumulate_samples(const FIFOData *data, ui
     }
     return true;
 }
+
+// high-resolution packets are always 20-bits, but not always 20-bits of data.
+// Scale factors account for the useless bits
+static inline float uint20_to_float(uint8_t msb, uint8_t bits, uint8_t lsb)
+{
+    uint32_t value20bit = uint32_t(msb) << 12U | uint32_t(bits) << 4U | lsb;
+    int32_t value32bit;
+    // Check the sign bit (MSB)
+    if (value20bit & 0x80000) { // MSB is set (negative value)
+        // Extend the sign bit to the upper 12 bits of the 32-bit integer
+        value32bit = (int32_t)(value20bit | 0xFFF00000);
+    } else { // MSB is not set (positive value)
+        // Zero-fill the upper 12 bits of the 32-bit integer
+        value32bit = value20bit;
+    }
+
+    return float(value32bit);
+}
+
 
 bool AP_InertialSensor_Invensensev3::accumulate_highres_samples(const FIFODataHighRes *data, uint8_t n_samples)
 {
@@ -404,12 +461,12 @@ bool AP_InertialSensor_Invensensev3::accumulate_highres_samples(const FIFODataHi
             return false;
         }
 
-        Vector3f accel{float(uint32_t(d.accel[0]) << 4 | d.ax),
-            float(uint32_t(d.accel[1]) << 4 | d.ay),
-            float(uint32_t(d.accel[2]) << 4 | d.az)};
-        Vector3f gyro{float(uint32_t(d.gyro[0]) << 4 | d.gx),
-            float(uint32_t(d.gyro[1]) << 4 | d.gy),
-            float(uint32_t(d.gyro[2]) << 4 | d.gz)};
+        Vector3f accel{uint20_to_float(d.accel[1], d.accel[0], d.ax),
+            uint20_to_float(d.accel[3], d.accel[2], d.ay),
+            uint20_to_float(d.accel[5], d.accel[4], d.az)};
+        Vector3f gyro{uint20_to_float(d.gyro[1], d.gyro[0], d.gx),
+            uint20_to_float(d.gyro[3], d.gyro[2], d.gy),
+            uint20_to_float(d.gyro[5], d.gyro[4], d.gz)};
 
         accel *= accel_scale;
         gyro *= gyro_scale;
@@ -419,7 +476,16 @@ bool AP_InertialSensor_Invensensev3::accumulate_highres_samples(const FIFODataHi
         // these four calls are about 40us
         _rotate_and_correct_accel(accel_instance, accel);
         _rotate_and_correct_gyro(gyro_instance, gyro);
-
+#if 0
+        if (AP_HAL::millis() - last_op > 1000 && inv3_type == Invensensev3_Type::ICM45686) {
+            last_op = AP_HAL::millis();
+            hal.console->printf("HR: %f %f %f, %f %f %f\n", accel.x, accel.y, accel.z, gyro.x, gyro.y, gyro.z);
+            hal.console->printf("%u %u %u %u\n", d.accel[4], d.accel[5], d.az, d.gz);
+            uint8_t* x = (uint8_t*)(&data[i]);
+            hal.console->printf("%x %x %x %x %x %x %x %x %x %x\n", x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9]);
+            hal.console->printf("%x %x %x %x %x %x %x %x %x %x\n", x[10], x[11], x[12], x[13], x[14], x[15], x[16], x[17], x[18], x[19]);
+        }
+#endif
         _notify_new_accel_raw_sample(accel_instance, accel, 0);
         _notify_new_gyro_raw_sample(gyro_instance, gyro);
 
@@ -454,7 +520,7 @@ void AP_InertialSensor_Invensensev3::read_fifo()
         break;
     }
 
-    const bool read_highres = is_highres();
+    const bool read_highres = highres_sampling;
     const uint8_t fifo_sample_size = read_highres ? INV3_HIGHRES_SAMPLE_SIZE : INV3_SAMPLE_SIZE;
 
     if (!block_read(reg_counth, (uint8_t*)&n_samples, 2)) {
@@ -472,16 +538,16 @@ void AP_InertialSensor_Invensensev3::read_fifo()
 
     while (n_samples > 0) {
         uint8_t n = MIN(n_samples, INV3_FIFO_BUFFER_LEN);
-        if (!block_read(reg_data, (uint8_t*)fifo_buffer.data, n * fifo_sample_size)) {
+        if (!block_read(reg_data, (uint8_t*)fifo_buffer, n * fifo_sample_size)) {
             goto check_registers;
         }
 
-        if (read_highres && !accumulate_highres_samples(fifo_buffer.highres_data, n)) {
+        if (read_highres && !accumulate_highres_samples((FIFODataHighRes*)fifo_buffer, n)) {
             need_reset = true;
             break;
         }
 
-        if (!read_highres && !accumulate_samples(fifo_buffer.data, n)) {
+        if (!read_highres && !accumulate_samples((FIFOData*)fifo_buffer, n)) {
             need_reset = true;
             break;
         }
@@ -795,7 +861,7 @@ void AP_InertialSensor_Invensensev3::set_filter_and_scaling_icm456xy(void)
     uint8_t fifo_config = (1U<<2 | 1U<<1); // FIFO_ACCEL_EN | FIFO_GYRO_EN, FIFO_IF_EN disabled
 
     // optionally enable high resolution mode
-    if (is_highres()) {
+    if (highres_sampling) {
         fifo_config |= (1U<<3);  // FIFO_HIRES_EN
     }
 
@@ -828,8 +894,6 @@ bool AP_InertialSensor_Invensensev3::check_whoami(void)
     switch (whoami) {
     case INV3_ID_ICM40609:
         inv3_type = Invensensev3_Type::ICM40609;
-        // Accel scale 32g (1024 LSB/g)
-        accel_scale = (GRAVITY_MSS / 1024);
         return true;
     case INV3_ID_ICM42688:
         inv3_type = Invensensev3_Type::ICM42688;
@@ -852,9 +916,6 @@ bool AP_InertialSensor_Invensensev3::check_whoami(void)
     switch (whoami) {
     case INV3_ID_ICM45686:
         inv3_type = Invensensev3_Type::ICM45686;
-        gyro_scale = GYRO_SCALE_4000DPS;
-        // Accel scale 32g (1024 LSB/g)
-        accel_scale = (GRAVITY_MSS / 1024);
         return true;
     }
     // not a value WHOAMI result
@@ -954,7 +1015,7 @@ bool AP_InertialSensor_Invensensev3::hardware_init(void)
         // use 16 bit data, gyro+accel
         uint8_t fifo_config = 0x03;
         // optionally enable high resolution mode
-        if (is_highres()) {
+        if (highres_sampling) {
             fifo_config |= (1U<<3);  // FIFO_HIRES_EN
         }
         register_write_bank(INV3REG_BANK_MREG1, INV3REG_MREG1_FIFO_CONFIG5, fifo_config);
