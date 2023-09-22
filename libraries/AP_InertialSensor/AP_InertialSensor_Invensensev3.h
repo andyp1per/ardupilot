@@ -101,9 +101,10 @@ private:
     */
     static constexpr float GYRO_SCALE_4000DPS = radians(1) / (SCALE_RANGE_16BIT / 4000.0);
     /*
-      highres gyro is always 131 LSB/DPS regardless of scale
+      highres gyro is always 131 LSB/DPS modified by the data size transmitted
     */
-    static constexpr float GYRO_SCALE_HIGHRES = radians(1) / (SCALE_RANGE_19BIT / 2000.0);
+    static constexpr float GYRO_SCALE_HIGHRES_2000DPS = radians(1) / (SCALE_RANGE_20BIT / 2000.0);
+    static constexpr float GYRO_SCALE_HIGHRES_4000DPS = radians(1) / (SCALE_RANGE_20BIT / 4000.0);
     /*
       Accel scale 16g (2048 LSB/g)
     */
@@ -114,7 +115,6 @@ private:
     static constexpr float ACCEL_SCALE_32G = (GRAVITY_MSS / (SCALE_RANGE_16BIT / 32));
     /*
       highres accel is 16384 LSB/g on 45686 amd 8192 LSB/g on all others
-      scaled to the packet size gives 32768 LSB/g on all sensors
     */
     static constexpr float ACCEL_SCALE_HIGHRES_16G = (GRAVITY_MSS / (SCALE_RANGE_20BIT / 16));
     static constexpr float ACCEL_SCALE_HIGHRES_32G = (GRAVITY_MSS / (SCALE_RANGE_20BIT / 32));

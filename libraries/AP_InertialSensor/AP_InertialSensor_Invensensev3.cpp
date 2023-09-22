@@ -301,12 +301,13 @@ void AP_InertialSensor_Invensensev3::start()
     // optionally enable high resolution mode
     if (highres_sampling) {
         fifo_config1 |= (1U<<4);  // FIFO_HIRES_EN
-        gyro_scale = GYRO_SCALE_HIGHRES;
+        gyro_scale = GYRO_SCALE_HIGHRES_2000DPS;
         accel_scale = ACCEL_SCALE_HIGHRES_16G;
         temp_sensitivity = 1.0 / 132.48;
         if (inv3_type == Invensensev3_Type::ICM45686) {
             temp_sensitivity = 1.0 / 128.0;
             accel_scale = ACCEL_SCALE_HIGHRES_32G;
+            gyro_scale = GYRO_SCALE_HIGHRES_4000DPS;
         } else if (inv3_type == Invensensev3_Type::ICM42670) {
             temp_sensitivity = 1.0 / 128.0;
         }
