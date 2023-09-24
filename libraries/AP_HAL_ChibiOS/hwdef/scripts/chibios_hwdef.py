@@ -2468,10 +2468,12 @@ INCLUDE common.ld
             if periph in self.bylabel:
                 p = self.bylabel[periph]
                 if p.has_extra('NODMA'):
+                    print("no dma for ", p, periph)
                     dma_exclude.add(periph)
             if periph in self.altlabel:
                 p = self.altlabel[periph]
                 if p.has_extra('NODMA'):
+                    print("no dma for ", p, periph)
                     dma_exclude.add(periph)
         return list(dma_exclude)
 
@@ -2976,12 +2978,20 @@ INCLUDE common.ld
         elif a[0] == 'undef':
             for u in a[1:]:
                 print("Removing %s" % u)
+                periph = self.config[u][0]
+                periph_type = self.config[u][1]
+                print("Removing %s" % periph)
+                print("Removing %s" % periph_type)
                 self.config.pop(u, '')
-                self.bytype.pop(u, '')
-                self.bylabel.pop(u, '')
-                self.alttype.pop(u, '')
-                self.altlabel.pop(u, '')
+                self.bytype.pop(periph_type, '')
+                self.bylabel.pop(periph, '')
+                self.alttype.pop(periph_type, '')
+                if periph in self.altlabel:
+                    print(self.altlabel[periph])
+                self.altlabel.pop(periph, '')
                 self.intdefines.pop(u, '')
+                print(self.altlabel)
+                print(self.alttype)
                 for dev in self.spidev:
                     if u == dev[0]:
                         self.spidev.remove(dev)
