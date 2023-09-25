@@ -229,6 +229,36 @@ void Copter::yaw_imbalance_check()
     }
 }
 
+// check for motor desync
+void Copter::desync_check()
+{
+#if HAL_WITH_ESC_TELEM && FRAME_CONFIG != HELI_FRAME
+    // If we are on the ground do nothing
+    if (!motors->armed() || ap.land_complete) {
+        return;
+    }
+
+    // check ESCs are sending RPM at expected level
+    uint32_t motor_mask = motors->get_motor_mask();
+    const bool telem_active = AP::esc_telem().is_telemetry_active(motor_mask);
+    // check that all motors are running
+    const uint32_t failed_motors = AP::esc_telem().get_motors_not_running(motor_mask);
+
+    // all good
+    if ((telem_active && !failed_motors) || !telem_active) {
+        return;
+    }
+
+    // warn user telem inactive or rpm is inadequate every 5 seconds
+    uint32_t now_ms = AP_HAL::millis();
+    if (now_ms - desync_check_warning_ms > 5000) {
+        desync_check_warning_ms = now_ms;
+        const char* prefix_str = "Motor desync:";
+        gcs().send_text(MAV_SEVERITY_CRITICAL, "%s ESC RPM out of range", prefix_str);
+    }
+#endif
+}
+
 #if PARACHUTE == ENABLED
 
 // Code to detect a crash main ArduCopter code
