@@ -182,6 +182,39 @@ void AP_MotorsMatrix::output_to_motors()
     }
 }
 
+void AP_MotorsMatrix::restart_motors(uint32_t failed_motor_mask)
+{
+    // convert output to PWM and send to each motor
+    for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
+        if (BIT_IS_SET(failed_motor_mask, i)) {
+            // stop anyone else writing to the motor
+            motor_enabled[i] = 0;
+            // disarm the motor
+            rc_write(i, 0);
+        }
+    }
+
+    // delay to give motors a chance to recover
+    hal.scheduler->delay(200);
+
+    // rearm with minimum pwm
+    for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
+        if (BIT_IS_SET(failed_motor_mask, i)) {
+            // rearm the motor
+            rc_write(i, get_pwm_output_min());
+        }
+    }
+
+    // delay to give motors a chance to rearm
+    hal.scheduler->delay(200);
+
+    for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
+        if (BIT_IS_SET(failed_motor_mask, i)) {
+            motor_enabled[i] = 1;
+        }
+    }
+}
+
 // get_motor_mask - returns a bitmask of which outputs are being used for motors (1 means being used)
 //  this can be used to ensure other pwm outputs (i.e. for servos) do not conflict
 uint32_t AP_MotorsMatrix::get_motor_mask()
