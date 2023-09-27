@@ -155,7 +155,7 @@ uint32_t AP_ESC_Telem::get_motors_not_running(uint32_t servo_channel_mask) const
             if (!rpm_data_within_timeout(rpmdata, now, ESC_RPM_CHECK_TIMEOUT_US)) {
                 BIT_SET(failed_motors, i);
             }
-            if (rpmdata.rpm == 0) {
+            if (is_zero(rpmdata.rpm)) {
                 BIT_SET(failed_motors, i);
             }
         }
