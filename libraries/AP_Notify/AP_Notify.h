@@ -91,6 +91,9 @@ public:
         Notify_LED_IS31FL3195_I2C_External          = (1 << 15), // IS31FL3195
         Notify_LED_IS31FL3195_I2C_Internal          = (1 << 16), // IS31FL3195
 #endif
+#if AP_NOTIFY_NEOPIXEL_ENABLED
+        Notify_LED_NeoPixelRGB              = (1 << 18), // NeoPixel AdaFruit 4544 Worldsemi WS2811
+#endif
         Notify_LED_MAX
     };
 
@@ -206,6 +209,7 @@ public:
     uint8_t get_buzz_level() const  { return _buzzer_level; }
     uint8_t get_buzz_volume() const  { return _buzzer_volume; }
     uint8_t get_led_len() const { return _led_len; }
+    uint32_t get_led_type() const { return _led_type; }
     int8_t get_rgb_led_brightness_percent() const;
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
