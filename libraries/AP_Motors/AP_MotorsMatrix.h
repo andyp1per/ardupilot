@@ -148,6 +148,16 @@ protected:
     float               _thrust_rpyt_out_filt[AP_MOTORS_MAX_NUM_MOTORS];    // filtered thrust outputs with 1 second time constant
     uint8_t             _motor_lost_index;  // index number of the lost motor
 
+    // motor restart handling
+    enum class MotorRestartState {
+        Running,
+        Disarming,
+        SpoolingUp
+    };
+    uint32_t            _motors_to_restart;
+    MotorRestartState   _restart_state;
+    uint32_t            _restart_start_ms;
+
     motor_frame_class   _active_frame_class; // active frame class (i.e. quad, hexa, octa, etc)
     motor_frame_type    _active_frame_type;  // active frame type (i.e. plus, x, v, etc)
 
@@ -163,6 +173,8 @@ private:
     bool setup_dodecahexa_matrix(motor_frame_type frame_type);
     bool setup_y6_matrix(motor_frame_type frame_type);
     bool setup_octaquad_matrix(motor_frame_type frame_type);
+
+    void run_restart_motors();
 
     static AP_MotorsMatrix *_singleton;
 };

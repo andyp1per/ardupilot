@@ -184,7 +184,14 @@ void AP_MotorsMatrix::output_to_motors()
 
 void AP_MotorsMatrix::restart_motors(uint32_t failed_motor_mask)
 {
-    // convert output to PWM and send to each motor
+    if (_motors_to_restart == failed_motor_mask) {
+        return;
+    }
+
+    _motors_to_restart |= failed_motor_mask;
+    _restart_start_ms = AP_HAL::millis();
+    _restart_state = MotorRestartState::Disarming;
+
     for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
         if (BIT_IS_SET(failed_motor_mask, i)) {
             // stop anyone else writing to the motor
@@ -193,25 +200,41 @@ void AP_MotorsMatrix::restart_motors(uint32_t failed_motor_mask)
             rc_write(i, 0);
         }
     }
+}
 
-    // delay to give motors a chance to recover
-    hal.scheduler->delay(200);
-
-    // rearm with minimum pwm
-    for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
-        if (BIT_IS_SET(failed_motor_mask, i)) {
-            // rearm the motor
-            rc_write(i, get_pwm_output_min());
-        }
+void AP_MotorsMatrix::run_restart_motors()
+{
+    if (_motors_to_restart == 0) {
+        return;
     }
 
-    // delay to give motors a chance to rearm
-    hal.scheduler->delay(200);
-
-    for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
-        if (BIT_IS_SET(failed_motor_mask, i)) {
-            motor_enabled[i] = 1;
+    switch(_restart_state) {
+    case MotorRestartState::Disarming:
+        if (AP_HAL::millis() - _restart_start_ms > 200) {
+            // rearm with minimum pwm
+            for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
+                if (BIT_IS_SET(_motors_to_restart, i)) {
+                    // rearm the motor
+                    rc_write(i, get_pwm_output_min());
+                }
+            }
+            _restart_start_ms = AP_HAL::millis();
+            _restart_state = MotorRestartState::SpoolingUp;
         }
+        break;
+    case MotorRestartState::SpoolingUp:
+        if (AP_HAL::millis() - _restart_start_ms > 200) {
+            for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
+                if (BIT_IS_SET(_motors_to_restart, i)) {
+                    motor_enabled[i] = 1;
+                }
+            }
+            _motors_to_restart = 0;
+            _restart_state = MotorRestartState::Running;
+        }
+        break;
+    case MotorRestartState::Running:
+        break;
     }
 }
 
@@ -434,6 +457,8 @@ void AP_MotorsMatrix::output_armed_stabilizing()
 
     // check for failed motor
     check_for_failed_motor(throttle_thrust_best_plus_adj);
+
+    run_restart_motors();
 }
 
 // check for failed motor
