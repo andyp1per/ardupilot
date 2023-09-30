@@ -184,11 +184,12 @@ void AP_MotorsMatrix::output_to_motors()
 
 void AP_MotorsMatrix::restart_motors(uint32_t failed_motor_mask)
 {
-    if (_motors_to_restart == failed_motor_mask) {
+    // either there is nothing to do or we are restarting in which case failure states will be wrong
+    if (_motors_to_restart == failed_motor_mask || _restart_state != MotorRestartState::Running) {
         return;
     }
 
-    _motors_to_restart |= failed_motor_mask;
+    _motors_to_restart = failed_motor_mask;
     _restart_start_ms = AP_HAL::millis();
     _restart_state = MotorRestartState::Disarming;
 
@@ -202,15 +203,19 @@ void AP_MotorsMatrix::restart_motors(uint32_t failed_motor_mask)
     }
 }
 
+// run the restart state machine
 void AP_MotorsMatrix::run_restart_motors()
 {
     if (_motors_to_restart == 0) {
         return;
     }
 
+    uint32_t now_ms = AP_HAL::millis();
+
     switch(_restart_state) {
     case MotorRestartState::Disarming:
-        if (AP_HAL::millis() - _restart_start_ms > 200) {
+        // no signal for >300ms is considered lost on BLHeli ESCs
+        if (now_ms - _restart_start_ms > 350) {
             // rearm with minimum pwm
             for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
                 if (BIT_IS_SET(_motors_to_restart, i)) {
@@ -218,17 +223,32 @@ void AP_MotorsMatrix::run_restart_motors()
                     rc_write(i, get_pwm_output_min());
                 }
             }
-            _restart_start_ms = AP_HAL::millis();
-            _restart_state = MotorRestartState::SpoolingUp;
+            _restart_start_ms = now_ms;
+            _channel_mask_update_ms = now_ms;
+            _restart_state = MotorRestartState::Arming;
         }
         break;
-    case MotorRestartState::SpoolingUp:
-        if (AP_HAL::millis() - _restart_start_ms > 200) {
+    case MotorRestartState::Arming:
+        // rearming requires 10 good frames in 30ms at zero throttle, but we also have to account
+        // for the time it takes to initialize (ta-da-da sound)
+        if (now_ms - _restart_start_ms > 300) {
             for (uint8_t i = 0; i < AP_MOTORS_MAX_NUM_MOTORS; i++) {
                 if (BIT_IS_SET(_motors_to_restart, i)) {
                     motor_enabled[i] = 1;
                 }
             }
+            _restart_start_ms = now_ms;
+            _restart_state = MotorRestartState::SpoolingUp;
+        // unfortunately disarming loses the reverse settings, so we need to reinstate these
+        // but don't want to flood the ESCs with requests
+        } else if (now_ms - _channel_mask_update_ms > 50) {
+            _channel_mask_update_ms = now_ms;
+            hal.rcout->update_channel_masks(true);
+        }
+        break;
+    case MotorRestartState::SpoolingUp:
+        // give a little bit of time for the motors to start sending data
+        if (now_ms - _restart_start_ms > 300) {
             _motors_to_restart = 0;
             _restart_state = MotorRestartState::Running;
         }

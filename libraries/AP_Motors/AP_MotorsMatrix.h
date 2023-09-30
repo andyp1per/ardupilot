@@ -77,6 +77,7 @@ public:
 
     // restart motors
     void                restart_motors(uint32_t failed_motor_mask) override;
+    bool                restarting() const override { return _restart_state != MotorRestartState::Running; };
 
     // add_motor using raw roll, pitch, throttle and yaw factors
     void                add_motor_raw(int8_t motor_num, float roll_fac, float pitch_fac, float yaw_fac, uint8_t testing_order, float throttle_factor = 1.0f);
@@ -152,11 +153,13 @@ protected:
     enum class MotorRestartState {
         Running,
         Disarming,
+        Arming,
         SpoolingUp
     };
     uint32_t            _motors_to_restart;
     MotorRestartState   _restart_state;
     uint32_t            _restart_start_ms;
+    uint32_t            _channel_mask_update_ms;
 
     motor_frame_class   _active_frame_class; // active frame class (i.e. quad, hexa, octa, etc)
     motor_frame_type    _active_frame_type;  // active frame type (i.e. plus, x, v, etc)
