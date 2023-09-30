@@ -234,28 +234,48 @@ void Copter::desync_check()
 {
 #if HAL_WITH_ESC_TELEM && FRAME_CONFIG != HELI_FRAME
     // If we are on the ground do nothing
-    if (!motors->armed() || ap.land_complete) {
+    if (!motors->armed() || motors->restarting() || copter.g2.failsafe_mr_timeout == 0
+#ifndef AP_MOTOR_DESYNC_DEBUG
+        || ap.land_complete
+#endif
+        ) {
         return;
     }
 
+#ifdef AP_MOTOR_DESYNC_DEBUG
+    if (motors->get_spool_state() == AP_Motors::SpoolState::SHUT_DOWN) {
+        return;
+    }
+#endif
     // check ESCs are sending RPM at expected level
     uint32_t motor_mask = motors->get_motor_mask();
     const bool telem_active = AP::esc_telem().is_telemetry_active(motor_mask);
     // check that all motors are running
     const uint32_t failed_motors = AP::esc_telem().get_motors_not_running(motor_mask);
+    uint32_t now_ms = AP_HAL::millis();
 
     // all good
     if ((telem_active && !failed_motors) || !telem_active) {
+        motor_failure_start_ms = 0;
         return;
     }
 
-    // warn user telem inactive or rpm is inadequate every 5 seconds
-    uint32_t now_ms = AP_HAL::millis();
-    if (now_ms - desync_check_warning_ms > 5000) {
-        desync_check_warning_ms = now_ms;
-        const char* prefix_str = "Motor desync:";
-        gcs().send_text(MAV_SEVERITY_CRITICAL, "%s ESC RPM out of range", prefix_str);
+    // start the clock on restart logic
+    if (!motor_failure_start_ms) {
+        motor_failure_start_ms = now_ms;
+        return;
     }
+
+    // see whether the timeout has expired
+    if (now_ms - motor_failure_start_ms < copter.g2.failsafe_mr_timeout) {
+        return;
+    }
+
+    motors->restart_motors(failed_motors);
+    motor_failure_start_ms = 0;
+
+    gcs().send_text(MAV_SEVERITY_CRITICAL, "Desync detected on %u motor(s), first motor: %u - restarting",
+        __builtin_popcount(failed_motors), __builtin_ffs(failed_motors));
 #endif
 }
 

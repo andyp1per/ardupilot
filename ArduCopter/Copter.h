@@ -332,9 +332,6 @@ private:
     // takeoff check
     uint32_t takeoff_check_warning_ms;  // system time user was last warned of takeoff check failure
 
-    // desync check
-    uint32_t desync_check_warning_ms;  // system time user was last warned of desync check failure
-
     // GCS selection
     GCS_Copter _gcs; // avoid using this; use gcs()
     GCS_Copter &gcs() { return _gcs; }
@@ -740,6 +737,8 @@ private:
     void thrust_loss_check();
     void yaw_imbalance_check();
     void desync_check();
+    uint32_t motor_failure_start_ms;
+
     LowPassFilterFloat yaw_I_filt{0.05f};
     uint32_t last_yaw_warn_ms;
     void parachute_check();
