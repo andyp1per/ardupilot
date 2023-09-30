@@ -152,10 +152,10 @@ uint32_t AP_ESC_Telem::get_motors_not_running(uint32_t servo_channel_mask) const
         if (BIT_IS_SET(servo_channel_mask, i)) {
             const volatile AP_ESC_Telem_Backend::RpmData& rpmdata = _rpm_data[i];
             // we choose a relatively strict measure of health so that failsafe actions can rely on the results
-            if (!rpm_data_within_timeout(rpmdata, now, ESC_RPM_CHECK_TIMEOUT_US)) {
+            if (now < rpmdata.last_update_us || now - rpmdata.last_update_us > ESC_RPM_CHECK_TIMEOUT_US) {
                 BIT_SET(failed_motors, i);
             }
-            if (is_zero(rpmdata.rpm)) {
+            else if (is_zero(rpmdata.rpm)) {
                 BIT_SET(failed_motors, i);
             }
         }
