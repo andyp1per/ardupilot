@@ -175,13 +175,12 @@ bool RCOutput::bdshot_setup_group_ic_DMA(pwm_group &group)
  */
 void RCOutput::bdshot_ic_dma_allocate(Shared_DMA *ctx)
 {
+    chSysLock();
     for (uint8_t i = 0; i < NUM_GROUPS; i++ ) {
         pwm_group &group = pwm_group_list[i];
         for (uint8_t icuch = 0; icuch < 4; icuch++) {
             if (group.bdshot.ic_dma_handle[icuch] == ctx && group.bdshot.ic_dma[icuch] == nullptr) {
-                chSysLock();
                 group.bdshot.ic_dma[icuch] = dmaStreamAllocI(group.dma_ch[icuch].stream_id, 10, bdshot_dma_ic_irq_callback, &group);
-                chSysUnlock();
 #if STM32_DMA_SUPPORTS_DMAMUX
                 if (group.bdshot.ic_dma[icuch]) {
                     dmaSetRequestSource(group.bdshot.ic_dma[icuch], group.dma_ch[icuch].channel);
@@ -190,6 +189,7 @@ void RCOutput::bdshot_ic_dma_allocate(Shared_DMA *ctx)
             }
         }
     }
+    chSysUnlock();
 }
 
 /*
@@ -197,17 +197,69 @@ void RCOutput::bdshot_ic_dma_allocate(Shared_DMA *ctx)
  */
 void RCOutput::bdshot_ic_dma_deallocate(Shared_DMA *ctx)
 {
+    chSysLock();
     for (uint8_t i = 0; i < NUM_GROUPS; i++ ) {
         pwm_group &group = pwm_group_list[i];
         for (uint8_t icuch = 0; icuch < 4; icuch++) {
             if (group.bdshot.ic_dma_handle[icuch] == ctx && group.bdshot.ic_dma[icuch] != nullptr) {
-                chSysLock();
                 dmaStreamFreeI(group.bdshot.ic_dma[icuch]);
                 group.bdshot.ic_dma[icuch] = nullptr;
-                chSysUnlock();
             }
         }
     }
+    chSysUnlock();
+}
+
+// reset pwm driver to output mode without resetting the clock or the peripheral
+// the code here is the equivalent of pwmStart()/pwmStop()
+void RCOutput::bdshot_reset_pwm(pwm_group& group)
+{
+    osalSysLock();
+// stop sets these
+    group.pwm_drv->tim->CR1  = 0;                    /* Timer disabled.              */
+    group.pwm_drv->tim->DIER = 0;                    /* All IRQs disabled.           */
+    group.pwm_drv->tim->SR   = 0;                    /* Clear eventual pending IRQs. */
+// start sets these
+    group.pwm_drv->tim->CCMR1 = STM32_TIM_CCMR1_OC1M(6) | STM32_TIM_CCMR1_OC1PE |
+                       STM32_TIM_CCMR1_OC2M(6) | STM32_TIM_CCMR1_OC2PE;
+    group.pwm_drv->tim->CCMR2 = STM32_TIM_CCMR2_OC3M(6) | STM32_TIM_CCMR2_OC3PE |
+                       STM32_TIM_CCMR2_OC4M(6) | STM32_TIM_CCMR2_OC4PE;
+    group.pwm_drv->tim->CCR[0] = 0;                  /* Comparator 1 disabled.       */
+    group.pwm_drv->tim->CCR[1] = 0;                  /* Comparator 2 disabled.       */
+    group.pwm_drv->tim->CCR[2] = 0;                  /* Comparator 3 disabled.       */
+    group.pwm_drv->tim->CCR[3] = 0;                  /* Comparator 4 disabled.       */
+    uint32_t psc = (group.pwm_drv->clock / group.pwm_drv->config->frequency) - 1;
+    group.pwm_drv->tim->PSC  = psc;
+    group.pwm_drv->tim->ARR  = group.pwm_drv->period - 1;
+    group.pwm_drv->tim->CR2  = group.pwm_drv->config->cr2;
+
+    uint32_t ccer = 0;
+    if (group.is_chan_enabled(0)) {
+        ccer |= STM32_TIM_CCER_CC1P | STM32_TIM_CCER_CC1E;
+    }
+    if (group.is_chan_enabled(1)) {
+        ccer |= STM32_TIM_CCER_CC2P | STM32_TIM_CCER_CC2E;
+    }
+    if (group.is_chan_enabled(2)) {
+        ccer |= STM32_TIM_CCER_CC3P | STM32_TIM_CCER_CC3E;
+    }
+    if (group.is_chan_enabled(3)) {
+        ccer |= STM32_TIM_CCER_CC4P | STM32_TIM_CCER_CC4E;
+    }
+    group.pwm_drv->tim->CCER = ccer;
+    group.pwm_drv->tim->EGR   = STM32_TIM_EGR_UG;      /* Update event.                */
+    group.pwm_drv->tim->DIER  = group.pwm_drv->config->dier &   /* DMA-related DIER settings.   */
+                        ~STM32_TIM_DIER_IRQ_MASK;
+    if (group.pwm_drv->has_bdtr) {
+        group.pwm_drv->tim->BDTR  = group.pwm_drv->config->bdtr | STM32_TIM_BDTR_MOE;
+    }
+#ifdef PAL_MODE_STM32_ALTERNATE_PUSHPULL
+    palSetLineMode(group.pal_lines[group.bdshot.curr_telem_chan], PAL_MODE_STM32_ALTERNATE_PUSHPULL);
+#endif
+    /* Timer configured and started.*/
+    group.pwm_drv->tim->CR1   = STM32_TIM_CR1_ARPE | STM32_TIM_CR1_URS | STM32_TIM_CR1_CEN;
+
+    osalSysUnlock();
 }
 
 // see https://github.com/betaflight/betaflight/pull/8554#issuecomment-512507625
@@ -221,10 +273,12 @@ void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
     // should be plenty
     chVTSetI(&group->dma_timeout, chTimeUS2I(group->dshot_pulse_send_time_us + 30U + 10U),
         bdshot_finish_dshot_gcr_transaction, group);
-    uint8_t curr_ch = group->bdshot.curr_telem_chan;
 
     group->pwm_drv->tim->CR1 = 0;
-    group->pwm_drv->tim->CCER = 0;
+    // do NOT CCER to 0 here - this pulls the line low on F103 (at least)
+    // and since we are already doing bdshot the relevant options that are set for output
+    // also apply to input and bdshot_config_icu_dshot() will disable any channels that need
+    // disabling
 
     // Configure Timer
     group->pwm_drv->tim->SR = 0;
@@ -240,6 +294,7 @@ void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
     group->pwm_drv->tim->ARR = 0xFFFF;  // count forever
     group->pwm_drv->tim->CNT = 0;
 
+    uint8_t curr_ch = group->bdshot.curr_telem_chan;
     // Initialise ICU channels
     bdshot_config_icu_dshot(group->pwm_drv->tim, curr_ch, group->bdshot.telem_tim_ch[curr_ch]);
 
@@ -273,6 +328,10 @@ void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
     // Start Timer
     group->pwm_drv->tim->EGR |= STM32_TIM_EGR_UG;
     group->pwm_drv->tim->SR = 0;
+
+#ifdef PAL_MODE_STM32_ALTERNATE_PUSHPULL
+    palSetLineMode(group->pal_lines[curr_ch], PAL_MODE_INPUT_PULLUP);
+#endif
     group->pwm_drv->tim->CR1 = TIM_CR1_ARPE | STM32_TIM_CR1_URS | STM32_TIM_CR1_UDIS | STM32_TIM_CR1_CEN;
     dmaStreamEnable(ic_dma);
 }
@@ -400,10 +459,12 @@ __RAMFUNC__ void RCOutput::bdshot_finish_dshot_gcr_transaction(virtual_timer_t* 
     // or the input channel buffer
     const stm32_dma_stream_t *dma =
         group->has_shared_ic_up_dma() ? group->dma : group->bdshot.ic_dma[curr_telem_chan];
+    osalDbgAssert(dma, "No DMA channel");
     // record the transaction size before the stream is released
     dmaStreamDisable(dma);
+    uint32_t tx_size = dmaStreamGetTransactionSize(dma);
     group->bdshot.dma_tx_size = MIN(uint16_t(GCR_TELEMETRY_BIT_LEN),
-        GCR_TELEMETRY_BIT_LEN - dmaStreamGetTransactionSize(dma));
+        GCR_TELEMETRY_BIT_LEN - tx_size);
     stm32_cacheBufferInvalidate(group->dma_buffer, group->bdshot.dma_tx_size);
     memcpy(group->bdshot.dma_buffer_copy, group->dma_buffer, sizeof(uint32_t) * group->bdshot.dma_tx_size);
 

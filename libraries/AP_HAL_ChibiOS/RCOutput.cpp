@@ -1177,13 +1177,14 @@ void RCOutput::set_output_mode(uint32_t mask, const enum output_mode mode)
         }
     }
 #if HAL_WITH_IO_MCU
+    const uint16_t iomcu_mask = (mask & ((1U<<chan_offset)-1));
     if ((mode == MODE_PWM_ONESHOT ||
          mode == MODE_PWM_ONESHOT125 ||
          mode == MODE_PWM_BRUSHED ||
          (mode >= MODE_PWM_DSHOT150 && mode <= MODE_PWM_DSHOT600)) &&
-        (mask & ((1U<<chan_offset)-1)) &&
+        iomcu_mask &&
         AP_BoardConfig::io_enabled()) {
-        iomcu.set_output_mode(mask, mode);
+        iomcu.set_output_mode(iomcu_mask, mode);
         return;
     }
 #endif
@@ -1428,7 +1429,7 @@ void RCOutput::led_timer_tick(uint64_t time_out_us)
 
 #if defined(IOMCU_FW) && HAL_DSHOT_ENABLED
 #ifdef HAL_WITH_BIDIR_DSHOT
-THD_WORKING_AREA(dshot_thread_wa, 256);
+THD_WORKING_AREA(dshot_thread_wa, 1024);
 #else
 THD_WORKING_AREA(dshot_thread_wa, 64);
 #endif
@@ -1541,16 +1542,20 @@ __RAMFUNC__ void RCOutput::dshot_send_next_group(void* p)
 #if AP_HAL_SHARED_DMA_ENABLED
 void RCOutput::dma_allocate(Shared_DMA *ctx)
 {
+    chSysLock();
     for (auto &group : pwm_group_list) {
         if (group.dma_handle == ctx && group.dma == nullptr) {
-            chSysLock();
             group.dma = dmaStreamAllocI(group.dma_up_stream_id, 10, dma_up_irq_callback, &group);
 #if defined(IOMCU_FW)
-            if (group.pwm_started) {
-                pwmStart(group.pwm_drv, &group.pwm_cfg);
+            if (group.pwm_started && group.dma_handle->is_shared()) {
+                group.pwm_drv->config = &group.pwm_cfg;
+                group.pwm_drv->period = group.pwm_cfg.period;
+                group.pwm_drv->enabled = 0U;
+                pwm_lld_start(group.pwm_drv);
+                group.pwm_drv->state = PWM_READY;
+                group.pwm_started = true;
             }
 #endif
-            chSysUnlock();
 #if STM32_DMA_SUPPORTS_DMAMUX
             if (group.dma) {
                 dmaSetRequestSource(group.dma, group.dma_up_channel);
@@ -1558,6 +1563,7 @@ void RCOutput::dma_allocate(Shared_DMA *ctx)
 #endif
         }
     }
+    chSysUnlock();
 }
 
 /*
@@ -1565,21 +1571,25 @@ void RCOutput::dma_allocate(Shared_DMA *ctx)
  */
 void RCOutput::dma_deallocate(Shared_DMA *ctx)
 {
+    chSysLock();
     for (auto &group : pwm_group_list) {
         if (group.dma_handle == ctx && group.dma != nullptr) {
-            chSysLock();
 #if defined(IOMCU_FW)
             // leaving the peripheral running on IOMCU plays havoc with the UART that is
             // also sharing this channel
-            if (group.pwm_started) {
-                pwmStop(group.pwm_drv);
+            if (group.pwm_started && group.dma_handle->is_shared()) {
+                pwm_lld_stop(group.pwm_drv);
+                group.pwm_drv->enabled = 0;
+                group.pwm_drv->config  = NULL;
+                group.pwm_drv->state   = PWM_STOP;
+                group.pwm_started = false;
             }
 #endif
             dmaStreamFreeI(group.dma);
             group.dma = nullptr;
-            chSysUnlock();
         }
     }
+    chSysUnlock();
 }
 #endif // AP_HAL_SHARED_DMA_ENABLED
 
@@ -1703,10 +1713,12 @@ void RCOutput::dshot_send(pwm_group &group, uint64_t time_out_us)
 
     if (group.bdshot.enabled) {
         if (group.pwm_started) {
-            pwmStop(group.pwm_drv);
+            bdshot_reset_pwm(group);
         }
-        pwmStart(group.pwm_drv, &group.pwm_cfg);
-        group.pwm_started = true;
+        else {
+            pwmStart(group.pwm_drv, &group.pwm_cfg);
+            group.pwm_started = true;
+        }
 
         // we can be more precise for capture timer
         group.bdshot.telempsc = (uint16_t)(lrintf(((float)group.pwm_drv->clock / bdshot_get_output_rate_hz(group.current_mode) + 0.01f)/TELEM_IC_SAMPLE) - 1);
