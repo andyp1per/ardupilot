@@ -328,10 +328,10 @@ void RCOutput::dshot_collect_dma_locks(uint64_t time_out_us, bool led_thread)
             // timer wrap with ChibiOS timers. Use CH_CFG_ST_TIMEDELTA
             // as minimum. Don't allow for a very long delay (over _dshot_period_us)
             // to prevent bugs in handling timer wrap
-            const uint32_t max_delay_us = led_thread ? LED_OUTPUT_PERIOD_US : _dshot_period_us;
-            const uint32_t min_delay_us = 10; // matches our CH_CFG_ST_TIMEDELTA
-            wait_us = constrain_uint32(wait_us, min_delay_us, max_delay_us);
-            mask = chEvtWaitOneTimeout(group.dshot_event_mask, MIN(TIME_MAX_INTERVAL, chTimeUS2I(wait_us)));
+            const uint32_t max_delay_ticks = chTimeUS2I(led_thread ? LED_OUTPUT_PERIOD_US : _dshot_period_us);
+            const uint32_t min_delay_ticks = CH_CFG_ST_TIMEDELTA;
+            const sysinterval_t wait_ticks = constrain_uint32(chTimeUS2I(wait_us), min_delay_ticks, max_delay_ticks);
+            mask = chEvtWaitOneTimeout(group.dshot_event_mask, MIN(TIME_MAX_INTERVAL, wait_ticks));
 
             // no time left cancel and restart
             if (!mask) {
@@ -1470,23 +1470,33 @@ void RCOutput::rcout_thread() {
     }
 
     rcout_thread_ctx = chThdGetSelfX();
+    uint64_t last_cycle_run_us = 0;
 
     while (true) {
         chEvtWaitOne(EVT_PWM_SEND | EVT_PWM_SYNTHETIC_SEND);
-
+        // start the clock
+        const uint64_t last_thread_run_us = AP_HAL::micros64();
         // this is when the cycle is supposed to start
         if (_dshot_cycle == 0) {
+            last_cycle_run_us = AP_HAL::micros64();
             // register a timer for the next tick if push() will not be providing it
             if (_dshot_rate != 1) {
                 chVTSet(&_dshot_rate_timer, chTimeUS2I(_dshot_period_us), dshot_update_tick, this);
             }
         }
 
+        // if DMA sharing is in effect there can be quite a delay between the request to begin the cycle and
+        // actually sending out data - thus we need to work out how much time we have left to collect the locks
+        uint64_t time_out_us = (_dshot_cycle + 1) * _dshot_period_us + last_cycle_run_us;
+        if (!_dshot_rate) {
+            time_out_us = last_thread_run_us + _dshot_period_us;
+        }
+
         // main thread requested a new dshot send or we timed out - if we are not running
         // as a multiple of loop rate then ignore EVT_PWM_SEND events to preserve periodicity
-        dshot_send_groups(0);
+        dshot_send_groups(time_out_us);
 #if AP_HAL_SHARED_DMA_ENABLED
-        dshot_collect_dma_locks(0);
+        dshot_collect_dma_locks(time_out_us);
 #endif
         if (_dshot_rate > 0) {
             _dshot_cycle = (_dshot_cycle + 1) % _dshot_rate;
@@ -1668,7 +1678,7 @@ void RCOutput::dshot_send(pwm_group &group, uint64_t time_out_us)
     // if we are sharing UP channels then it might have taken a long time to get here,
     // if there's not enough time to actually send a pulse then cancel
 #if AP_HAL_SHARED_DMA_ENABLED
-    if (time_out_us > 0 && AP_HAL::micros64() + group.dshot_pulse_time_us > time_out_us) {
+    if (AP_HAL::micros64() + group.dshot_pulse_time_us > time_out_us) {
         group.dma_handle->unlock();
         return;
     }

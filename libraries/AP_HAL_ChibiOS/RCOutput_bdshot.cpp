@@ -450,8 +450,8 @@ __RAMFUNC__ void RCOutput::bdshot_finish_dshot_gcr_transaction(virtual_timer_t* 
 {
     pwm_group *group = (pwm_group *)p;
     chSysLockFromISR();
-#ifdef HAL_GPIO_LINE_GPIO56
-    TOGGLE_PIN_DEBUG(56);
+#ifdef HAL_GPIO_LINE_GPIO55
+    TOGGLE_PIN_DEBUG(55);
 #endif
     uint8_t curr_telem_chan = group->bdshot.curr_telem_chan;
 
@@ -483,8 +483,8 @@ __RAMFUNC__ void RCOutput::bdshot_finish_dshot_gcr_transaction(virtual_timer_t* 
     group->bdshot.curr_telem_chan = bdshot_find_next_ic_channel(*group);
     // tell the waiting process we've done the DMA
     chEvtSignalI(group->dshot_waiter, group->dshot_event_mask);
-#ifdef HAL_GPIO_LINE_GPIO56
-    TOGGLE_PIN_DEBUG(56);
+#ifdef HAL_GPIO_LINE_GPIO55
+    TOGGLE_PIN_DEBUG(55);
 #endif
     chSysUnlockFromISR();
 }
