@@ -19,6 +19,7 @@
 
 #include <AP_Math/AP_Math.h>
 #include <AP_Math/crc.h>
+#include <AP_ESC_Telem/AP_ESC_Telem.h>
 #include "iofirmware.h"
 #include <AP_HAL_ChibiOS/RCInput.h>
 #include <AP_HAL_ChibiOS/RCOutput.h>
@@ -135,8 +136,10 @@ static void dma_tx_end_cb(hal_uart_driver *uart)
     (void)uart->usart->DR;
     (void)uart->usart->DR;
 
+#ifdef HAL_GPIO_LINE_GPIO108
     TOGGLE_PIN_DEBUG(108);
     TOGGLE_PIN_DEBUG(108);
+#endif
 
     chEvtSignalI(iomcu.thread_ctx, IOEVENT_TX_END);
 }
@@ -416,8 +419,9 @@ void AP_IOMCU_FW::update()
     // immediate timeout here for lowest latency
     eventmask_t mask = chEvtWaitAnyTimeout(IOEVENT_PWM | IOEVENT_TX_END, TIME_IMMEDIATE);
 #endif
-
+#ifdef HAL_GPIO_LINE_GPIO107
     TOGGLE_PIN_DEBUG(107);
+#endif
 
     iomcu.reg_status.total_ticks++;
     if (mask) {
@@ -521,7 +525,9 @@ void AP_IOMCU_FW::update()
         tx_dma_handle->unlock();
     }
 #endif
+#ifdef HAL_GPIO_LINE_GPIO107
     TOGGLE_PIN_DEBUG(107);
+#endif
 }
 
 void AP_IOMCU_FW::pwm_out_update()
@@ -1062,7 +1068,7 @@ void AP_IOMCU_FW::rcout_config_update(void)
     }
 
     // see if there is anything to do, we only support setting the mode for a particular channel once
-    if ((last_output_mode_mask & ~mode_out.mask) == mode_out.mask) {
+    if ((last_output_mode_mask & mode_out.mask) == mode_out.mask) {
         return;
     }
 
@@ -1074,7 +1080,7 @@ void AP_IOMCU_FW::rcout_config_update(void)
 #endif
         hal.rcout->set_output_mode(mode_out.mask, (AP_HAL::RCOutput::output_mode)mode_out.mode);
 #ifdef HAL_WITH_BIDIR_DSHOT
-        hal.rcout->set_bidir_dshot_mask(mode_out.mask);
+        //hal.rcout->set_bidir_dshot_mask(mode_out.mask);
         hal.rcout->set_motor_poles(14);
 #endif
         // enabling dshot changes the memory allocation

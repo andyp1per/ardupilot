@@ -11,6 +11,7 @@
 
 #if AP_HAL_SHARED_DMA_ENABLED
 #include <AP_HAL_ChibiOS/shared_dma.h>
+#include <AP_ESC_Telem/AP_ESC_Telem.h>
 #endif
 
 #define PWM_IGNORE_THIS_CHANNEL UINT16_MAX
@@ -135,6 +136,9 @@ public:
     void tx_dma_deallocate(ChibiOS::Shared_DMA *ctx);
 
     ChibiOS::Shared_DMA* tx_dma_handle;
+#endif
+#if HAL_WITH_ESC_TELEM
+    AP_ESC_Telem esc_telem;
 #endif
 
     // true when override channel active
