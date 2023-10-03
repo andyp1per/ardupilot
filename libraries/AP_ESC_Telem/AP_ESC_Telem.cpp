@@ -49,7 +49,9 @@ AP_ESC_Telem::AP_ESC_Telem()
         AP_HAL::panic("Too many AP_ESC_Telem instances");
     }
     _singleton = this;
+#if !defined(IOMCU_FW)
     AP_Param::setup_object_defaults(this, var_info);
+#endif
 }
 
 // return the average motor RPM
