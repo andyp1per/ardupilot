@@ -1723,7 +1723,7 @@ void RCOutput::dshot_send(pwm_group &group, uint64_t time_out_us)
 
     if (group.bdshot.enabled) {
         if (group.pwm_started) {
-            bdshot_reset_pwm(group);
+            bdshot_reset_pwm(group, group.bdshot.prev_telem_chan);
         }
         else {
             pwmStart(group.pwm_drv, &group.pwm_cfg);

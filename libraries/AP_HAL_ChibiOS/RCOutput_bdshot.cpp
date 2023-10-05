@@ -103,7 +103,9 @@ bool RCOutput::bdshot_setup_group_ic_DMA(pwm_group &group)
         if (group.chan[i] != CHAN_DISABLED && _bdshot.mask & group.ch_mask) {
             // bi-directional dshot requires less than MID2 speed and PUSHPULL in order to avoid noise on the line
             // when switching from output to input
-#ifdef PAL_MODE_STM32_ALTERNATE_PUSHPULL
+#if defined(IOMCU_FW)
+            // on F103 the line mode has to be managed manually
+            // PAL_MODE_STM32_ALTERNATE_PUSHPULL is 50Mhz, similar to the medieum speed on other MCUs
             palSetLineMode(group.pal_lines[i], PAL_MODE_STM32_ALTERNATE_PUSHPULL);
 #else
             palSetLineMode(group.pal_lines[i], PAL_MODE_ALTERNATE(group.alt_functions[i])
@@ -212,54 +214,90 @@ void RCOutput::bdshot_ic_dma_deallocate(Shared_DMA *ctx)
 
 // reset pwm driver to output mode without resetting the clock or the peripheral
 // the code here is the equivalent of pwmStart()/pwmStop()
-void RCOutput::bdshot_reset_pwm(pwm_group& group)
+void RCOutput::bdshot_reset_pwm(pwm_group& group, uint8_t telem_channel)
 {
+#if defined(IOMCU_FW)
     osalSysLock();
-// stop sets these
-    group.pwm_drv->tim->CR1  = 0;                    /* Timer disabled.              */
-    group.pwm_drv->tim->DIER = 0;                    /* All IRQs disabled.           */
-    group.pwm_drv->tim->SR   = 0;                    /* Clear eventual pending IRQs. */
-// start sets these
-    group.pwm_drv->tim->CCMR1 = STM32_TIM_CCMR1_OC1M(6) | STM32_TIM_CCMR1_OC1PE |
-                       STM32_TIM_CCMR1_OC2M(6) | STM32_TIM_CCMR1_OC2PE;
-    group.pwm_drv->tim->CCMR2 = STM32_TIM_CCMR2_OC3M(6) | STM32_TIM_CCMR2_OC3PE |
-                       STM32_TIM_CCMR2_OC4M(6) | STM32_TIM_CCMR2_OC4PE;
-    group.pwm_drv->tim->CCR[0] = 0;                  /* Comparator 1 disabled.       */
-    group.pwm_drv->tim->CCR[1] = 0;                  /* Comparator 2 disabled.       */
-    group.pwm_drv->tim->CCR[2] = 0;                  /* Comparator 3 disabled.       */
-    group.pwm_drv->tim->CCR[3] = 0;                  /* Comparator 4 disabled.       */
-    uint32_t psc = (group.pwm_drv->clock / group.pwm_drv->config->frequency) - 1;
-    group.pwm_drv->tim->PSC  = psc;
-    group.pwm_drv->tim->ARR  = group.pwm_drv->period - 1;
-    group.pwm_drv->tim->CR2  = group.pwm_drv->config->cr2;
 
-    uint32_t ccer = 0;
-    if (group.is_chan_enabled(0)) {
-        ccer |= STM32_TIM_CCER_CC1P | STM32_TIM_CCER_CC1E;
+    stm32_tim_t* TIMx = group.pwm_drv->tim;
+// stop sets these
+    TIMx->CR1  = 0;                    /* Timer disabled.              */
+    TIMx->DIER = 0;                    /* All IRQs disabled.           */
+    TIMx->SR   = 0;                    /* Clear eventual pending IRQs. */
+    TIMx->CNT = 0;
+    TIMx->CCR[0] = 0;                  /* Comparator 1 disabled.       */
+    TIMx->CCR[1] = 0;                  /* Comparator 2 disabled.       */
+    TIMx->CCR[2] = 0;                  /* Comparator 3 disabled.       */
+    TIMx->CCR[3] = 0;                  /* Comparator 4 disabled.       */
+// start sets these
+    // at the point this is called we will have done input capture on a CC channel
+    // we need to switch that channel back to output and the default settings
+    // all other channels will not have been modified
+    switch (group.bdshot.telem_tim_ch[telem_channel]) {
+    case 0: // CC1
+        TOGGLE_PIN_DEBUG(54);
+        MODIFY_REG(TIMx->CCER, TIM_CCER_CC1E, 0);   // disable CC so that it can be modified
+
+        MODIFY_REG(TIMx->CCMR1, (TIM_CCMR1_CC1S | TIM_CCMR1_IC1F | TIM_CCMR1_IC1PSC),
+            STM32_TIM_CCMR1_OC1M(6) | STM32_TIM_CCMR1_OC1PE);
+        MODIFY_REG(TIMx->CCER, (TIM_CCER_CC1P | TIM_CCER_CC1NP), (TIM_CCER_CC1P | TIM_CCER_CC1E));
+        TOGGLE_PIN_DEBUG(54);
+        break;
+    case 1: // CC2
+        MODIFY_REG(TIMx->CCER, TIM_CCER_CC2E, 0);   // disable CC so that it can be modified
+        MODIFY_REG(TIMx->CCMR1, (TIM_CCMR1_CC2S | TIM_CCMR1_IC2F | TIM_CCMR1_IC2PSC),
+            STM32_TIM_CCMR1_OC2M(6) | STM32_TIM_CCMR1_OC2PE);
+        MODIFY_REG(TIMx->CCER, (TIM_CCER_CC2P | TIM_CCER_CC2NP), (TIM_CCER_CC2P | TIM_CCER_CC2E));
+        break;
+    case 2: // CC3
+        MODIFY_REG(TIMx->CCER, TIM_CCER_CC3E, 0);   // disable CC so that it can be modified
+        MODIFY_REG(TIMx->CCMR2, (TIM_CCMR2_CC3S | TIM_CCMR2_IC3F | TIM_CCMR2_IC3PSC),
+            STM32_TIM_CCMR2_OC3M(6) | STM32_TIM_CCMR2_OC3PE);
+        MODIFY_REG(TIMx->CCER, (TIM_CCER_CC3P | TIM_CCER_CC3NP), (TIM_CCER_CC3P | TIM_CCER_CC3E));
+        break;
+    case 3: // CC4
+        MODIFY_REG(TIMx->CCER, TIM_CCER_CC4E, 0);   // disable CC so that it can be modified
+        MODIFY_REG(TIMx->CCMR2, (TIM_CCMR2_CC4S | TIM_CCMR2_IC4F | TIM_CCMR2_IC4PSC),
+            STM32_TIM_CCMR2_OC4M(6) | STM32_TIM_CCMR2_OC4PE);
+#ifdef TIM_CCER_CC4NP
+        MODIFY_REG(TIMx->CCER, (TIM_CCER_CC4P | TIM_CCER_CC4NP), (TIM_CCER_CC4P | TIM_CCER_CC4E));
+#else
+        MODIFY_REG(TIMx->CCER, TIM_CCER_CC4P, (TIM_CCER_CC4P | TIM_CCER_CC4E));
+#endif
+        break;
+    default:
+        break;
     }
-    if (group.is_chan_enabled(1)) {
-        ccer |= STM32_TIM_CCER_CC2P | STM32_TIM_CCER_CC2E;
-    }
-    if (group.is_chan_enabled(2)) {
-        ccer |= STM32_TIM_CCER_CC3P | STM32_TIM_CCER_CC3E;
-    }
-    if (group.is_chan_enabled(3)) {
-        ccer |= STM32_TIM_CCER_CC4P | STM32_TIM_CCER_CC4E;
-    }
-    group.pwm_drv->tim->CCER = ccer;
-    group.pwm_drv->tim->EGR   = STM32_TIM_EGR_UG;      /* Update event.                */
-    group.pwm_drv->tim->DIER  = group.pwm_drv->config->dier &   /* DMA-related DIER settings.   */
+
+    uint32_t psc = (group.pwm_drv->clock / group.pwm_drv->config->frequency) - 1;
+    TIMx->PSC  = psc;
+    TIMx->ARR  = group.pwm_drv->period - 1;
+    TIMx->CR2  = group.pwm_drv->config->cr2;
+    TIMx->EGR   = STM32_TIM_EGR_UG;      /* Update event.                */
+    TIMx->SR    = 0;                     /* Clear pending IRQs.          */
+    TIMx->DIER  = group.pwm_drv->config->dier &   /* DMA-related DIER settings.   */
                         ~STM32_TIM_DIER_IRQ_MASK;
     if (group.pwm_drv->has_bdtr) {
-        group.pwm_drv->tim->BDTR  = group.pwm_drv->config->bdtr | STM32_TIM_BDTR_MOE;
+        TIMx->BDTR  = group.pwm_drv->config->bdtr | STM32_TIM_BDTR_MOE;
     }
-#ifdef PAL_MODE_STM32_ALTERNATE_PUSHPULL
-    palSetLineMode(group.pal_lines[group.bdshot.curr_telem_chan], PAL_MODE_STM32_ALTERNATE_PUSHPULL);
-#endif
+
+    // we need to switch every output on the same input channel to avoid
+    // spurious line changes
+    for (uint8_t i = 0; i<4; i++) {
+        if (group.bdshot.telem_tim_ch[telem_channel] == group.bdshot.telem_tim_ch[i]) {
+            palSetLineMode(group.pal_lines[i], PAL_MODE_STM32_ALTERNATE_PUSHPULL);
+        }
+    }
+
     /* Timer configured and started.*/
-    group.pwm_drv->tim->CR1   = STM32_TIM_CR1_ARPE | STM32_TIM_CR1_URS | STM32_TIM_CR1_CEN;
+    TIMx->CR1   = STM32_TIM_CR1_ARPE | STM32_TIM_CR1_URS | STM32_TIM_CR1_CEN;
 
     osalSysUnlock();
+#else
+    // on more capable MCUs we can do something very simple
+    pwmStop(group.pwm_drv);
+    pwmStart(group.pwm_drv, &group.pwm_cfg);
+#endif
 }
 
 // see https://github.com/betaflight/betaflight/pull/8554#issuecomment-512507625
@@ -275,15 +313,18 @@ void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
         bdshot_finish_dshot_gcr_transaction, group);
 
     group->pwm_drv->tim->CR1 = 0;
+
+    // Configure Timer
+    group->pwm_drv->tim->SR = 0;
     // do NOT CCER to 0 here - this pulls the line low on F103 (at least)
     // and since we are already doing bdshot the relevant options that are set for output
     // also apply to input and bdshot_config_icu_dshot() will disable any channels that need
     // disabling
-
-    // Configure Timer
-    group->pwm_drv->tim->SR = 0;
+#if !defined(IOMCU_FW)
+    group->pwm_drv->tim->CCER = 0;
     group->pwm_drv->tim->CCMR1 = 0;
     group->pwm_drv->tim->CCMR2 = 0;
+#endif
     group->pwm_drv->tim->DIER = 0;
     group->pwm_drv->tim->CR2 = 0;
     group->pwm_drv->tim->PSC = group->bdshot.telempsc;
@@ -293,8 +334,17 @@ void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
     //TOGGLE_PIN_CH_DEBUG(54, curr_ch);
     group->pwm_drv->tim->ARR = 0xFFFF;  // count forever
     group->pwm_drv->tim->CNT = 0;
-
     uint8_t curr_ch = group->bdshot.curr_telem_chan;
+
+#if defined(IOMCU_FW)
+    // we need to switch every input on the same input channel to allow
+    // the ESCs to drive the lines
+    for (uint8_t i = 0; i<4; i++) {
+        if (group->bdshot.telem_tim_ch[curr_ch] == group->bdshot.telem_tim_ch[i]) {
+            palSetLineMode(group->pal_lines[i], PAL_MODE_INPUT_PULLUP);
+        }
+    }
+#endif
     // Initialise ICU channels
     bdshot_config_icu_dshot(group->pwm_drv->tim, curr_ch, group->bdshot.telem_tim_ch[curr_ch]);
 
@@ -316,7 +366,12 @@ void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
 #endif
     dmaStreamSetMode(ic_dma,
                     STM32_DMA_CR_CHSEL(group->dma_ch[curr_ch].channel) |
-                    STM32_DMA_CR_DIR_P2M | STM32_DMA_CR_PSIZE_WORD | STM32_DMA_CR_MSIZE_WORD |
+                    STM32_DMA_CR_DIR_P2M | STM32_DMA_CR_PSIZE_WORD |
+#if defined(IOMCU_FW)
+                    STM32_DMA_CR_MSIZE_BYTE |
+#else
+                    STM32_DMA_CR_MSIZE_WORD |
+#endif
                     STM32_DMA_CR_MINC | STM32_DMA_CR_PL(3) |
                     STM32_DMA_CR_TEIE | STM32_DMA_CR_TCIE);
 
@@ -329,9 +384,6 @@ void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
     group->pwm_drv->tim->EGR |= STM32_TIM_EGR_UG;
     group->pwm_drv->tim->SR = 0;
 
-#ifdef PAL_MODE_STM32_ALTERNATE_PUSHPULL
-    palSetLineMode(group->pal_lines[curr_ch], PAL_MODE_INPUT_PULLUP);
-#endif
     group->pwm_drv->tim->CR1 = TIM_CR1_ARPE | STM32_TIM_CR1_URS | STM32_TIM_CR1_UDIS | STM32_TIM_CR1_CEN;
     dmaStreamEnable(ic_dma);
 }
@@ -344,16 +396,15 @@ void RCOutput::bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t 
         /* Disable the Channel 1: Reset the CC1E Bit */
         TIMx->CCER &= (uint32_t)~TIM_CCER_CC1E;
 
-        const uint32_t CCMR1_FILT = TIM_CCMR1_IC1F_1;   // 4 samples per output transition
         // Select the Input and set the filter and the prescaler value
-        if (chan == 0) {
+        if (chan == 0) {    // TI1
             MODIFY_REG(TIMx->CCMR1,
                         (TIM_CCMR1_CC1S | TIM_CCMR1_IC1F | TIM_CCMR1_IC1PSC),
-                        (TIM_CCMR1_CC1S_0 | CCMR1_FILT));
-        } else {
+                        (TIM_CCMR1_CC1S_0 | TIM_CCMR1_IC1F_1));// 4 samples per output transition
+        } else {            // TI2
             MODIFY_REG(TIMx->CCMR1,
                         (TIM_CCMR1_CC1S | TIM_CCMR1_IC1F | TIM_CCMR1_IC1PSC),
-                        (TIM_CCMR1_CC1S_1 | CCMR1_FILT));
+                        (TIM_CCMR1_CC1S_1 | TIM_CCMR1_IC1F_1));
         }
         // Select the Polarity as Both Edge and set the CC1E Bit
         MODIFY_REG(TIMx->CCER,
@@ -365,19 +416,16 @@ void RCOutput::bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t 
     case 1: {
         // Disable the Channel 2: Reset the CC2E Bit
         TIMx->CCER &= (uint32_t)~TIM_CCER_CC2E;
-
-        const uint32_t CCMR1_FILT = TIM_CCMR1_IC2F_1;
         // Select the Input and set the filter and the prescaler value
-        if (chan == 0) {
+        if (chan == 0) {    // TI1
             MODIFY_REG(TIMx->CCMR1,
                         (TIM_CCMR1_CC2S | TIM_CCMR1_IC2F | TIM_CCMR1_IC2PSC),
-                        (TIM_CCMR1_CC2S_1 | CCMR1_FILT));
-        } else {
+                        (TIM_CCMR1_CC2S_1 | TIM_CCMR1_IC2F_1));
+        } else {            // TI2
             MODIFY_REG(TIMx->CCMR1,
                         (TIM_CCMR1_CC2S | TIM_CCMR1_IC2F | TIM_CCMR1_IC2PSC),
-                        (TIM_CCMR1_CC2S_0 | CCMR1_FILT));
+                        (TIM_CCMR1_CC2S_0 | TIM_CCMR1_IC2F_1));
         }
-
         // Select the Polarity as Both Edge and set the CC2E Bit
         MODIFY_REG(TIMx->CCER,
                     TIM_CCER_CC2P | TIM_CCER_CC2NP | TIM_CCER_CC2E,
@@ -389,16 +437,15 @@ void RCOutput::bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t 
         // Disable the Channel 3: Reset the CC3E Bit
         TIMx->CCER &= (uint32_t)~TIM_CCER_CC3E;
 
-        const uint32_t CCMR2_FILT = TIM_CCMR2_IC3F_1;
         // Select the Input and set the filter and the prescaler value
-        if (chan == 2) {
+        if (chan == 2) {    // TI3
             MODIFY_REG(TIMx->CCMR2,
                         (TIM_CCMR2_CC3S | TIM_CCMR2_IC3F | TIM_CCMR2_IC3PSC),
-                        (TIM_CCMR2_CC3S_0 | CCMR2_FILT));
-        } else {
+                        (TIM_CCMR2_CC3S_0 | TIM_CCMR2_IC3F_1));
+        } else {            // TI4
             MODIFY_REG(TIMx->CCMR2,
                         (TIM_CCMR2_CC3S | TIM_CCMR2_IC3F | TIM_CCMR2_IC3PSC),
-                        (TIM_CCMR2_CC3S_1 | CCMR2_FILT));
+                        (TIM_CCMR2_CC3S_1 | TIM_CCMR2_IC3F_1));
         }
 
         // Select the Polarity as Both Edge and set the CC3E Bit
@@ -412,16 +459,15 @@ void RCOutput::bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t 
         // Disable the Channel 4: Reset the CC4E Bit
         TIMx->CCER &= (uint32_t)~TIM_CCER_CC4E;
 
-        const uint32_t CCMR2_FILT = TIM_CCMR2_IC4F_1;
         // Select the Input and set the filter and the prescaler value
-        if (chan == 2) {
+        if (chan == 2) {    // TI3
             MODIFY_REG(TIMx->CCMR2,
                         (TIM_CCMR2_CC4S | TIM_CCMR2_IC4F | TIM_CCMR2_IC4PSC),
-                        (TIM_CCMR2_CC4S_1 | CCMR2_FILT));
-        } else {
+                        (TIM_CCMR2_CC4S_1 | TIM_CCMR2_IC4F_1));
+        } else {            // TI4
             MODIFY_REG(TIMx->CCMR2,
                         (TIM_CCMR2_CC4S | TIM_CCMR2_IC4F | TIM_CCMR2_IC4PSC),
-                        (TIM_CCMR2_CC4S_0 | CCMR2_FILT));
+                        (TIM_CCMR2_CC4S_0 | TIM_CCMR2_IC4F_1));
         }
 
         // Select the Polarity as Both Edge and set the CC4E Bit
@@ -465,6 +511,7 @@ __RAMFUNC__ void RCOutput::bdshot_finish_dshot_gcr_transaction(virtual_timer_t* 
     uint32_t tx_size = dmaStreamGetTransactionSize(dma);
     group->bdshot.dma_tx_size = MIN(uint16_t(GCR_TELEMETRY_BIT_LEN),
         GCR_TELEMETRY_BIT_LEN - tx_size);
+
     stm32_cacheBufferInvalidate(group->dma_buffer, group->bdshot.dma_tx_size);
     memcpy(group->bdshot.dma_buffer_copy, group->dma_buffer, sizeof(uint32_t) * group->bdshot.dma_tx_size);
 
