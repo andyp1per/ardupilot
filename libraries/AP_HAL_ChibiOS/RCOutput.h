@@ -26,9 +26,16 @@
 #if HAL_USE_PWM == TRUE
 
 #if defined(IOMCU_FW)
+#ifdef HAL_WITH_BIDIR_DSHOT
+typedef uint16_t dmar_uint_t; // save memory to allow dshot on IOMCU
+typedef int16_t dmar_int_t;
+#else
 typedef uint8_t dmar_uint_t; // save memory to allow dshot on IOMCU
+typedef int8_t dmar_int_t;
+#endif
 #else
 typedef uint32_t dmar_uint_t;
+typedef int32_t dmar_int_t;
 #endif
 
 #define RCOU_DSHOT_TIMING_DEBUG 0
@@ -297,7 +304,9 @@ private:
     static const uint16_t MIN_GCR_BIT_LEN = 7;
     static const uint16_t MAX_GCR_BIT_LEN = 22;
     static const uint16_t GCR_TELEMETRY_BIT_LEN = MAX_GCR_BIT_LEN;
-    static const uint16_t GCR_TELEMETRY_BUFFER_LEN = GCR_TELEMETRY_BIT_LEN*sizeof(uint32_t);
+    // input capture is expecting TELEM_IC_SAMPLE (16) ticks per transition (22) so the maximum
+    // value of the counter in CCR registers is 16*22 == 352, so must be 16-bit
+    static const uint16_t GCR_TELEMETRY_BUFFER_LEN = GCR_TELEMETRY_BIT_LEN*sizeof(dmar_uint_t);
 
     struct pwm_group {
         // only advanced timers can do high clocks needed for more than 400Hz
@@ -381,7 +390,7 @@ private:
             uint8_t curr_telem_chan;
             uint8_t prev_telem_chan;
             uint16_t telempsc;
-            uint32_t dma_buffer_copy[GCR_TELEMETRY_BUFFER_LEN];
+            dmar_uint_t dma_buffer_copy[GCR_TELEMETRY_BUFFER_LEN];
 #if RCOU_DSHOT_TIMING_DEBUG
             uint16_t telem_rate[4];
             uint16_t telem_err_rate[4];
@@ -668,7 +677,7 @@ private:
      */
     void bdshot_ic_dma_allocate(Shared_DMA *ctx);
     void bdshot_ic_dma_deallocate(Shared_DMA *ctx);
-    static uint32_t bdshot_decode_telemetry_packet(uint32_t* buffer, uint32_t count);
+    static uint32_t bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t count);
     bool bdshot_decode_telemetry_from_erpm(uint16_t erpm, uint8_t chan);
     bool bdshot_decode_dshot_telemetry(pwm_group& group, uint8_t chan);
     static uint8_t bdshot_find_next_ic_channel(const pwm_group& group);
