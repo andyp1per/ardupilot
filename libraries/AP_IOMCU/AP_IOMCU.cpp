@@ -918,6 +918,13 @@ void AP_IOMCU::set_output_mode(uint16_t mask, uint16_t mode)
     trigger_event(IOEVENT_SET_OUTPUT_MODE);
 }
 
+// set output mode
+void AP_IOMCU::set_bidir_dshot_mask(uint16_t mask)
+{
+    mode_out.bdmask = mask;
+    trigger_event(IOEVENT_SET_OUTPUT_MODE);
+}
+
 AP_HAL::RCOutput::output_mode AP_IOMCU::get_output_mode(uint8_t& mask) const
 {
     mask = reg_status.rcout_mask;

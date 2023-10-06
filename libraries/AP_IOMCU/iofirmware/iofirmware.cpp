@@ -614,16 +614,20 @@ void AP_IOMCU_FW::rcin_update()
 
 void AP_IOMCU_FW::erpm_update()
 {
+#ifdef HAL_WITH_BIDIR_DSHOT
     if (hal.rcout->new_erpm()) {
         dshot_erpm.update_mask |= hal.rcout->read_erpm(dshot_erpm.erpm, IOMCU_MAX_CHANNELS);
     }
+#endif
 }
 
 void AP_IOMCU_FW::telem_update()
 {
+#ifdef HAL_WITH_BIDIR_DSHOT
     for (uint8_t i = 0; i<IOMCU_MAX_CHANNELS; i++) {
         dshot_telem.error_rate[i] = uint32_t(hal.rcout->get_erpm_error_rate(i) * 10.0f) & 0xFF;
     }
+#endif
 }
 
 void AP_IOMCU_FW::process_io_packet()
@@ -722,12 +726,14 @@ bool AP_IOMCU_FW::handle_code_read()
     case PAGE_RAW_RCIN:
         COPY_PAGE(rc_input);
         break;
+#ifdef HAL_WITH_BIDIR_DSHOT
     case PAGE_RAW_DSHOT_ERPM:
         COPY_PAGE(dshot_erpm);
         break;
     case PAGE_RAW_DSHOT_TELEM:
         COPY_PAGE(dshot_telem);
         break;
+#endif
     case PAGE_STATUS:
         COPY_PAGE(reg_status);
         break;
@@ -755,6 +761,7 @@ bool AP_IOMCU_FW::handle_code_read()
     tx_io_packet.crc = 0;
     tx_io_packet.crc =  crc_crc8((const uint8_t *)&tx_io_packet, tx_io_packet.get_size());
 
+#ifdef HAL_WITH_BIDIR_DSHOT
     switch (rx_io_packet.page) {
     case PAGE_RAW_DSHOT_ERPM:
         dshot_erpm.update_mask = 0;
@@ -762,6 +769,7 @@ bool AP_IOMCU_FW::handle_code_read()
     default:
         break;
     }
+#endif
     return true;
 }
 
@@ -847,6 +855,7 @@ bool AP_IOMCU_FW::handle_code_write()
         case PAGE_REG_SETUP_OUTPUT_MODE:
             mode_out.mask = rx_io_packet.regs[0];
             mode_out.mode = rx_io_packet.regs[1];
+            mode_out.bdmask = rx_io_packet.regs[2];
             break;
 
         case PAGE_REG_SETUP_HEATER_DUTY_CYCLE:
@@ -1099,7 +1108,8 @@ void AP_IOMCU_FW::rcout_config_update(void)
     }
 
     // see if there is anything to do, we only support setting the mode for a particular channel once
-    if ((last_output_mode_mask & mode_out.mask) == mode_out.mask) {
+    if ((last_output_mode_mask & mode_out.mask) == mode_out.mask
+        && (last_output_bdmask & mode_out.bdmask) == mode_out.bdmask) {
         return;
     }
 
@@ -1111,12 +1121,12 @@ void AP_IOMCU_FW::rcout_config_update(void)
 #endif
         hal.rcout->set_output_mode(mode_out.mask, (AP_HAL::RCOutput::output_mode)mode_out.mode);
 #ifdef HAL_WITH_BIDIR_DSHOT
-        hal.rcout->set_bidir_dshot_mask(mode_out.mask);
-        hal.rcout->set_motor_poles(14);
+        hal.rcout->set_bidir_dshot_mask(mode_out.bdmask);
 #endif
         // enabling dshot changes the memory allocation
         reg_status.freemem = hal.util->available_memory();
         last_output_mode_mask |= mode_out.mask;
+        last_output_bdmask |= mode_out.bdmask;
         break;
     case AP_HAL::RCOutput::MODE_PWM_ONESHOT:
     case AP_HAL::RCOutput::MODE_PWM_ONESHOT125:

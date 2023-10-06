@@ -115,12 +115,10 @@ public:
     } rate;
 
     // output mode values
-    struct {
-        uint16_t mask;
-        uint16_t mode;
-    } mode_out;
+    struct page_mode_out mode_out;
 
     uint16_t last_output_mode_mask;
+    uint16_t last_output_bdmask;
 
     // MIXER values
     struct page_mixing mixing;

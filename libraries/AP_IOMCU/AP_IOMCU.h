@@ -107,6 +107,9 @@ public:
     // set output mode
     void set_output_mode(uint16_t mask, uint16_t mode);
 
+    // set bi-directional mask
+    void set_bidir_dshot_mask(uint16_t mask);
+
     // get output mode
     AP_HAL::RCOutput::output_mode get_output_mode(uint8_t& mask) const;
 
@@ -274,10 +277,7 @@ private:
 
     struct page_GPIO GPIO;
     // output mode values
-    struct {
-        uint16_t mask;
-        uint16_t mode;
-    } mode_out;
+    struct page_mode_out mode_out;
 
     // IMU heater duty cycle
     uint8_t heater_duty_cycle;

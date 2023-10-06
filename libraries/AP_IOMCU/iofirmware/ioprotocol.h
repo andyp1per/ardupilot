@@ -186,6 +186,12 @@ struct __attribute__((packed, aligned(2))) page_GPIO {
     uint8_t output_mask;
 };
 
+struct __attribute__((packed, aligned(2))) page_mode_out {
+    uint16_t mask;
+    uint16_t mode;
+    uint16_t bdmask;
+};
+
 struct __attribute__((packed, aligned(2))) page_dshot {
     uint16_t telem_mask;
     uint8_t command;
