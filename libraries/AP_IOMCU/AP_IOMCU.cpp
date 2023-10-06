@@ -79,6 +79,7 @@ void AP_IOMCU::init(void)
     uart.set_unbuffered_writes(true);
 
     AP_BoardConfig *boardconfig = AP_BoardConfig::get_singleton();
+
     if ((!boardconfig || boardconfig->io_enabled() == 1) && !hal.util->was_watchdog_reset()) {
         check_crc();
     } else {
@@ -308,6 +309,18 @@ void AP_IOMCU::thread_main(void)
             last_servo_read_ms = AP_HAL::millis();
         }
 
+        if (AP_BoardConfig::io_dshot() && now - last_erpm_read_ms > 10) {
+            // read erpm at 100Hz
+            read_erpm();
+            last_erpm_read_ms = AP_HAL::millis();
+        }
+
+        if (AP_BoardConfig::io_dshot() && now - last_telem_read_ms > 100) {
+            // read dshot telemetry at 10Hz
+            read_telem();
+            last_telem_read_ms = AP_HAL::millis();
+        }
+
         if (now - last_safety_option_check_ms > 1000) {
             update_safety_options();
             last_safety_option_check_ms = now;
@@ -368,6 +381,38 @@ void AP_IOMCU::read_rc_input()
     }
     if (rc_input.flags_rc_ok && !rc_input.flags_failsafe) {
         rc_last_input_ms = AP_HAL::millis();
+    }
+}
+
+/*
+  read dshot erpm
+ */
+void AP_IOMCU::read_erpm()
+{
+    uint16_t *r = (uint16_t *)&dshot_erpm;
+    if (!read_registers(PAGE_RAW_DSHOT_ERPM, 0, sizeof(dshot_erpm)/2, r)) {
+        return;
+    }
+    uint8_t motor_poles = 14;
+    AP_BLHeli* blh = AP_BLHeli::get_singleton();
+    if (blh) {
+        motor_poles = blh->get_motor_poles();
+    }
+    for (uint8_t i=0; i<IOMCU_MAX_CHANNELS; i++) {
+        if (dshot_erpm.update_mask & 1U<<i) {
+            update_rpm(i, dshot_erpm.erpm[i] * 200U / motor_poles, float(dshot_telem.error_rate[i]) / 10.0f);
+        }
+    }
+}
+
+/*
+  read dshot telemetry
+ */
+void AP_IOMCU::read_telem()
+{
+    uint16_t *r = (uint16_t *)&dshot_telem;
+    if (!read_registers(PAGE_RAW_DSHOT_TELEM, 0, sizeof(dshot_telem)/2, r)) {
+        return;
     }
 }
 

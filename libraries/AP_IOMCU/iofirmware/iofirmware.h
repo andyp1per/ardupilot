@@ -30,6 +30,8 @@ public:
     void pwm_out_update();
     void heater_update();
     void rcin_update();
+    void erpm_update();
+    void telem_update();
 
     bool handle_code_write();
     bool handle_code_read();
@@ -137,8 +139,13 @@ public:
 
     ChibiOS::Shared_DMA* tx_dma_handle;
 #endif
+#ifdef HAL_WITH_BIDIR_DSHOT
 #if HAL_WITH_ESC_TELEM
     AP_ESC_Telem esc_telem;
+#endif
+    struct page_dshot_erpm dshot_erpm;
+    struct page_dshot_telem dshot_telem;
+    uint32_t last_telem_update_ms;
 #endif
 
     // true when override channel active

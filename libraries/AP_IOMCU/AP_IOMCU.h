@@ -13,11 +13,16 @@
 #include "iofirmware/ioprotocol.h"
 #include <AP_RCMapper/AP_RCMapper.h>
 #include <AP_HAL/RCOutput.h>
+#include <AP_ESC_Telem/AP_ESC_Telem_Backend.h>
 
 typedef uint32_t eventmask_t;
 typedef struct ch_thread thread_t;
 
-class AP_IOMCU {
+class AP_IOMCU
+#ifdef HAL_WITH_ESC_TELEM
+  : public AP_ESC_Telem_Backend
+#endif
+{
 public:
     AP_IOMCU(AP_HAL::UARTDriver &uart);
 
@@ -192,6 +197,8 @@ private:
     uint32_t last_servo_read_ms;
     uint32_t last_safety_option_check_ms;
     uint32_t last_reg_read_ms;
+    uint32_t last_erpm_read_ms;
+    uint32_t last_telem_read_ms;
 
     // last value of safety options
     uint16_t last_safety_options = 0xFFFF;
@@ -204,6 +211,8 @@ private:
 
     void send_servo_out(void);
     void read_rc_input(void);
+    void read_erpm(void);
+    void read_telem(void);
     void read_servo(void);
     void read_status(void);
     void discard_input(void);
@@ -255,6 +264,10 @@ private:
         uint16_t period_us;
         uint16_t rate;
     } dshot_rate;
+
+    // bi-directional dshot erpm values
+    struct page_dshot_erpm dshot_erpm;
+    struct page_dshot_telem dshot_telem;
 
     // queue of dshot commands that need sending
     ObjectBuffer<page_dshot> dshot_command_queue{8};

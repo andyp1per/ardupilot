@@ -486,10 +486,12 @@ void AP_IOMCU_FW::update()
         // turn amber off
         AMBER_SET(0);
     }
-    // update status page at 20Hz
+
+    // update status page and telemetry at 20Hz
     if (now - last_status_ms > 50) {
         last_status_ms = now;
         page_status_update();
+        telem_update();
     }
 
     // run fast loop functions at 1Khz
@@ -499,6 +501,7 @@ void AP_IOMCU_FW::update()
         heater_update();
         rcin_update();
         rcin_serial_update();
+        erpm_update();
     }
 
     // run remaining functions at 100Hz
@@ -609,6 +612,20 @@ void AP_IOMCU_FW::rcin_update()
     }
 }
 
+void AP_IOMCU_FW::erpm_update()
+{
+    if (hal.rcout->new_erpm()) {
+        dshot_erpm.update_mask |= hal.rcout->read_erpm(dshot_erpm.erpm, IOMCU_MAX_CHANNELS);
+    }
+}
+
+void AP_IOMCU_FW::telem_update()
+{
+    for (uint8_t i = 0; i<IOMCU_MAX_CHANNELS; i++) {
+        dshot_telem.error_rate[i] = uint32_t(hal.rcout->get_erpm_error_rate(i) * 10.0f) & 0xFF;
+    }
+}
+
 void AP_IOMCU_FW::process_io_packet()
 {
     iomcu.reg_status.total_pkts++;
@@ -705,6 +722,12 @@ bool AP_IOMCU_FW::handle_code_read()
     case PAGE_RAW_RCIN:
         COPY_PAGE(rc_input);
         break;
+    case PAGE_RAW_DSHOT_ERPM:
+        COPY_PAGE(dshot_erpm);
+        break;
+    case PAGE_RAW_DSHOT_TELEM:
+        COPY_PAGE(dshot_telem);
+        break;
     case PAGE_STATUS:
         COPY_PAGE(reg_status);
         break;
@@ -731,6 +754,14 @@ bool AP_IOMCU_FW::handle_code_read()
     memcpy(tx_io_packet.regs, values, sizeof(uint16_t)*tx_io_packet.count);
     tx_io_packet.crc = 0;
     tx_io_packet.crc =  crc_crc8((const uint8_t *)&tx_io_packet, tx_io_packet.get_size());
+
+    switch (rx_io_packet.page) {
+    case PAGE_RAW_DSHOT_ERPM:
+        dshot_erpm.update_mask = 0;
+        break;
+    default:
+        break;
+    }
     return true;
 }
 
@@ -1080,7 +1111,7 @@ void AP_IOMCU_FW::rcout_config_update(void)
 #endif
         hal.rcout->set_output_mode(mode_out.mask, (AP_HAL::RCOutput::output_mode)mode_out.mode);
 #ifdef HAL_WITH_BIDIR_DSHOT
-        //hal.rcout->set_bidir_dshot_mask(mode_out.mask);
+        hal.rcout->set_bidir_dshot_mask(mode_out.mask);
         hal.rcout->set_motor_poles(14);
 #endif
         // enabling dshot changes the memory allocation
