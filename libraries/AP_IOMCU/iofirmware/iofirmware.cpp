@@ -19,7 +19,6 @@
 
 #include <AP_Math/AP_Math.h>
 #include <AP_Math/crc.h>
-#include <AP_ESC_Telem/AP_ESC_Telem.h>
 #include "iofirmware.h"
 #include <AP_HAL_ChibiOS/RCInput.h>
 #include <AP_HAL_ChibiOS/RCOutput.h>

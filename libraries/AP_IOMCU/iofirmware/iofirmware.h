@@ -11,7 +11,6 @@
 
 #if AP_HAL_SHARED_DMA_ENABLED
 #include <AP_HAL_ChibiOS/shared_dma.h>
-#include <AP_ESC_Telem/AP_ESC_Telem.h>
 #endif
 
 #define PWM_IGNORE_THIS_CHANNEL UINT16_MAX
@@ -138,9 +137,6 @@ public:
     ChibiOS::Shared_DMA* tx_dma_handle;
 #endif
 #ifdef HAL_WITH_BIDIR_DSHOT
-#if HAL_WITH_ESC_TELEM
-    AP_ESC_Telem esc_telem;
-#endif
     struct page_dshot_erpm dshot_erpm;
     struct page_dshot_telem dshot_telem;
     uint32_t last_telem_update_ms;
