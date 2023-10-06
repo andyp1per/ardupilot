@@ -21,6 +21,7 @@
 #include "hwdef/common/stm32_util.h"
 #include <AP_InternalError/AP_InternalError.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
+#include <AP_BoardConfig/AP_BoardConfig.h>
 
 #ifdef HAL_WITH_BIDIR_DSHOT
 
@@ -854,11 +855,27 @@ bool RCOutput::bdshot_decode_telemetry_from_erpm(uint16_t encodederpm, uint8_t c
     // update the ESC telemetry data
     if (erpm < INVALID_ERPM) {
         _bdshot.erpm[chan] = erpm;
+        _bdshot.update_mask |= 1U<<chan;
 #if HAL_WITH_ESC_TELEM
-        update_rpm(chan, erpm * 200U / _bdshot.motor_poles, get_erpm_error_rate(chan));
+        uint8_t normalized_chan = chan;
+#if HAL_WITH_IO_MCU
+        if (AP_BoardConfig::io_dshot()) {
+            normalized_chan = chan + chan_offset;
+        }
+#endif
+        update_rpm(normalized_chan, erpm * 200U / _bdshot.motor_poles, get_erpm_error_rate(chan));
 #endif
     }
     return erpm < INVALID_ERPM;
+}
+
+uint32_t RCOutput::read_erpm(uint16_t* erpm, uint8_t len)
+{
+    const uint8_t READ_LEN = MIN(len, uint8_t(max_channels));
+    memcpy(erpm, _bdshot.erpm, sizeof(uint16_t) * READ_LEN);
+    const uint32_t mask = _bdshot.update_mask;
+    _bdshot.update_mask = 0;
+    return mask;
 }
 
 #endif // HAL_WITH_BIDIR_DSHOT

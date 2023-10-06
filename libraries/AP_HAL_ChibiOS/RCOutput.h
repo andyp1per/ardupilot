@@ -66,6 +66,11 @@ public:
     float get_erpm_error_rate(uint8_t chan) const override {
       return 100.0f * float(_bdshot.erpm_errors[chan]) / (1 + _bdshot.erpm_errors[chan] + _bdshot.erpm_clean_frames[chan]);
     }
+    /*
+      allow all erpm values to be read and for new updates to be detected - primarily for IOMCU
+     */
+    bool  new_erpm() override { return _bdshot.update_mask != 0; }
+    uint32_t read_erpm(uint16_t* erpm, uint8_t len) override;
 #endif
     void set_output_mode(uint32_t mask, const enum output_mode mode) override;
     enum output_mode get_output_mode(uint32_t& mask) override;
@@ -534,6 +539,7 @@ private:
     struct {
         uint32_t mask;
         uint16_t erpm[max_channels];
+        volatile uint32_t update_mask;
 #ifdef HAL_WITH_BIDIR_DSHOT
         uint16_t erpm_errors[max_channels];
         uint16_t erpm_clean_frames[max_channels];
