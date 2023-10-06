@@ -157,8 +157,8 @@ public:
     /*
       allow all erpm values to be read and for new updates to be detected - primarily for IOMCU
      */
-    virtual bool  new_erpm() = 0;
-    virtual uint32_t  read_erpm(uint16_t* erpm, uint8_t len) = 0;
+    virtual bool  new_erpm() { return false; }
+    virtual uint32_t  read_erpm(uint16_t* erpm, uint8_t len) { return 0; }
 
     /*
       enable PX4IO SBUS out at the given rate
