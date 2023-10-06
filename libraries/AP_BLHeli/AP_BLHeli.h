@@ -54,6 +54,7 @@ public:
     }
 
     uint32_t get_bidir_dshot_mask() const { return channel_bidir_dshot_mask.get(); }
+    uint8_t get_motor_poles() const { return motor_poles.get(); }
 
     static AP_BLHeli *get_singleton(void) {
         return _singleton;
