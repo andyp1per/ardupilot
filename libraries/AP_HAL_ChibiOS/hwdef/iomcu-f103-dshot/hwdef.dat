@@ -13,7 +13,7 @@ DMA_NOMAP 1
 # only four timers on F103xB so use TIM1 for system timer
 STM32_ST_USE_TIMER 1
 
-define HAL_WITH_ESC_TELEM 1
+define HAL_WITH_ESC_TELEM 0
 
 undef PA0 PA1 PB8 PB9 PA6 PA7 PB0 PB1
 
