@@ -23,6 +23,11 @@
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
 
+#if HAL_WITH_IO_MCU
+#include <AP_IOMCU/AP_IOMCU.h>
+extern AP_IOMCU iomcu;
+#endif
+
 #ifdef HAL_WITH_BIDIR_DSHOT
 
 #if defined(IOMCU_FW)
@@ -49,6 +54,11 @@ extern const AP_HAL::HAL& hal;
  */
 void RCOutput::set_bidir_dshot_mask(uint32_t mask)
 {
+#if HAL_WITH_IO_MCU
+    if (AP_BoardConfig::io_dshot() && (mask & ((1U<<chan_offset)-1))) {
+        iomcu.set_bidir_dshot_mask(mask);
+    }
+#endif
     _bdshot.mask = (mask >> chan_offset);
     // we now need to reconfigure the DMA channels since they are affected by the value of the mask
     for (uint8_t i = 0; i < NUM_GROUPS; i++ ) {
