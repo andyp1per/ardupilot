@@ -584,6 +584,11 @@ void RCOutput::set_dshot_esc_type(DshotEscType dshot_esc_type)
             DSHOT_BIT_1_TICKS = DSHOT_BIT_1_TICKS_DEFAULT;
             break;
     }
+#if HAL_WITH_IO_MCU
+    if (AP_BoardConfig::io_dshot()) {
+        iomcu.set_dshot_esc_type(dshot_esc_type);
+    }
+#endif
 }
 #endif // #if HAL_DSHOT_ENABLED
 
