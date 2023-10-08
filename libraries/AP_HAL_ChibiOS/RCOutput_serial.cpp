@@ -62,12 +62,13 @@ bool RCOutput::dshot_send_command(pwm_group& group, uint8_t command, uint8_t cha
     group.bdshot.enabled = false;
     if ((_bdshot.mask & active_channels) == active_channels) {
         bdshot_telem = true;
-        // it's not clear why this is required, but without it we get no output
         if (group.pwm_started) {
-            pwmStop(group.pwm_drv);
+            bdshot_reset_pwm(group, RCOutput::ALL_CHANNELS);
         }
-        pwmStart(group.pwm_drv, &group.pwm_cfg);
-        group.pwm_started = true;
+        else {
+            pwmStart(group.pwm_drv, &group.pwm_cfg);
+            group.pwm_started = true;
+        }
     }
 #endif    
 

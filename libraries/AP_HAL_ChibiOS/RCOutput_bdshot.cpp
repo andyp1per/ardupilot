@@ -743,7 +743,7 @@ uint32_t RCOutput::bdshot_get_output_rate_hz(const enum output_mode mode)
     }
 }
 
-#define INVALID_ERPM 0xffffU
+#define INVALID_ERPM 0xfffU
 
 // decode a telemetry packet from a GCR encoded stride buffer, take from betaflight decodeTelemetryPacket
 // see https://github.com/betaflight/betaflight/pull/8554#issuecomment-512507625 for a description of the protocol
@@ -804,8 +804,8 @@ bool RCOutput::bdshot_decode_telemetry_from_erpm(uint16_t encodederpm, uint8_t c
     }
 
     // eRPM = m << e (see https://github.com/bird-sanctuary/extended-dshot-telemetry)
-    uint8_t expo = ((encodederpm & 0xfffffe00U) >> 9U) & 0xffU;
-    uint16_t value = (encodederpm & 0x000001ffU);
+    uint8_t expo = ((encodederpm & 0xfffffe00U) >> 9U) & 0xffU; // 3bits
+    uint16_t value = (encodederpm & 0x000001ffU);               // 9bits
     uint8_t normalized_chan = chan;
 #if HAL_WITH_IO_MCU
     if (AP_BoardConfig::io_dshot()) {
