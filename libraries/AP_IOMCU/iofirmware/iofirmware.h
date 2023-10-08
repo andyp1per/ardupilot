@@ -4,6 +4,7 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Common/AP_Common.h>
 #include <AP_RCProtocol/AP_RCProtocol.h>
+#include <AP_ESC_Telem/AP_ESC_Telem.h>
 
 #include "hal.h"
 #include "ch.h"
@@ -118,6 +119,7 @@ public:
 
     uint16_t last_output_mode_mask;
     uint16_t last_output_bdmask;
+    uint16_t last_output_esc_type;
 
     // MIXER values
     struct page_mixing mixing;
@@ -138,8 +140,11 @@ public:
 #endif
 #ifdef HAL_WITH_BIDIR_DSHOT
     struct page_dshot_erpm dshot_erpm;
-    struct page_dshot_telem dshot_telem;
+    struct page_dshot_telem dshot_telem[IOMCU_MAX_CHANNELS/4];
     uint32_t last_telem_update_ms;
+#if HAL_WITH_ESC_TELEM
+    AP_ESC_Telem esc_telem;
+#endif
 #endif
 
     // true when override channel active

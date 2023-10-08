@@ -623,8 +623,19 @@ void AP_IOMCU_FW::erpm_update()
 void AP_IOMCU_FW::telem_update()
 {
 #ifdef HAL_WITH_BIDIR_DSHOT
-    for (uint8_t i = 0; i<IOMCU_MAX_CHANNELS; i++) {
-        dshot_telem.error_rate[i] = uint32_t(hal.rcout->get_erpm_error_rate(i) * 10.0f) & 0xFF;
+    for (uint8_t i = 0; i < IOMCU_MAX_CHANNELS/4; i++) {
+        for (uint8_t j = 0; j < 4; j++) {
+            const uint8_t esc_id = (i * 4 + j);
+            if (esc_id >= IOMCU_MAX_CHANNELS) {
+                continue;
+            }
+            dshot_telem[i].error_rate[j] = uint16_t(roundf(hal.rcout->get_erpm_error_rate(esc_id) * 100.0));
+            const volatile AP_ESC_Telem_Backend::TelemetryData& telem = esc_telem.get_telem_data(esc_id);
+            dshot_telem[i].voltage_cvolts[j] = uint16_t(roundf(telem.voltage * 100));
+            dshot_telem[i].current_camps[j] = uint16_t(roundf(telem.current * 100));
+            dshot_telem[i].temperature_cdeg[j] = telem.temperature_cdeg;
+            dshot_telem[i].types[j] = telem.types;
+        }
     }
 #endif
 }
@@ -729,8 +740,17 @@ bool AP_IOMCU_FW::handle_code_read()
     case PAGE_RAW_DSHOT_ERPM:
         COPY_PAGE(dshot_erpm);
         break;
-    case PAGE_RAW_DSHOT_TELEM:
-        COPY_PAGE(dshot_telem);
+    case PAGE_RAW_DSHOT_TELEM_1_4:
+        COPY_PAGE(dshot_telem[0]);
+        break;
+    case PAGE_RAW_DSHOT_TELEM_5_8:
+        COPY_PAGE(dshot_telem[1]);
+        break;
+    case PAGE_RAW_DSHOT_TELEM_9_12:
+        COPY_PAGE(dshot_telem[2]);
+        break;
+    case PAGE_RAW_DSHOT_TELEM_13_16:
+        COPY_PAGE(dshot_telem[3]);
         break;
 #endif
     case PAGE_STATUS:
@@ -855,6 +875,7 @@ bool AP_IOMCU_FW::handle_code_write()
             mode_out.mask = rx_io_packet.regs[0];
             mode_out.mode = rx_io_packet.regs[1];
             mode_out.bdmask = rx_io_packet.regs[2];
+            mode_out.esc_type = rx_io_packet.regs[3];
             break;
 
         case PAGE_REG_SETUP_HEATER_DUTY_CYCLE:
@@ -1108,7 +1129,8 @@ void AP_IOMCU_FW::rcout_config_update(void)
 
     // see if there is anything to do, we only support setting the mode for a particular channel once
     if ((last_output_mode_mask & mode_out.mask) == mode_out.mask
-        && (last_output_bdmask & mode_out.bdmask) == mode_out.bdmask) {
+        && (last_output_bdmask & mode_out.bdmask) == mode_out.bdmask
+        && last_output_esc_type == mode_out.esc_type) {
         return;
     }
 
@@ -1121,11 +1143,13 @@ void AP_IOMCU_FW::rcout_config_update(void)
         hal.rcout->set_output_mode(mode_out.mask, (AP_HAL::RCOutput::output_mode)mode_out.mode);
 #ifdef HAL_WITH_BIDIR_DSHOT
         hal.rcout->set_bidir_dshot_mask(mode_out.bdmask);
+        hal.rcout->set_dshot_esc_type(AP_HAL::RCOutput::DshotEscType(mode_out.esc_type));
 #endif
         // enabling dshot changes the memory allocation
         reg_status.freemem = hal.util->available_memory();
         last_output_mode_mask |= mode_out.mask;
         last_output_bdmask |= mode_out.bdmask;
+        last_output_esc_type = mode_out.esc_type;
         break;
     case AP_HAL::RCOutput::MODE_PWM_ONESHOT:
     case AP_HAL::RCOutput::MODE_PWM_ONESHOT125:

@@ -126,6 +126,9 @@ public:
     // set telem request mask
     void set_telem_request_mask(uint32_t mask);
 
+    // set the dshot esc_type
+    void set_dshot_esc_type(AP_HAL::RCOutput::DshotEscType dshot_esc_type);
+
     // send a dshot command
     void send_dshot_command(uint8_t command, uint8_t chan, uint32_t command_timeout_ms, uint16_t repeat_count, bool priority);
 #endif
@@ -270,7 +273,8 @@ private:
 
     // bi-directional dshot erpm values
     struct page_dshot_erpm dshot_erpm;
-    struct page_dshot_telem dshot_telem;
+    struct page_dshot_telem dshot_telem[IOMCU_MAX_CHANNELS/4];
+    uint8_t esc_group;
 
     // queue of dshot commands that need sending
     ObjectBuffer<page_dshot> dshot_command_queue{8};

@@ -398,9 +398,12 @@ void AP_IOMCU::read_erpm()
     if (blh) {
         motor_poles = blh->get_motor_poles();
     }
-    for (uint8_t i=0; i<IOMCU_MAX_CHANNELS; i++) {
-        if (dshot_erpm.update_mask & 1U<<i) {
-            update_rpm(i, dshot_erpm.erpm[i] * 200U / motor_poles, float(dshot_telem.error_rate[i]) / 10.0f);
+    for (uint8_t i = 0; i < IOMCU_MAX_CHANNELS/4; i++) {
+        for (uint8_t j = 0; j < 4; j++) {
+            const uint8_t esc_id = (i * 4 + j);
+            if (dshot_erpm.update_mask & 1U<<esc_id) {
+                update_rpm(esc_id, dshot_erpm.erpm[esc_id] * 200U / motor_poles, dshot_telem[i].error_rate[j] / 100.0);
+            }
         }
     }
 }
@@ -410,10 +413,35 @@ void AP_IOMCU::read_erpm()
  */
 void AP_IOMCU::read_telem()
 {
-    uint16_t *r = (uint16_t *)&dshot_telem;
-    if (!read_registers(PAGE_RAW_DSHOT_TELEM, 0, sizeof(dshot_telem)/2, r)) {
+    struct page_dshot_telem* telem = &dshot_telem[esc_group];
+    uint16_t *r = (uint16_t *)telem;
+    iopage page = PAGE_RAW_DSHOT_TELEM_1_4;
+    switch (esc_group) {
+    case 1:
+        page = PAGE_RAW_DSHOT_TELEM_5_8;
+        break;
+    case 2:
+        page = PAGE_RAW_DSHOT_TELEM_9_12;
+        break;
+    case 3:
+        page = PAGE_RAW_DSHOT_TELEM_13_16;
+        break;
+    default:
+        break;
+    }
+
+    if (!read_registers(page, 0, sizeof(page_dshot_telem)/2, r)) {
         return;
     }
+    for (uint i = 0; i<4; i++) {
+        TelemetryData t {
+            .temperature_cdeg = int16_t(telem->temperature_cdeg[i]),
+            .voltage = float(telem->voltage_cvolts[i]) * 100.0,
+            .current = float(telem->current_camps[i]) * 100.0
+        };
+        update_telem_data(esc_group * 4 + i, t, telem->types[i]);
+    }
+    esc_group = (esc_group + 1) % 4;
 }
 
 /*
@@ -884,6 +912,13 @@ void AP_IOMCU::set_dshot_period(uint16_t period_us, uint8_t drate)
     dshot_rate.period_us = period_us;
     dshot_rate.rate = drate;
     trigger_event(IOEVENT_SET_DSHOT_PERIOD);
+}
+
+// set the dshot esc_type
+void AP_IOMCU::set_dshot_esc_type(AP_HAL::RCOutput::DshotEscType dshot_esc_type)
+{
+    mode_out.esc_type = uint16_t(dshot_esc_type);
+    trigger_event(IOEVENT_SET_OUTPUT_MODE);
 }
 
 // set output mode
