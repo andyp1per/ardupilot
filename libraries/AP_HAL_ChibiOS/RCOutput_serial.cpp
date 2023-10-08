@@ -121,7 +121,11 @@ void RCOutput::send_dshot_command(uint8_t command, uint8_t chan, uint32_t comman
 
     DshotCommandPacket pkt;
     pkt.command = command;
-    pkt.chan = chan - chan_offset;
+    if (chan != ALL_CHANNELS) {
+        pkt.chan = chan - chan_offset;
+    } else {
+        pkt.chan = ALL_CHANNELS;
+    }
     if (command_timeout_ms == 0) {
         pkt.cycle = MAX(10, repeat_count);
     } else {
