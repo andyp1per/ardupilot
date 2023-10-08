@@ -55,8 +55,9 @@ extern const AP_HAL::HAL& hal;
 void RCOutput::set_bidir_dshot_mask(uint32_t mask)
 {
 #if HAL_WITH_IO_MCU
-    if (AP_BoardConfig::io_dshot() && (mask & ((1U<<chan_offset)-1))) {
-        iomcu.set_bidir_dshot_mask(mask);
+    const uint32_t iomcu_mask = ((1U<<chan_offset)-1);
+    if (AP_BoardConfig::io_dshot() && (mask & iomcu_mask)) {
+        iomcu.set_bidir_dshot_mask(mask & iomcu_mask);
     }
 #endif
     _bdshot.mask = (mask >> chan_offset);
@@ -380,7 +381,7 @@ void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
     // setup for transfers. 0x0D is the register
     // address offset of the CCR registers in the timer peripheral
 #if defined(IOMCU_FW)
-    uint8_t telem_ch_pair = (group->bdshot.telem_tim_ch[curr_ch] >> 2U) << 2U; // round to the lowest of the channel pair
+    uint8_t telem_ch_pair = group->bdshot.telem_tim_ch[curr_ch] & ~1U; // round to the lowest of the channel pair
     const uint8_t ccr_ofs = offsetof(stm32_tim_t, CCR)/4 + telem_ch_pair;
     group->pwm_drv->tim->DCR = STM32_TIM_DCR_DBA(ccr_ofs) | STM32_TIM_DCR_DBL(1); // read two registers at a time
 #else
@@ -391,7 +392,6 @@ void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
     // Start Timer
     group->pwm_drv->tim->EGR |= STM32_TIM_EGR_UG;
     group->pwm_drv->tim->SR = 0;
-
     group->pwm_drv->tim->CR1 = TIM_CR1_ARPE | STM32_TIM_CR1_URS | STM32_TIM_CR1_UDIS | STM32_TIM_CR1_CEN;
     dmaStreamEnable(ic_dma);
 }
@@ -565,8 +565,8 @@ __RAMFUNC__ void RCOutput::bdshot_finish_dshot_gcr_transaction(virtual_timer_t* 
 {
     pwm_group *group = (pwm_group *)p;
     chSysLockFromISR();
-#ifdef HAL_GPIO_LINE_GPIO55
-    TOGGLE_PIN_DEBUG(55);
+#ifdef HAL_GPIO_LINE_GPIO56
+    TOGGLE_PIN_DEBUG(56);
 #endif
     uint8_t curr_telem_chan = group->bdshot.curr_telem_chan;
 
@@ -577,9 +577,8 @@ __RAMFUNC__ void RCOutput::bdshot_finish_dshot_gcr_transaction(virtual_timer_t* 
     osalDbgAssert(dma, "No DMA channel");
     // record the transaction size before the stream is released
     dmaStreamDisable(dma);
-    uint32_t tx_size = dmaStreamGetTransactionSize(dma);
     group->bdshot.dma_tx_size = MIN(uint16_t(GCR_TELEMETRY_BIT_LEN),
-        GCR_TELEMETRY_BIT_LEN - tx_size);
+        GCR_TELEMETRY_BIT_LEN - dmaStreamGetTransactionSize(dma));
 
     stm32_cacheBufferInvalidate(group->dma_buffer, group->bdshot.dma_tx_size);
     memcpy(group->bdshot.dma_buffer_copy, group->dma_buffer, sizeof(dmar_uint_t) * group->bdshot.dma_tx_size);
@@ -599,8 +598,8 @@ __RAMFUNC__ void RCOutput::bdshot_finish_dshot_gcr_transaction(virtual_timer_t* 
     group->bdshot.curr_telem_chan = bdshot_find_next_ic_channel(*group);
     // tell the waiting process we've done the DMA
     chEvtSignalI(group->dshot_waiter, group->dshot_event_mask);
-#ifdef HAL_GPIO_LINE_GPIO55
-    TOGGLE_PIN_DEBUG(55);
+#ifdef HAL_GPIO_LINE_GPIO56
+    TOGGLE_PIN_DEBUG(56);
 #endif
     chSysUnlockFromISR();
 }
