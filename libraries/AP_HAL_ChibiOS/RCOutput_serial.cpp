@@ -63,7 +63,7 @@ bool RCOutput::dshot_send_command(pwm_group& group, uint8_t command, uint8_t cha
     if ((_bdshot.mask & active_channels) == active_channels) {
         bdshot_telem = true;
         if (group.pwm_started) {
-            bdshot_reset_pwm(group, RCOutput::ALL_CHANNELS);
+            bdshot_reset_pwm(group, group.bdshot.prev_telem_chan);
         }
         else {
             pwmStart(group.pwm_drv, &group.pwm_cfg);
