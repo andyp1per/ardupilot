@@ -486,13 +486,19 @@ void AP_IOMCU_FW::update()
         AMBER_SET(0);
     }
 
-    // update status page and telemetry at 20Hz
+    // update status page at 20Hz
     if (now - last_status_ms > 50) {
         last_status_ms = now;
         page_status_update();
+    }
+#ifdef HAL_WITH_BIDIR_DSHOT
+    // EDT updates are semt at ~1Hz per ESC, but we want to make sure
+    // that we don't delay updates unduly so sample at 5Hz
+    if (now - last_telem_ms > 200) {
+        last_telem_ms = now;
         telem_update();
     }
-
+#endif
     // run fast loop functions at 1Khz
     if (now_us - last_fast_loop_us >= 1000)
     {
@@ -500,7 +506,9 @@ void AP_IOMCU_FW::update()
         heater_update();
         rcin_update();
         rcin_serial_update();
+#ifdef HAL_WITH_BIDIR_DSHOT
         erpm_update();
+#endif
     }
 
     // run remaining functions at 100Hz
@@ -611,18 +619,16 @@ void AP_IOMCU_FW::rcin_update()
     }
 }
 
+#ifdef HAL_WITH_BIDIR_DSHOT
 void AP_IOMCU_FW::erpm_update()
 {
-#ifdef HAL_WITH_BIDIR_DSHOT
     if (hal.rcout->new_erpm()) {
         dshot_erpm.update_mask |= hal.rcout->read_erpm(dshot_erpm.erpm, IOMCU_MAX_CHANNELS);
     }
-#endif
 }
 
 void AP_IOMCU_FW::telem_update()
 {
-#ifdef HAL_WITH_BIDIR_DSHOT
     for (uint8_t i = 0; i < IOMCU_MAX_CHANNELS/4; i++) {
         for (uint8_t j = 0; j < 4; j++) {
             const uint8_t esc_id = (i * 4 + j);
@@ -637,8 +643,8 @@ void AP_IOMCU_FW::telem_update()
             dshot_telem[i].types[j] = telem.types;
         }
     }
-#endif
 }
+#endif
 
 void AP_IOMCU_FW::process_io_packet()
 {

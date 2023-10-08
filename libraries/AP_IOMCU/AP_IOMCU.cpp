@@ -79,7 +79,6 @@ void AP_IOMCU::init(void)
     uart.set_unbuffered_writes(true);
 
     AP_BoardConfig *boardconfig = AP_BoardConfig::get_singleton();
-
     if ((!boardconfig || boardconfig->io_enabled() == 1) && !hal.util->was_watchdog_reset()) {
         check_crc();
     } else {
@@ -113,6 +112,12 @@ void AP_IOMCU::thread_main(void)
 
     uart.begin(1500*1000, 128, 128);
     uart.set_unbuffered_writes(true);
+
+    AP_BLHeli* blh = AP_BLHeli::get_singleton();
+    uint16_t erpm_period_ms = 10; // default 100Hz
+    if (blh && blh->get_telemetry_rate() > 0) {
+        erpm_period_ms = constrain_int16(1000 / blh->get_telemetry_rate(), 1, 1000);
+    }
 
     trigger_event(IOEVENT_INIT);
 
@@ -309,14 +314,18 @@ void AP_IOMCU::thread_main(void)
             last_servo_read_ms = AP_HAL::millis();
         }
 
-        if (AP_BoardConfig::io_dshot() && now - last_erpm_read_ms > 10) {
-            // read erpm at 100Hz
+        if (AP_BoardConfig::io_dshot() && now - last_erpm_read_ms > erpm_period_ms) {
+            // read erpm at configured rate. A more efficient scheme might be to 
+            // send erpm info back with the response from a PWM send, but that would
+            // require a reworking of the registers model
             read_erpm();
             last_erpm_read_ms = AP_HAL::millis();
         }
 
         if (AP_BoardConfig::io_dshot() && now - last_telem_read_ms > 100) {
             // read dshot telemetry at 10Hz
+            // needs to be at least 4Hz since each ESC updates at ~1Hz and we
+            // are reading 4 at a time
             read_telem();
             last_telem_read_ms = AP_HAL::millis();
         }
