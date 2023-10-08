@@ -806,6 +806,12 @@ bool RCOutput::bdshot_decode_telemetry_from_erpm(uint16_t encodederpm, uint8_t c
     // eRPM = m << e (see https://github.com/bird-sanctuary/extended-dshot-telemetry)
     uint8_t expo = ((encodederpm & 0xfffffe00U) >> 9U) & 0xffU;
     uint16_t value = (encodederpm & 0x000001ffU);
+    uint8_t normalized_chan = chan;
+#if HAL_WITH_IO_MCU
+    if (AP_BoardConfig::io_dshot()) {
+        normalized_chan = chan + chan_offset;
+    }
+#endif
 
     if (!(value & 0x100U) && (_dshot_esc_type == DSHOT_ESC_BLHELI_EDT || _dshot_esc_type == DSHOT_ESC_BLHELI_EDT_S)) {
         switch (expo) {
@@ -814,7 +820,7 @@ bool RCOutput::bdshot_decode_telemetry_from_erpm(uint16_t encodederpm, uint8_t c
             TelemetryData t {
                 .temperature_cdeg = int16_t(value * 100)
             };
-            update_telem_data(chan, t, AP_ESC_Telem_Backend::TelemetryType::TEMPERATURE);
+            update_telem_data(normalized_chan, t, AP_ESC_Telem_Backend::TelemetryType::TEMPERATURE);
     #endif
             return false;
             }
@@ -824,7 +830,7 @@ bool RCOutput::bdshot_decode_telemetry_from_erpm(uint16_t encodederpm, uint8_t c
             TelemetryData t {
                 .voltage = 0.25f * value
             };
-            update_telem_data(chan, t, AP_ESC_Telem_Backend::TelemetryType::VOLTAGE);
+            update_telem_data(normalized_chan, t, AP_ESC_Telem_Backend::TelemetryType::VOLTAGE);
     #endif
             return false;
             }
@@ -834,7 +840,7 @@ bool RCOutput::bdshot_decode_telemetry_from_erpm(uint16_t encodederpm, uint8_t c
             TelemetryData t {
                 .current = float(value)
             };
-            update_telem_data(chan, t, AP_ESC_Telem_Backend::TelemetryType::CURRENT);
+            update_telem_data(normalized_chan, t, AP_ESC_Telem_Backend::TelemetryType::CURRENT);
     #endif
             return false;
             }
@@ -867,12 +873,6 @@ bool RCOutput::bdshot_decode_telemetry_from_erpm(uint16_t encodederpm, uint8_t c
         _bdshot.erpm[chan] = erpm;
         _bdshot.update_mask |= 1U<<chan;
 #if HAL_WITH_ESC_TELEM
-        uint8_t normalized_chan = chan;
-#if HAL_WITH_IO_MCU
-        if (AP_BoardConfig::io_dshot()) {
-            normalized_chan = chan + chan_offset;
-        }
-#endif
         update_rpm(normalized_chan, erpm * 200U / _bdshot.motor_poles, get_erpm_error_rate(chan));
 #endif
     }
