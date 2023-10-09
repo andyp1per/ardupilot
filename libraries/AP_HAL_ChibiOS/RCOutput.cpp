@@ -1434,10 +1434,12 @@ void RCOutput::led_timer_tick(uint64_t time_out_us)
 
 #if defined(IOMCU_FW) && HAL_DSHOT_ENABLED
 #ifdef HAL_WITH_BIDIR_DSHOT
-THD_WORKING_AREA(dshot_thread_wa, 1024);
+THD_WORKING_AREA(dshot_thread_wa, 512);
 #else
 THD_WORKING_AREA(dshot_thread_wa, 64);
 #endif
+static const char* rcout_thread_name = "rcout";
+
 void RCOutput::timer_tick()
 {
     if (dshot_timer_setup) {
@@ -1475,6 +1477,8 @@ void RCOutput::rcout_thread() {
     }
 
     rcout_thread_ctx = chThdGetSelfX();
+    chRegSetThreadNameX(rcout_thread_ctx, rcout_thread_name);
+
     uint64_t last_cycle_run_us = 0;
 
     while (true) {
