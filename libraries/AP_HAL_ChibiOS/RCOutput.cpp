@@ -1568,7 +1568,6 @@ void RCOutput::dma_allocate(Shared_DMA *ctx)
                 group.pwm_drv->enabled = 0U;
                 pwm_lld_start(group.pwm_drv);
                 group.pwm_drv->state = PWM_READY;
-                group.pwm_started = true;
             }
 #endif
 #if STM32_DMA_SUPPORTS_DMAMUX
@@ -1597,7 +1596,6 @@ void RCOutput::dma_deallocate(Shared_DMA *ctx)
                 group.pwm_drv->enabled = 0;
                 group.pwm_drv->config  = NULL;
                 group.pwm_drv->state   = PWM_STOP;
-                group.pwm_started = false;
             }
 #endif
             dmaStreamFreeI(group.dma);
