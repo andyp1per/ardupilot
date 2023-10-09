@@ -241,7 +241,6 @@ void RCOutput::bdshot_reset_pwm(pwm_group& group, uint8_t telem_channel)
     TIMx->CCR[1] = 0;                  /* Comparator 2 disabled.       */
     TIMx->CCR[2] = 0;                  /* Comparator 3 disabled.       */
     TIMx->CCR[3] = 0;                  /* Comparator 4 disabled.       */
-    // pwmStart sets these
     // at the point this is called we will have done input capture on two CC channels
     // we need to switch those channels back to output and the default settings
     // all other channels will not have been modified
@@ -269,7 +268,7 @@ void RCOutput::bdshot_reset_pwm(pwm_group& group, uint8_t telem_channel)
     default:
         break;
     }
-
+    // pwmStart sets these
     uint32_t psc = (group.pwm_drv->clock / group.pwm_drv->config->frequency) - 1;
     TIMx->PSC  = psc;
     TIMx->ARR  = group.pwm_drv->period - 1;
@@ -285,6 +284,9 @@ void RCOutput::bdshot_reset_pwm(pwm_group& group, uint8_t telem_channel)
     // we need to switch every output on the same input channel to avoid
     // spurious line changes
     for (uint8_t i = 0; i<4; i++) {
+        if (group.chan[i] == CHAN_DISABLED) {
+            continue;
+        }
         if (group.bdshot.telem_tim_ch[telem_channel] == group.bdshot.telem_tim_ch[i]) {
             palSetLineMode(group.pal_lines[i], PAL_MODE_STM32_ALTERNATE_PUSHPULL);
         }
@@ -341,6 +343,9 @@ void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
     // we need to switch every input on the same input channel to allow
     // the ESCs to drive the lines
     for (uint8_t i = 0; i<4; i++) {
+        if (group->chan[i] == CHAN_DISABLED) {
+            continue;
+        }
         if (group->bdshot.telem_tim_ch[curr_ch] == group->bdshot.telem_tim_ch[i]) {
             palSetLineMode(group->pal_lines[i], PAL_MODE_INPUT_PULLUP);
         }
