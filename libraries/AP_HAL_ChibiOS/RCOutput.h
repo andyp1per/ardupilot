@@ -289,7 +289,8 @@ private:
       SEND_START = 1,
       SEND_COMPLETE = 2,
       RECV_START = 3,
-      RECV_COMPLETE = 4
+      RECV_COMPLETE = 4,
+      RECV_FAILED = 5
     };
 
     struct PACKED SerialLed {
@@ -608,6 +609,10 @@ private:
 
     bool is_bidir_dshot_enabled() const { return _bdshot.mask != 0; }
 
+    static bool is_dshot_send_allowed(DshotState state) {
+      return state == DshotState::IDLE || state == DshotState::RECV_COMPLETE || state == DshotState::RECV_FAILED;
+    }
+
     // are all the ESCs returning data
     bool group_escs_active(const pwm_group& group) const {
       return group.en_mask > 0 && (group.en_mask & _active_escs_mask) == group.en_mask;
@@ -690,6 +695,7 @@ private:
     static void bdshot_dma_ic_irq_callback(void *p, uint32_t flags);
     static void bdshot_finish_dshot_gcr_transaction(virtual_timer_t* vt, void *p);
     bool bdshot_setup_group_ic_DMA(pwm_group &group);
+    void bdshot_prepare_for_next_pulse(pwm_group& group);
     static void bdshot_receive_pulses_DMAR(pwm_group* group);
     static void bdshot_reset_pwm(pwm_group& group, uint8_t telem_channel);
     static void bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t ccr_ch);

@@ -39,7 +39,7 @@ bool RCOutput::dshot_send_command(pwm_group& group, uint8_t command, uint8_t cha
         return false;
     }
 
-    if (soft_serial_waiting() || (group.dshot_state != DshotState::IDLE && group.dshot_state != DshotState::RECV_COMPLETE)) {
+    if (soft_serial_waiting() || !is_dshot_send_allowed(group.dshot_state)) {
         // doing serial output or DMAR input, don't send DShot pulses
         return false;
     }
@@ -57,19 +57,8 @@ bool RCOutput::dshot_send_command(pwm_group& group, uint8_t command, uint8_t cha
     group.dshot_waiter = rcout_thread_ctx;
     bool bdshot_telem = false;
 #ifdef HAL_WITH_BIDIR_DSHOT
-    uint32_t active_channels = group.ch_mask & group.en_mask;
-    // no need to get the input capture lock
-    group.bdshot.enabled = false;
-    if ((_bdshot.mask & active_channels) == active_channels) {
-        bdshot_telem = true;
-        if (group.pwm_started) {
-            bdshot_reset_pwm(group, group.bdshot.prev_telem_chan);
-        }
-        else {
-            pwmStart(group.pwm_drv, &group.pwm_cfg);
-            group.pwm_started = true;
-        }
-    }
+    bdshot_prepare_for_next_pulse(group);
+    bdshot_telem = group.bdshot.enabled;
 #endif    
 
     memset((uint8_t *)group.dma_buffer, 0, DSHOT_BUFFER_LENGTH);

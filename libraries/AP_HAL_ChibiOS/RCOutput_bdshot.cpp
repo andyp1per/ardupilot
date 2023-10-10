@@ -224,6 +224,59 @@ void RCOutput::bdshot_ic_dma_deallocate(Shared_DMA *ctx)
     chSysUnlock();
 }
 
+// setup bdshot for sending and receiving the next pulse
+void RCOutput::bdshot_prepare_for_next_pulse(pwm_group& group)
+{
+    // assume that we won't be able to get the input capture lock
+    group.bdshot.enabled = false;
+
+    uint32_t active_channels = group.ch_mask & group.en_mask;
+    // now grab the input capture lock if we are able, we can only enable bi-dir on a group basis
+    if (((_bdshot.mask & active_channels) == active_channels) && group.has_ic()) {
+        if (group.has_shared_ic_up_dma()) {
+            // no locking required
+            group.bdshot.enabled = true;
+        } else {
+            osalDbgAssert(!group.bdshot.ic_dma_handle[group.bdshot.curr_telem_chan]->is_locked(), "DMA handle is already locked");
+            group.bdshot.ic_dma_handle[group.bdshot.curr_telem_chan]->lock();
+            group.bdshot.enabled = true;
+        }
+    }
+
+    // if the last transaction returned telemetry, decode it
+    if (group.dshot_state == DshotState::RECV_COMPLETE) {
+        uint8_t chan = group.chan[group.bdshot.prev_telem_chan];
+        uint32_t now = AP_HAL::millis();
+        if (bdshot_decode_dshot_telemetry(group, group.bdshot.prev_telem_chan)) {
+            _bdshot.erpm_clean_frames[chan]++;
+            _active_escs_mask |= (1<<chan); // we know the ESC is functional at this point
+        } else {
+            _bdshot.erpm_errors[chan]++;
+        }
+        // reset statistics periodically
+        if (now - _bdshot.erpm_last_stats_ms[chan] > 5000) {
+            _bdshot.erpm_clean_frames[chan] = 0;
+            _bdshot.erpm_errors[chan] = 0;
+            _bdshot.erpm_last_stats_ms[chan] = now;
+        }
+    } else if (group.dshot_state == DshotState::RECV_FAILED) {
+        _bdshot.erpm_errors[group.bdshot.curr_telem_chan]++;
+    }
+
+    if (group.bdshot.enabled) {
+        if (group.pwm_started) {
+            bdshot_reset_pwm(group, group.bdshot.prev_telem_chan);
+        }
+        else {
+            pwmStart(group.pwm_drv, &group.pwm_cfg);
+            group.pwm_started = true;
+        }
+
+        // we can be more precise for capture timer
+        group.bdshot.telempsc = (uint16_t)(lrintf(((float)group.pwm_drv->clock / bdshot_get_output_rate_hz(group.current_mode) + 0.01f)/TELEM_IC_SAMPLE) - 1);
+    }
+}
+
 // reset pwm driver to output mode without resetting the clock or the peripheral
 // the code here is the equivalent of pwmStart()/pwmStop()
 void RCOutput::bdshot_reset_pwm(pwm_group& group, uint8_t telem_channel)
@@ -407,8 +460,8 @@ void RCOutput::bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t 
 #if defined(IOMCU_FW)
     // F103 does not support both edges input capture so we need to set up two channels
     // both pointing at the same input to capture the data. The lower numbered channel
-    // needs to handle the falling edge so that we get an even number of half-words in
-    // the DMA buffer
+    // needs to handle the rising edge so that we get an even number of half-words in
+    // the DMA buffer albeit out-of-order
     switch(ccr_ch) {
     case 0:
     case 1: {
@@ -430,9 +483,9 @@ void RCOutput::bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t 
                         (TIM_CCMR1_CC2S | TIM_CCMR1_IC2F | TIM_CCMR1_IC2PSC),
                         (TIM_CCMR1_CC2S_0 | TIM_CCMR1_IC2F_1));
         }
-        // Select the Polarity as falling on IC1 and rising on IC2
-        MODIFY_REG(TIMx->CCER, TIM_CCER_CC1P | TIM_CCER_CC2P, TIM_CCER_CC1P | TIM_CCER_CC1E | TIM_CCER_CC2E);
-        MODIFY_REG(TIMx->DIER, TIM_DIER_CC1DE | TIM_DIER_CC2DE, TIM_DIER_CC1DE | TIM_DIER_CC2DE);
+        // Select the Polarity as falling on IC2 and rising on IC1
+        MODIFY_REG(TIMx->CCER, TIM_CCER_CC1P | TIM_CCER_CC2P, TIM_CCER_CC2P | TIM_CCER_CC1E | TIM_CCER_CC2E);
+        MODIFY_REG(TIMx->DIER, TIM_DIER_CC1DE | TIM_DIER_CC2DE, TIM_DIER_CC1DE);
         break;
     }
     case 2:
@@ -454,9 +507,9 @@ void RCOutput::bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t 
                         (TIM_CCMR2_CC4S | TIM_CCMR2_IC4F | TIM_CCMR2_IC4PSC),
                         (TIM_CCMR2_CC4S_0 | TIM_CCMR2_IC4F_1));
         }
-        // Select the Polarity as falling on IC1 and rising on IC2
-        MODIFY_REG(TIMx->CCER, TIM_CCER_CC3P | TIM_CCER_CC4P, TIM_CCER_CC3P | TIM_CCER_CC3E | TIM_CCER_CC4E);
-        MODIFY_REG(TIMx->DIER, TIM_DIER_CC3DE | TIM_DIER_CC4DE, TIM_DIER_CC3DE | TIM_DIER_CC4DE);
+        // Select the Polarity as falling on IC4 and rising on IC3
+        MODIFY_REG(TIMx->CCER, TIM_CCER_CC3P | TIM_CCER_CC4P, TIM_CCER_CC4P | TIM_CCER_CC3E | TIM_CCER_CC4E);
+        MODIFY_REG(TIMx->DIER, TIM_DIER_CC3DE | TIM_DIER_CC4DE, TIM_DIER_CC3DE);
         break;
 
     }
@@ -588,8 +641,6 @@ __RAMFUNC__ void RCOutput::bdshot_finish_dshot_gcr_transaction(virtual_timer_t* 
     stm32_cacheBufferInvalidate(group->dma_buffer, group->bdshot.dma_tx_size);
     memcpy(group->bdshot.dma_buffer_copy, group->dma_buffer, sizeof(dmar_uint_t) * group->bdshot.dma_tx_size);
 
-    group->dshot_state = DshotState::RECV_COMPLETE;
-
     // if using input capture DMA and sharing the UP and CH channels then clean up
     // by assigning the source back to UP
 #if STM32_DMA_SUPPORTS_DMAMUX
@@ -598,9 +649,16 @@ __RAMFUNC__ void RCOutput::bdshot_finish_dshot_gcr_transaction(virtual_timer_t* 
     }
 #endif
 
-    // rotate to the next input channel
     group->bdshot.prev_telem_chan = group->bdshot.curr_telem_chan;
-    group->bdshot.curr_telem_chan = bdshot_find_next_ic_channel(*group);
+
+    if (group->bdshot.dma_tx_size > 0) {
+        group->dshot_state = DshotState::RECV_COMPLETE;
+        // rotate to the next input channel if something was successfully read
+        group->bdshot.curr_telem_chan = bdshot_find_next_ic_channel(*group);
+    } else {
+        group->dshot_state = DshotState::RECV_FAILED;
+    }
+
     // tell the waiting process we've done the DMA
     chEvtSignalI(group->dshot_waiter, group->dshot_event_mask);
 #ifdef HAL_GPIO_LINE_GPIO56
@@ -754,9 +812,38 @@ uint32_t RCOutput::bdshot_get_output_rate_hz(const enum output_mode mode)
 uint32_t RCOutput::bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t count)
 {
     uint32_t value = 0;
-    dmar_uint_t oldValue = buffer[0];
     uint32_t bits = 0;
     uint32_t len;
+#if defined(IOMCU_FW)
+    // on f103 we are reading one edge with ICn and the other with ICn+1, the DMA architecture only
+    // allows to trigger on a single register, even though we are reading multiple registers per transfer
+    // we cannot trigger on ICn+1 since that requires reading CCRn+1 and we can't read backwards to get
+    // CCRn. instead we trigger on ICn and then read CCRn and CCRn+1 giving us the new value of ICn and the 
+    // old value of ICn+1. in order to avoid reading garbage on the first read we trigger ICn on the rising
+    // edge. this gives us all the data but with each pair of bytes transposed. we thus need to untranspose
+    // as we decode
+    dmar_uint_t oldValue = buffer[1];
+
+    for (int32_t i = 0; i <= count+1; ) {
+        if (i < count) {
+            dmar_int_t diff = buffer[i] - oldValue;
+            if (bits >= 21U) {
+                break;
+            }
+            len = (diff + TELEM_IC_SAMPLE/2U) / TELEM_IC_SAMPLE;
+        } else {
+            len = 21U - bits;
+        }
+
+        value <<= len;
+        value |= 1U << (len - 1U);
+        oldValue = buffer[i];
+        bits += len;
+
+        i += (i%2 ? -1 : 3);
+    }
+#else
+    dmar_uint_t oldValue = buffer[0];
 
     for (uint32_t i = 1; i <= count; i++) {
         if (i < count) {
@@ -774,6 +861,7 @@ uint32_t RCOutput::bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t 
         oldValue = buffer[i];
         bits += len;
     }
+#endif
     if (bits != 21U) {
         return INVALID_ERPM;
     }

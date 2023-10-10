@@ -1567,11 +1567,15 @@ void RCOutput::dma_allocate(Shared_DMA *ctx)
             group.dma = dmaStreamAllocI(group.dma_up_stream_id, 10, dma_up_irq_callback, &group);
 #if defined(IOMCU_FW)
             if (group.pwm_started && group.dma_handle->is_shared()) {
+#if 0
                 group.pwm_drv->config = &group.pwm_cfg;
                 group.pwm_drv->period = group.pwm_cfg.period;
                 group.pwm_drv->enabled = 0U;
                 pwm_lld_start(group.pwm_drv);
                 group.pwm_drv->state = PWM_READY;
+#endif
+                rccEnableTIM4(true);
+                rccResetTIM4();
             }
 #endif
 #if STM32_DMA_SUPPORTS_DMAMUX
@@ -1596,10 +1600,13 @@ void RCOutput::dma_deallocate(Shared_DMA *ctx)
             // leaving the peripheral running on IOMCU plays havoc with the UART that is
             // also sharing this channel
             if (group.pwm_started && group.dma_handle->is_shared()) {
+#if 0
                 pwm_lld_stop(group.pwm_drv);
                 group.pwm_drv->enabled = 0;
                 group.pwm_drv->config  = NULL;
                 group.pwm_drv->state   = PWM_STOP;
+#endif
+                rccDisableTIM4();
             }
 #endif
             dmaStreamFreeI(group.dma);
@@ -1672,7 +1679,7 @@ void RCOutput::fill_DMA_buffer_dshot(dmar_uint_t *buffer, uint8_t stride, uint16
 void RCOutput::dshot_send(pwm_group &group, uint64_t time_out_us)
 {
 #if HAL_DSHOT_ENABLED
-    if (soft_serial_waiting() || (group.dshot_state != DshotState::IDLE && group.dshot_state != DshotState::RECV_COMPLETE)) {
+    if (soft_serial_waiting() || !is_dshot_send_allowed(group.dshot_state)) {
         // doing serial output or DMAR input, don't send DShot pulses
         return;
     }
@@ -1694,52 +1701,7 @@ void RCOutput::dshot_send(pwm_group &group, uint64_t time_out_us)
     // only the timer thread releases the locks
     group.dshot_waiter = rcout_thread_ctx;
 #ifdef HAL_WITH_BIDIR_DSHOT
-    // assume that we won't be able to get the input capture lock
-    group.bdshot.enabled = false;
-
-    uint32_t active_channels = group.ch_mask & group.en_mask;
-    // now grab the input capture lock if we are able, we can only enable bi-dir on a group basis
-    if (((_bdshot.mask & active_channels) == active_channels) && group.has_ic()) {
-        if (group.has_shared_ic_up_dma()) {
-            // no locking required
-            group.bdshot.enabled = true;
-        } else {
-            osalDbgAssert(!group.bdshot.ic_dma_handle[group.bdshot.curr_telem_chan]->is_locked(), "DMA handle is already locked");
-            group.bdshot.ic_dma_handle[group.bdshot.curr_telem_chan]->lock();
-            group.bdshot.enabled = true;
-        }
-    }
-
-    // if the last transaction returned telemetry, decode it
-    if (group.dshot_state == DshotState::RECV_COMPLETE) {
-        uint8_t chan = group.chan[group.bdshot.prev_telem_chan];
-        uint32_t now = AP_HAL::millis();
-        if (bdshot_decode_dshot_telemetry(group, group.bdshot.prev_telem_chan)) {
-            _bdshot.erpm_clean_frames[chan]++;
-            _active_escs_mask |= (1<<chan); // we know the ESC is functional at this point
-        } else {
-            _bdshot.erpm_errors[chan]++;
-        }
-        // reset statistics periodically
-        if (now - _bdshot.erpm_last_stats_ms[chan] > 5000) {
-            _bdshot.erpm_clean_frames[chan] = 0;
-            _bdshot.erpm_errors[chan] = 0;
-            _bdshot.erpm_last_stats_ms[chan] = now;
-        }
-    }
-
-    if (group.bdshot.enabled) {
-        if (group.pwm_started) {
-            bdshot_reset_pwm(group, group.bdshot.prev_telem_chan);
-        }
-        else {
-            pwmStart(group.pwm_drv, &group.pwm_cfg);
-            group.pwm_started = true;
-        }
-
-        // we can be more precise for capture timer
-        group.bdshot.telempsc = (uint16_t)(lrintf(((float)group.pwm_drv->clock / bdshot_get_output_rate_hz(group.current_mode) + 0.01f)/TELEM_IC_SAMPLE) - 1);
-    }
+    bdshot_prepare_for_next_pulse(group);
 #endif
     bool safety_on = hal.util->safety_switch_state() == AP_HAL::Util::SAFETY_DISARMED;
 #if !defined(IOMCU_FW)
@@ -1829,7 +1791,7 @@ bool RCOutput::serial_led_send(pwm_group &group)
     }
 
 #if HAL_DSHOT_ENABLED
-    if (soft_serial_waiting() || (group.dshot_state != DshotState::IDLE && group.dshot_state != DshotState::RECV_COMPLETE)) {
+    if (soft_serial_waiting() || !is_dshot_send_allowed(group.dshot_state)) {
         // doing serial output or DMAR input, don't send DShot pulses
         return false;
     }
