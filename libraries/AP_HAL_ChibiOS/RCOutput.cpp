@@ -1567,15 +1567,9 @@ void RCOutput::dma_allocate(Shared_DMA *ctx)
             group.dma = dmaStreamAllocI(group.dma_up_stream_id, 10, dma_up_irq_callback, &group);
 #if defined(IOMCU_FW)
             if (group.pwm_started && group.dma_handle->is_shared()) {
-#if 0
-                group.pwm_drv->config = &group.pwm_cfg;
-                group.pwm_drv->period = group.pwm_cfg.period;
-                group.pwm_drv->enabled = 0U;
-                pwm_lld_start(group.pwm_drv);
-                group.pwm_drv->state = PWM_READY;
-#endif
-                rccEnableTIM4(true);
-                rccResetTIM4();
+                /* Timer configured and started.*/
+                group.pwm_drv->tim->CR1   = STM32_TIM_CR1_ARPE | STM32_TIM_CR1_URS | STM32_TIM_CR1_CEN;
+                group.pwm_drv->tim->DIER  = group.pwm_drv->config->dier & ~STM32_TIM_DIER_IRQ_MASK;
             }
 #endif
 #if STM32_DMA_SUPPORTS_DMAMUX
@@ -1598,15 +1592,11 @@ void RCOutput::dma_deallocate(Shared_DMA *ctx)
         if (group.dma_handle == ctx && group.dma != nullptr) {
 #if defined(IOMCU_FW)
             // leaving the peripheral running on IOMCU plays havoc with the UART that is
-            // also sharing this channel
+            // also sharing this channel, we only turn it off rather than resetting so
+            // that we don't have to worry about line modes etc
             if (group.pwm_started && group.dma_handle->is_shared()) {
-#if 0
-                pwm_lld_stop(group.pwm_drv);
-                group.pwm_drv->enabled = 0;
-                group.pwm_drv->config  = NULL;
-                group.pwm_drv->state   = PWM_STOP;
-#endif
-                rccDisableTIM4();
+                group.pwm_drv->tim->CR1   = 0;
+                group.pwm_drv->tim->DIER  = 0;
             }
 #endif
             dmaStreamFreeI(group.dma);
