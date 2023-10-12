@@ -636,11 +636,13 @@ void AP_IOMCU_FW::telem_update()
                 continue;
             }
             dshot_telem[i].error_rate[j] = uint16_t(roundf(hal.rcout->get_erpm_error_rate(esc_id) * 100.0));
+#if HAL_WITH_ESC_TELEM
             const volatile AP_ESC_Telem_Backend::TelemetryData& telem = esc_telem.get_telem_data(esc_id);
             dshot_telem[i].voltage_cvolts[j] = uint16_t(roundf(telem.voltage * 100));
             dshot_telem[i].current_camps[j] = uint16_t(roundf(telem.current * 100));
             dshot_telem[i].temperature_cdeg[j] = telem.temperature_cdeg;
             dshot_telem[i].types[j] = telem.types;
+#endif
         }
     }
 }
