@@ -309,6 +309,7 @@ void RCOutput::dshot_collect_dma_locks(uint64_t time_out_us, bool led_thread)
             continue;
         }
 
+        // dma handle will only be unlocked if the send was aborted
         if (group.dma_handle != nullptr && group.dma_handle->is_locked()) {
             // calculate how long we have left
             uint64_t now = AP_HAL::micros64();
@@ -341,13 +342,11 @@ void RCOutput::dshot_collect_dma_locks(uint64_t time_out_us, bool led_thread)
 #ifdef HAL_WITH_BIDIR_DSHOT
             // if using input capture DMA then clean up
             if (group.bdshot.enabled) {
-                // the channel index only moves on with success
-                const uint8_t chan = mask ? group.bdshot.prev_telem_chan
-                    : group.bdshot.curr_telem_chan;
                 // only unlock if not shared
-                if (group.bdshot.ic_dma_handle[chan] != nullptr
-                    && group.bdshot.ic_dma_handle[chan] != group.dma_handle) {
-                    group.bdshot.ic_dma_handle[chan]->unlock();
+                if (group.bdshot.curr_ic_dma_handle != nullptr
+                    && group.bdshot.curr_ic_dma_handle != group.dma_handle) {
+                    group.bdshot.curr_ic_dma_handle->unlock();
+                    group.bdshot.curr_ic_dma_handle = nullptr;
                 }
             }
 #endif
@@ -1472,7 +1471,7 @@ void RCOutput::dshot_send_trampoline(void *p)
  */
 void RCOutput::rcout_thread() {
     // don't start outputting until fully configured
-    while (!hal.scheduler->is_system_initialized()) {
+    while (!hal.scheduler->is_system_initialized() || _dshot_period_us == 0) {
         hal.scheduler->delay_microseconds(1000);
     }
 
@@ -1501,8 +1500,33 @@ void RCOutput::rcout_thread() {
             time_out_us = last_thread_run_us + _dshot_period_us;
         }
 
-        // main thread requested a new dshot send or we timed out - if we are not running
-        // as a multiple of loop rate then ignore EVT_PWM_SEND events to preserve periodicity
+        // DMA channel sharing on F10x is complicated. The allocations are
+        // TIM2_UP  - (1,2)
+        // TIM4_UP  - (1,7)
+        // TIM3_UP  - (1,3)
+        // TIM2_CH2 - (1,7) - F103 only
+        // TIM4_CH3 - (1,5) - F103 only
+        // TIM3_CH4 - (1,3) - F103 only
+        // and (1,7) is also shared with USART2_TX
+        // locks have to be unlocked in reverse order, and shared CH locks do not need to be taken so the
+        // ordering that will work follows. This relies on recursive lock behaviour that allows us to relock
+        // a mutex without releasing it first:
+        // TIM4_UP  - lock   (shared)
+        // TIM4     - dshot send
+        // TIM4_CH3 - lock
+        // TIM2_UP  - lock
+        // TIM2_CH2 - lock recursive (shared)
+        // TIM2     - dshot send
+        // TIM3_UP  - lock
+        // [TIM3_CH4 - shared lock]
+        // TIM3     - dshot send
+        // [TIM3_CH4 - shared unlock]
+        // TIM3_UP  - unlock
+        // TIM2_CH2 - unlock recursive (shared)
+        // TIM2_UP  - unlock
+        // TIM4_CH3 - unlock
+        // TIM4_UP  - unlock
+
         dshot_send_groups(time_out_us);
 #if AP_HAL_SHARED_DMA_ENABLED
         dshot_collect_dma_locks(time_out_us);
@@ -1538,6 +1562,12 @@ void RCOutput::dshot_send_groups(uint64_t time_out_us)
         } else if (group.can_send_dshot_pulse()) {
             dshot_send(group, time_out_us);
         }
+#ifdef HAL_WITH_BIDIR_DSHOT
+        // prevent the next send going out until the previous send has released its DMA channel
+        if (group.shared_up_dma) {
+            chEvtWaitOne(DSHOT_CASCADE);
+        }
+#endif
     }
 
     if (command_sent) {
@@ -1762,7 +1792,7 @@ void RCOutput::dshot_send(pwm_group &group, uint64_t time_out_us)
         }
     }
 
-    chEvtGetAndClearEvents(group.dshot_event_mask);
+    chEvtGetAndClearEvents(group.dshot_event_mask | DSHOT_CASCADE);
     // start sending the pulses out
     send_pulses_DMAR(group, DSHOT_BUFFER_LENGTH);
 #endif // HAL_DSHOT_ENABLED
@@ -1801,7 +1831,7 @@ bool RCOutput::serial_led_send(pwm_group &group)
 
     group.dshot_waiter = led_thread_ctx;
 
-    chEvtGetAndClearEvents(group.dshot_event_mask);
+    chEvtGetAndClearEvents(group.dshot_event_mask | DSHOT_CASCADE);
 
     // start sending the pulses out
     send_pulses_DMAR(group, group.dma_buffer_len);
@@ -1946,7 +1976,7 @@ void RCOutput::dma_cancel(pwm_group& group)
         }
     }
     chVTResetI(&group.dma_timeout);
-    chEvtGetAndClearEventsI(group.dshot_event_mask);
+    chEvtGetAndClearEventsI(group.dshot_event_mask | DSHOT_CASCADE);
 
     group.dshot_state = DshotState::IDLE;
     chSysUnlock();

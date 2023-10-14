@@ -92,6 +92,7 @@ bool RCOutput::bdshot_setup_group_ic_DMA(pwm_group &group)
             // Return error
             return false;
         }
+
         if (!group.bdshot.ic_dma_handle[i]) {
             // share up channel if required
             if (group.dma_ch[i].stream_id == group.dma_up_stream_id) {
@@ -237,8 +238,10 @@ void RCOutput::bdshot_prepare_for_next_pulse(pwm_group& group)
             // no locking required
             group.bdshot.enabled = true;
         } else {
-            osalDbgAssert(!group.bdshot.ic_dma_handle[group.bdshot.curr_telem_chan]->is_locked(), "DMA handle is already locked");
-            group.bdshot.ic_dma_handle[group.bdshot.curr_telem_chan]->lock();
+            osalDbgAssert(!group.bdshot.curr_ic_dma_handle, "IC DMA handle has not been released");
+            group.bdshot.curr_ic_dma_handle = group.bdshot.ic_dma_handle[group.bdshot.curr_telem_chan];
+            osalDbgAssert(group.shared_up_dma || !group.bdshot.curr_ic_dma_handle->is_locked(), "IC DMA handle is already locked");
+            group.bdshot.curr_ic_dma_handle->lock();
             group.bdshot.enabled = true;
         }
     }
@@ -748,6 +751,11 @@ __RAMFUNC__ void RCOutput::dma_up_irq_callback(void *p, uint32_t flags)
     }
     dmaStreamDisable(group->dma);
 
+    if (group->shared_up_dma && group->bdshot.enabled) {
+        // next dshot pulse can go out now
+        chEvtSignalI(group->dshot_waiter, DSHOT_CASCADE);
+    }
+
     if (soft_serial_waiting()) {
 #if HAL_SERIAL_ESC_COMM_ENABLED
         // tell the waiting process we've done the DMA
@@ -898,7 +906,9 @@ bool RCOutput::bdshot_decode_telemetry_from_erpm(uint16_t encodederpm, uint8_t c
     // eRPM = m << e (see https://github.com/bird-sanctuary/extended-dshot-telemetry)
     uint8_t expo = ((encodederpm & 0xfffffe00U) >> 9U) & 0xffU; // 3bits
     uint16_t value = (encodederpm & 0x000001ffU);               // 9bits
+#if HAL_WITH_ESC_TELEM
     uint8_t normalized_chan = chan;
+#endif
 #if HAL_WITH_IO_MCU
     if (AP_BoardConfig::io_dshot()) {
         normalized_chan = chan + chan_offset;

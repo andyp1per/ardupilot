@@ -330,6 +330,7 @@ private:
             uint8_t stream_id;
             uint8_t channel;
         } dma_ch[4];
+        bool shared_up_dma; // do we need to wait for TIMx_UP DMA to be finished after use
 #endif
         uint8_t alt_functions[4];
         ioline_t pal_lines[4];
@@ -395,6 +396,7 @@ private:
             uint8_t telem_tim_ch[4];
             uint8_t curr_telem_chan;
             uint8_t prev_telem_chan;
+            Shared_DMA *curr_ic_dma_handle; // a shortcut to avoid logic errors involving the wrong lock
             uint16_t telempsc;
             dmar_uint_t dma_buffer_copy[GCR_TELEMETRY_BUFFER_LEN];
 #if RCOU_DSHOT_TIMING_DEBUG
@@ -664,6 +666,8 @@ private:
     uint16_t create_dshot_packet(const uint16_t value, bool telem_request, bool bidir_telem);
     void fill_DMA_buffer_dshot(dmar_uint_t *buffer, uint8_t stride, uint16_t packet, uint16_t clockmul);
 
+    // event to allow dshot cascading
+    static const eventmask_t DSHOT_CASCADE = EVENT_MASK(16);
     void dshot_send_groups(uint64_t time_out_us);
     void dshot_send(pwm_group &group, uint64_t time_out_us);
     bool dshot_send_command(pwm_group &group, uint8_t command, uint8_t chan);
