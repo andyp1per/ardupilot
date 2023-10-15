@@ -1445,15 +1445,8 @@ void RCOutput::timer_tick()
         return;
     }
 
-    bool dshot_enabled = false;
-    for (uint8_t i = 0; i < NUM_GROUPS; i++ ) {
-        pwm_group &group = pwm_group_list[i];
-        if (is_dshot_protocol(group.current_mode)) {
-            dshot_enabled = true;
-            break;
-        }
-    }
-    if (!dshot_timer_setup && dshot_enabled) {
+    uint32_t dshot_mask;
+    if (is_dshot_protocol(get_output_mode(dshot_mask))) {
         chThdCreateStatic(dshot_thread_wa, sizeof(dshot_thread_wa),
                             APM_RCOUT_PRIORITY, &RCOutput::dshot_send_trampoline, this);
         dshot_timer_setup = true;
@@ -1554,19 +1547,24 @@ void RCOutput::dshot_send_groups(uint64_t time_out_us)
     }
 
     for (auto &group : pwm_group_list) {
+        bool pulse_sent;
         // send a dshot command
         if (is_dshot_protocol(group.current_mode)
             && dshot_command_is_active(group)) {
             command_sent = dshot_send_command(group, _dshot_current_command.command, _dshot_current_command.chan);
+            pulse_sent = true;
         // actually do a dshot send
         } else if (group.can_send_dshot_pulse()) {
             dshot_send(group, time_out_us);
+            pulse_sent = true;
         }
 #ifdef HAL_WITH_BIDIR_DSHOT
         // prevent the next send going out until the previous send has released its DMA channel
-        if (group.shared_up_dma) {
+        if (pulse_sent && group.shared_up_dma && group.bdshot.enabled) {
             chEvtWaitOne(DSHOT_CASCADE);
         }
+#else
+        (void)pulse_sent;
 #endif
     }
 
