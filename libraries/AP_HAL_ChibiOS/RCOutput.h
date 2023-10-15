@@ -674,6 +674,7 @@ private:
     static void dshot_update_tick(virtual_timer_t*, void* p);
     static void dshot_send_next_group(void* p);
     // release locks on the groups that are pending in reverse order
+    sysinterval_t calc_ticks_remaining(pwm_group &group, uint64_t time_out_us, uint64_t cycle_length_us);
     void dshot_collect_dma_locks(uint64_t last_run_us, bool led_thread = false);
     static void dma_up_irq_callback(void *p, uint32_t flags);
     static void dma_unlock(virtual_timer_t*, void *p);

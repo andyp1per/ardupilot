@@ -295,6 +295,27 @@ __RAMFUNC__ void RCOutput::dshot_update_tick(virtual_timer_t* vt, void* p)
     chSysUnlockFromISR();
 }
 
+// calculate how much time remains in the current cycle
+sysinterval_t RCOutput::calc_ticks_remaining(pwm_group &group, uint64_t time_out_us, uint64_t cycle_length_us)
+{
+    uint64_t now = AP_HAL::micros64();
+    const uint64_t pulse_elapsed_us = now - group.last_dmar_send_us;
+    uint32_t wait_us = 0;
+    if (now < time_out_us) {
+        wait_us = time_out_us - now;
+    }
+    if (pulse_elapsed_us < group.dshot_pulse_send_time_us) {
+        // better to let the burst write in progress complete rather than cancelling mid way through
+        wait_us = MAX(wait_us, group.dshot_pulse_send_time_us - pulse_elapsed_us);
+    }
+
+    // waiting for a very short period of time can cause a
+    // timer wrap with ChibiOS timers. Use CH_CFG_ST_TIMEDELTA
+    // as minimum. Don't allow for a very long delay (over _dshot_period_us)
+    // to prevent bugs in handling timer wrap
+    return constrain_uint32(chTimeUS2I(wait_us), CH_CFG_ST_TIMEDELTA, chTimeUS2I(cycle_length_us));
+}
+
 #if AP_HAL_SHARED_DMA_ENABLED
 // release locks on the groups that are pending in reverse order
 void RCOutput::dshot_collect_dma_locks(uint64_t time_out_us, bool led_thread)
@@ -311,28 +332,9 @@ void RCOutput::dshot_collect_dma_locks(uint64_t time_out_us, bool led_thread)
 
         // dma handle will only be unlocked if the send was aborted
         if (group.dma_handle != nullptr && group.dma_handle->is_locked()) {
-            // calculate how long we have left
-            uint64_t now = AP_HAL::micros64();
             // if we have time left wait for the event
-            eventmask_t mask = 0;
-            const uint64_t pulse_elapsed_us = now - group.last_dmar_send_us;
-            uint32_t wait_us = 0;
-            if (now < time_out_us) {
-                wait_us = time_out_us - now;
-            }
-            if (pulse_elapsed_us < group.dshot_pulse_send_time_us) {
-                // better to let the burst write in progress complete rather than cancelling mid way through
-                wait_us = MAX(wait_us, group.dshot_pulse_send_time_us - pulse_elapsed_us);
-            }
-
-            // waiting for a very short period of time can cause a
-            // timer wrap with ChibiOS timers. Use CH_CFG_ST_TIMEDELTA
-            // as minimum. Don't allow for a very long delay (over _dshot_period_us)
-            // to prevent bugs in handling timer wrap
-            const uint32_t max_delay_ticks = chTimeUS2I(led_thread ? LED_OUTPUT_PERIOD_US : _dshot_period_us);
-            const uint32_t min_delay_ticks = CH_CFG_ST_TIMEDELTA;
-            const sysinterval_t wait_ticks = constrain_uint32(chTimeUS2I(wait_us), min_delay_ticks, max_delay_ticks);
-            mask = chEvtWaitOneTimeout(group.dshot_event_mask, MIN(TIME_MAX_INTERVAL, wait_ticks));
+            const sysinterval_t wait_ticks = calc_ticks_remaining(group, time_out_us, led_thread ? LED_OUTPUT_PERIOD_US : _dshot_period_us);
+            eventmask_t mask = chEvtWaitOneTimeout(group.dshot_event_mask, MIN(TIME_MAX_INTERVAL, wait_ticks));
 
             // no time left cancel and restart
             if (!mask) {
@@ -1561,7 +1563,7 @@ void RCOutput::dshot_send_groups(uint64_t time_out_us)
 #ifdef HAL_WITH_BIDIR_DSHOT
         // prevent the next send going out until the previous send has released its DMA channel
         if (pulse_sent && group.shared_up_dma && group.bdshot.enabled) {
-            chEvtWaitOne(DSHOT_CASCADE);
+            chEvtWaitOneTimeout(DSHOT_CASCADE, calc_ticks_remaining(group, time_out_us, _dshot_period_us));
         }
 #else
         (void)pulse_sent;
