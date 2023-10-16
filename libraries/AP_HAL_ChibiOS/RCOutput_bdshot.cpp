@@ -375,7 +375,7 @@ void RCOutput::bdshot_receive_pulses_DMAR(pwm_group* group)
 
     // Configure Timer
     group->pwm_drv->tim->SR = 0;
-    // do NOT CCER to 0 here - this pulls the line low on F103 (at least)
+    // do NOT set CCER to 0 here - this pulls the line low on F103 (at least)
     // and since we are already doing bdshot the relevant options that are set for output
     // also apply to input and bdshot_config_icu_dshot() will disable any channels that need
     // disabling
@@ -462,9 +462,9 @@ void RCOutput::bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t 
 {
 #if defined(IOMCU_FW)
     // F103 does not support both edges input capture so we need to set up two channels
-    // both pointing at the same input to capture the data. The lower numbered channel
-    // needs to handle the rising edge so that we get an even number of half-words in
-    // the DMA buffer albeit out-of-order
+    // both pointing at the same input to capture the data. The triggered channel
+    // needs to handle the second edge - so rising or falling - so that we get an
+    // even number of half-words in the DMA buffer
     switch(ccr_ch) {
     case 0:
     case 1: {
@@ -656,6 +656,13 @@ __RAMFUNC__ void RCOutput::bdshot_finish_dshot_gcr_transaction(virtual_timer_t* 
     stm32_cacheBufferInvalidate(group->dma_buffer, group->bdshot.dma_tx_size);
     memcpy(group->bdshot.dma_buffer_copy, group->dma_buffer, sizeof(dmar_uint_t) * group->bdshot.dma_tx_size);
 
+    // although it should be possible to start the next DMAR transaction concurrently with receiving 
+    // telemetry, in practice it seems to interfere with the DMA engine
+    if (group->shared_up_dma && group->bdshot.enabled) {
+        // next dshot pulse can go out now
+        chEvtSignalI(group->dshot_waiter, DSHOT_CASCADE);
+    }
+
     // if using input capture DMA and sharing the UP and CH channels then clean up
     // by assigning the source back to UP
 #if STM32_DMA_SUPPORTS_DMAMUX
@@ -768,11 +775,6 @@ __RAMFUNC__ void RCOutput::dma_up_irq_callback(void *p, uint32_t flags)
     }
     dmaStreamDisable(group->dma);
 
-    if (group->shared_up_dma && group->bdshot.enabled) {
-        // next dshot pulse can go out now
-        chEvtSignalI(group->dshot_waiter, DSHOT_CASCADE);
-    }
-
     if (soft_serial_waiting()) {
 #if HAL_SERIAL_ESC_COMM_ENABLED
         // tell the waiting process we've done the DMA
@@ -841,13 +843,14 @@ uint32_t RCOutput::bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t 
     uint32_t len;
 
     if (reversed) {
-        // on f103 we are reading one edge with ICn and the other with ICn+1, the DMA architecture only
-        // allows to trigger on a single register, even though we are reading multiple registers per transfer
-        // we cannot trigger on ICn+1 since that requires reading CCRn+1 and we can't read backwards to get
-        // CCRn. instead we trigger on ICn and then read CCRn and CCRn+1 giving us the new value of ICn and the 
-        // old value of ICn+1. in order to avoid reading garbage on the first read we trigger ICn on the rising
-        // edge. this gives us all the data but with each pair of bytes transposed. we thus need to untranspose
-        // as we decode
+        // on F103 we are reading one edge with ICn and the other with ICn+1, the DMA architecture only
+        // allows to trigger on a single register dictated by the DMA input capture channel being used.
+        // even though we are reading multiple registers per transfer we always cannot trigger on one or other
+        // of the registers and if the one we trigger on is the one that is numerically first each register
+        // pair that we read will be swapped in time. in this case we trigger on ICn and then read CCRn and CCRn+1
+        // giving us the new value of ICn and the old value of ICn+1. in order to avoid reading garbage on the
+        // first read we trigger ICn on the rising edge. this gives us all the data but with each pair of bytes
+        // transposed. we thus need to untranspose as we decode
         dmar_uint_t oldValue = buffer[1];
 
         for (int32_t i = 0; i <= count+1; ) {
