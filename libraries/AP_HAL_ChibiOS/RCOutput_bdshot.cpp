@@ -486,9 +486,15 @@ void RCOutput::bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t 
                         (TIM_CCMR1_CC2S | TIM_CCMR1_IC2F | TIM_CCMR1_IC2PSC),
                         (TIM_CCMR1_CC2S_0 | TIM_CCMR1_IC2F_1));
         }
-        // Select the Polarity as falling on IC2 and rising on IC1
-        MODIFY_REG(TIMx->CCER, TIM_CCER_CC1P | TIM_CCER_CC2P, TIM_CCER_CC2P | TIM_CCER_CC1E | TIM_CCER_CC2E);
-        MODIFY_REG(TIMx->DIER, TIM_DIER_CC1DE | TIM_DIER_CC2DE, TIM_DIER_CC1DE);
+        if (ccr_ch == 0) {
+            // Select the Polarity as falling on IC2 and rising on IC1
+            MODIFY_REG(TIMx->CCER, TIM_CCER_CC1P | TIM_CCER_CC2P, TIM_CCER_CC2P | TIM_CCER_CC1E | TIM_CCER_CC2E);
+            MODIFY_REG(TIMx->DIER, TIM_DIER_CC1DE | TIM_DIER_CC2DE, TIM_DIER_CC1DE);
+        } else {
+            // Select the Polarity as falling on IC1 and rising on IC2
+            MODIFY_REG(TIMx->CCER, TIM_CCER_CC1P | TIM_CCER_CC2P, TIM_CCER_CC1P | TIM_CCER_CC1E | TIM_CCER_CC2E);
+            MODIFY_REG(TIMx->DIER, TIM_DIER_CC1DE | TIM_DIER_CC2DE, TIM_DIER_CC2DE);
+        }
         break;
     }
     case 2:
@@ -510,9 +516,15 @@ void RCOutput::bdshot_config_icu_dshot(stm32_tim_t* TIMx, uint8_t chan, uint8_t 
                         (TIM_CCMR2_CC4S | TIM_CCMR2_IC4F | TIM_CCMR2_IC4PSC),
                         (TIM_CCMR2_CC4S_0 | TIM_CCMR2_IC4F_1));
         }
-        // Select the Polarity as falling on IC4 and rising on IC3
-        MODIFY_REG(TIMx->CCER, TIM_CCER_CC3P | TIM_CCER_CC4P, TIM_CCER_CC4P | TIM_CCER_CC3E | TIM_CCER_CC4E);
-        MODIFY_REG(TIMx->DIER, TIM_DIER_CC3DE | TIM_DIER_CC4DE, TIM_DIER_CC3DE);
+        if (ccr_ch == 2) {
+            // Select the Polarity as falling on IC4 and rising on IC3
+            MODIFY_REG(TIMx->CCER, TIM_CCER_CC3P | TIM_CCER_CC4P, TIM_CCER_CC4P | TIM_CCER_CC3E | TIM_CCER_CC4E);
+            MODIFY_REG(TIMx->DIER, TIM_DIER_CC3DE | TIM_DIER_CC4DE, TIM_DIER_CC3DE);
+        } else {
+            // Select the Polarity as falling on IC3 and rising on IC4
+            MODIFY_REG(TIMx->CCER, TIM_CCER_CC3P | TIM_CCER_CC4P, TIM_CCER_CC3P | TIM_CCER_CC3E | TIM_CCER_CC4E);
+            MODIFY_REG(TIMx->DIER, TIM_DIER_CC3DE | TIM_DIER_CC4DE, TIM_DIER_CC4DE);
+        }
         break;
 
     }
@@ -681,7 +693,11 @@ bool RCOutput::bdshot_decode_dshot_telemetry(pwm_group& group, uint8_t chan)
     }
 
     // evaluate dshot telemetry
-    group.bdshot.erpm[chan] = bdshot_decode_telemetry_packet(group.bdshot.dma_buffer_copy, group.bdshot.dma_tx_size);
+    bool reversed = false;
+#if defined(IOMCU_FW)
+    reversed = (group.bdshot.telem_tim_ch[chan] & 1U) == 0;
+#endif
+    group.bdshot.erpm[chan] = bdshot_decode_telemetry_packet(group.bdshot.dma_buffer_copy, group.bdshot.dma_tx_size, reversed);
 
     group.dshot_state = DshotState::IDLE;
 
@@ -818,59 +834,61 @@ uint32_t RCOutput::bdshot_get_output_rate_hz(const enum output_mode mode)
 
 // decode a telemetry packet from a GCR encoded stride buffer, take from betaflight decodeTelemetryPacket
 // see https://github.com/betaflight/betaflight/pull/8554#issuecomment-512507625 for a description of the protocol
-uint32_t RCOutput::bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t count)
+uint32_t RCOutput::bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t count, bool reversed)
 {
     uint32_t value = 0;
     uint32_t bits = 0;
     uint32_t len;
-#if defined(IOMCU_FW)
-    // on f103 we are reading one edge with ICn and the other with ICn+1, the DMA architecture only
-    // allows to trigger on a single register, even though we are reading multiple registers per transfer
-    // we cannot trigger on ICn+1 since that requires reading CCRn+1 and we can't read backwards to get
-    // CCRn. instead we trigger on ICn and then read CCRn and CCRn+1 giving us the new value of ICn and the 
-    // old value of ICn+1. in order to avoid reading garbage on the first read we trigger ICn on the rising
-    // edge. this gives us all the data but with each pair of bytes transposed. we thus need to untranspose
-    // as we decode
-    dmar_uint_t oldValue = buffer[1];
 
-    for (int32_t i = 0; i <= count+1; ) {
-        if (i < count) {
-            dmar_int_t diff = buffer[i] - oldValue;
-            if (bits >= 21U) {
-                break;
+    if (reversed) {
+        // on f103 we are reading one edge with ICn and the other with ICn+1, the DMA architecture only
+        // allows to trigger on a single register, even though we are reading multiple registers per transfer
+        // we cannot trigger on ICn+1 since that requires reading CCRn+1 and we can't read backwards to get
+        // CCRn. instead we trigger on ICn and then read CCRn and CCRn+1 giving us the new value of ICn and the 
+        // old value of ICn+1. in order to avoid reading garbage on the first read we trigger ICn on the rising
+        // edge. this gives us all the data but with each pair of bytes transposed. we thus need to untranspose
+        // as we decode
+        dmar_uint_t oldValue = buffer[1];
+
+        for (int32_t i = 0; i <= count+1; ) {
+            if (i < count) {
+                dmar_int_t diff = buffer[i] - oldValue;
+                if (bits >= 21U) {
+                    break;
+                }
+                len = (diff + TELEM_IC_SAMPLE/2U) / TELEM_IC_SAMPLE;
+            } else {
+                len = 21U - bits;
             }
-            len = (diff + TELEM_IC_SAMPLE/2U) / TELEM_IC_SAMPLE;
-        } else {
-            len = 21U - bits;
+
+            value <<= len;
+            value |= 1U << (len - 1U);
+            oldValue = buffer[i];
+            bits += len;
+
+            i += (i%2 ? -1 : 3);
         }
-
-        value <<= len;
-        value |= 1U << (len - 1U);
-        oldValue = buffer[i];
-        bits += len;
-
-        i += (i%2 ? -1 : 3);
     }
-#else
-    dmar_uint_t oldValue = buffer[0];
+    else {
+        dmar_uint_t oldValue = buffer[0];
 
-    for (uint32_t i = 1; i <= count; i++) {
-        if (i < count) {
-            dmar_int_t diff = buffer[i] - oldValue;
-            if (bits >= 21U) {
-                break;
+        for (uint32_t i = 1; i <= count; i++) {
+            if (i < count) {
+                dmar_int_t diff = buffer[i] - oldValue;
+                if (bits >= 21U) {
+                    break;
+                }
+                len = (diff + TELEM_IC_SAMPLE/2U) / TELEM_IC_SAMPLE;
+            } else {
+                len = 21U - bits;
             }
-            len = (diff + TELEM_IC_SAMPLE/2U) / TELEM_IC_SAMPLE;
-        } else {
-            len = 21U - bits;
-        }
 
-        value <<= len;
-        value |= 1U << (len - 1U);
-        oldValue = buffer[i];
-        bits += len;
+            value <<= len;
+            value |= 1U << (len - 1U);
+            oldValue = buffer[i];
+            bits += len;
+        }
     }
-#endif
     if (bits != 21U) {
         return INVALID_ERPM;
     }
