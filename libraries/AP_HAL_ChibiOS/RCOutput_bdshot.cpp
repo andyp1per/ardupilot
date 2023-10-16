@@ -653,11 +653,12 @@ __RAMFUNC__ void RCOutput::bdshot_finish_dshot_gcr_transaction(virtual_timer_t* 
 #endif
 
     group->bdshot.prev_telem_chan = group->bdshot.curr_telem_chan;
+    // rotate to the next input channel, we have to rotate even on failure otherwise
+    // we will not get data from active channels
+    group->bdshot.curr_telem_chan = bdshot_find_next_ic_channel(*group);
 
     if (group->bdshot.dma_tx_size > 0) {
         group->dshot_state = DshotState::RECV_COMPLETE;
-        // rotate to the next input channel if something was successfully read
-        group->bdshot.curr_telem_chan = bdshot_find_next_ic_channel(*group);
     } else {
         group->dshot_state = DshotState::RECV_FAILED;
     }
