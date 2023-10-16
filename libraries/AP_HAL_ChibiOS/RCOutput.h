@@ -693,7 +693,7 @@ private:
      */
     void bdshot_ic_dma_allocate(Shared_DMA *ctx);
     void bdshot_ic_dma_deallocate(Shared_DMA *ctx);
-    static uint32_t bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t count);
+    static uint32_t bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t count, bool reversed);
     bool bdshot_decode_telemetry_from_erpm(uint16_t erpm, uint8_t chan);
     bool bdshot_decode_dshot_telemetry(pwm_group& group, uint8_t chan);
     static uint8_t bdshot_find_next_ic_channel(const pwm_group& group);
