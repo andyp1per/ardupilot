@@ -15,7 +15,7 @@ STM32_ST_USE_TIMER 1
 
 define HAL_WITH_ESC_TELEM 1
 
-undef PA0 PA1 PB8 PB9 PA6 PA7 PB0 PB1
+undef PA0 PA1 PB8 PB9
 
 # the order is important here as it determines the order that timers are used to sending dshot
 # TIM4 needs to go first so that TIM4_UP can be freed up to be used by input capture for TIM2
@@ -23,10 +23,9 @@ PB8 TIM4_CH3 TIM4 PWM(3) GPIO(103) BIDIR
 PB9 TIM4_CH4 TIM4 PWM(4) GPIO(104)
 PA0 TIM2_CH1 TIM2 PWM(1) GPIO(101)
 PA1 TIM2_CH2 TIM2 PWM(2) GPIO(102) BIDIR # DMA channel 7, shared with TIM4_UP and USART2_TX
-PA6 TIM3_CH1 TIM3 PWM(5) GPIO(105)
-PA7 TIM3_CH2 TIM3 PWM(6) GPIO(106)
-PB0 TIM3_CH3 TIM3 PWM(7) GPIO(107)
-PB1 TIM3_CH4 TIM3 PWM(8) GPIO(108) BIDIR # DMA channel 3, shared with TIM3_UP
+
+# currently no support for having mixed outputs on the same timer
+# PB1 TIM3_CH4 TIM3 PWM(8) GPIO(108) BIDIR # DMA channel 3, shared with TIM3_UP
 
 # TIM2_UP - (1,2)
 # TIM4_UP - (1,7)
