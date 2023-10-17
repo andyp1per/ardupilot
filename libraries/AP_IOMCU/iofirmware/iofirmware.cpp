@@ -629,6 +629,8 @@ void AP_IOMCU_FW::erpm_update()
 
 void AP_IOMCU_FW::telem_update()
 {
+    uint32_t now_ms = AP_HAL::millis();
+
     for (uint8_t i = 0; i < IOMCU_MAX_CHANNELS/4; i++) {
         for (uint8_t j = 0; j < 4; j++) {
             const uint8_t esc_id = (i * 4 + j);
@@ -638,6 +640,10 @@ void AP_IOMCU_FW::telem_update()
             dshot_telem[i].error_rate[j] = uint16_t(roundf(hal.rcout->get_erpm_error_rate(esc_id) * 100.0));
 #if HAL_WITH_ESC_TELEM
             const volatile AP_ESC_Telem_Backend::TelemetryData& telem = esc_telem.get_telem_data(esc_id);
+            if (now_ms - telem.last_update_ms > ESC_TELEM_DATA_TIMEOUT_MS) {
+                dshot_telem[i].types[j] = 0;
+                continue;
+            }
             dshot_telem[i].voltage_cvolts[j] = uint16_t(roundf(telem.voltage * 100));
             dshot_telem[i].current_camps[j] = uint16_t(roundf(telem.current * 100));
             dshot_telem[i].temperature_cdeg[j] = telem.temperature_cdeg;
@@ -791,7 +797,7 @@ bool AP_IOMCU_FW::handle_code_read()
 #ifdef HAL_WITH_BIDIR_DSHOT
     switch (rx_io_packet.page) {
     case PAGE_RAW_DSHOT_ERPM:
-        dshot_erpm.update_mask = 0;
+        memset(&dshot_erpm, 0, sizeof(dshot_erpm));
         break;
     default:
         break;
