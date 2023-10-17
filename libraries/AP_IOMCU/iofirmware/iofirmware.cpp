@@ -640,8 +640,11 @@ void AP_IOMCU_FW::telem_update()
             dshot_telem[i].error_rate[j] = uint16_t(roundf(hal.rcout->get_erpm_error_rate(esc_id) * 100.0));
 #if HAL_WITH_ESC_TELEM
             const volatile AP_ESC_Telem_Backend::TelemetryData& telem = esc_telem.get_telem_data(esc_id);
+            // if data is stale the set to zero to avoidn phantom data appearing in mavlink
             if (now_ms - telem.last_update_ms > ESC_TELEM_DATA_TIMEOUT_MS) {
-                dshot_telem[i].types[j] = 0;
+                dshot_telem[i].voltage_cvolts[j] = 0;
+                dshot_telem[i].current_camps[j] = 0;
+                dshot_telem[i].temperature_cdeg[j] = 0;
                 continue;
             }
             dshot_telem[i].voltage_cvolts[j] = uint16_t(roundf(telem.voltage * 100));
