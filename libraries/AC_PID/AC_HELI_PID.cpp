@@ -69,12 +69,6 @@ const AP_Param::GroupInfo AC_HELI_PID::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("SMAX", 12, AC_HELI_PID, _slew_rate_max, 0),
 
-    // @Param: PDMX
-    // @DisplayName: PD sum maximum
-    // @Description: The maximum/minimum value that the sum of the P and D term can output
-    // @User: Advanced
-    AP_GROUPINFO("PDMX", 13, AC_HELI_PID, _kpdmax, 0),
-
     // @Param: D_FF
     // @DisplayName: PID Derivative FeedForward Gain
     // @Description: FF D Gain which produces an output that is proportional to the rate of change of the target

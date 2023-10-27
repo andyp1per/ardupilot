@@ -277,18 +277,18 @@ float AC_PID::update_error(float error, float dt, bool limit)
         _error = error;
         _derivative = 0.0f;
         _target_derivative = 0.0f;
-#if AC_PID_ADVANCED_ENABLED
-        if (_adv_enable && !is_zero(_notch_E_center_freq_hz.get())) {
-            _error_notch.reset();
-            _error = _error_notch.apply(_error);
+#if AP_FILTER_ENABLED
+        if (_error_notch != nullptr) {
+            _error_notch->reset();
+            _error = _error_notch->apply(_error);
         }
 #endif
     } else {
         float error_last = _error;
-#if AC_PID_ADVANCED_ENABLED
-        // apply notch filter before FLTE to avoid shot noise
-        if (_adv_enable && !is_zero(_notch_E_center_freq_hz.get())) {
-            error = _error_notch.apply(error);
+#if AP_FILTER_ENABLED
+        // apply notch filters before FTLD/FLTE to avoid shot noise
+        if (_error_notch != nullptr) {
+            error = _error_notch->apply(error);
         }
 #endif
         _error += get_filt_E_alpha(dt) * (error - _error);
