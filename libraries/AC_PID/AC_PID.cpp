@@ -252,7 +252,8 @@ float AC_PID::update_all(float target, float measurement, float dt, bool limit, 
     _pid_info.error = _error;
     _pid_info.P = P_out;
     _pid_info.D = D_out;
-    _pid_info.FF = _target * _kff + _target_derivative * _kdff;
+    _pid_info.FF = _target * _kff;
+    _pid_info.DFF = _target_derivative * _kdff;
 
     return P_out + _integrator + D_out;
 }
@@ -357,7 +358,7 @@ float AC_PID::get_d() const
 
 float AC_PID::get_ff()
 {
-    return  _pid_info.FF;
+    return  _pid_info.FF + _pid_info.DFF;
 }
 
 void AC_PID::reset_I()
