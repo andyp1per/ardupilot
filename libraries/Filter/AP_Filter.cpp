@@ -137,7 +137,7 @@ AP_Filter* AP_Filters::get_filter(uint8_t index)
         return nullptr;
     }
 
-    return filters[index];
+    return filters[index-1];
 }
 
 // singleton instance
