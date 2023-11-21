@@ -332,15 +332,15 @@ void AP_OSD::osd_thread()
     backend->osd_thread_run_once();
 
     while (true) {
-        hal.scheduler->delay(100);
+        backend->clear();
+        hal.scheduler->delay(33);
         update_osd();
+        hal.scheduler->delay(33);
     }
 }
 
 void AP_OSD::update_osd()
 {
-    backend->clear();
-
     if (!_disable) {
         update_stats();
         update_current_screen();
@@ -348,6 +348,8 @@ void AP_OSD::update_osd()
         get_screen(current_screen).set_backend(backend);
         // skip drawing for MSP OSD backends to save some resources
         if (osd_types(osd_type.get()) != OSD_MSP) {
+            get_screen(current_screen).draw();
+            hal.scheduler->delay(33);
             get_screen(current_screen).draw();
         }
     }
