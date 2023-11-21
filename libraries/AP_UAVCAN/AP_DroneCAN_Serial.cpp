@@ -81,12 +81,14 @@ void AP_DroneCAN_Serial::begin(uint32_t b, uint16_t rxS, uint16_t txS)
             if (broadcast_pub[i] == nullptr) {
                 AP_BoardConfig::allocation_error("AP_DroneCAN_Serial: broadcast_pub[%d]", i);
             }
+            broadcast_pub[i]->setPriority(uavcan::TransferPriority(24));
         }
         if (serial_config_pub[i] == nullptr) {
             serial_config_pub[i] = new uavcan::Publisher<uavcan::tunnel::SerialConfig>(*ap_uavcan->get_node());
             if (serial_config_pub[i] == nullptr) {
                 AP_BoardConfig::allocation_error("AP_DroneCAN_Serial: serial_config_pub[%d]", i);
             }
+            serial_config_pub[i]->setPriority(uavcan::TransferPriority(24));
         }
     }
     _initialized = true;
@@ -176,7 +178,8 @@ void AP_DroneCAN_Serial::dronecan_loop(AP_SerialManager::SerialProtocol protocol
 
     uavcan::tunnel::SerialConfig serial_config;
     // push out config changes every 1s
-    if (AP_HAL::millis() - _last_serial_config_ms > 1000 || _baudrate != _last_baudrate) {
+    if ((AP_HAL::millis() - _last_serial_config_ms > 1000 || _baudrate != _last_baudrate)
+        && _writebuf.available() == 0) {
         serial_config.channel_id = _channel_id;
         serial_config.baud = _baudrate;
         serial_config.options = get_options();
