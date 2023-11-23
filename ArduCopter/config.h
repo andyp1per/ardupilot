@@ -132,6 +132,10 @@
  # define EKF_ORIGIN_MAX_ALT_KM         50   // EKF origin and home must be within 50km vertically
 #endif
 
+#ifndef EKF_LPF_CUTOFF
+# define EKF_LPF_CUTOFF     5.0f    // frequency cutoff of EKF variance filters
+#endif
+
 //////////////////////////////////////////////////////////////////////////////
 //  Auto Tuning
 #ifndef AUTOTUNE_ENABLED

@@ -794,7 +794,10 @@ Copter::Copter(void)
     rc_throttle_control_in_filter(1.0f),
     inertial_nav(ahrs),
     param_loader(var_info),
-    flightmode(&mode_stabilize)
+    flightmode(&mode_stabilize),
+    position_variance(EKF_LPF_CUTOFF),
+    vel_variance(EKF_LPF_CUTOFF),
+    height_variance(EKF_LPF_CUTOFF)
 {
 }
 
