@@ -795,9 +795,9 @@ Copter::Copter(void)
     inertial_nav(ahrs),
     param_loader(var_info),
     flightmode(&mode_stabilize),
-    position_variance(EKF_LPF_CUTOFF),
-    vel_variance(EKF_LPF_CUTOFF),
-    height_variance(EKF_LPF_CUTOFF)
+    pos_variance_filt(EKF_LPF_CUTOFF),
+    vel_variance_filt(EKF_LPF_CUTOFF),
+    hgt_variance_filt(EKF_LPF_CUTOFF)
 {
 }
 

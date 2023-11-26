@@ -113,11 +113,6 @@ void Copter::ekf_check()
 // ekf_over_threshold - returns true if the ekf's variance are over the tolerance
 bool Copter::ekf_over_threshold()
 {
-    // return false immediately if disabled
-    if (g.fs_ekf_thresh <= 0.0f) {
-        return false;
-    }
-
     // use EKF to get variance
     float position_var, vel_var, height_var, tas_variance;
     Vector3f mag_variance;
@@ -130,11 +125,17 @@ bool Copter::ekf_over_threshold()
     uint32_t now_us = AP_HAL::micros();
     float dt = (now_us - last_ekf_check_us) / 1000000.0f;
 
-    position_var = position_variance.apply(position_var, dt);
-    vel_var = vel_variance.apply(vel_var, dt);
-    height_var = height_variance.apply(height_var, dt);
+    // always update filtered values as this serves the vibration check as well
+    position_var = pos_variance_filt.apply(position_var, dt);
+    vel_var = vel_variance_filt.apply(vel_var, dt);
+    height_var = hgt_variance_filt.apply(height_var, dt);
 
     last_ekf_check_us = now_us;
+
+    // return false if disabled
+    if (g.fs_ekf_thresh <= 0.0f) {
+        return false;
+    }
 
     const float mag_max = fmaxf(fmaxf(mag_variance.x,mag_variance.y),mag_variance.z);
 
@@ -275,11 +276,12 @@ void Copter::check_vibration()
     const bool innov_velD_posD_positive = is_positive(vel_innovation.z) && is_positive(pos_innovation.z);
 
     // check if vertical velocity variance is at least 1 (NK4.SV >= 1.0)
+    // filtered variances are updated in ekf_check() which runs at the same rate (10Hz) as this check
     if (!variances_valid) {
         innovation_checks_valid = false;
     }
     const bool is_vibration_affected = ahrs.is_vibration_affected();
-    const bool bad_vibe_detected = (innovation_checks_valid && innov_velD_posD_positive && (vel_variance.get() > 1.0f)) || is_vibration_affected;
+    const bool bad_vibe_detected = (innovation_checks_valid && innov_velD_posD_positive && (vel_variance_filt.get() > 1.0f)) || is_vibration_affected;
     const bool do_bad_vibe_actions = (g2.fs_vibe_enabled == 1) && bad_vibe_detected && motors->armed() && !flightmode->has_manual_throttle();
 
     if (!vibration_check.high_vibes) {

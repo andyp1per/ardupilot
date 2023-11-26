@@ -331,9 +331,9 @@ private:
 
     // EKF variances are unfiltered and are designed to recover very quickly when possible
     // thus failsafes should be triggered on filtered values in order to avoid transient errors 
-    LowPassFilterFloat position_variance;
-    LowPassFilterFloat vel_variance;
-    LowPassFilterFloat height_variance;
+    LowPassFilterFloat pos_variance_filt;
+    LowPassFilterFloat vel_variance_filt;
+    LowPassFilterFloat hgt_variance_filt;
     bool variances_valid;
     uint32_t last_ekf_check_us;
 
