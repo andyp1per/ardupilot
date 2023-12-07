@@ -3351,6 +3351,14 @@ function fence:get_breach_time() end
 ---| 8 # Minimum altitude
 function fence:get_breaches() end
 
+-- Returns minimum safe altitude (i.e. alt_min + margin)
+---@return number 
+function fence:get_safe_alt_min() end
+
+-- Returns maximum safe altitude (i.e. alt_max - margin)
+---@return number 
+function fence:get_safe_alt_max() end
+
 -- desc
 ---@class stat_t_ud
 local stat_t_ud = {}
