@@ -1854,8 +1854,12 @@ function motors:get_forward() end
 ---@return number -- The normalized output, typically 0 to 1.
 function motors:get_throttle() end
 
--- Gets the current spool state of the motors. This is particularly relevant for helicopters and vehicles with complex startup procedures.
----@return integer -- The spool state enum value.
+-- get thrust motor input
+---@return number
+function motors:get_throttle_in() end
+
+-- get throttle motor output
+---@return integer
 ---| '0' # Shut down
 ---| '1' # Ground idle
 ---| '2' # Spooling up
@@ -2724,10 +2728,21 @@ function vehicle:set_target_angle_and_climbrate(roll_deg, pitch_deg, yaw_deg, cl
 ---@return boolean -- True if successful.
 function vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, yaw_rate_dps, throttle) end
 
+-- desc
+---@param roll_deg number
+---@param pitch_deg number
+---@param yaw_deg number
+---@param thrust number
+---@param use_yaw_rate boolean
+---@param yaw_rate_degs number
+---@return boolean
+function vehicle:set_target_angle_and_thrust(roll_deg, pitch_deg, yaw_deg, thrust, use_yaw_rate, yaw_rate_degs) end
+
 -- Sets the target velocity in the North-East-Down frame for guided modes.
 ---@param vel_ned Vector3f_ud -- A Vector3f where x=North, y=East, z=Down, in meters/second.
----@return boolean -- True on success.
-function vehicle:set_target_velocity_NED(vel_ned) end
+---@param align_yaw_to_target? boolean
+---@return boolean -- true on success
+function vehicle:set_target_velocity_NED(vel_ned, align_yaw_to_target) end
 
 -- Sets a target velocity and acceleration in the NED frame.
 ---@param target_vel Vector3f_ud
@@ -3953,8 +3968,36 @@ function fence:get_margin_breach_time() end
 ---| 8 # Minimum altitude
 function fence:get_breaches() end
 
--- Gets a bitmask of all currently breached fence margins.
----@return integer -- The margin breach bitmask.
+-- Returns minimum safe altitude (i.e. alt_min + margin)
+---@return number 
+function fence:get_safe_alt_min() end
+
+-- Returns maximum safe altitude (i.e. alt_max - margin)
+---@return number 
+function fence:get_safe_alt_max() end
+
+-- Returns configured fences
+---@return integer fence_type bitmask
+---| 1 # Maximim altitude
+---| 2 # Circle
+---| 4 # Polygon
+---| 8 # Minimum altitude
+function fence:present() end
+
+-- Returns enabled fences
+---@return integer fence_type bitmask
+---| 1 # Maximim altitude
+---| 2 # Circle
+---| 4 # Polygon
+---| 8 # Minimum altitude
+function fence:get_enabled_fences() end
+
+-- Returns the type bitmask of any fence whose margins have been crossed
+---@return integer fence_type bitmask
+---| 1 # Maximim altitude
+---| 2 # Circle
+---| 4 # Polygon
+---| 8 # Minimum altitude
 function fence:get_margin_breaches() end
 
 -- Gets the shortest distance to a specific type of geofence.
