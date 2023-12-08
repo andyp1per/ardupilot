@@ -350,15 +350,24 @@ bool Copter::set_target_posvelaccel_NED(const Vector3f& target_pos_ned_m, const 
     return mode_guided.set_pos_vel_accel_NEU_m(pos_neu_m, vel_neu_ms, accel_neu_mss, use_yaw, radians(yaw_deg), use_yaw_rate, radians(yaw_rate_degs), yaw_relative);
 }
 
-bool Copter::set_target_velocity_NED(const Vector3f& target_vel_ned_ms)
+bool Copter::set_target_velocity_NED(const Vector3f& target_vel_ned_ms, bool align_yaw_to_target)
 {
     // exit if vehicle is not in Guided mode or Auto-Guided mode
     if (!flightmode->in_guided_mode()) {
         return false;
     }
 
+    // optionally line up the copter with the velocity vector
+    float yaw_rads = 0.0f;
+    if (align_yaw_to_target) {
+        const float speed_sq = target_vel_ned_ms.xy().length_squared();
+        if (copter.position_ok() && (speed_sq > (YAW_LOOK_AHEAD_MIN_SPEED_MS * YAW_LOOK_AHEAD_MIN_SPEED_MS))) {
+            yaw_rads = atan2f(target_vel_ned_ms.y, target_vel_ned_ms.x);
+        }
+    }
+    
     const Vector3f vel_neu_ms{target_vel_ned_ms.x, target_vel_ned_ms.y, -target_vel_ned_ms.z};
-    mode_guided.set_vel_NEU_ms(vel_neu_ms);
+    mode_guided.set_vel_accel_NEU_m(vel_neu_ms, Vector3f(), align_yaw_to_target, yaw_rads);
     return true;
 }
 
@@ -461,6 +470,15 @@ AP_Vehicle::custom_mode_state* Copter::register_custom_mode(const uint8_t num, c
 
     // No free slots
     return nullptr;
+}
+
+bool Copter::set_target_angle_and_thrust(float roll_deg, float pitch_deg, float yaw_deg, float thrust, bool use_yaw_rate, float yaw_rate_degs)
+{
+    Quaternion q;
+    q.from_euler(radians(roll_deg),radians(pitch_deg),radians(yaw_deg));
+
+    mode_guided.set_angle(q, Vector3f{}, thrust, true);
+    return true;
 }
 #endif // MODE_GUIDED_ENABLED
 
