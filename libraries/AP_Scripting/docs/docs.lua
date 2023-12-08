@@ -2237,8 +2237,9 @@ function vehicle:set_target_angle_and_climbrate(roll_deg, pitch_deg, yaw_deg, cl
 
 -- desc
 ---@param vel_ned Vector3f_ud
+---@param align_yaw_to_target? boolean
 ---@return boolean
-function vehicle:set_target_velocity_NED(vel_ned) end
+function vehicle:set_target_velocity_NED(vel_ned, align_yaw_to_target) end
 
 -- desc
 ---@param target_vel Vector3f_ud
