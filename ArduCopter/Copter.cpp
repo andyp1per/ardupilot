@@ -393,6 +393,20 @@ bool Copter::set_target_angle_and_climbrate(float roll_deg, float pitch_deg, flo
     mode_guided.set_angle(q, Vector3f{}, climb_rate_ms*100, false);
     return true;
 }
+
+bool Copter::set_target_angle_and_thrust(float roll_deg, float pitch_deg, float yaw_deg, float thrust, bool use_yaw_rate, float yaw_rate_degs)
+{
+    // exit if vehicle is not in Guided mode or Auto-Guided mode
+    if (!flightmode->in_guided_mode()) {
+        return false;
+    }
+
+    Quaternion q;
+    q.from_euler(radians(roll_deg),radians(pitch_deg),radians(yaw_deg));
+
+    mode_guided.set_angle(q, Vector3f{}, thrust, true);
+    return true;
+}
 #endif
 
 #if MODE_CIRCLE_ENABLED == ENABLED
