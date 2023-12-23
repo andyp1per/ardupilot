@@ -23,10 +23,15 @@ function set_function(state)
 end
 
 -- set up the initial state
-set_function(rc:get_aux_cached(300) == AuxSwitchPos.LOW)
+set_function(true)
 
 -- run updates at 1Hz
 function update()
+    -- always run locked in acro
+    if vehicle:get_mode() == 1 and not fpv_locked then
+        set_function(true)
+        return update, 1000
+    end
     local sw_pos = rc:get_aux_cached(300)
     if sw_pos ~= prev_pos then
         if sw_pos == AuxSwitchPos.LOW then
