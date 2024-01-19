@@ -1705,7 +1705,7 @@ bool AP_Arming::arm(AP_Arming::Method method, const bool do_arming_checks)
         if (fence != nullptr) {
             // If a fence is set to auto-enable, turn on the fence
             if (fence->auto_enabled() == AC_Fence::AutoEnable::ONLY_WHEN_ARMED) {
-                fence->enable(true);
+                fence->enable(true, AC_FENCE_ARMING_FENCES);
                 GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Fence: auto-enabled");
             }
         }
@@ -1751,7 +1751,7 @@ bool AP_Arming::disarm(const AP_Arming::Method method, bool do_disarm_checks)
     AC_Fence *fence = AP::fence();
     if (fence != nullptr) {
         if(fence->auto_enabled() == AC_Fence::AutoEnable::ONLY_WHEN_ARMED) {
-            fence->enable(false);
+            fence->enable_configured(false);
         }
     }
 #endif
