@@ -1062,7 +1062,7 @@ void RC_Channel::do_aux_function_fence(const AuxSwitchPos ch_flag)
         return;
     }
 
-    fence->enable(ch_flag == AuxSwitchPos::HIGH);
+    fence->enable_configured(ch_flag == AuxSwitchPos::HIGH);
 }
 #endif
 
