@@ -22,10 +22,10 @@
 
 #define CHIBIOS_SCHEDULER_MAX_TIMER_PROCS 8
 
-#define APM_MONITOR_PRIORITY    183
+#define APM_MONITOR_PRIORITY    184
 #define APM_MAIN_PRIORITY       180
 #define APM_TIMER_PRIORITY      181
-#define APM_RCOUT_PRIORITY      181
+#define APM_RCOUT_PRIORITY      183
 #define APM_LED_PRIORITY         60
 #define APM_UART_PRIORITY        60
 #define APM_NET_PRIORITY         60
@@ -49,7 +49,7 @@
 #ifndef APM_SPI_PRIORITY
 // SPI priority needs to be above main priority to ensure fast sampling of IMUs can keep up
 // with the data rate
-#define APM_SPI_PRIORITY        181
+#define APM_SPI_PRIORITY        183
 #endif
 
 #ifndef APM_CAN_PRIORITY
