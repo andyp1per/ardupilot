@@ -281,6 +281,7 @@ static bool test_protocol_bytesonly(const char *name, uint32_t baudrate,
 }
 
 //Main loop where the action takes place
+#pragma GCC diagnostic error "-Wframe-larger-than=2000"
 void loop()
 {
     const uint8_t srxl_bytes[] = { 0xa5, 0x03, 0x0c, 0x04, 0x2f, 0x6c, 0x10, 0xb4, 0x26,
