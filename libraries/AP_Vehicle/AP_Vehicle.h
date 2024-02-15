@@ -442,6 +442,13 @@ protected:
     // Check if this mode can be entered from the GCS
     bool block_GCS_mode_change(uint8_t mode_num, const uint8_t *mode_list, uint8_t mode_list_length) const;
 
+#if AP_INERTIALSENSOR_HARMONICNOTCH_ENABLED
+    // update the harmonic notch
+    void update_dynamic_notch(AP_InertialSensor::HarmonicNotch &notch);
+    // run notch update at either loop rate or 200Hz
+    void update_dynamic_notch_at_specified_rate();
+#endif // AP_INERTIALSENSOR_HARMONICNOTCH_ENABLED
+
 private:
 
     // delay() callback that processing MAVLink packets
@@ -453,12 +460,6 @@ private:
 
     // update the harmonic notch for throttle based notch
     void update_throttle_notch(AP_InertialSensor::HarmonicNotch &notch);
-
-    // update the harmonic notch
-    void update_dynamic_notch(AP_InertialSensor::HarmonicNotch &notch);
-
-    // run notch update at either loop rate or 200Hz
-    void update_dynamic_notch_at_specified_rate();
 
     // decimation for 1Hz update
     uint8_t one_Hz_counter;
