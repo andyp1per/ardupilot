@@ -906,14 +906,19 @@ void AC_AutoTune_Multi::updating_rate_p_up_d_down(float &tune_d, float tune_d_mi
         // do not decrease the D term past the minimum
         if (tune_d <= tune_d_min) {
             tune_d = tune_d_min;
-            AP::logger().Write_Event(LogEvent::AUTOTUNE_REACHED_LIMIT);
+            LOGGER_WRITE_EVENT(LogEvent::AUTOTUNE_REACHED_LIMIT);
+            gcs().send_text(MAV_SEVERITY_CRITICAL, "AutoTune: Rate D Gain Determination Failed");
+            mode = FAILED;
+            LOGGER_WRITE_EVENT(LogEvent::AUTOTUNE_FAILED);
         }
         // decrease P gain to match D gain reduction
         tune_p -= tune_p*tune_p_step_ratio;
         // do not decrease the P term past the minimum
         if (tune_p <= tune_p_min) {
             tune_p = tune_p_min;
-            AP::logger().Write_Event(LogEvent::AUTOTUNE_REACHED_LIMIT);
+            gcs().send_text(MAV_SEVERITY_CRITICAL, "AutoTune: Rate P Gain Determination Failed");
+            mode = FAILED;
+            LOGGER_WRITE_EVENT(LogEvent::AUTOTUNE_FAILED);
         }
         // cancel change in direction
         positive_direction = !positive_direction;
@@ -961,8 +966,11 @@ void AC_AutoTune_Multi::updating_angle_p_down(float &tune_p, float tune_p_min, f
         if (tune_p <= tune_p_min) {
             tune_p = tune_p_min;
             counter = AUTOTUNE_SUCCESS_COUNT;
-            AP::logger().Write_Event(LogEvent::AUTOTUNE_REACHED_LIMIT);
-        }
+            LOGGER_WRITE_EVENT(LogEvent::AUTOTUNE_REACHED_LIMIT);
+            gcs().send_text(MAV_SEVERITY_CRITICAL, "AutoTune: Angle P Gain Determination Failed");
+            mode = FAILED;
+            LOGGER_WRITE_EVENT(LogEvent::AUTOTUNE_FAILED);
+       }
     }
 }
 
