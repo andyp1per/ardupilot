@@ -605,3 +605,6 @@ private:
 namespace AP {
     AP_Logger &logger();
 };
+
+#define LOGGER_WRITE_ERROR(subsys, err) AP::logger().Write_Error(subsys, err)
+#define LOGGER_WRITE_EVENT(evt) AP::logger().Write_Event(evt)
