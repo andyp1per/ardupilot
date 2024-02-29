@@ -51,7 +51,7 @@ class AP_MSP;
 #define AP_OSD_NUM_SYMBOLS 107
 #define OSD_MAX_INSTANCES 2
 
-#if AP_OSD_CRSF_EXTENSIONS_ENABLED && AP_RCPROTOCOL_CRSF_ENABLED
+#if AP_OSD_CRSF_EXTENSIONS_ENABLED
 // These options are defined in AP_RCProtocol_config.h
 #define AP_OSD_CRSF_PANELS_ENABLED 1
 #define AP_OSD_WARN_RSSI_DEFAULT -100   // Default value for OSD RSSI panel warning, in dbm
