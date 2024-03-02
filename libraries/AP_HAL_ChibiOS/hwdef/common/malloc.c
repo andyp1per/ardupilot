@@ -585,7 +585,7 @@ void __wrap__free_r(void *rptr, void *ptr)
     return free(ptr);
 }
 
-#ifdef USE_POSIX
+#ifdef USE_POSIX_FATFS
 /*
   allocation functions for FATFS
  */
@@ -615,7 +615,7 @@ void ff_memfree(void* mblock)
 {
     free(mblock);
 }
-#endif // USE_POSIX
+#endif // USE_POSIX_FATFS
 
 /*
   return true if a memory region is safe for a DMA operation
@@ -661,3 +661,4 @@ bool mem_is_dma_safe(const void *addr, uint32_t size, bool filesystem_op)
     return false;
 #endif // STM32F1
 }
+#endif // USE_POSIX_FATFS
