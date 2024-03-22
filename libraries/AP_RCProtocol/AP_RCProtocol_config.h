@@ -17,3 +17,7 @@
 #ifndef AP_RCPROTOCOL_SRXL_ENABLED
 #define AP_RCPROTOCOL_SRXL_ENABLED AP_RCPROTOCOL_BACKEND_DEFAULT_ENABLED
 #endif
+
+#ifndef AP_OSD_CRSF_EXTENSIONS_ENABLED
+#define AP_OSD_CRSF_EXTENSIONS_ENABLED 1    // CRSF OSD Panels disabled by default, enable via custom build server
+#endif
