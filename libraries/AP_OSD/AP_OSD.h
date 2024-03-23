@@ -120,6 +120,9 @@ protected:
     char u_icon(enum unit_type unit);
     float u_scale(enum unit_type unit, float value);
 
+    uint8_t scale_x(uint8_t x);
+    uint8_t scale_y(uint8_t x);
+
     AP_OSD_Backend *backend;
     AP_OSD *osd;
 
@@ -535,11 +538,17 @@ public:
         AUTO_SWITCH=2,
     };
 
+    enum FontScale {
+        SCALE_NONE=0,
+        SCALE_53x20=1,
+    };
+
     AP_Int8 osd_type;
     AP_Int8 font_num;
     AP_Int32 options;
 
 #if OSD_ENABLED
+    AP_Int8 font_scale;
     AP_Int8 rc_channel;
     AP_Int8 sw_method;
 

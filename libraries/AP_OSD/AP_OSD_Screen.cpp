@@ -1398,6 +1398,26 @@ float AP_OSD_AbstractScreen::u_scale(enum unit_type unit, float value)
     return value * scale[units][unit] + (offsets[units]?offsets[units][unit]:0);
 }
 
+uint8_t  AP_OSD_AbstractScreen::scale_x(uint8_t x)
+{
+    switch (osd->font_scale.get()) {
+        case AP_OSD::SCALE_53x20:
+            return x*53/30;
+        default:
+            return x;
+    }
+}
+
+uint8_t  AP_OSD_AbstractScreen::scale_y(uint8_t x)
+{
+    switch (osd->font_scale.get()) {
+        case AP_OSD::SCALE_53x20:
+            return x*20/13;
+        default:
+            return x;
+    }
+}
+
 char AP_OSD_Screen::get_arrow_font_index(int32_t angle_cd)
 {
     uint32_t interval = 36000 / SYMBOL(SYM_ARROW_COUNT);
@@ -2465,7 +2485,7 @@ void AP_OSD_Screen::draw_rngf(uint8_t x, uint8_t y)
     }
 }
 
-#define DRAW_SETTING(n) if (n.enabled) draw_ ## n(n.xpos, n.ypos)
+#define DRAW_SETTING(n) if (n.enabled) draw_ ## n(scale_x(n.xpos), scale_y(n.ypos))
 
 #if HAL_WITH_OSD_BITMAP || HAL_WITH_MSP_DISPLAYPORT
 void AP_OSD_Screen::draw(void)
