@@ -1066,7 +1066,7 @@ const AP_Param::GroupInfo AP_OSD_Screen::var_info2[] = {
     // @Description: Scales OSD element positions based on the the overlay text resolution (MSP DisplayPort only)
     // @Values: 0:Disable,1:Enabled
     // @User: Standard
-    AP_GROUPINFO("TXT_SCALE", 3, AP_OSD_Screen, txt_scale, 0),
+    AP_GROUPINFO("TXT_SCALE", 5, AP_OSD_Screen, txt_scale, 0),
 #endif
 
 #if AP_OSD_CRSF_PANELS_ENABLED      // Parameter and item names are prefixed XF to comply with 16 char limit
