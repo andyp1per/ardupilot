@@ -248,16 +248,6 @@ const AP_Param::GroupInfo AP_OSD::var_info[] = {
     AP_SUBGROUPINFO2(screen[3], "4_", 30, AP_OSD, AP_OSD_Screen),
 #endif
 
-#if OSD_ENABLED
-    // @Param: _SCALE
-    // @DisplayName: OSD Scale
-    // @Description: This scales the OSD element positions based on the disaply size.
-    // @Values: 0:No scaling (30x13),1:Scale to 53x20
-    // @User: Standard
-    AP_GROUPINFO("_SCALE", 33, AP_OSD, font_scale, 0),
-
-#endif
-
     AP_GROUPEND
 };
 

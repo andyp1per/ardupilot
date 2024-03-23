@@ -99,11 +99,21 @@ public:
 
 protected:
     bool check_option(uint32_t option);
+    virtual uint8_t get_msg_visible_width() const { return 26; }
 #ifdef HAL_WITH_MSP_DISPLAYPORT
+
+    enum TextResolution {
+        SCALE_30x16=0,
+        SCALE_50x18=1,
+    };
+
     virtual uint8_t get_txt_resolution() const {
         return 0;
     }
     virtual uint8_t get_font_index() const {
+        return 0;
+    }
+    virtual uint8_t get_txt_scale() const {
         return 0;
     }
 #endif
@@ -156,13 +166,18 @@ public:
     uint8_t get_font_index() const override {
         return font_index;
     }
+    uint8_t get_txt_scale() const override {
+        return txt_scale;
+    }
+    uint8_t get_msg_visible_width() const override {
+        return txt_scale.get() && txt_resolution == SCALE_50x18 ? 50-4 : 26;
+    }
 #endif
 private:
     friend class AP_MSP;
     friend class AP_MSP_Telem_Backend;
     friend class AP_MSP_Telem_DJI;
 
-    static const uint8_t message_visible_width = 26;
     static const uint8_t message_scroll_time_ms = 200;
     static const uint8_t message_scroll_delay = 5;
 
@@ -258,6 +273,7 @@ private:
     // Per screen HD resolution options (currently supported only by DisplayPort)
     AP_Int8 txt_resolution;
     AP_Int8 font_index;
+    AP_Int8 txt_scale;
 #endif
 
     void draw_altitude(uint8_t x, uint8_t y);
@@ -536,11 +552,6 @@ public:
         TOGGLE=0,
         PWM_RANGE=1,
         AUTO_SWITCH=2,
-    };
-
-    enum FontScale {
-        SCALE_NONE=0,
-        SCALE_53x20=1,
     };
 
     AP_Int8 osd_type;

@@ -1060,6 +1060,13 @@ const AP_Param::GroupInfo AP_OSD_Screen::var_info2[] = {
     // @Range: 0 15
     // @User: Standard
     AP_GROUPINFO("FONT", 4, AP_OSD_Screen, font_index, 0),
+
+    // @Param: TXT_SCALE
+    // @DisplayName: Scales OSD element positions based on the the overlay text resolution (MSP DisplayPort only)
+    // @Description: Scales OSD element positions based on the the overlay text resolution (MSP DisplayPort only)
+    // @Values: 0:Disable,1:Enabled
+    // @User: Standard
+    AP_GROUPINFO("TXT_SCALE", 3, AP_OSD_Screen, txt_scale, 0),
 #endif
 
 #if AP_OSD_CRSF_PANELS_ENABLED      // Parameter and item names are prefixed XF to comply with 16 char limit
@@ -1400,22 +1407,22 @@ float AP_OSD_AbstractScreen::u_scale(enum unit_type unit, float value)
 
 uint8_t  AP_OSD_AbstractScreen::scale_x(uint8_t x)
 {
-    switch (osd->font_scale.get()) {
-        case AP_OSD::SCALE_53x20:
-            return x*53/30;
-        default:
-            return x;
+#if HAL_WITH_MSP_DISPLAYPORT
+    if (get_txt_scale() && get_txt_resolution() == SCALE_50x18) {
+        return x*50/30;
     }
+#endif
+    return x;
 }
 
 uint8_t  AP_OSD_AbstractScreen::scale_y(uint8_t x)
 {
-    switch (osd->font_scale.get()) {
-        case AP_OSD::SCALE_53x20:
-            return x*20/13;
-        default:
-            return x;
+#if HAL_WITH_MSP_DISPLAYPORT
+    if (get_txt_scale() && get_txt_resolution() == SCALE_50x18) {
+        return x*18/16;
     }
+#endif
+    return x;
 }
 
 char AP_OSD_Screen::get_arrow_font_index(int32_t angle_cd)
@@ -1614,6 +1621,7 @@ void AP_OSD_Screen::draw_message(uint8_t x, uint8_t y)
             }
 
             int16_t start_position = 0;
+            const uint8_t message_visible_width = get_msg_visible_width();
             //scroll if required
             //scroll pattern: wait, scroll to the left, wait, scroll to the right
             if (len > message_visible_width) {
