@@ -130,8 +130,8 @@ protected:
     char u_icon(enum unit_type unit);
     float u_scale(enum unit_type unit, float value);
 
-    uint8_t scale_x(uint8_t x);
-    uint8_t scale_y(uint8_t x);
+    uint8_t scale_x(uint8_t x) const;
+    uint8_t scale_y(uint8_t x) const;
 
     AP_OSD_Backend *backend;
     AP_OSD *osd;
@@ -170,7 +170,7 @@ public:
         return txt_scale;
     }
     uint8_t get_msg_visible_width() const override {
-        return txt_scale.get() && txt_resolution == SCALE_50x18 ? 50-4 : 26;
+        return (txt_scale.get() && txt_resolution == SCALE_50x18) ? MIN(50-scale_x(message.xpos), 46) : 26;
     }
 #endif
 private:

@@ -1060,13 +1060,6 @@ const AP_Param::GroupInfo AP_OSD_Screen::var_info2[] = {
     // @Range: 0 15
     // @User: Standard
     AP_GROUPINFO("FONT", 4, AP_OSD_Screen, font_index, 0),
-
-    // @Param: TXT_SCALE
-    // @DisplayName: Scales OSD element positions based on the the overlay text resolution (MSP DisplayPort only)
-    // @Description: Scales OSD element positions based on the the overlay text resolution (MSP DisplayPort only)
-    // @Values: 0:Disable,1:Enabled
-    // @User: Standard
-    AP_GROUPINFO("TXT_SCALE", 5, AP_OSD_Screen, txt_scale, 0),
 #endif
 
 #if AP_OSD_CRSF_PANELS_ENABLED      // Parameter and item names are prefixed XF to comply with 16 char limit
@@ -1150,6 +1143,16 @@ const AP_Param::GroupInfo AP_OSD_Screen::var_info2[] = {
     // @Range: 0 21
     AP_SUBGROUPINFO(crsf_lq, "XF_LQ", 9, AP_OSD_Screen, AP_OSD_Setting),
 #endif
+
+#if HAL_WITH_MSP_DISPLAYPORT
+    // @Param: TXT_SCALE
+    // @DisplayName: Scales OSD element positions based on the the overlay text resolution (MSP DisplayPort only)
+    // @Description: Scales OSD element positions based on the the overlay text resolution (MSP DisplayPort only)
+    // @Values: 0:Disable,1:Enabled
+    // @User: Standard
+    AP_GROUPINFO("TXT_SCALE", 10, AP_OSD_Screen, txt_scale, 0),
+#endif
+
 
     AP_GROUPEND
 };
@@ -1405,7 +1408,7 @@ float AP_OSD_AbstractScreen::u_scale(enum unit_type unit, float value)
     return value * scale[units][unit] + (offsets[units]?offsets[units][unit]:0);
 }
 
-uint8_t  AP_OSD_AbstractScreen::scale_x(uint8_t x)
+uint8_t  AP_OSD_AbstractScreen::scale_x(uint8_t x) const
 {
 #if HAL_WITH_MSP_DISPLAYPORT
     if (get_txt_scale() && get_txt_resolution() == SCALE_50x18) {
@@ -1415,7 +1418,7 @@ uint8_t  AP_OSD_AbstractScreen::scale_x(uint8_t x)
     return x;
 }
 
-uint8_t  AP_OSD_AbstractScreen::scale_y(uint8_t x)
+uint8_t  AP_OSD_AbstractScreen::scale_y(uint8_t x) const
 {
 #if HAL_WITH_MSP_DISPLAYPORT
     if (get_txt_scale() && get_txt_resolution() == SCALE_50x18) {
@@ -1621,7 +1624,7 @@ void AP_OSD_Screen::draw_message(uint8_t x, uint8_t y)
             }
 
             int16_t start_position = 0;
-            const uint8_t message_visible_width = get_msg_visible_width();
+            const uint8_t message_visible_width = MIN(get_msg_visible_width(), int(sizeof(buffer)-1));
             //scroll if required
             //scroll pattern: wait, scroll to the left, wait, scroll to the right
             if (len > message_visible_width) {
