@@ -54,6 +54,7 @@
 #define UBLOX_SET_BINARY_460800 "\265\142\006\001\003\000\001\006\001\022\117$PUBX,41,1,0023,0001,460800,0*11\r\n"
 
 #define UBLOX_RXM_RAW_LOGGING 1
+#define UBLOX_RXM_RTCM_LOGGING 1
 #define UBLOX_MAX_RXM_RAW_SATS 22
 #define UBLOX_MAX_RXM_RAWX_SATS 32
 #define UBLOX_GNSS_SETTINGS 1
@@ -98,13 +99,14 @@
 #define CONFIG_RTK_MOVBASE   (1<<17)
 #define CONFIG_TIM_TM2       (1<<18)
 #define CONFIG_M10           (1<<19)
-#define CONFIG_LAST          (1<<20) // this must always be the last bit
+#define CONFIG_RATE_RTCM     (1<<20)
+#define CONFIG_LAST          (1<<21) // this must always be the last bit
 
 #define CONFIG_REQUIRED_INITIAL (CONFIG_RATE_NAV | CONFIG_RATE_POSLLH | CONFIG_RATE_STATUS | CONFIG_RATE_VELNED)
 
 #define CONFIG_ALL (CONFIG_RATE_NAV | CONFIG_RATE_POSLLH | CONFIG_RATE_STATUS | CONFIG_RATE_SOL | CONFIG_RATE_VELNED \
                     | CONFIG_RATE_DOP | CONFIG_RATE_MON_HW | CONFIG_RATE_MON_HW2 | CONFIG_RATE_RAW | CONFIG_VERSION \
-                    | CONFIG_NAV_SETTINGS | CONFIG_GNSS | CONFIG_SBAS)
+                    | CONFIG_NAV_SETTINGS | CONFIG_GNSS | CONFIG_SBAS | CONFIG_RATE_RTCM)
 
 //Configuration Sub-Sections
 #define SAVE_CFG_IO     (1<<0)
@@ -561,6 +563,16 @@ private:
     };
 #endif
 
+#if UBLOX_RXM_RTCM_LOGGING
+    struct PACKED ubx_rxm_rtcm {
+        uint8_t version;
+        uint8_t flags;
+        uint16_t reserved1;
+        uint16_t refStation;
+        uint16_t msgType;
+    };
+#endif
+
     struct PACKED ubx_ack_ack {
         uint8_t clsID;
         uint8_t msgID;
@@ -621,6 +633,9 @@ private:
         ubx_rxm_raw rxm_raw;
         ubx_rxm_rawx rxm_rawx;
 #endif
+#if UBLOX_RXM_RTCM_LOGGING
+        ubx_rxm_rtcm rxm_rtcm;
+#endif
         ubx_ack_ack ack;
         ubx_ack_nack nack;
         ubx_tim_tm2 tim_tm2;
@@ -676,6 +691,7 @@ private:
         MSG_NAV_SVINFO = 0x30,
         MSG_RXM_RAW = 0x10,
         MSG_RXM_RAWX = 0x15,
+        MSG_RXM_RTCM = 0x32,
         MSG_TIM_TM2 = 0x03
     };
     enum ubx_gnss_identifier {
@@ -732,6 +748,7 @@ private:
         STEP_MON_HW2,
         STEP_RAW,
         STEP_RAWX,
+        STEP_RTCM,
         STEP_VERSION,
         STEP_RTK_MOVBASE, // setup moving baseline
         STEP_TIM_TM2,
@@ -812,6 +829,7 @@ private:
     void log_tim_tm2(void);
     void log_rxm_raw(const struct ubx_rxm_raw &raw);
     void log_rxm_rawx(const struct ubx_rxm_rawx &raw);
+    void log_rxm_rtcm(const struct ubx_rxm_rtcm &rtcm);
 
 #if GPS_MOVING_BASELINE
     // see if we should use uart2 for moving baseline config
