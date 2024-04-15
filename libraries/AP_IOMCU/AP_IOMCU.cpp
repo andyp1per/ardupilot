@@ -1090,7 +1090,9 @@ bool AP_IOMCU::check_crc(void)
     }
 
     const uint16_t magic = REBOOT_BL_MAGIC;
-    write_registers(PAGE_SETUP, PAGE_REG_SETUP_REBOOT_BL, 1, &magic);
+    if (!write_registers(PAGE_SETUP, PAGE_REG_SETUP_REBOOT_BL, 1, &magic)) {
+        DEV_PRINTF("IOMCU: Failed to send reboot command\n");
+    }
 
     // avoid internal error on fw upload delay
     last_reg_access_ms = 0;
@@ -1098,7 +1100,7 @@ bool AP_IOMCU::check_crc(void)
     if (!upload_fw()) {
         AP_ROMFS::free(fw);
         fw = nullptr;
-        AP_BoardConfig::config_error("Failed to update IO firmware");
+        AP_BoardConfig::config_error("Failed to update IO firmware expected crc 0x%X got: 0x%X\n", (unsigned)crc, (unsigned)io_crc);
     }
 
     AP_ROMFS::free(fw);

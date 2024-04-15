@@ -55,8 +55,12 @@
 #include "AP_IOMCU.h"
 #include <AP_ROMFS/AP_ROMFS.h>
 #include <AP_Math/crc.h>
+#include <GCS_MAVLink/GCS.h>
+#include <GCS_MAVLink/GCS_MAVLink.h>
 
-#define debug(fmt, args ...)  do { hal.console->printf("IOMCU: " fmt "\n", ## args); } while(0)
+//#define debug(fmt, args ...)  do { hal.console->printf("IOMCU: " fmt "\n", ## args); } while(0)
+
+#define debug(fmt, args ...)  do { gcs().send_text(MAV_SEVERITY_WARNING, "IOMCU: " fmt "\n", ## args); }  while(0)
 
 extern const AP_HAL::HAL &hal;
 
@@ -71,7 +75,7 @@ bool AP_IOMCU::upload_fw(void)
     bool ret = false;
 
     /* look for the bootloader for 150 ms */
-    for (uint8_t i = 0; i < 15; i++) {
+    for (uint8_t i = 0; i < 150; i++) {
         ret = sync();
         if (ret) {
             break;
