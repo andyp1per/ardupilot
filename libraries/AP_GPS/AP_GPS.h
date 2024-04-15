@@ -614,6 +614,9 @@ protected:
     AP_Enum<SBAS_Mode> _sbas_mode;
     AP_Int8 _min_elevation;
     AP_Int8 _raw_data;
+    AP_Int8 _gnss_mode[GPS_MAX_RECEIVERS];
+    AP_Int16 _rate_ms[GPS_MAX_RECEIVERS];   // this parameter should always be accessed using get_rate_ms()
+    AP_Int8 _rtcm_data;
     AP_Int8 _save_config;
     AP_Int8 _auto_config;
     AP_Int8 _blend_mask;
