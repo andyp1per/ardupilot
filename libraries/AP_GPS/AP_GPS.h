@@ -784,6 +784,7 @@ private:
     struct {
         RTCM3_Parser *parsers[MAVLINK_COMM_NUM_BUFFERS];
         uint32_t sent_crc[32];
+        mavlink_channel_t sent_channels[32];
         uint8_t sent_idx;
     } rtcm;
     bool parse_rtcm_injection(mavlink_channel_t chan, const mavlink_gps_rtcm_data_t &pkt);
