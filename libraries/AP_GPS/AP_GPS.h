@@ -599,12 +599,9 @@ protected:
     AP_Enum<SBAS_Mode> _sbas_mode;
     AP_Int8 _min_elevation;
     AP_Int8 _raw_data;
-<<<<<<< HEAD
     AP_Int8 _gnss_mode[GPS_MAX_RECEIVERS];
     AP_Int16 _rate_ms[GPS_MAX_RECEIVERS];   // this parameter should always be accessed using get_rate_ms()
-=======
     AP_Int8 _rtcm_data;
->>>>>>> c15503a070 (AP_GPS: allow logging of UBX-RXM-RTCM)
     AP_Int8 _save_config;
     AP_Int8 _auto_config;
     AP_Vector3f _antenna_offset[GPS_MAX_RECEIVERS];
@@ -632,6 +629,7 @@ protected:
         GPSL5HealthOverride = (1U << 5),
         AlwaysRTCMDecode = (1U << 6),
         DisableRTCMDecode = (1U << 7),
+        LogRTCMData = (1U << 8),
     };
 
     // check if an option is set
