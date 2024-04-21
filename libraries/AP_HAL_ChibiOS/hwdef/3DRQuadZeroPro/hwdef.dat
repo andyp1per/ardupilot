@@ -81,7 +81,35 @@ PD15 UART8_RTS UART8
 # TODO: RSSI Analog Input
 # PXX RSSI_IN ADCX
 
-# ++++++++++++ TODO: FINISH THIS +++++++++++++ 
+# Now the VDD sense pin. This is used to sense primary board voltage.
+PA4 VDD_5V_SENS ADC1 SCALE(2)
+
+# SPI1 BMI088
+PA5 SPI1_SCK SPI1
+PA6 SPI1_MISO SPI1
+PA7 SPI1_MOSI SPI1
+
+# SPI2 IIM-42652
+PB13 SPI2_SCK SPI2
+PB14 SPI2_MISO SPI2
+PB15 SPI2_MOSI SPI2
+
+# SPI4 DPS368
+PE2 SPI4_SCK SPI4
+PE5 SPI4_MISO SPI4
+PE6 SPI4_MOSI SPI4
+
+# SPI6 FRAM
+PB3 SPI6_SCK SPI6
+PB4 SPI6_MISO SPI6
+PB5 SPI6_MOSI SPI6
+
+# This is the pin that senses USB being connected. It is an input pin
+# setup as OPENDRAIN.
+PA9 VBUS INPUT OPENDRAIN
+
+# This input pin is used to detect that power is valid on USB.
+PC0 VBUS_VALID INPUT PULLDOWN
 
 # USB
 PA11 OTG_FS_DM OTG1
@@ -90,10 +118,74 @@ PA12 OTG_FS_DP OTG1
 PA13 JTMS-SWDIO SWD
 PA14 JTCK-SWCLK SWD
 
-# Add CS pins are in high
-#OUTPUT LOW = N
-PA15 FRAM_CS CS SPEED_VERYLOW NODMA #N 
-PB12 IIM42652_CS CS #N
-PE3 BARO_CS CS #N
-PB0 BMI088_GYRO_CS CS #N
-PC5 BMI088_ACCEL_CS #N
+# PWM output for buzzer
+PC7 TIM3_CH2 TIM3 GPIO(77) ALARM
+
+# First I2C bus.
+PB6 I2C1_SCL I2C1
+PB7 I2C1_SDA I2C1
+
+# Second I2C bus.
+PB10 I2C2_SCL I2C2
+PB11 I2C2_SDA I2C2
+
+# Third I2C bus.
+PB8 I2C4_SCL I2C4
+PB9 I2C4_SDA I2C4
+
+# microSD card
+PC8 SDMMC1_D0 SDMMC1
+PC9 SDMMC1_D1 SDMMC1
+PC10 SDMMC1_D2 SDMMC1
+PC11 SDMMC1_D3 SDMMC1
+PC12 SDMMC1_CK SDMMC1
+PD2 SDMMC1_CMD SDMMC1
+
+# CS pins for SPI sensors. The labels for all CS pins need to
+# match the SPI device table later in this file.
+PA15 FRAM_CS CS SPEED_VERYLOW NODMA 
+PB12 IIM42652_CS CS 
+PE3 BARO_CS CS 
+PB0 BMI088_GYRO_CS CS 
+PC5 BMI088_ACCEL_CS 
+
+# Now we start defining some PWM pins. We also map these pins to GPIO
+# values, so users can set BRD_PWM_COUNT to choose how many of the PWM
+# outputs on the primary MCU are setup as PWM and how many as
+# GPIOs. To match HAL_PX4 we number the GPIOs for the PWM outputs
+# starting at 50.
+
+PE9 TIM1_CH1 TIM1 PWM(1) GPIO(50)
+PE11 TIM1_CH2 TIM1 PWM(2) GPIO(51)
+PE13 TIM1_CH3 TIM1 PWM(3) GPIO(52)
+PE14 TIM1_CH4 TIM1 PWM(4) GPIO(53)
+PA0 TIM2_CH1 TIM2 PWM(5) GPIO(54)
+PA1 TIM2_CH2 TIM2 PWM(6) GPIO(55)
+PA2 TIM2_CH3 TIM2 PWM(7) GPIO(56)
+PA3 TIM2_CH4 TIM2 PWM(8) GPIO(57)
+
+# Only available as test points
+PD13 TIM4_CH2 TIM4 PWM(9) GPIO(58)
+
+# This is the invensense iim42652 data-ready pin.
+PD10 MPU_DRDY INPUT
+
+# Power flag pins: these tell the MCU the status of the various power
+# supplies that are available. The pin names need to exactly match the
+# names used in AnalogIn.cpp. 
+PC1 VDD_BRICK_VALID INPUT PULLDOWN
+
+# SPI Table
+SPIDEV bmi088_g    SPI1 DEVID1  BMI088_GYRO_CS    MODE3  10*MHZ  10*MHZ
+SPIDEV bmi088_a    SPI1 DEVID2  BMI088_ACCEL_CS   MODE3  10*MHZ  10*MHZ
+SPIDEV iim42652    SPI2 DEVID3  IIM42652_CS       MODE3  10*MHZ  10*MHZ
+SPIDEV dps310      SPI4 DEVID4  BARO_CS           MODE3  5*MHZ  5*MHZ
+SPIDEV ramtron     SPI6 DEVID10 FRAM_CS           MODE3  8*MHZ  8*MHZ
+
+# Enable RAMTROM parameter storage.
+define HAL_WITH_RAMTRON 1
+
+# Enable FAT filesystem support (needs a microSD defined via SDMMC).
+define HAL_OS_FATFS_IO 1
+
+# ++++++++++++ TODO: FINISH THIS +++++++++++++ 
