@@ -6361,7 +6361,7 @@ void GCS::passthru_timer(void)
     uint8_t nbytes = 0;
 
     // read from port1, and write to port2
-    while (nbytes < sizeof(buf) && (b = _passthru.port1->read_locked(lock_key)) >= 0) {
+    while (nbytes < MIN(sizeof(buf),_passthru.port2->txspace()) && (b = _passthru.port1->read_locked(lock_key)) >= 0) {
         buf[nbytes++] = b;
     }
     if (nbytes > 0) {
@@ -6371,7 +6371,7 @@ void GCS::passthru_timer(void)
 
     // read from port2, and write to port1
     nbytes = 0;
-    while (nbytes < sizeof(buf) && (b = _passthru.port2->read_locked(lock_key)) >= 0) {
+    while (nbytes < MIN(sizeof(buf),_passthru.port1->txspace()) && (b = _passthru.port2->read_locked(lock_key)) >= 0) {
         buf[nbytes++] = b;
     }
     if (nbytes > 0) {
