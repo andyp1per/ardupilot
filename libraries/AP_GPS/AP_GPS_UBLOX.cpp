@@ -240,6 +240,7 @@ const AP_GPS_UBLOX::config_list AP_GPS_UBLOX::config_M10[] {
  { ConfigKey::CFG_NAVSPG_DYNMODEL, 8}, // Air < 4g
 };
 
+AP_GPS_UBLOX::config_list AP_GPS_UBLOX::config_GNSS[UBLOX_MAX_GNSS_CONFIG_BLOCKS*3] {};
 
 void
 AP_GPS_UBLOX::_request_next_config(void)
@@ -442,6 +443,73 @@ AP_GPS_UBLOX::_request_next_config(void)
 #endif
         break;
 
+    case STEP_F9: {
+        if (_hardware_generation == UBLOX_F9 && gps._gnss_mode[state.instance] != 0) {
+
+            uint8_t cfg_count = 0;
+
+            // ZED-F9P defaults are
+            // GPS L1C/A+L2C(ZED)
+            // SBAS L1C/A
+            // GALILEO E1+E5B(ZED)+E5A(NEO)
+            // BEIDOU B1+B2(ZED)+B2A(NEO)
+            // QZSS L1C/A+L2C(ZED)+L5(NEO)
+            // GLONASS L1+L2(ZED)
+            // IMES not supported
+            // GPS and QZSS should be enabled/disabled together, but we will leave them alone
+
+            uint8_t gnss_mode = gps._gnss_mode[state.instance];
+            gnss_mode |= 1U<<GNSS_GPS;
+            gnss_mode |= 1U<<GNSS_QZSS;
+            gnss_mode &= ~(1U<<GNSS_IMES);
+            gps._gnss_mode[state.instance].set_and_save(gnss_mode);
+
+            for(int i = 0; i < UBLOX_MAX_GNSS_CONFIG_BLOCKS; i++) {
+                bool ena = gnss_mode & (1U<<i);
+                switch (i) {
+                case GNSS_SBAS:
+                    config_GNSS[cfg_count++] = { ConfigKey::CFG_SIGNAL_SBAS_ENA, ena };
+                    // If a constellation is disabled, the signals get disabled as well
+                    if (ena) {
+                        config_GNSS[cfg_count++] = { ConfigKey::CFG_SIGNAL_SBAS_L1CA_ENA, ena };
+                    }
+                    break;
+                case GNSS_GALILEO:
+                    config_GNSS[cfg_count++] = { ConfigKey::CFG_SIGNAL_GAL_ENA, ena };
+                    if (ena) {
+                        config_GNSS[cfg_count++] = { ConfigKey::CFG_SIGNAL_GAL_E1_ENA, ena };
+                        config_GNSS[cfg_count++] = { ConfigKey::CFG_SIGNAL_GAL_E5B_ENA, ena };
+                    }
+                    break;
+                case GNSS_BEIDOU:
+                    config_GNSS[cfg_count++] = { ConfigKey::CFG_SIGNAL_BDS_ENA, ena };
+                    if (ena) {
+                        config_GNSS[cfg_count++] = { ConfigKey::CFG_SIGNAL_BDS_B1_ENA, ena };
+                        config_GNSS[cfg_count++] = { ConfigKey::CFG_SIGNAL_BDS_B2_ENA, ena };
+                    }
+                    break;
+                case GNSS_GLONASS:
+                    config_GNSS[cfg_count++] = { ConfigKey::CFG_SIGNAL_GLO_ENA, ena };
+                    if (ena) {
+                        config_GNSS[cfg_count++] = { ConfigKey::CFG_SIGNAL_GLO_L1_ENA, ena };
+                        config_GNSS[cfg_count++] = { ConfigKey::CFG_SIGNAL_GLO_L2_ENA, ena };
+                    }
+                    break;
+                case GNSS_IMES:
+                case GNSS_GPS:
+                case GNSS_QZSS:
+                    // not supported or leave alone
+                    break;
+                }
+            }
+            // special handling of F9 config
+            Debug("Sending F9 settings");
+            if (!_configure_config_set(config_GNSS, cfg_count, CONFIG_F9, UBX_VALSET_LAYER_RAM | UBX_VALSET_LAYER_BBR)) {
+                _next_message--;
+            }
+        }
+        break;
+    }
 
     case STEP_M10: {
         if (_hardware_generation == UBLOX_M10) {
@@ -1068,6 +1136,7 @@ AP_GPS_UBLOX::_parse_gps(void)
             case CLASS_CFG:
                 switch(_buffer.nack.msgID) {
                 case MSG_CFG_VALGET:
+                    Debug("NACK 0x%x", (unsigned)_buffer.nack.msgID);
                     if (active_config.list != nullptr) {
                         /*
                           likely this device does not support fetching multiple keys at once, go one at a time
@@ -1312,9 +1381,12 @@ AP_GPS_UBLOX::_parse_gps(void)
                 // see if it is in active config list
                 int8_t cfg_idx = find_active_config_index(id);
                 if (cfg_idx >= 0) {
+                    Debug("valset(0x%lx): %u", uint32_t(id), (*cfg_data) & 0x1);
                     const uint8_t key_size = config_key_size(id);
-                    if (cfg_len < key_size ||
-                        memcmp(&active_config.list[cfg_idx].value, cfg_data, key_size) != 0) {
+                    if (cfg_len < key_size
+                        // for keys of length 1 only the LSB is significant
+                        || (key_size == 1 && (active_config.list[cfg_idx].value & 0x1) != (*cfg_data & 0x1))
+                        || memcmp(&active_config.list[cfg_idx].value, cfg_data, key_size) != 0) {
                         _configure_valset(id, &active_config.list[cfg_idx].value, active_config.layers);
                         _unconfigured_messages |= active_config.unconfig_bit;
                         active_config.done_mask &= ~(1U << cfg_idx);
@@ -1339,6 +1411,8 @@ AP_GPS_UBLOX::_parse_gps(void)
                                   unsigned(active_config.list[active_config.fetch_index].key));
                         }
                     }
+                } else {
+                    Debug("valget no active config for 0x%lx", (uint32_t)id);
                 }
 
                 // step over the value
@@ -1384,6 +1458,8 @@ AP_GPS_UBLOX::_parse_gps(void)
                         _unconfigured_messages |= CONFIG_TMODE_MODE;
                     }
                     _hardware_generation = UBLOX_F9;
+                    _unconfigured_messages |= CONFIG_F9;
+                    _unconfigured_messages &= ~CONFIG_GNSS;
                 }
                 if (strncmp(_version.swVersion, "EXT CORE 4", 10) == 0) {
                     // a M9
@@ -1882,6 +1958,7 @@ AP_GPS_UBLOX::_configure_valset(ConfigKey key, const void *value, uint8_t layers
     if (!supports_F9_config()) {
         return false;
     }
+
     const uint8_t len = config_key_size(key);
     struct ubx_cfg_valset msg {};
     uint8_t buf[sizeof(msg)+len];
@@ -2071,6 +2148,7 @@ static const char *reasons[] = {"navigation rate",
                                 "Time mode settings",
                                 "RTK MB",
                                 "TIM TM2",
+                                "F9",
                                 "M10",
                                 "rtcm rate"};
 
