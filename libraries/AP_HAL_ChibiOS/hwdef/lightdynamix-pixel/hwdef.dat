@@ -2,3 +2,4 @@
 
 include ../MatekH743-bdshot/hwdef.dat
 
+define AP_ADVANCEDFAILSAFE_ENABLED 1
