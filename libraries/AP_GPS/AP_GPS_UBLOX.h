@@ -100,7 +100,8 @@
 #define CONFIG_TIM_TM2       (1<<18)
 #define CONFIG_F9            (1<<19)
 #define CONFIG_M10           (1<<20)
-#define CONFIG_LAST          (1<<21) // this must always be the last bit
+#define CONFIG_RATE_RTCM     (1<<21)
+#define CONFIG_LAST          (1<<22) // this must always be the last bit
 
 #define CONFIG_REQUIRED_INITIAL (CONFIG_RATE_NAV | CONFIG_RATE_POSLLH | CONFIG_RATE_STATUS | CONFIG_RATE_VELNED)
 
