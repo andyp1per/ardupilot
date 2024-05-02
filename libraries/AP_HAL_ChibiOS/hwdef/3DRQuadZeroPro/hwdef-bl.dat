@@ -19,10 +19,12 @@ APJ_BOARD_ID 1167
 FLASH_SIZE_KB 2048
 
 # bootloader is installed at zero offset
-FLASH_RESERVE_START_LOAD_KB 0
+FLASH_RESERVE_START_KB 0
 
 # the location where the bootloader will put the firmware
 FLASH_BOOTLOADER_LOAD_KB 128
+
+env OPTIMIZE -Os
 
 # Bootloader LED
 PE10 LED_BOOTLOADER OUTPUT
