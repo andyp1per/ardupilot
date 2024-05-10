@@ -77,6 +77,7 @@ void Copter::rate_controller_thread()
                                                 dt, dt_avg, max_dt, min_dt);
             max_dt = dt_avg;
             min_dt = dt_avg;
+            last_rtdt_log_us = now_us;
         }
 #endif
 
