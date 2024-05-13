@@ -94,7 +94,7 @@ void Copter::rate_controller_thread()
         // it is important not to drop samples otherwise the filtering will be fubar
         // there is no need to output to the motors more than once for every batch of samples
         while (ins.get_next_gyro_sample(gyro)) {
-            attitude_control->rate_controller_run_dt(sensor_dt, gyro);
+            attitude_control->rate_controller_run_dt(sensor_dt, gyro + ahrs.get_gyro_drift());
         }
         chEvtGetAndClearEvents(AP_InertialSensor::EVT_GYRO_SAMPLE);
 
