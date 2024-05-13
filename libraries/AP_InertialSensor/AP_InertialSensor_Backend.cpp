@@ -266,8 +266,11 @@ void AP_InertialSensor_Backend::apply_gyro_filters(const uint8_t instance, const
         /*
           tell the rate thread we have a new sample
         */
-        _imu._rate_loop_gyro_window.push(gyro_filtered);
-        chEvtSignal(_imu.rate_loop_thread, AP_InertialSensor::EVT_GYRO_SAMPLE);
+        if (++_imu.rate_decimation_count >= _imu.rate_decimation) {
+            _imu._rate_loop_gyro_window.push(gyro_filtered);
+            chEvtSignal(_imu.rate_loop_thread, AP_InertialSensor::EVT_GYRO_SAMPLE);
+            _imu.rate_decimation_count = 0;
+        }
     }
 #endif
 }

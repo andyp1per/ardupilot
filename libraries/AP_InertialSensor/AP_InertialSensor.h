@@ -807,18 +807,15 @@ private:
      */
     thread_t *rate_loop_thread;
     ObjectBuffer<Vector3f> _rate_loop_gyro_window{AP_INERTIAL_SENSOR_RATE_LOOP_BUFFER_SIZE};
+    uint8_t rate_decimation = 1;
+    uint8_t rate_decimation_count;
 
 public:
     static const eventmask_t EVT_GYRO_SAMPLE = EVENT_MASK(5);
-    void set_rate_loop_sem(thread_t *t) { rate_loop_thread = t; }
+    void set_rate_loop_thread(thread_t *t) { rate_loop_thread = t; }
     bool get_next_gyro_sample(Vector3f& gyro) { return _rate_loop_gyro_window.pop(gyro); }
     uint32_t get_num_gyro_samples() { return _rate_loop_gyro_window.available(); }
-    bool discard_gyro_samples(uint32_t n) { return _rate_loop_gyro_window.advance(n); }
-    void ensure_gyro_buffer_size(uint32_t n) {
-        if (_rate_loop_gyro_window.get_size() < n) {
-            _rate_loop_gyro_window.set_size(n);
-        }
-    }
+    void set_rate_decimation(uint8_t rdec) { rate_decimation = rdec; }
 };
 
 namespace AP {
