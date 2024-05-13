@@ -813,6 +813,7 @@ public:
     void set_rate_loop_sem(thread_t *t) { rate_loop_thread = t; }
     bool get_next_gyro_sample(Vector3f& gyro) { return _rate_loop_gyro_window.pop(gyro); }
     uint32_t get_num_gyro_samples() { return _rate_loop_gyro_window.available(); }
+    bool discard_gyro_samples(uint32_t n) { return _rate_loop_gyro_window.advance(n); }
 };
 
 namespace AP {
