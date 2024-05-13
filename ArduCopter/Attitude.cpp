@@ -16,7 +16,7 @@ void Copter::rate_controller_thread()
     float min_dt = 1.0;
     uint32_t now_ms = AP_HAL::millis();
     uint32_t last_report_ms = now_ms;
-    uint32_t last_rtdt_log_us = last_run_us;
+    uint32_t last_rtdt_log_ms = now_ms;
     uint32_t last_notch_sample_ms = now_ms;
     bool was_using_rate_thread = false;
     uint32_t running_slow = 0;
@@ -79,13 +79,13 @@ void Copter::rate_controller_thread()
 // @Field: dtMax: Max time delta since last log output
 // @Field: dtMin: Min time delta since last log output
 
-        if (now_us - last_rtdt_log_us >= 2500) {    // 400 Hz
+        if (now_ms - last_rtdt_log_ms >= 10) {    // 100 Hz
             AP::logger().WriteStreaming("RTDT", "TimeUS,dt,dtAvg,dtMax,dtMin", "Qffff",
                                                 AP_HAL::micros64(),
                                                 dt, sensor_dt, max_dt, min_dt);
             max_dt = sensor_dt;
             min_dt = sensor_dt;
-            last_rtdt_log_us = now_us;
+            last_rtdt_log_ms = now_ms;
         }
 #endif
 
@@ -134,6 +134,8 @@ void Copter::rate_controller_thread()
                 const uint32_t new_attitude_rate = AP::ins().get_raw_gyro_rate_hz()/(rate_decimation+1);
                 if (new_attitude_rate > AP::scheduler().get_filtered_loop_rate_hz()) {
                     rate_decimation = rate_decimation + 1;
+                    // gyro buffer needs to be large enough to accommodate the decimation size
+                    AP::ins().ensure_gyro_buffer_size(rate_decimation+2);
                     attitude_control->set_notch_sample_rate(new_attitude_rate);
                     gcs().send_text(MAV_SEVERITY_WARNING, "Attitude CPU high, dropping rate to %luHz",
                         new_attitude_rate);
