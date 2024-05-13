@@ -9,7 +9,9 @@
 */
 void Copter::rate_controller_thread()
 {
-    ins.set_rate_loop_sem(chThdGetSelfX());
+    uint8_t rate_decimation = 1;
+    ins.set_rate_loop_thread(chThdGetSelfX());
+    ins.set_rate_decimation(rate_decimation);
 
     uint32_t last_run_us = AP_HAL::micros();
     float max_dt = 0.0;
@@ -20,7 +22,6 @@ void Copter::rate_controller_thread()
     uint32_t last_notch_sample_ms = now_ms;
     bool was_using_rate_thread = false;
     uint32_t running_slow = 0;
-    uint32_t rate_decimation = 1;
 
     while (true) {
         // allow changing option at runtime
@@ -45,18 +46,10 @@ void Copter::rate_controller_thread()
         // wait for an IMU sample
         Vector3f gyro;
         // we must use multiples of the actual sensor rate
-        const float sensor_dt = 1.0f * rate_decimation / AP::ins().get_raw_gyro_rate_hz();
+        const float sensor_dt = 1.0f * rate_decimation / ins.get_raw_gyro_rate_hz();
 
         // wait for at least one gyro sample to be available
         chEvtWaitOne(AP_InertialSensor::EVT_GYRO_SAMPLE);
-
-        // check we have enough samples for a cycle
-        if (AP::ins().get_num_gyro_samples() < rate_decimation) {
-            continue;
-        }
-
-        // consume all the intermediate samples that we will ignore
-        AP::ins().discard_gyro_samples(rate_decimation-1);
 
         if (ap.motor_test) {
             continue;
@@ -91,7 +84,7 @@ void Copter::rate_controller_thread()
 
         motors->set_dt(sensor_dt);
         // check if we are falling behind
-        if (AP::ins().get_num_gyro_samples() > 2 * rate_decimation) {
+        if (ins.get_num_gyro_samples() > 2) {
             running_slow++;
         } else if (running_slow > 0) {
             running_slow--;
@@ -100,11 +93,8 @@ void Copter::rate_controller_thread()
         // run the rate controller on all available samples
         // it is important not to drop samples otherwise the filtering will be fubar
         // there is no need to output to the motors more than once for every batch of samples
-        while (AP::ins().get_next_gyro_sample(gyro)) {
+        while (ins.get_next_gyro_sample(gyro)) {
             attitude_control->rate_controller_run_dt(sensor_dt, gyro);
-            if (!AP::ins().discard_gyro_samples(rate_decimation-1)) {
-                break;
-            }
         }
         chEvtGetAndClearEvents(AP_InertialSensor::EVT_GYRO_SAMPLE);
 
@@ -131,18 +121,18 @@ void Copter::rate_controller_thread()
         if (now_ms - last_report_ms >= 200) {
             last_report_ms = now_ms;
             if (running_slow > 5 || AP::scheduler().get_extra_loop_us() > 0) {
-                const uint32_t new_attitude_rate = AP::ins().get_raw_gyro_rate_hz()/(rate_decimation+1);
+                const uint32_t new_attitude_rate = ins.get_raw_gyro_rate_hz()/(rate_decimation+1);
                 if (new_attitude_rate > AP::scheduler().get_filtered_loop_rate_hz()) {
                     rate_decimation = rate_decimation + 1;
-                    // gyro buffer needs to be large enough to accommodate the decimation size
-                    AP::ins().ensure_gyro_buffer_size(rate_decimation+2);
+                    ins.set_rate_decimation(rate_decimation);
                     attitude_control->set_notch_sample_rate(new_attitude_rate);
                     gcs().send_text(MAV_SEVERITY_WARNING, "Attitude CPU high, dropping rate to %luHz",
                         new_attitude_rate);
                 }
             } else if (rate_decimation > 1) {
-                const uint32_t new_attitude_rate = AP::ins().get_raw_gyro_rate_hz()/(rate_decimation-1);
+                const uint32_t new_attitude_rate = ins.get_raw_gyro_rate_hz()/(rate_decimation-1);
                 rate_decimation = rate_decimation - 1;
+                ins.set_rate_decimation(rate_decimation);
                 attitude_control->set_notch_sample_rate(new_attitude_rate);
                 gcs().send_text(MAV_SEVERITY_WARNING, "Attitude CPU normal, increasing rate to %luHz",
                     new_attitude_rate);
