@@ -412,7 +412,7 @@ struct PACKED log_PID {
     float   Dmod;
     float   slew_rate;
     float   dt;
-    float   max_dt;
+    float   raw_target;
     uint8_t flags;
 };
 
@@ -672,7 +672,7 @@ struct PACKED log_VER {
 // UNIT messages define units which can be referenced by FMTU messages
 // FMTU messages associate types (e.g. centimeters/second/second) to FMT message fields
 
-#define PID_LABELS "TimeUS,Tar,Act,Err,P,I,D,FF,DFF,Dmod,SRt,dt,mdt,Flags"
+#define PID_LABELS "TimeUS,Tar,Act,Err,P,I,D,FF,DFF,Dmod,SRt,dt,RT,Flags"
 #define PID_FMT    "QffffffffffffB"
 #define PID_UNITS  "s-------------"
 #define PID_MULTS  "F-------------"
