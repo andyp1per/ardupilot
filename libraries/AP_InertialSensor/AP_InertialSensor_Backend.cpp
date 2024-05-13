@@ -262,12 +262,12 @@ void AP_InertialSensor_Backend::apply_gyro_filters(const uint8_t instance, const
     }
 
 #if AP_AHRS_ENABLED
-    if (_imu.rate_loop_sem != nullptr && instance == primary_gyro) {
+    if (_imu.rate_loop_thread != nullptr && instance == primary_gyro) {
         /*
           tell the rate thread we have a new sample
         */
-        _imu._gyro[instance] = gyro_filtered;
-        _imu.rate_loop_sem->signal();
+        _imu._rate_loop_gyro_window.push(gyro_filtered);
+        chEvtSignal(_imu.rate_loop_thread, AP_InertialSensor::EVT_GYRO_SAMPLE);
     }
 #endif
 }
