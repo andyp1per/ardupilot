@@ -9,18 +9,17 @@
 */
 void Copter::rate_controller_thread()
 {
-    HAL_BinarySemaphore rate_sem;
-    ins.set_rate_loop_sem(&rate_sem);
+    ins.set_rate_loop_sem(chThdGetSelfX());
 
     uint32_t last_run_us = AP_HAL::micros();
     float max_dt = 0.0;
     float min_dt = 1.0;
-    float dt_avg = 0.0;
     uint32_t now_ms = AP_HAL::millis();
     uint32_t last_report_ms = now_ms;
     uint32_t last_rtdt_log_us = last_run_us;
     uint32_t last_notch_sample_ms = now_ms;
     bool was_using_rate_thread = false;
+    uint32_t running_slow = 0;
 
     while (true) {
         // allow changing option at runtime
@@ -43,7 +42,12 @@ void Copter::rate_controller_thread()
         using_rate_thread = true;
 
         // wait for an IMU sample
-        rate_sem.wait_blocking();
+        Vector3f gyro;
+        // we must use multiples of the actual sensor rate
+        const float sensor_dt = 1.0f / AP::ins().get_raw_gyro_rate_hz();
+
+        chEvtWaitOne(AP_InertialSensor::EVT_GYRO_SAMPLE);
+
         if (ap.motor_test) {
             continue;
         }
@@ -52,12 +56,6 @@ void Copter::rate_controller_thread()
         const uint32_t dt_us = now_us - last_run_us;
         const float dt = dt_us * 1.0e-6;
         last_run_us = now_us;
-
-        if (is_zero(dt_avg)) {
-            dt_avg = dt;
-        } else {
-            dt_avg = 0.99f * dt_avg + 0.01f * dt;
-        }
 
         max_dt = MAX(dt, max_dt);
         min_dt = MIN(dt, min_dt);
@@ -74,22 +72,28 @@ void Copter::rate_controller_thread()
         if (now_us - last_rtdt_log_us >= 2500) {    // 400 Hz
             AP::logger().WriteStreaming("RTDT", "TimeUS,dt,dtAvg,dtMax,dtMin", "Qffff",
                                                 AP_HAL::micros64(),
-                                                dt, dt_avg, max_dt, min_dt);
-            max_dt = dt_avg;
-            min_dt = dt_avg;
+                                                dt, sensor_dt, max_dt, min_dt);
+            max_dt = sensor_dt;
+            min_dt = sensor_dt;
             last_rtdt_log_us = now_us;
         }
 #endif
 
-        /*
-          run the rate controller. We pass in the long term average dt
-          not the per loop dt, as most of the timing jitter is from
-          the timing of the FIFO reads on the SPI bus, which does not
-          reflect the actual time between IMU samples, which is steady
-        */
-        motors->set_dt(dt_avg);
-        attitude_control->set_dt(dt_avg);
-        attitude_control->rate_controller_run();
+        motors->set_dt(sensor_dt);
+        // check if we are falling behind
+        if (AP::ins().get_num_gyro_samples() > 2) {
+            running_slow++;
+        } else if (running_slow > 0) {
+            running_slow--;
+        }
+
+        // run the rate controller on all available samples
+        // it is important not to drop samples otherwise the filtering will be fubar
+        // there is no need to output to the motors more than once for every batch of samples
+        while (AP::ins().get_next_gyro_sample(gyro)) {
+            attitude_control->rate_controller_run_dt(sensor_dt, gyro);
+        }
+        chEvtGetAndClearEvents(AP_InertialSensor::EVT_GYRO_SAMPLE);
 
         /*
           immediately output the new motor values
@@ -101,24 +105,23 @@ void Copter::rate_controller_thread()
          */
         update_dynamic_notch_at_specified_rate();
 
-#if CONFIG_HAL_BOARD != HAL_BOARD_SITL
-        // ensure we give at least some CPU to other threads
-        // don't sleep on SITL where small sleeps are not possible
-        hal.scheduler->delay_microseconds(100);
-#endif
-
         now_ms = AP_HAL::millis();
 
         if (now_ms - last_notch_sample_ms >= 1000 || !was_using_rate_thread) {
             // update the PID notch sample rate at 1Hz if if we are
             // enabled at runtime
             last_notch_sample_ms = now_ms;
-            attitude_control->set_notch_sample_rate(1.0 / dt_avg);
+            attitude_control->set_notch_sample_rate(1.0 / sensor_dt);
         }
         
         if (now_ms - last_report_ms >= 200) {
             last_report_ms = now_ms;
-            gcs().send_named_float("LRATE", 1.0/dt_avg);
+            if (running_slow > 5) {
+                hal.console->printf("GYRO RUNNIG SLOW\n");
+            }
+            if (AP::scheduler().get_extra_loop_us() > 0) {
+                hal.console->printf("MAIN LOOP RUNNIG SLOW %luus\n", AP::scheduler().get_extra_loop_us());
+            }
         }
 
         was_using_rate_thread = true;
@@ -133,10 +136,10 @@ void Copter::run_rate_controller_main()
     // set attitude and position controller loop time
     const float last_loop_time_s = AP::scheduler().get_last_loop_time_s();
     pos_control->set_dt(last_loop_time_s);
+    attitude_control->set_dt(last_loop_time_s);
 
     if (!using_rate_thread) {
         motors->set_dt(last_loop_time_s);
-        attitude_control->set_dt(last_loop_time_s);
         // only run the rate controller if we are not using the rate thread
         attitude_control->rate_controller_run();
     }
