@@ -814,6 +814,11 @@ public:
     bool get_next_gyro_sample(Vector3f& gyro) { return _rate_loop_gyro_window.pop(gyro); }
     uint32_t get_num_gyro_samples() { return _rate_loop_gyro_window.available(); }
     bool discard_gyro_samples(uint32_t n) { return _rate_loop_gyro_window.advance(n); }
+    void ensure_gyro_buffer_size(uint32_t n) {
+        if (_rate_loop_gyro_window.get_size() < n) {
+            _rate_loop_gyro_window.set_size(n);
+        }
+    }
 };
 
 namespace AP {
