@@ -126,6 +126,10 @@ public:
         return false;
     }
 
+    virtual void wait_for_event(uint32_t event) = 0;
+    virtual void* get_event_context() const = 0;
+    virtual void signal_event(void* context, uint32_t event) = 0;
+
 private:
 
     AP_HAL::Proc _delay_cb;
