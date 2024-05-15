@@ -464,6 +464,9 @@ protected:
     // rate controller input smoothing time constant
     AP_Float            _input_tc;
 
+    // latest gyro value use by the rate_controller
+    Vector3f            _rate_gyro;
+
     // Intersampling period in seconds
     float               _dt;
 
