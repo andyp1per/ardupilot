@@ -1,8 +1,12 @@
 #include "Copter.h"
 
+#include <AP_HAL_ChibiOS/ConcurrentObjectBuffer.h>
+
 /*************************************************************
  *  Attitude Rate controllers and timing
  ****************************************************************/
+
+//ChibiOS::ConcurrentObjectBuffer<Vector3f> obj;
 
 /*
   thread for rate control
@@ -10,7 +14,9 @@
 void Copter::rate_controller_thread()
 {
     uint8_t rate_decimation = 1;
-    ins.set_rate_loop_thread(chThdGetSelfX());
+    //HAL_EventSemaphore sem;
+
+    //ins.set_rate_loop_sem(&sem);
     ins.set_rate_decimation(rate_decimation);
 
     uint32_t last_run_us = AP_HAL::micros();
@@ -49,7 +55,7 @@ void Copter::rate_controller_thread()
         const float sensor_dt = 1.0f * rate_decimation / ins.get_raw_gyro_rate_hz();
 
         // wait for at least one gyro sample to be available
-        chEvtWaitOne(AP_InertialSensor::EVT_GYRO_SAMPLE);
+        //sem.wait_blocking();
 
         if (ap.motor_test) {
             continue;
@@ -96,7 +102,6 @@ void Copter::rate_controller_thread()
         while (ins.get_next_gyro_sample(gyro)) {
             attitude_control->rate_controller_run_dt(sensor_dt, gyro + ahrs.get_gyro_drift());
         }
-        chEvtGetAndClearEvents(AP_InertialSensor::EVT_GYRO_SAMPLE);
 
         /*
           immediately output the new motor values

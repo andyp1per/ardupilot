@@ -23,6 +23,7 @@
 
 #include "CANIface.h"
 
+#include "ConcurrentObjectBuffer.h"
 #include "utility/BetterStream.h"
 
 /* HAL Class definition */

@@ -35,8 +35,8 @@ template <class RetType, class... Args>
 class Functor
 {
 public:
-    constexpr Functor(void *obj, RetType (*method)(void *obj, Args...))
-        : _obj(obj)
+    constexpr Functor(void *o, RetType (*method)(void *o, Args...))
+        : _obj(o)
         , _method(method)
     {
     }

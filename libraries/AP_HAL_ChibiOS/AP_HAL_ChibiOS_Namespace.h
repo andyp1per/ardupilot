@@ -18,6 +18,8 @@ namespace ChibiOS {
     class Scheduler;
     class Semaphore;
     class BinarySemaphore;
+    class EventSemaphore;
+    template<class T> class ConcurrentObjectBuffer;
     class SPIBus;
     class SPIDesc;
     class SPIDevice;

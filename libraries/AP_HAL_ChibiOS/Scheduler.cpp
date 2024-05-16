@@ -742,21 +742,6 @@ bool Scheduler::thread_create(AP_HAL::MemberProc proc, const char *name, uint32_
     return true;
 }
 
-void Scheduler::wait_for_event(uint32_t event) override
-{
-    chEvtWaitOne(EVENT_MASK(event));
-}
-
-void* Scheduler::get_event_context() const override
-{
-    return chThdGetSelfX();
-}
-
-void Scheduler::signal_event(void* context, uint32_t event) override
-{
-    chEvtSignal((thread_t*)context, EVENT_MASK(event));
-}
-
 /*
   inform the scheduler that we are calling an operation from the
   main thread that may take an extended amount of time. This can

@@ -137,4 +137,58 @@ void BinarySemaphore::signal_ISR(void)
 
 #endif // CH_CFG_USE_SEMAPHORES == TRUE
 
+#if CH_CFG_USE_EVENTS == TRUE
+EventSemaphore::EventSemaphore(bool initial_state, uint8_t event) :
+    AP_HAL::BinarySemaphore(initial_state)
+{
+    _context = chThdGetSelfX();
+    _mask = EVENT_MASK(event);
+
+    if (!initial_state) {
+        wait_blocking();
+    }
+}
+
+bool EventSemaphore::wait(uint32_t timeout_us)
+{
+    auto mask = (eventmask_t)_mask;
+    chEvtGetAndClearEvents(mask);
+    if (timeout_us == 0) {
+        return chEvtWaitOneTimeout(mask, TIME_IMMEDIATE) == mask;
+    }
+    // loop waiting for 60ms at a time. This ensures we can wait for
+    // any amount of time even on systems with a 16 bit timer
+    while (timeout_us > 0) {
+        const uint32_t us = MIN(timeout_us, 60000U);
+        if (chEvtWaitOneTimeout(mask, TIME_US2I(us)) == mask) {
+            return true;
+        }
+        timeout_us -= us;
+    }
+    return false;
+}
+
+bool EventSemaphore::wait_blocking(void)
+{
+    auto mask = (eventmask_t)_mask;
+    chEvtGetAndClearEvents(mask);
+    return chEvtWaitOne(mask) == mask;
+}
+
+void EventSemaphore::signal(void)
+{
+    auto mask = (eventmask_t)_mask;
+    chEvtSignal((thread_t*)_context, mask);
+}
+
+void EventSemaphore::signal_ISR(void)
+{
+    auto mask = (eventmask_t)_mask;
+    chSysLockFromISR();
+    chEvtSignalI((thread_t*)_context, mask);
+    chSysUnlockFromISR();
+}
+
+#endif // CH_CFG_USE_EVENTS == TRUE
+
 #endif // CH_CFG_USE_MUTEXES

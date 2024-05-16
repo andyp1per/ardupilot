@@ -55,3 +55,22 @@ public:
 protected:
     uint32_t _lock[5];
 };
+
+/*
+  BinarySemaphore implementation based on eventing
+ */
+class ChibiOS::EventSemaphore : public AP_HAL::BinarySemaphore {
+public:
+    EventSemaphore(bool initial_state=false, uint8_t event = 1);
+
+    CLASS_NO_COPY(EventSemaphore);
+
+    bool wait(uint32_t timeout_us) override;
+    bool wait_blocking(void) override;
+    void signal(void) override;
+    void signal_ISR(void) override;
+
+protected:
+    void* _context;
+    uint32_t _mask;
+};

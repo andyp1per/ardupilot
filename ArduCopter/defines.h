@@ -6,10 +6,6 @@
 #define ENABLED                 1
 #define DISABLED                0
 
-// this avoids a very common config error
-#define ENABLE ENABLED
-#define DISABLE DISABLED
-
 // Frame types
 #define UNDEFINED_FRAME 0
 #define MULTICOPTER_FRAME 1

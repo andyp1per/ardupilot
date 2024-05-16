@@ -141,10 +141,6 @@ public:
      */
     bool thread_create(AP_HAL::MemberProc, const char *name, uint32_t stack_size, priority_base base, int8_t priority) override;
 
-    void wait_for_event(uint32_t event) override;
-    void* get_event_context() const override;
-    void signal_event(void* context, uint32_t event) override;
-
     // pat the watchdog
     void watchdog_pat(void);
 
