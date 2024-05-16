@@ -647,11 +647,12 @@ private:
         DISABLE_YAW_IMBALANCE_WARNING = (1<<1),   // 2
         RELEASE_GRIPPER_ON_THRUST_LOSS = (1<<2),  // 4
         USE_RATE_LOOP_THREAD           = (1<<3),  // 8
+        USE_FIXED_RATE_LOOP_THREAD     = (1<<4),  // 16
     };
 
     // return true if a flight option is set
     bool flight_option_is_set(FlightOptions option) const {
-        return (g2.flight_options & uint32_t(FlightOptions::USE_RATE_LOOP_THREAD)) != 0;
+        return (g2.flight_options & uint32_t(option)) != 0;
     }
 
     static constexpr int8_t _failsafe_priorities[] = {
