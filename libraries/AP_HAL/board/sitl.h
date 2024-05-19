@@ -38,6 +38,7 @@
 #define HAL_BOARD_TERRAIN_DIRECTORY "terrain"
 #define HAL_PARAM_DEFAULTS_PATH nullptr
 #define HAL_INS_DEFAULT HAL_INS_NONE
+#define HAL_INS_RATE_LOOP 1
 #define HAL_BARO_DEFAULT HAL_BARO_NONE
 #define HAL_GPIO_A_LED_PIN        61
 #define HAL_GPIO_B_LED_PIN        48
@@ -55,6 +56,8 @@
 #include <AP_HAL_SITL/Semaphores.h>
 #define HAL_Semaphore HALSITL::Semaphore
 #define HAL_BinarySemaphore HALSITL::BinarySemaphore
+#include <AP_HAL_SITL/CondMutex.h>
+#define HAL_CondMutex HALSITL::CondMutex
 #endif
 
 #ifndef HAL_NUM_CAN_IFACES
