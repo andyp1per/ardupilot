@@ -22,14 +22,8 @@
 
 #define CHIBIOS_SCHEDULER_MAX_TIMER_PROCS 8
 
-#if HAL_INS_RATE_LOOP
-#define APM_MONITOR_PRIORITY    184
-#define APM_RCOUT_PRIORITY      183
-#define APM_SPI_PRIORITY        183
-#else
 #define APM_MONITOR_PRIORITY    183
 #define APM_RCOUT_PRIORITY      181
-#endif
 #define APM_MAIN_PRIORITY       180
 #define APM_TIMER_PRIORITY      181
 #define APM_LED_PRIORITY         60
