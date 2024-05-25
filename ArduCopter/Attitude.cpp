@@ -127,7 +127,11 @@ void Copter::rate_controller_thread()
                 || !motors->armed() || ap.land_complete)) {
             last_rate_check_ms = now_ms;
             const uint32_t att_rate = ins.get_raw_gyro_rate_hz()/rate_decimation;
-            if (running_slow > 5 || AP::scheduler().get_extra_loop_us() > 0 || AP::logger().in_log_download()) {
+            if (running_slow > 5 || AP::scheduler().get_extra_loop_us() > 0
+#if HAL_LOGGING_ENABLED
+                || AP::logger().in_log_download()
+#endif
+                ) {
                 const uint32_t new_attitude_rate = ins.get_raw_gyro_rate_hz()/(rate_decimation+1);
                 if (new_attitude_rate > AP::scheduler().get_filtered_loop_rate_hz() * 2) {
                     rate_decimation = rate_decimation + 1;
