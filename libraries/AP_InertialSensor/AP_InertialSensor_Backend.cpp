@@ -804,12 +804,8 @@ void AP_InertialSensor_Backend::update_gyro(uint8_t instance) /* front end */
             notch.update_params(instance, sensors_converging(), gyro_rate);
         }
     }
-<<<<<<< HEAD
-=======
-#endif
 
     set_primary_gyro(_imu._primary_gyro);
->>>>>>> c4f7eb6a26... AP_InertialSensor: keep a record of the priamry gyro and use it
 }
 
 /*
