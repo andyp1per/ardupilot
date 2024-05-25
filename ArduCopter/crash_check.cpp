@@ -172,7 +172,7 @@ void Copter::thrust_loss_check()
 
 #if AP_GRIPPER_ENABLED
         if (flight_option_is_set(FlightOptions::RELEASE_GRIPPER_ON_THRUST_LOSS)) {
-            gripper.release();
+            copter.g2.gripper.release();
         }
 #endif
     }
