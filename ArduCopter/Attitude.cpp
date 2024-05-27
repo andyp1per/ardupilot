@@ -120,6 +120,14 @@ void Copter::rate_controller_thread()
             last_notch_sample_ms = now_ms;
             attitude_control->set_notch_sample_rate(1.0 / sensor_dt);
         }
+
+        // Once armed, switch to the fast rate if configured to do so
+        if (rate_decimation > 1 && motors->armed() && flight_option_is_set(FlightOptions::USE_FIXED_RATE_LOOP_THREAD)) {
+            rate_decimation = 1;
+            ins.set_rate_decimation(rate_decimation);
+            attitude_control->set_notch_sample_rate(ins.get_raw_gyro_rate_hz());
+            gcs().send_text(MAV_SEVERITY_INFO, "Attitude rate active at %uHz", (unsigned)ins.get_raw_gyro_rate_hz());
+        }
         
         // check that the CPU is not pegged, if it is drop the attitude rate
         if (now_ms - last_rate_check_ms >= 200
@@ -143,7 +151,8 @@ void Copter::rate_controller_thread()
                     rate_loop_count = 0;
                 }
             } else if (rate_decimation > 1 && rate_loop_count > att_rate // ensure a second's worth of good readings
-                && (prev_loop_count > att_rate/10 // ensure there was 100ms worth of good readings at the higher rate
+                && (prev_loop_count > att_rate/10   // ensure there was 100ms worth of good readings at the higher rate
+                    || prev_loop_count == 0         // last rate was actually a lower rate so keep going quickly
                     || now_ms - last_rate_increase_ms >= 10000)) { // every 10s retry
                 const uint32_t new_attitude_rate = ins.get_raw_gyro_rate_hz()/(rate_decimation-1);
                 rate_decimation = rate_decimation - 1;
