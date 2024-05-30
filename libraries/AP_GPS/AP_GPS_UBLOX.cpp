@@ -269,8 +269,6 @@ const AP_GPS_UBLOX::config_list AP_GPS_UBLOX::config_L5_ovrd_dis[] {
     {ConfigKey::CFG_SIGNAL_L5_HEALTH_OVRD, 0},
 };
 
-AP_GPS_UBLOX::config_list AP_GPS_UBLOX::config_GNSS[UBLOX_MAX_GNSS_CONFIG_BLOCKS*3] {};
-
 void
 AP_GPS_UBLOX::_request_next_config(void)
 {
@@ -472,7 +470,12 @@ AP_GPS_UBLOX::_request_next_config(void)
             uint8_t cfg_count = populate_F9_gnss();
             // special handling of F9 config
             if (cfg_count > 0) {
+<<<<<<< HEAD
                 CFG_Debug("Sending F9 settings, GNSS=%u", gps._gnss_mode[state.instance]);
+=======
+                CFG_Debug("Sending F9 settings, GNSS=%u", params.gnss_mode);
+
+>>>>>>> 2af6358c07 (AP_GPS: dynamically allocate config_GNSS)
                 if (!_configure_list_valset(config_GNSS, cfg_count, UBX_VALSET_LAYER_RAM | UBX_VALSET_LAYER_BBR)) {
                     _next_message--;
                     break;
@@ -2341,6 +2344,14 @@ uint8_t AP_GPS_UBLOX::populate_F9_gnss(void)
         // IMES not supported
         // GPS and QZSS should be enabled/disabled together, but we will leave them alone
         // QZSS and SBAS can only be enabled if GPS is enabled
+
+        if (config_GNSS == nullptr) {
+            config_GNSS = (config_list*)calloc(UBLOX_MAX_GNSS_CONFIG_BLOCKS*3, sizeof(config_list));
+        }
+
+        if (config_GNSS == nullptr) {
+            return 0;
+        }
 
         uint8_t gnss_mode = gps._gnss_mode[state.instance];
         gnss_mode |= 1U<<GNSS_GPS;
