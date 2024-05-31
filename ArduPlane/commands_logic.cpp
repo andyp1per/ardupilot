@@ -426,7 +426,7 @@ void Plane::do_land(const AP_Mission::Mission_Command& cmd)
         auto_state.takeoff_pitch_cd = 1000;
     }
 
-    // zero rangefinder state, start to accumulate good samples now
+    // zero rangefinder state, start to accumulate good samples nowq
     memset(&rangefinder_state, 0, sizeof(rangefinder_state));
 
     landing.do_land(cmd, relative_altitude);
@@ -435,10 +435,6 @@ void Plane::do_land(const AP_Mission::Mission_Command& cmd)
         // if we were in an abort we need to explicitly move out of the abort state, as it's sticky
         set_flight_stage(AP_FixedWing::FlightStage::LAND);
     }
-
-#if AP_FENCE_ENABLED
-    plane.fence.auto_disable_fence_for_landing();
-#endif
 }
 
 #if HAL_QUADPLANE_ENABLED
