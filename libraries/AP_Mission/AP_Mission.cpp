@@ -15,6 +15,7 @@
 #include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_ServoRelayEvents/AP_ServoRelayEvents_config.h>
 #include <RC_Channel/RC_Channel_config.h>
+#include <AC_Fence/AC_Fence.h>
 
 const AP_Param::GroupInfo AP_Mission::var_info[] = {
 
@@ -438,6 +439,10 @@ bool AP_Mission::start_command(const Mission_Command& cmd)
     case MAV_CMD_VIDEO_START_CAPTURE:
     case MAV_CMD_VIDEO_STOP_CAPTURE:
         return start_command_camera(cmd);
+#endif
+#if AP_FENCE_ENABLED
+    case MAV_CMD_DO_FENCE_ENABLE:
+        return start_command_fence(cmd);
 #endif
     case MAV_CMD_DO_PARACHUTE:
         return start_command_parachute(cmd);
