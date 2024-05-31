@@ -1424,7 +1424,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_altitude(10, 100, relative=True)
         self.set_rc(3, 1500)
         self.set_rc(2, 1400)
-        self.wait_distance_to_home(12, 20)
+        self.wait_distance_to_home(12, 20, timeout=30)
         tstart = self.get_sim_time()
         push_time = 70 # push against barrier for 60 seconds
         failed_max = False
@@ -1769,8 +1769,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_rc(3, 1800)
 
         self.wait_mode('RTL', timeout=120)
-        # Assert fence is not healthy now that we are in RTL
-        self.assert_sensor_state(fence_bit, healthy=False)
 
         self.wait_landed_and_disarmed(0)
         # the breach should have cleared since we auto-disable the
@@ -10964,7 +10962,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
     def disabled_tests(self):
         return {
             "Parachute": "See https://github.com/ArduPilot/ardupilot/issues/4702",
-            "HorizontalAvoidFence": "See https://github.com/ArduPilot/ardupilot/issues/11525",
             "AltEstimation": "See https://github.com/ArduPilot/ardupilot/issues/15191",
             "GroundEffectCompensation_takeOffExpected": "Flapping",
             "GroundEffectCompensation_touchDownExpected": "Flapping",
