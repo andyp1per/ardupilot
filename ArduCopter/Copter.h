@@ -715,6 +715,7 @@ private:
     void throttle_loop();
     void update_batt_compass(void);
     void loop_rate_logging();
+    void fast_logging();
     void ten_hz_logging_loop();
     void twentyfive_hz_logging();
     void three_hz_loop();
@@ -737,6 +738,7 @@ private:
     void rotate_body_frame_to_NE(float &x, float &y);
     uint16_t get_pilot_speed_dn() const;
     void rate_controller_thread();
+    void rate_controller_slow_loop();
     void run_rate_controller_main();
 
 #if AC_CUSTOMCONTROL_MULTI_ENABLED == ENABLED
