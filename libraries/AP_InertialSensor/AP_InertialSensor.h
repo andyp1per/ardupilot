@@ -807,7 +807,7 @@ private:
       we hav finished filtering the primary IMU
      */
     ObjectBuffer<Vector3f> _rate_loop_gyro_window{AP_INERTIAL_SENSOR_RATE_LOOP_BUFFER_SIZE};
-    uint8_t rate_decimation = 1;
+    uint8_t rate_decimation; // 0 means off
     uint8_t rate_decimation_count;
     AP_HAL::CondMutex* _cmutex;
 
@@ -816,6 +816,7 @@ public:
     bool get_next_gyro_sample(Vector3f& gyro);
     uint32_t get_num_gyro_samples() { return _rate_loop_gyro_window.available(); }
     void set_rate_decimation(uint8_t rdec) { rate_decimation = rdec; }
+    void update_backends();
 
     bool gyro_samples_available() { return  _rate_loop_gyro_window.available() > 0; }
 #endif
