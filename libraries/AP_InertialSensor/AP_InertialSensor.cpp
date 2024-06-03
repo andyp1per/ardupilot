@@ -1823,9 +1823,8 @@ void AP_InertialSensor::update(void)
             _delta_velocity_valid[i] = false;
             _delta_angle_valid[i] = false;
         }
-        for (uint8_t i=0; i<_backend_count; i++) {
-            _backends[i]->update();
-        }
+
+        update_backends();
 
         if (!_startup_error_counts_set) {
             for (uint8_t i=0; i<INS_MAX_INSTANCES; i++) {
@@ -2731,6 +2730,10 @@ void AP_InertialSensor::force_save_calibration(void)
 #if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
 bool AP_InertialSensor::get_next_gyro_sample(Vector3f& gyro)
 {
+    if (!_cmutex) {
+        return false;
+    }
+
     _cmutex->lock_and_wait(FUNCTOR_BIND_MEMBER(&AP_InertialSensor::gyro_samples_available, bool));
     bool ret = _rate_loop_gyro_window.pop(gyro);
     _cmutex->unlock();
@@ -2738,6 +2741,13 @@ bool AP_InertialSensor::get_next_gyro_sample(Vector3f& gyro)
     return ret;
 }
 #endif
+
+void AP_InertialSensor::update_backends()
+{
+    for (uint8_t i=0; i<_backend_count; i++) {
+        _backends[i]->update();
+    }
+}
 
 namespace AP {
 
