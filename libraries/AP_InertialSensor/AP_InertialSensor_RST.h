@@ -31,6 +31,7 @@ public:
 
     /* update accel and gyro state */
     bool update() override;
+    void update_filters() override;
 
     void start(void) override;
 

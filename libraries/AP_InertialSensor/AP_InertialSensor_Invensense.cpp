@@ -487,6 +487,16 @@ bool AP_InertialSensor_Invensense::update() /* front end */
     return true;
 }
 
+#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+void AP_InertialSensor_Invensense::update_filters()
+{
+    WITH_SEMAPHORE(_sem);
+
+    update_accel_filters(_accel_instance);
+    update_gyro_filters(_gyro_instance);
+}
+#endif
+
 void AP_InertialSensor_Invensense::set_primary_gyro(uint8_t instance)
 {
     _dev->set_periodic_minimum(instance == _gyro_instance ? 0 : 100);

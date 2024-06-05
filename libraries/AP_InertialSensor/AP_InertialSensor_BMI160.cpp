@@ -218,6 +218,16 @@ bool AP_InertialSensor_BMI160::update()
     return true;
 }
 
+#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+void AP_InertialSensor_BMI160::update_filters()
+{
+    WITH_SEMAPHORE(_sem);
+
+    update_accel_filters(_accel_instance);
+    update_gyro_filters(_gyro_instance);
+}
+#endif
+
 void AP_InertialSensor_BMI160::_check_err_reg()
 {
 #ifdef BMI160_DEBUG
