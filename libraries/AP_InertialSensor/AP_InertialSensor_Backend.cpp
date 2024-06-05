@@ -807,6 +807,14 @@ void AP_InertialSensor_Backend::update_gyro(uint8_t instance) /* front end */
         _imu._new_gyro_data[instance] = false;
     }
 
+    update_gyro_filters(instance);
+}
+
+/*
+  propagate filter changes from front end to backend
+ */
+void AP_InertialSensor_Backend::update_gyro_filters(uint8_t instance) /* front end */
+{
     // possibly update filter frequency
     const float gyro_rate = _gyro_raw_sample_rate(instance);
 
@@ -841,13 +849,32 @@ void AP_InertialSensor_Backend::update_accel(uint8_t instance) /* front end */
         _publish_accel(instance, _imu._accel_filtered[instance]);
         _imu._new_accel_data[instance] = false;
     }
-    
+
+    update_accel_filters(instance);
+}
+
+
+/*
+  propagate filter changes from front end to backend
+ */
+void AP_InertialSensor_Backend::update_accel_filters(uint8_t instance) /* front end */
+{
     // possibly update filter frequency
     if (_last_accel_filter_hz != _accel_filter_cutoff()) {
         _imu._accel_filter[instance].set_cutoff_frequency(_accel_raw_sample_rate(instance), _accel_filter_cutoff());
         _last_accel_filter_hz = _accel_filter_cutoff();
     }
 }
+
+#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+void AP_InertialSensor_Backend::update_filters()
+{
+    WITH_SEMAPHORE(_sem);
+
+    update_accel_filters(accel_instance);
+    update_gyro_filters(gyro_instance);
+}
+#endif
 
 #if HAL_LOGGING_ENABLED
 bool AP_InertialSensor_Backend::should_log_imu_raw() const
