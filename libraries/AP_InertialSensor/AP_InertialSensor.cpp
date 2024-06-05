@@ -1808,7 +1808,9 @@ void AP_InertialSensor::update(void)
             _delta_angle_valid[i] = false;
         }
 
-        update_backends();
+        for (uint8_t i=0; i<_backend_count; i++) {
+            _backends[i]->update();
+        }
 
         if (!_startup_error_counts_set) {
             for (uint8_t i=0; i<INS_MAX_INSTANCES; i++) {
@@ -2724,14 +2726,14 @@ bool AP_InertialSensor::get_next_gyro_sample(Vector3f& gyro)
 
     return ret;
 }
-#endif
 
-void AP_InertialSensor::update_backends()
+void AP_InertialSensor::update_backend_filters()
 {
     for (uint8_t i=0; i<_backend_count; i++) {
-        _backends[i]->update();
+        _backends[i]->update_filters();
     }
 }
+#endif
 
 namespace AP {
 
