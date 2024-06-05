@@ -36,6 +36,7 @@ public:
      */
     void start() override;
     bool update() override;
+    void update_filters() override;
 
     enum reg_scha63t {
         RATE_XZ     = 0x01,

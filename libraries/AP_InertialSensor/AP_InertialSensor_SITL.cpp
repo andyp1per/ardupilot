@@ -376,6 +376,16 @@ bool AP_InertialSensor_SITL::update(void)
     return true;
 }
 
+#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+void AP_InertialSensor_SITL::update_filters()
+{
+    WITH_SEMAPHORE(_sem);
+
+    update_accel_filters(accel_instance);
+    update_gyro_filters(gyro_instance);
+}
+#endif
+
 uint8_t AP_InertialSensor_SITL::bus_id = 0;
 
 void AP_InertialSensor_SITL::start()

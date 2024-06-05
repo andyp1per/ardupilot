@@ -232,6 +232,16 @@ bool AP_InertialSensor_BMI270::update()
     return true;
 }
 
+#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+void AP_InertialSensor_BMI270::update_filters()
+{
+    WITH_SEMAPHORE(_sem);
+
+    update_accel_filters(_accel_instance);
+    update_gyro_filters(_gyro_instance);
+}
+#endif
+
 /*
   read from registers, special SPI handling needed
 */

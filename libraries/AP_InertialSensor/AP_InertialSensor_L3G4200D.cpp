@@ -282,6 +282,16 @@ bool AP_InertialSensor_L3G4200D::update(void)
     return true;
 }
 
+#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+void AP_InertialSensor_L3G4200D::update_filters()
+{
+    WITH_SEMAPHORE(_sem);
+
+    update_accel_filters(_accel_instance);
+    update_gyro_filters(_gyro_instance);
+}
+#endif
+
 // Accumulate values from accels and gyros
 void AP_InertialSensor_L3G4200D::_accumulate_gyro (void)
 {

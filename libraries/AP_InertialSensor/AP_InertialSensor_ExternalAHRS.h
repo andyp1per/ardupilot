@@ -16,6 +16,7 @@ public:
     bool update() override;
     void start() override;
     void accumulate() override;
+    void update_filters() override;
 
     void handle_external(const AP_ExternalAHRS::ins_data_message_t &pkt) override;
     bool get_output_banner(char* banner, uint8_t banner_len) override;

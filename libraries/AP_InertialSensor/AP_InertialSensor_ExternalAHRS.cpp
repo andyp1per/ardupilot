@@ -40,6 +40,18 @@ bool AP_InertialSensor_ExternalAHRS::update(void)
     return started;
 }
 
+#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+void AP_InertialSensor_ExternalAHRS::update_filters()
+{
+    WITH_SEMAPHORE(_sem);
+
+    if (started) {
+        update_accel_filters(accel_instance);
+        update_gyro_filters(gyro_instance);
+    }
+}
+#endif
+
 void AP_InertialSensor_ExternalAHRS::start()
 {
     const float rate = AP::externalAHRS().get_IMU_rate();

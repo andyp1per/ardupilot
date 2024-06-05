@@ -346,3 +346,13 @@ bool AP_InertialSensor_BMI055::update()
     update_gyro(gyro_instance);
     return true;
 }
+
+#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+void AP_InertialSensor_BMI055::update_filters()
+{
+    WITH_SEMAPHORE(_sem);
+
+    update_accel_filters(accel_instance);
+    update_gyro_filters(gyro_instance);
+}
+#endif

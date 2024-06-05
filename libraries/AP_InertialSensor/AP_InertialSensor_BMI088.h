@@ -35,6 +35,7 @@ public:
      */
     void start() override;
     bool update() override;
+    void update_filters() override;
 
 private:
     AP_InertialSensor_BMI088(AP_InertialSensor &imu,

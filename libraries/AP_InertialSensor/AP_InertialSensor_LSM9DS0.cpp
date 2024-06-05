@@ -783,6 +783,16 @@ bool AP_InertialSensor_LSM9DS0::update()
     return true;
 }
 
+#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+void AP_InertialSensor_LSM9DS0::update_filters()
+{
+    WITH_SEMAPHORE(_sem);
+
+    update_accel_filters(_accel_instance);
+    update_gyro_filters(_gyro_instance);
+}
+#endif
+
 #if LSM9DS0_DEBUG
 /* dump all config registers - used for debug */
 void AP_InertialSensor_LSM9DS0::_dump_registers(void)

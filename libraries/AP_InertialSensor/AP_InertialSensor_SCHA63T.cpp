@@ -413,6 +413,16 @@ bool AP_InertialSensor_SCHA63T::update()
     return true;
 }
 
+#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+void AP_InertialSensor_SCHA63T::update_filters()
+{
+    WITH_SEMAPHORE(_sem);
+
+    update_accel_filters(accel_instance);
+    update_gyro_filters(gyro_instance);
+}
+#endif
+
 bool AP_InertialSensor_SCHA63T::read_register(uint8_t uno_due, reg_scha63t reg_addr, uint8_t* val)
 {
     bool ret = false;

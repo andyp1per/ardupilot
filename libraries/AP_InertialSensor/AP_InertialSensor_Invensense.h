@@ -46,6 +46,8 @@ public:
 
     /* update accel and gyro state */
     bool update() override __RAMFUNC__; /* front end */
+    void update_filters() override __RAMFUNC__;
+
     void accumulate() override; /* front end */
 
     /*
