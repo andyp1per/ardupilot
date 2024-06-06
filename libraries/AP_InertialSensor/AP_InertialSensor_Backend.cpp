@@ -798,6 +798,8 @@ void AP_InertialSensor_Backend::update_gyro(uint8_t instance) /* front end */
     }
 
     update_gyro_filters(instance);
+
+    set_primary_gyro(_imu._primary_gyro);
 }
 
 /*
@@ -821,8 +823,6 @@ void AP_InertialSensor_Backend::update_gyro_filters(uint8_t instance) /* front e
             notch.update_params(instance, sensors_converging(), gyro_rate);
         }
     }
-
-    set_primary_gyro(_imu._primary_gyro);
 }
 
 /*
@@ -841,6 +841,8 @@ void AP_InertialSensor_Backend::update_accel(uint8_t instance) /* front end */
     }
 
     update_accel_filters(instance);
+
+    set_primary_accel(_imu._primary_accel);
 }
 
 
@@ -854,8 +856,6 @@ void AP_InertialSensor_Backend::update_accel_filters(uint8_t instance) /* front 
         _imu._accel_filter[instance].set_cutoff_frequency(_accel_raw_sample_rate(instance), _accel_filter_cutoff());
         _last_accel_filter_hz = _accel_filter_cutoff();
     }
-
-    set_primary_accel(_imu._primary_accel);
 }
 
 #if HAL_LOGGING_ENABLED
