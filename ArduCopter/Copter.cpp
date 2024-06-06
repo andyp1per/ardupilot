@@ -524,9 +524,11 @@ void Copter::update_batt_compass(void)
 // should be run at loop rate
 void Copter::loop_rate_logging()
 {
-    if (using_rate_thread) {
+#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+    if (using_rate_thread && copter.g2.att_log_rate_hz != 0) {
         return;
     }
+#endif
 
     fast_logging();
 }

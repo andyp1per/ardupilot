@@ -40,8 +40,14 @@ void Copter::rate_controller_thread()
     uint32_t last_timing_msg_us = 0;
 #endif
 
-    uint8_t filter_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz() + copter.g2.att_filter_rate_hz - 1) / copter.g2.att_filter_rate_hz);
-    uint8_t log_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz() + copter.g2.att_log_rate_hz - 1) / copter.g2.att_log_rate_hz);
+    uint8_t filter_rate_decimate = 2;
+    if (copter.g2.att_filter_rate_hz != 0) {
+        filter_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz() + copter.g2.att_filter_rate_hz - 1) / copter.g2.att_filter_rate_hz);
+    }
+    uint8_t log_rate_decimate = 0;
+    if (copter.g2.att_log_rate_hz != 0) {
+        log_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz() + copter.g2.att_log_rate_hz - 1) / copter.g2.att_log_rate_hz);
+    }
     uint8_t filter_loop_count = 0;
     uint8_t log_loop_count = 0;
 
@@ -143,7 +149,7 @@ void Copter::rate_controller_thread()
         }
 
         // fast logging output
-        if (log_loop_count++ >= log_rate_decimate) {
+        if (log_rate_decimate > 0 && log_loop_count++ >= log_rate_decimate) {
             log_loop_count = 0;
 #if HAL_LOGGING_ENABLED
             fast_logging();
