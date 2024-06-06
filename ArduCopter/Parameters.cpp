@@ -1252,16 +1252,16 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
 #if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
     // @Param: ATT_FILTER_RATE
     // @DisplayName: Rate thread notch update rate
-    // @Description: The rate of rate thread filter updates in Hz. The actual rate is constrained to be a whole divisor of the gyro rate and thus cannot be larger than the gyro rate.
+    // @Description: The rate of rate thread filter updates in Hz. The actual rate is constrained to be a whole divisor of the gyro rate and thus cannot be larger than the gyro rate. A value of 0 will utilize a rate of half the attitude update rate (usually the gyro rate).
     // @Range: 400 8000
     // @Increment: 1
     // @User: Advanced
     // @RebootRequired: True
-    AP_GROUPINFO("ATT_FILTER_RATE", 9, ParametersG2, att_filter_rate_hz, 1000),
+    AP_GROUPINFO("ATT_FILTER_RATE", 9, ParametersG2, att_filter_rate_hz, 0),
 
     // @Param: ATT_LOG_RATE
     // @DisplayName: Rate thread fast logging rate
-    // @Description: The rate of rate thread fast logging in Hz. The actual rate is constrained to be a whole divisor of the gyro rate and thus cannot be larger than the gyro rate.
+    // @Description: The rate of rate thread fast logging in Hz. The actual rate is constrained to be a whole divisor of the gyro rate and thus cannot be larger than the gyro rate. A value of 0 will utilize a rate equivalent to the main loop rate.
     // @Range: 400 8000
     // @Increment: 1
     // @User: Advanced
