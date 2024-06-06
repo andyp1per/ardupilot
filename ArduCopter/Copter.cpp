@@ -524,22 +524,21 @@ void Copter::update_batt_compass(void)
 // should be run at loop rate
 void Copter::loop_rate_logging()
 {
+    bool log_rates = true;
 #if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
     if (using_rate_thread && copter.g2.att_log_rate_hz != 0) {
-        return;
+        log_rates = false;
     }
 #endif
 
-    fast_logging();
-}
-
-void Copter::fast_logging()
-{
-    if (should_log(MASK_LOG_ATTITUDE_FAST) && !copter.flightmode->logs_attitude()) {
+   if (should_log(MASK_LOG_ATTITUDE_FAST) && !copter.flightmode->logs_attitude()) {
         Log_Write_Attitude();
-        Log_Write_PIDS(); // only logs if PIDS bitmask is set
+        if (log_rates) {
+            Log_Write_Rate();
+            Log_Write_PIDS(); // only logs if PIDS bitmask is set
+        }
     }
-    if (should_log(MASK_LOG_FTN_FAST)) {
+    if (should_log(MASK_LOG_FTN_FAST) && log_rates) {
         AP::ins().write_notch_log_messages();
     }
     if (should_log(MASK_LOG_IMU_FAST)) {

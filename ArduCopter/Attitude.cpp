@@ -152,7 +152,7 @@ void Copter::rate_controller_thread()
         if (log_rate_decimate > 0 && log_loop_count++ >= log_rate_decimate) {
             log_loop_count = 0;
 #if HAL_LOGGING_ENABLED
-            fast_logging();
+            rate_controller_log_update();
 #endif
         }
 
@@ -241,6 +241,24 @@ void Copter::rate_controller_filter_update()
 
     // this copies backend data to the frontend and updates the notches
     ins.update_backend_filters();
+}
+
+/*
+  log only those items that are updated at the rate loop rate
+ */
+void Copter::rate_controller_log_update()
+{
+#if HAL_LOGGING_ENABLED
+    if (should_log(MASK_LOG_ATTITUDE_FAST) && !copter.flightmode->logs_attitude()) {
+        Log_Write_Rate();
+        Log_Write_PIDS(); // only logs if PIDS bitmask is set
+    }
+#if AP_INERTIALSENSOR_HARMONICNOTCH_ENABLED
+    if (should_log(MASK_LOG_FTN_FAST)) {
+        AP::ins().write_notch_log_messages();
+    }
+#endif
+#endif
 }
 
 #endif
