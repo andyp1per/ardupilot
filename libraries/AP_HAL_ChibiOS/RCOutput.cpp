@@ -1391,8 +1391,7 @@ void RCOutput::trigger_groups(void)
 #if !defined(HAL_NO_RCOUT_THREAD) || HAL_DSHOT_ENABLED
     // trigger a PWM send
     if (!in_soft_serial() &&
-        (hal.scheduler->in_main_thread() ||
-         chThdGetPriorityX() > APM_MAIN_PRIORITY_BOOST) && rcout_thread_ctx) {
+        (hal.scheduler->in_main_thread() || force_trigger) && rcout_thread_ctx) {
         chEvtSignal(rcout_thread_ctx, EVT_PWM_SEND);
     }
 #endif
