@@ -79,6 +79,10 @@ public:
         // 0x30 -> 0x3f - raw 12 bit packets
     };
 
+    enum MSPType {
+        GHST_MSP_WAYPOINT = 0x01,
+    };
+
     enum DeviceAddress {
         GHST_ADDRESS_FLIGHT_CONTROLLER = 0x82,
         GHST_ADDRESS_GOGGLES = 0x83,
