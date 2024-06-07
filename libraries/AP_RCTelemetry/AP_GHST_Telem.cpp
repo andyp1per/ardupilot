@@ -216,6 +216,9 @@ bool AP_GHST_Telem::_process_frame(AP_RCProtocol_GHST::FrameType frame_type, voi
         _enable_telemetry = AP::ghost()->is_telemetry_supported();
         break;
     }
+    case AP_RCProtocol_GHST::GHST_UL_MSP_REQ:
+        process_msp_frame(data);
+        break;
     default:
         break;
     }
@@ -230,6 +233,24 @@ void AP_GHST_Telem::update()
 void AP_GHST_Telem::process_pending_requests()
 {
     _pending_request.frame_type = 0;
+}
+
+void AP_GHST_Telem::process_msp_frame(void* data)
+{
+    uint8_t* frame = (uint8_t*)data;
+
+    switch (frame[0]) {
+    case AP_RCProtocol_GHST::MSPType::GHST_MSP_WAYPOINT: {
+        WaypointFrame* waypoint = (WaypointFrame*)&frame[1];
+
+        Location loc;
+        loc.lat = le32toh(waypoint->latitude);
+        loc.lng = le32toh(waypoint->longitude);
+        break;
+    }
+    default:
+        break;
+    }
 }
 
 // prepare battery data
