@@ -79,6 +79,15 @@ public:
         uint8_t flags; // MISC_FLAGS_MAGHEAD 0x01, MISC_FLAGS_BAROALT 0x02, MISC_FLAGS_VARIO 0x04
     };
 
+    struct PACKED WaypointFrame {
+        uint32_t latitude; // ( degree * 1e7 )
+        uint32_t longitude; // (degree * 1e7 )
+    };
+
+    struct PACKED MSPResponse {
+        uint8_t payload[6];
+    };
+
     union PACKED TelemetryPayload {
         GPSFrame gps;
         GPSSecondaryFrame gps2;
@@ -130,6 +139,8 @@ private:
     // get next telemetry data for external consumers
     bool _get_telem_data(AP_RCProtocol_GHST::Frame* data, bool is_tx_active);
     bool _process_frame(AP_RCProtocol_GHST::FrameType frame_type, void* data);
+    // process a waypoint nav frame
+    void process_msp_frame(void* data);
 
     TelemetryPayload _telem;
     uint8_t _telem_size;
