@@ -1097,7 +1097,6 @@ int32_t Mode::wp_bearing() const
 bool Mode::set_destination(const Location& dest_loc, bool use_yaw, float yaw_cd, bool use_yaw_rate, float yaw_rate_cds, bool yaw_relative)
 {
     bool terr_alt;
-    Vector3f dest_neu;
 
     // convert destination location to vector
     if (!AC_WPNav::get_vector_NEU(dest_loc, default_destination, terr_alt)) {
