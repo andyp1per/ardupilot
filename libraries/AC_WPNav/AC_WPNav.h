@@ -46,7 +46,7 @@ public:
 
     // convert location to vector from ekf origin.  terrain_alt is set to true if resulting vector's z-axis should be treated as alt-above-terrain
     //      returns false if conversion failed (likely because terrain data was not available)
-    bool get_vector_NEU(const Location &loc, Vector3f &vec, bool &terrain_alt);
+    static bool get_vector_NEU(const Location &loc, Vector3f &vec, bool &terrain_alt);
 
     ///
     /// waypoint controller
