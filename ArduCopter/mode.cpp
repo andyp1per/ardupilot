@@ -1083,6 +1083,30 @@ uint16_t Mode::get_pilot_speed_dn()
     return copter.get_pilot_speed_dn();
 }
 
+uint32_t Mode::wp_distance() const
+{
+    return get_horizontal_distance_cm(inertial_nav.get_position_xy_cm(), default_destination.xy());
+}
+
+/// get_wp_bearing_to_destination - get bearing to next waypoint in centi-degrees
+int32_t Mode::wp_bearing() const
+{
+    return get_bearing_cd(inertial_nav.get_position_xy_cm(), default_destination.xy());
+}
+
+bool Mode::set_destination(const Location& dest_loc, bool use_yaw, float yaw_cd, bool use_yaw_rate, float yaw_rate_cds, bool yaw_relative)
+{
+    bool terr_alt;
+    Vector3f dest_neu;
+
+    // convert destination location to vector
+    if (!AC_WPNav::get_vector_NEU(dest_loc, default_destination, terr_alt)) {
+        return false;
+    }
+
+    return true;
+}
+
 // Return stopping point as a location with above origin alt frame
 Location Mode::get_stopping_point() const
 {

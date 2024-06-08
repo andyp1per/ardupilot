@@ -149,9 +149,10 @@ public:
 
     // functions for reporting to GCS
     virtual bool get_wp(Location &loc) const { return false; };
-    virtual int32_t wp_bearing() const { return 0; }
-    virtual uint32_t wp_distance() const { return 0; }
-    virtual float crosstrack_error() const { return 0.0f;}
+    virtual int32_t wp_bearing() const;
+    virtual uint32_t wp_distance() const;
+    virtual float crosstrack_error() const { return pos_control->crosstrack_error(); }
+    virtual bool set_destination(const Location& dest_loc, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false);
 
     // functions to support MAV_CMD_DO_CHANGE_SPEED
     virtual bool set_speed_xy(float speed_xy_cms) {return false;}
@@ -258,6 +259,7 @@ protected:
     RC_Channel *&channel_pitch;
     RC_Channel *&channel_throttle;
     RC_Channel *&channel_yaw;
+    Vector3f default_destination;
     float &G_Dt;
 
     // note that we support two entirely different automatic takeoffs:
@@ -1057,7 +1059,7 @@ public:
     void set_angle(const Quaternion &attitude_quat, const Vector3f &ang_vel, float climb_rate_cms_or_thrust, bool use_thrust);
 
     bool set_destination(const Vector3f& destination, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false, bool terrain_alt = false);
-    bool set_destination(const Location& dest_loc, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false);
+    bool set_destination(const Location& dest_loc, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false) override;
     bool get_wp(Location &loc) const override;
     void set_accel(const Vector3f& acceleration, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false, bool log_request = true);
     void set_velocity(const Vector3f& velocity, bool use_yaw = false, float yaw_cd = 0.0, bool use_yaw_rate = false, float yaw_rate_cds = 0.0, bool yaw_relative = false, bool log_request = true);
