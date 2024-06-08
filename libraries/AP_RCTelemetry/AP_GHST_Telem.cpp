@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
+#include <AP_Vehicle/AP_Vehicle.h>
 
 //#define GHST_DEBUG
 #ifdef GHST_DEBUG
@@ -246,6 +247,8 @@ void AP_GHST_Telem::process_msp_frame(void* data)
         Location loc;
         loc.lat = le32toh(waypoint->latitude);
         loc.lng = le32toh(waypoint->longitude);
+
+        AP::vehicle()->set_target_location(loc);
         break;
     }
     default:
