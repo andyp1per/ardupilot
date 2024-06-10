@@ -31,6 +31,7 @@
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 #include <AP_RCTelemetry/AP_GHST_Telem.h>
 #include <AP_SerialManager/AP_SerialManager.h>
+#include <AP_Vehicle/AP_Vehicle.h>
 
 /*
  * GHST protocol
