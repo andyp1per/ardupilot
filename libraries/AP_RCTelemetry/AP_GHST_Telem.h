@@ -108,7 +108,6 @@ private:
 
     enum SensorType {
         ATTITUDE,
-        VTX_PARAMETERS,
         BATTERY,
         GPS,
         GPS2,
