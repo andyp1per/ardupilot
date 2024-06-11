@@ -242,8 +242,8 @@ void AP_GHST_Telem::process_msp_frame(void* data)
 
         Location loc;
 
-        loc.lat = le32toh(waypoint->latitude);
-        loc.lng = le32toh(waypoint->longitude);
+        loc.lat = be32toh(waypoint->latitude);
+        loc.lng = be32toh(waypoint->longitude);
 
         AP::vehicle()->set_target_location(loc);
         break;
