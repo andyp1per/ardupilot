@@ -75,30 +75,29 @@ void AP_GHST_Telem::setup_wfq_scheduler(void)
     // priority[i] = 1/_scheduler.packet_weight[i]
     // rate[i] = LinkRate * ( priority[i] / (sum(priority[1-n])) )
 
-    // CRSF telemetry rate is 150Hz (4ms) max, so these rates must fit
-    add_scheduler_entry(50, 120);   // Attitude and compass 8Hz
-    add_scheduler_entry(200, 1000); // VTX parameters    1Hz
-    add_scheduler_entry(1300, 500); // battery           2Hz
-    add_scheduler_entry(550, 280);  // GPS               3Hz
-    add_scheduler_entry(550, 280);  // GPS2              3Hz
+    // GHST telemetry rate is 55Hz in normal mode
+    add_scheduler_entry(50, 100);   // Attitude and compass 10Hz
+    add_scheduler_entry(1300, 200); // battery           5Hz
+    add_scheduler_entry(550, 120);  // GPS               8Hz
+    add_scheduler_entry(550, 120);  // GPS2              8Hz
 }
 
 void AP_GHST_Telem::update_custom_telemetry_rates(AP_RCProtocol_GHST::RFMode rf_mode)
 {
-    if (is_high_speed_telemetry(rf_mode)) {
+    if (is_high_speed_telemetry(rf_mode)) { // 55Hz+
         // standard telemetry for high data rates
-        set_scheduler_entry(BATTERY, 1000, 1000);       // 1Hz
-        set_scheduler_entry(ATTITUDE, 1000, 1000);      // 1Hz
+        set_scheduler_entry(BATTERY, 1000, 200);       // 5Hz
+        set_scheduler_entry(ATTITUDE, 1000, 100);      // 10Hz
         // custom telemetry for high data rates
-        set_scheduler_entry(GPS, 550, 500);            // 2.0Hz
-        set_scheduler_entry(GPS2, 550, 500);            // 2.0Hz
-    } else {
+        set_scheduler_entry(GPS, 550, 100);            // 10Hz
+        set_scheduler_entry(GPS2, 550, 100);            // 10Hz
+    } else {    // 19Hz
         // standard telemetry for low data rates
-        set_scheduler_entry(BATTERY, 1000, 2000);       // 0.5Hz
-        set_scheduler_entry(ATTITUDE, 1000, 3000);      // 0.33Hz
+        set_scheduler_entry(BATTERY, 1000, 1000);       // 1Hz
+        set_scheduler_entry(ATTITUDE, 1000, 333);      // 3Hz
         // GHST custom telemetry for low data rates
-        set_scheduler_entry(GPS, 550, 1000);              // 1.0Hz
-        set_scheduler_entry(GPS2, 550, 1000);              // 1.0Hz
+        set_scheduler_entry(GPS, 550, 333);              // 3Hz
+        set_scheduler_entry(GPS2, 550, 333);              // 3Hz
     }
 }
 
@@ -170,9 +169,10 @@ AP_RCProtocol_GHST::RFMode AP_GHST_Telem::get_rf_mode() const
     return static_cast<AP_RCProtocol_GHST::RFMode>(ghost->get_link_status().rf_mode);
 }
 
+// telemetry 55hz and above
 bool AP_GHST_Telem::is_high_speed_telemetry(const AP_RCProtocol_GHST::RFMode rf_mode) const
 {
-    return rf_mode == AP_RCProtocol_GHST::RFMode::GHST_RF_MODE_RACE || rf_mode == AP_RCProtocol_GHST::RFMode::GHST_RF_MODE_RACE250;
+    return rf_mode == AP_RCProtocol_GHST::RFMode::GHST_RF_MODE_RACE || rf_mode == AP_RCProtocol_GHST::RFMode::GHST_RF_MODE_RACE250 || rf_mode == AP_RCProtocol_GHST::RFMode::GHST_RF_MODE_NORMAL;
 }
 
 uint16_t AP_GHST_Telem::get_telemetry_rate() const
