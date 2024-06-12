@@ -997,7 +997,7 @@ void AP_CRSF_Telem::calc_vario()
 // prepare gps data
 void AP_CRSF_Telem::calc_gps()
 {
-    const Location &loc = AP::gps().location(0); // use the first gps instance (same as in send_mavlink_gps_raw)
+    const Location &loc = AP::gps().location();
 
     _telem.bcast.gps.latitude = htobe32(loc.lat);
     _telem.bcast.gps.longitude = htobe32(loc.lng);
