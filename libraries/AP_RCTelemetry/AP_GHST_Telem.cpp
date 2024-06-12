@@ -285,7 +285,7 @@ void AP_GHST_Telem::calc_battery()
 void AP_GHST_Telem::calc_gps()
 {
     debug("GPS");
-    const Location &loc = AP::gps().location(0); // use the first gps instance (same as in send_mavlink_gps_raw)
+    const Location &loc = AP::gps().location();
 
     _telem.gps.latitude = htole32(loc.lat);
     _telem.gps.longitude = htole32(loc.lng);
