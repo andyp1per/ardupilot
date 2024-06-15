@@ -409,6 +409,9 @@ void AP_InertialSensor_Invensensev3::update_filters()
 
 void AP_InertialSensor_Invensensev3::set_primary_gyro(uint8_t instance)
 {
+    if (!_imu.use_rate_loop_gyro_samples()) {
+        return;
+    }
     dev->set_periodic_minimum(instance == gyro_instance ? 0 : 100);
 }
 
