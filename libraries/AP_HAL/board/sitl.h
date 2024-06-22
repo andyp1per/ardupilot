@@ -84,3 +84,7 @@
 #ifndef AP_FILTER_ENABLED
 #define AP_FILTER_ENABLED 1
 #endif
+
+#ifndef HAL_INS_RATE_LOOP
+#define HAL_INS_RATE_LOOP 1
+#endif
