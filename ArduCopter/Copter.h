@@ -642,7 +642,7 @@ private:
     };
 
 
-    enum class FlightOptions : uint8_t {
+    enum class FlightOptions {
         DISABLE_THRUST_LOSS_CHECK     = (1<<0),   // 1
         DISABLE_YAW_IMBALANCE_WARNING = (1<<1),   // 2
         RELEASE_GRIPPER_ON_THRUST_LOSS = (1<<2),  // 4
@@ -658,10 +658,6 @@ private:
 
     FastRateType get_fast_rate_type() const { return FastRateType(g2.att_enable.get()); }
 #endif
-    // returns true if option is enabled for this vehicle
-    bool option_is_enabled(FlightOption option) const {
-        return (g2.flight_options & uint32_t(option)) != 0;
-    }
 
     static constexpr int8_t _failsafe_priorities[] = {
                                                       (int8_t)FailsafeAction::TERMINATE,
