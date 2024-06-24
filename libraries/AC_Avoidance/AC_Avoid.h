@@ -68,10 +68,9 @@ public:
         float backup_speed = 0.0f;
         adjust_velocity_z(kP, accel_cmss, climb_rate_cms, backup_speed, dt);
         if (!is_zero(backup_speed)) {
-            climb_rate_cms = MIN(climb_rate_cms, backup_speed);
+            climb_rate_cms = backup_speed;
         }
     }
-    
 
     // adjust roll-pitch to push vehicle away from objects
     // roll and pitch value are in centi-degrees
