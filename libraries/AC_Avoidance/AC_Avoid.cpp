@@ -366,6 +366,19 @@ void AC_Avoid::adjust_speed(float kP, float accel, float heading, float &speed, 
 }
 
 // adjust vertical climb rate so vehicle does not break the vertical fence
+void AC_Avoid::adjust_velocity_z(float kP, float accel_cmss, float& climb_rate_cms, float dt) {
+    float backup_speed = 0.0f;
+    adjust_velocity_z(kP, accel_cmss, climb_rate_cms, backup_speed, dt);
+    if (!is_zero(backup_speed)) {
+        if (is_negative(backup_speed)) {
+            climb_rate_cms = MIN(climb_rate_cms, backup_speed);
+        } else {
+            climb_rate_cms = MAX(climb_rate_cms, backup_speed);
+        }
+    }
+}
+
+// adjust vertical climb rate so vehicle does not break the vertical fence
 void AC_Avoid::adjust_velocity_z(float kP, float accel_cmss, float& climb_rate_cms, float& backup_speed, float dt)
 {
 #ifdef AP_AVOID_ENABLE_Z
