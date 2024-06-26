@@ -481,6 +481,9 @@ void AP_AHRS::update(bool skip_ins_update)
     // update published state
     update_state();
 
+    // tell the IMU to grab some data
+    AP::ins().update_primary(state.primary_gyro, state.primary_accel);
+
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     /*
       add timing jitter to simulate slow EKF response
