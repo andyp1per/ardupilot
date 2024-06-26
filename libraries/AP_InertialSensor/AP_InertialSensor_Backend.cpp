@@ -464,7 +464,7 @@ void AP_InertialSensor_Backend::log_gyro_raw(uint8_t instance, const uint64_t sa
     }
 
 #if AP_AHRS_ENABLED
-    const bool log_because_primary_gyro = _imu.raw_logging_option_set(AP_InertialSensor::RAW_LOGGING_OPTION::PRIMARY_GYRO_ONLY) && (instance == AP::ahrs().get_primary_gyro_index());
+    const bool log_because_primary_gyro = _imu.raw_logging_option_set(AP_InertialSensor::RAW_LOGGING_OPTION::PRIMARY_GYRO_ONLY) && (instance == _imu.get_primary_gyro());
 #else
     const bool log_because_primary_gyro = false;
 #endif
@@ -798,8 +798,6 @@ void AP_InertialSensor_Backend::update_gyro(uint8_t instance) /* front end */
     }
 
     update_gyro_filters(instance);
-
-    set_primary_gyro(_imu._primary_gyro);
 }
 
 /*
@@ -841,8 +839,6 @@ void AP_InertialSensor_Backend::update_accel(uint8_t instance) /* front end */
     }
 
     update_accel_filters(instance);
-
-    set_primary_accel(_imu._primary_accel);
 }
 
 

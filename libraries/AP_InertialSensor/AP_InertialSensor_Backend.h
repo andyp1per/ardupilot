@@ -93,6 +93,9 @@ public:
     virtual void handle_external(const AP_ExternalAHRS::ins_data_message_t &pkt) {}
 #endif
 
+    // catch updates to the primary gyro and accel
+    virtual void set_primary(uint8_t _gyro_instance, uint8_t _accel_instance) {}
+
     /*
       device driver IDs. These are used to fill in the devtype field
       of the device ID, which shows up as INS*ID* parameters to
@@ -282,10 +285,6 @@ protected:
     // common accel update function for all backends
     void update_accel(uint8_t instance) __RAMFUNC__; /* front end */
     void update_accel_filters(uint8_t instance) __RAMFUNC__; /* front end */
-
-    // catch updates to the primary gyro and accel
-    virtual void set_primary_gyro(uint8_t instance) {}
-    virtual void set_primary_accel(uint8_t instance) {}
 
     // support for updating filter at runtime
     uint16_t _last_accel_filter_hz;

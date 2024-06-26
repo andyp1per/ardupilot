@@ -1862,10 +1862,7 @@ void AP_InertialSensor::update(void)
         for (uint8_t i=0; i<INS_MAX_INSTANCES; i++) {
             if (_gyro_healthy[i] && _use(i)) {
                 _first_usable_gyro = i;
-#if AP_AHRS_ENABLED
-                // ask AHRS for the true primary, might just be us though
-                _primary_gyro = AP::ahrs().get_primary_gyro_index();
-#else
+#if !AP_AHRS_ENABLED
                 _primary_gyro = _first_usable_gyro;
 #endif
                 break;
@@ -1874,10 +1871,7 @@ void AP_InertialSensor::update(void)
         for (uint8_t i=0; i<INS_MAX_INSTANCES; i++) {
             if (_accel_healthy[i] && _use(i)) {
                 _first_usable_accel = i;
-#if AP_AHRS_ENABLED
-                // ask AHRS for the true primary, might just be us though
-                _primary_accel = AP::ahrs().get_primary_accel_index();
-#else
+#if !AP_AHRS_ENABLED
                 _primary_accel = _first_usable_accel;
 #endif
                 break;
@@ -1901,6 +1895,21 @@ void AP_InertialSensor::update(void)
         send_uart_data();
     }
 #endif
+}
+
+/*
+  update gyro and accel values from backends
+ */
+void AP_InertialSensor::update_primary(uint8_t primary_gyro, uint8_t primary_accel)
+{
+    if (primary_gyro != _primary_gyro || primary_gyro != primary_accel) {
+        for (uint8_t i=0; i<_backend_count; i++) {
+            _backends[i]->set_primary(primary_gyro, primary_accel);
+        }
+    }
+
+    _primary_gyro = primary_gyro;
+    _primary_accel = primary_accel;
 }
 
 /*

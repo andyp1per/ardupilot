@@ -74,7 +74,7 @@ private:
     bool accumulate_samples(const struct FIFOData *data, uint8_t n_samples);
     bool accumulate_highres_samples(const struct FIFODataHighRes *data, uint8_t n_samples);
 
-    void set_primary_gyro(uint8_t instance) override;
+    void set_primary(uint8_t _gyro_instance, uint8_t _accel_instance) override;
     // reset FIFO configure1 register
     uint8_t fifo_config1;
 

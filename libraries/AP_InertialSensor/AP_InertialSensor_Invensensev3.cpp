@@ -397,13 +397,13 @@ bool AP_InertialSensor_Invensensev3::update()
     return true;
 }
 
-void AP_InertialSensor_Invensensev3::set_primary_gyro(uint8_t instance)
+void AP_InertialSensor_Invensensev3::set_primary(uint8_t _gyro_instance, uint8_t _accel_instance)
 {
 #if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
     if (!_imu.use_rate_loop_gyro_samples()) {
         return;
     }
-    dev->set_periodic_minimum(instance == gyro_instance ? 0 : 100);
+    dev->set_periodic_minimum(_gyro_instance == gyro_instance ? 0 : 100);
 #endif
 }
 

@@ -199,6 +199,9 @@ public:
     // update gyro and accel values from accumulated samples
     void update(void) __RAMFUNC__;
 
+    // update notion of primary gyro and accel for flight control
+    void update_primary(uint8_t primary_gyro, uint8_t primary_accel) __RAMFUNC__;
+
     // wait for a sample to be available
     void wait_for_sample(void) __RAMFUNC__;
 
@@ -223,6 +226,9 @@ public:
 
     uint8_t get_first_usable_accel(void) const { return _first_usable_accel; }
     uint8_t get_first_usable_gyro(void) const { return _first_usable_gyro; }
+
+    // AHRS determined primary gyro
+    uint8_t get_primary_gyro(void) const { return _primary_gyro; }
 
     // get the gyro filter rate in Hz
     uint16_t get_gyro_filter_hz(void) const { return _gyro_filter_cutoff; }
@@ -663,8 +669,8 @@ private:
     uint8_t _first_usable_accel;
 
     // primary accel and gyro
-    uint8_t _primary_gyro;
-    uint8_t _primary_accel;
+    uint8_t _primary_gyro = UINT8_MAX;
+    uint8_t _primary_accel = UINT8_MAX;
 
     // mask of accels and gyros which we will be actively using
     // and this should wait for in wait_for_sample()
