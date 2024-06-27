@@ -178,6 +178,16 @@ bool AP_BattMonitor_INA2XX::configure(DevType dtype)
     }
 
     case DevType::INA234: {
+	// configure for MAX_AMPS
+	voltage_LSB = 25.6e-3; // 25.6 mV/LSB
+	current_LSB = max_amps / (1<<11);
+	const uint16_t shunt_cal = uint16_t(0.08192 * current_LSB * rShunt) & 0x7FFF;
+	if (write_word(REG_234_CONFIG, REG_234_CONFIG_RESET) && // reset
+	    write_word(REG_234_CONFIG, 0) &&
+	    write_word(REG_234_CAL, shunt_cal)) {
+	    dev_type = dtype;
+	    return true;
+	}
 	break;
    }
 
@@ -376,6 +386,18 @@ void AP_BattMonitor_INA2XX::timer(void)
     }
    
     case DevType::INA234: {
+	int16_t bus_voltage16, current16;
+	if (!read_word16(REG_234_VBUS, bus_voltage16) ||
+	    !read_word16(REG_234_CURRENT, current16)) {
+	    failed_reads++;
+	    if (failed_reads > 10) {
+	       // device has disconnected, we need to reconfigure it
+	       dev_type = DevType::UNKNOWN;
+	    }
+	    return;
+	}
+	voltage = (bus_voltage16>>4) * voltage_LSB;
+	current = (current16>>4) * current_LSB;
 	break;
     }
 
