@@ -21,7 +21,7 @@
 #include <AP_HAL/AP_HAL.h>
 #include "AP_Scripting.h"
 #include <AP_Logger/AP_Logger.h>
-
+#include <AP_Filesystem/AP_Filesystem_config.h>
 #include <AP_Scripting/lua_generated_bindings.h>
 
 #define DISABLE_INTERRUPTS_FOR_SCRIPT_RUN 0
@@ -520,10 +520,12 @@ void lua_scripts::run(void) {
     // Skip those directores disabled with SCR_DIR_DISABLE param
     uint16_t dir_disable = AP_Scripting::get_singleton()->get_disabled_dir();
     bool loaded = false;
+#if AP_FILESYSTEM_FILE_WRITING_ENABLED
     if ((dir_disable & uint16_t(AP_Scripting::SCR_DIR::SCRIPTS)) == 0) {
         load_all_scripts_in_dir(L, SCRIPTING_DIRECTORY);
         loaded = true;
     }
+#endif
     if ((dir_disable & uint16_t(AP_Scripting::SCR_DIR::ROMFS)) == 0) {
         load_all_scripts_in_dir(L, "@ROMFS/scripts");
         loaded = true;
