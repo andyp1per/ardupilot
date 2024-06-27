@@ -13,7 +13,9 @@
 */
 void Copter::rate_controller_thread()
 {
-    uint8_t rate_decimation = 1;
+    uint8_t target_rate_decimation = constrain_int16(g2.att_decimation.get(), 1,
+                                                     uint8_t((ins.get_raw_gyro_rate_hz() + 400 - 1) / 400));
+    uint8_t rate_decimation = target_rate_decimation;
     uint32_t rate_loop_count = 0;
     uint32_t prev_loop_count = 0;
 
@@ -175,11 +177,15 @@ void Copter::rate_controller_thread()
             // enabled at runtime
             last_notch_sample_ms = now_ms;
             attitude_control->set_notch_sample_rate(1.0 / sensor_dt);
+
+
+            target_rate_decimation = constrain_int16(g2.att_decimation.get(), 1,
+                                                     uint8_t((ins.get_raw_gyro_rate_hz() + 400 - 1) / 400));
         }
 
         // Once armed, switch to the fast rate if configured to do so
-        if (rate_decimation > 1 && motors->armed() && get_fast_rate_type() != FastRateType::FAST_RATE_FIXED) {
-            rate_decimation = 1;
+        if (rate_decimation > target_rate_decimation && motors->armed() && get_fast_rate_type() == FastRateType::FAST_RATE_FIXED) {
+            rate_decimation = target_rate_decimation;
             attitude_control->set_notch_sample_rate(ins.get_raw_gyro_rate_hz());
             gcs().send_text(MAV_SEVERITY_INFO, "Attitude rate active at %uHz", (unsigned)ins.get_raw_gyro_rate_hz());
         }
@@ -212,7 +218,7 @@ void Copter::rate_controller_thread()
                     }
 #endif
                 }
-            } else if (rate_decimation > 1 && rate_loop_count > att_rate // ensure a second's worth of good readings
+            } else if (rate_decimation > target_rate_decimation && rate_loop_count > att_rate // ensure a second's worth of good readings
                 && (prev_loop_count > att_rate/10   // ensure there was 100ms worth of good readings at the higher rate
                     || prev_loop_count == 0         // last rate was actually a lower rate so keep going quickly
                     || now_ms - last_rate_increase_ms >= 10000)) { // every 10s retry
