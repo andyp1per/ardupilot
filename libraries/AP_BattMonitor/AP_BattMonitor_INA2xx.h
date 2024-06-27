@@ -34,6 +34,7 @@ private:
         UNKNOWN = 0,
         INA226,
         INA228,
+	INA234,
         INA238,
         INA231,
     };

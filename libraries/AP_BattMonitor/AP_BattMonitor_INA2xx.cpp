@@ -34,6 +34,17 @@ extern const AP_HAL::HAL& hal;
 #define REG_228_DIETEMP       0x06
 #define INA_228_TEMP_C_LSB    7.8125e-3
 
+// INA234 specific registers
+#define REG_234_CONFIG	      0x00
+#define REG_234_CONFIG_RESET  0x8000
+#define REG_234_VSHUNT	      0x01
+#define REG_234_VBUS          0x02
+#define REG_234_CURRENT       0x04
+#define REG_234_CAL	      0x05
+#define REG_234_MANUFACT_ID   0x3e
+#define REG_234_DEVICE_ID     0x3f
+
+
 // INA237/INA238 specific registers
 #define REG_238_CONFIG        0x00
 #define  REG_238_CONFIG_RESET   0x8000
@@ -165,6 +176,10 @@ bool AP_BattMonitor_INA2XX::configure(DevType dtype)
         }
         break;
     }
+
+    case DevType::INA234: {
+	break;
+   }
 
     case DevType::INA238: {
         // configure for MAX_AMPS
@@ -358,6 +373,10 @@ void AP_BattMonitor_INA2XX::timer(void)
         current = (current24>>4) * current_LSB;
         temperature = temp16 * INA_228_TEMP_C_LSB;
         break;
+    }
+   
+    case DevType::INA234: {
+	break;
     }
 
     case DevType::INA238: {
