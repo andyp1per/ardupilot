@@ -184,7 +184,7 @@ void Copter::rate_controller_thread()
         }
 
         // Once armed, switch to the fast rate if configured to do so
-        if (rate_decimation > target_rate_decimation && motors->armed() && get_fast_rate_type() == FastRateType::FAST_RATE_FIXED) {
+        if (rate_decimation != target_rate_decimation && motors->armed() && get_fast_rate_type() == FastRateType::FAST_RATE_FIXED) {
             rate_decimation = target_rate_decimation;
             attitude_control->set_notch_sample_rate(ins.get_raw_gyro_rate_hz());
             gcs().send_text(MAV_SEVERITY_INFO, "Attitude rate active at %uHz", (unsigned)ins.get_raw_gyro_rate_hz());
@@ -199,11 +199,11 @@ void Copter::rate_controller_thread()
 #if HAL_LOGGING_ENABLED
                 || AP::logger().in_log_download()
 #endif
-                || target_rate_decimation > rate_decimation
-                ) {
-                const uint32_t new_attitude_rate = ins.get_raw_gyro_rate_hz()/(rate_decimation+1);
-                if (new_attitude_rate > AP::scheduler().get_filtered_loop_rate_hz() * 2) {
-                    rate_decimation = rate_decimation + 1;
+                || target_rate_decimation > rate_decimation) {
+                const uint8_t new_rate_decimation = MAX(rate_decimation + 1, target_rate_decimation);
+                const uint32_t new_attitude_rate = ins.get_raw_gyro_rate_hz() / new_rate_decimation;
+                if (new_attitude_rate > AP::scheduler().get_filtered_loop_rate_hz()) {
+                    rate_decimation = new_rate_decimation;
                     attitude_control->set_notch_sample_rate(new_attitude_rate);
                     gcs().send_text(MAV_SEVERITY_WARNING, "Attitude CPU high, dropping rate to %uHz",
                                     (unsigned)new_attitude_rate);
