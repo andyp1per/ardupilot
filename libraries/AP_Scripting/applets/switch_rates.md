@@ -66,4 +66,9 @@ parameters" in the messages tab when this happens.
   ACRO_Y_RATE_TC
   FSTRATE_ENABLE
   FSTRATE_DIV
+  MOT_SPIN_MIN
+  MOT_SPIN_MAX
+  MOT_THST_EXPO
+  SERVO_DSHOT_RATE
+
   

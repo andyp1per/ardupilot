@@ -89,6 +89,10 @@ local param_table = {
    "ACRO_Y_RATE_TC",
    "FSTRATE_ENABLE",
    "FSTRATE_DIV",
+   "MOT_SPIN_MIN",
+   "MOT_SPIN_MAX",
+   "MOT_THST_EXPO",
+   "SERVO_DSHOT_RATE",
 }
 
 -- setup script specific parameters
