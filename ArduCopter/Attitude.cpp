@@ -192,13 +192,14 @@ void Copter::rate_controller_thread()
         
         // check that the CPU is not pegged, if it is drop the attitude rate
         if (now_ms - last_rate_check_ms >= 200
-            && (get_fast_rate_type() != FastRateType::FAST_RATE_FIXED || !motors->armed())) {
+            && (get_fast_rate_type() != FastRateType::FAST_RATE_FIXED || !motors->armed() || target_rate_decimation > rate_decimation)) {
             last_rate_check_ms = now_ms;
             const uint32_t att_rate = ins.get_raw_gyro_rate_hz()/rate_decimation;
             if (running_slow > 5 || AP::scheduler().get_extra_loop_us() > 0
 #if HAL_LOGGING_ENABLED
                 || AP::logger().in_log_download()
 #endif
+                || target_rate_decimation > rate_decimation
                 ) {
                 const uint32_t new_attitude_rate = ins.get_raw_gyro_rate_hz()/(rate_decimation+1);
                 if (new_attitude_rate > AP::scheduler().get_filtered_loop_rate_hz() * 2) {
