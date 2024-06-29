@@ -33,6 +33,7 @@ void Copter::rate_controller_thread()
 #endif
     uint32_t last_notch_sample_ms = now_ms;
     bool was_using_rate_thread = false;
+    bool was_armed = false;
     uint32_t running_slow = 0;
 #ifdef RATE_LOOP_TIMING_DEBUG
     uint32_t gyro_sample_time_us = 0;
@@ -172,22 +173,24 @@ void Copter::rate_controller_thread()
 
         now_ms = AP_HAL::millis();
 
+        // make sure we have the latest target rate
+        target_rate_decimation = constrain_int16(g2.att_decimation.get(), 1,
+                                                 uint8_t((ins.get_raw_gyro_rate_hz() + 400 - 1) / 400));
         if (now_ms - last_notch_sample_ms >= 1000 || !was_using_rate_thread) {
             // update the PID notch sample rate at 1Hz if we are
             // enabled at runtime
             last_notch_sample_ms = now_ms;
             attitude_control->set_notch_sample_rate(1.0 / sensor_dt);
-
-
-            target_rate_decimation = constrain_int16(g2.att_decimation.get(), 1,
-                                                     uint8_t((ins.get_raw_gyro_rate_hz() + 400 - 1) / 400));
         }
 
         // Once armed, switch to the fast rate if configured to do so
-        if (rate_decimation != target_rate_decimation && motors->armed() && get_fast_rate_type() == FastRateType::FAST_RATE_FIXED) {
+        if ((rate_decimation != target_rate_decimation || !was_armed) && motors->armed() && get_fast_rate_type() == FastRateType::FAST_RATE_FIXED) {
             rate_decimation = target_rate_decimation;
             attitude_control->set_notch_sample_rate(ins.get_raw_gyro_rate_hz() / rate_decimation);
             gcs().send_text(MAV_SEVERITY_INFO, "Attitude rate active at %uHz", (unsigned)ins.get_raw_gyro_rate_hz() / rate_decimation);
+            was_armed = motors->armed();
+        } else if (!motors->armed()) {
+            was_armed = false;
         }
         
         // check that the CPU is not pegged, if it is drop the attitude rate
