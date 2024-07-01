@@ -653,7 +653,8 @@ private:
     enum class FastRateType : uint8_t {
         FAST_RATE_DISABLED            = 0,
         FAST_RATE_DYNAMIC             = 1,
-        FAST_RATE_FIXED               = 2,
+        FAST_RATE_FIXED_ARMED         = 2,
+        FAST_RATE_FIXED               = 3,
     };
 
     FastRateType get_fast_rate_type() const { return FastRateType(g2.att_enable.get()); }
