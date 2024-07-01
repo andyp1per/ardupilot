@@ -33,6 +33,7 @@ void Copter::rate_controller_thread()
 #endif
     uint32_t last_notch_sample_ms = now_ms;
     bool was_using_rate_thread = false;
+    bool notify_fixed_rate_active = true;
     bool was_armed = false;
     uint32_t running_slow = 0;
 #ifdef RATE_LOOP_TIMING_DEBUG
@@ -59,9 +60,7 @@ void Copter::rate_controller_thread()
 #endif
 
         // allow changing option at runtime
-        if ((get_fast_rate_type() != FastRateType::FAST_RATE_DYNAMIC &&
-             get_fast_rate_type() != FastRateType::FAST_RATE_FIXED) ||
-            ap.motor_test) {
+        if (get_fast_rate_type() == FastRateType::FAST_RATE_DISABLED || ap.motor_test) {
             using_rate_thread = false;
             if (was_using_rate_thread) {
                 // if we were using the rate thread, we need to
@@ -183,19 +182,27 @@ void Copter::rate_controller_thread()
             attitude_control->set_notch_sample_rate(1.0 / sensor_dt);
         }
 
+        // interlock for printing fixed rate active
+        if (was_armed != motors->armed()) {
+            notify_fixed_rate_active = !was_armed;
+            was_armed = motors->armed();
+        }
+
         // Once armed, switch to the fast rate if configured to do so
-        if ((rate_decimation != target_rate_decimation || !was_armed) && motors->armed() && get_fast_rate_type() == FastRateType::FAST_RATE_FIXED) {
+        if ((rate_decimation != target_rate_decimation || notify_fixed_rate_active)
+            && ((get_fast_rate_type() == FastRateType::FAST_RATE_FIXED_ARMED && motors->armed())
+                || get_fast_rate_type() == FastRateType::FAST_RATE_FIXED)) {
             rate_decimation = target_rate_decimation;
             attitude_control->set_notch_sample_rate(ins.get_raw_gyro_rate_hz() / rate_decimation);
             gcs().send_text(MAV_SEVERITY_INFO, "Attitude rate active at %uHz", (unsigned)ins.get_raw_gyro_rate_hz() / rate_decimation);
-            was_armed = motors->armed();
-        } else if (!motors->armed()) {
-            was_armed = false;
+            notify_fixed_rate_active = false;
         }
-        
+
         // check that the CPU is not pegged, if it is drop the attitude rate
         if (now_ms - last_rate_check_ms >= 100
-            && (get_fast_rate_type() != FastRateType::FAST_RATE_FIXED || !motors->armed() || target_rate_decimation > rate_decimation)) {
+            && (get_fast_rate_type() == FastRateType::FAST_RATE_DYNAMIC
+                || (get_fast_rate_type() == FastRateType::FAST_RATE_FIXED_ARMED && !motors->armed())
+                || target_rate_decimation > rate_decimation)) {
             last_rate_check_ms = now_ms;
             const uint32_t att_rate = ins.get_raw_gyro_rate_hz()/rate_decimation;
             if (running_slow > 5 || AP::scheduler().get_extra_loop_us() > 0

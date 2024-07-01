@@ -1255,7 +1255,7 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Description: Enable the fast Rate thread
     // @User: Advanced
     // @RebootRequired: True
-    // @Values: 0:Disabled,1:Enabled-Dynamic,2:Enabled-Fixed
+    // @Values: 0:Disabled,1:Enabled-Dynamic,2:Enabled-FixedWhenArmed,3:Enabled-Fixed
     AP_GROUPINFO("FSTRATE_ENABLE", 9, ParametersG2, att_enable, 0),
 
     // @Param: FSTRATE_DIV
