@@ -318,6 +318,7 @@ void Copter::rate_controller_log_update()
 #endif
 }
 
+#pragma GCC pop_options
 #endif // AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
 
 /*
@@ -336,8 +337,6 @@ void Copter::run_rate_controller_main()
         attitude_control->rate_controller_run();
     }
 }
-
-#pragma GCC pop_options
 
 /*************************************************************
  *  throttle control
