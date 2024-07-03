@@ -132,7 +132,7 @@ void Copter::auto_disarm_check()
 }
 
 // motors_output - send output to motors library which will adjust and send to ESCs and servos
-void Copter::motors_output()
+void Copter::motors_output(bool full_push)
 {
 #if ADVANCED_FAILSAFE == ENABLED
     // this is to allow the failsafe module to deliberately crash
@@ -180,7 +180,11 @@ void Copter::motors_output()
     }
 
     // push all channels
-    SRV_Channels::push();
+    if (full_push) {
+        SRV_Channels::push();
+    } else {
+        hal.rcout->push();
+    }
 }
 
 // motors_output from main thread

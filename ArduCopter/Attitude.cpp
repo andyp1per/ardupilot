@@ -6,6 +6,8 @@
  ****************************************************************/
 
 #if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+#pragma GCC push_options
+#pragma GCC optimize("O2")
 
 //#define RATE_LOOP_TIMING_DEBUG
 /*
@@ -40,6 +42,8 @@ void Copter::rate_controller_thread()
     uint32_t gyro_sample_time_us = 0;
     uint32_t rate_controller_time_us = 0;
     uint32_t motor_output_us = 0;
+    uint32_t log_output_us = 0;
+    uint32_t ctrl_output_us = 0;
     uint32_t timing_count = 0;
     uint32_t last_timing_msg_us = 0;
 #endif
@@ -51,6 +55,9 @@ void Copter::rate_controller_thread()
     uint8_t log_med_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz() + 10 - 1) / 10);        // 10Hz
     uint8_t log_loop_count = 0;
 #endif
+    uint8_t main_loop_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz()
+        + AP::scheduler().get_filtered_loop_rate_hz() - 1) / AP::scheduler().get_filtered_loop_rate_hz());
+    uint8_t main_loop_count = 0;
     uint8_t filter_loop_count = 0;
 
     while (true) {
@@ -142,13 +149,21 @@ void Copter::rate_controller_thread()
 #endif
 
         // immediately output the new motor values
-        motors_output();
+        if (main_loop_count++ >= main_loop_rate_decimate) {
+            main_loop_count = 0;
+        }
+        motors_output(main_loop_count == 0);
 
         // process filter updates
         if (filter_loop_count++ >= filter_rate_decimate) {
             filter_loop_count = 0;
             rate_controller_filter_update();
         }
+
+#ifdef RATE_LOOP_TIMING_DEBUG
+        motor_output_us += AP_HAL::micros() - rate_now_us;
+        rate_now_us = AP_HAL::micros();
+#endif
 
 #if HAL_LOGGING_ENABLED
         // fast logging output
@@ -166,7 +181,7 @@ void Copter::rate_controller_thread()
 #endif
 
 #ifdef RATE_LOOP_TIMING_DEBUG
-        motor_output_us += AP_HAL::micros() - rate_now_us;
+        log_output_us += AP_HAL::micros() - rate_now_us;
         rate_now_us = AP_HAL::micros();
 #endif
 
@@ -254,14 +269,16 @@ void Copter::rate_controller_thread()
 
 #ifdef RATE_LOOP_TIMING_DEBUG
         timing_count++;
+        ctrl_output_us += AP_HAL::micros() - rate_now_us;
+        rate_now_us = AP_HAL::micros();
 
         if (rate_now_us - last_timing_msg_us > 1e6) {
-            hal.console->printf("Rate loop timing: gyro=%uus, rate=%uus, motors=%uus\n",
+            hal.console->printf("Rate loop timing: gyro=%uus, rate=%uus, motors=%uus, log=%uus, ctrl=%uus\n",
                                 unsigned(gyro_sample_time_us/timing_count), unsigned(rate_controller_time_us/timing_count),
-                                unsigned(motor_output_us/timing_count));
+                                unsigned(motor_output_us/timing_count), unsigned(log_output_us/timing_count), unsigned(ctrl_output_us/timing_count));
             last_timing_msg_us = rate_now_us;
             timing_count = 0;
-            gyro_sample_time_us = rate_controller_time_us = motor_output_us = 0;
+            gyro_sample_time_us = rate_controller_time_us = motor_output_us = log_output_us = ctrl_output_us = 0;
         }
 #endif
 
@@ -319,6 +336,8 @@ void Copter::run_rate_controller_main()
         attitude_control->rate_controller_run();
     }
 }
+
+#pragma GCC pop_options
 
 /*************************************************************
  *  throttle control
