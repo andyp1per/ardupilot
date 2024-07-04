@@ -320,6 +320,11 @@ bool AP_BattMonitor_INA2XX::detect_device(void)
         has_temp = true;
         return configure(DevType::INA238);
     }
+    if (read_word16(REG_234_MANUFACT_ID, id) && id == 0x5449 &&
+        read_word16(REG_234_DEVICE_ID, id) && (id&0xFFF0) == 0xA480) {
+        has_temp = false;
+        return configure(DevType::INA234);
+    }
     if (read_word16(REG_226_MANUFACT_ID, id) && id == 0x5449 &&
         write_word(REG_226_CONFIG, REG_226_CONFIG_RESET) &&
         write_word(REG_226_CONFIG, REG_226_CONFIG_DEFAULT) &&
@@ -332,11 +337,6 @@ bool AP_BattMonitor_INA2XX::detect_device(void)
         return configure(DevType::INA231);
     }
 
-    if (read_word16(REG_234_MANUFACT_ID, id) && id == 0x5449 &&
-        read_word16(REG_234_DEVICE_ID, id) && (id&0xFFF0) == 0xA480) {
-        has_temp = false;
-        return configure(DevType::INA234);
-    }
     return false;
 }
 
