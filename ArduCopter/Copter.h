@@ -747,6 +747,7 @@ private:
     uint16_t get_pilot_speed_dn() const;
     void run_rate_controller_main();
 #if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+    uint8_t calc_gyro_decimation(uint16_t gyro_decimation, uint16_t rate_hz);
     void rate_controller_thread();
     void rate_controller_filter_update();
     void rate_controller_log_update();

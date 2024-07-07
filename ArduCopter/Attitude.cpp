@@ -9,14 +9,20 @@
 #pragma GCC push_options
 #pragma GCC optimize("O2")
 
+#define DIV_ROUND_INT(x, d) ((x + d/2) / d)
+
+uint8_t Copter::calc_gyro_decimation(uint16_t gyro_decimation, uint16_t rate_hz)
+{
+    return uint8_t(DIV_ROUND_INT(ins.get_raw_gyro_rate_hz() / gyro_decimation, rate_hz));
+}
+
 //#define RATE_LOOP_TIMING_DEBUG
 /*
   thread for rate control
 */
 void Copter::rate_controller_thread()
 {
-    uint8_t target_rate_decimation = constrain_int16(g2.att_decimation.get(), 1,
-                                                     uint8_t((ins.get_raw_gyro_rate_hz() + 400 - 1) / 400));
+    uint8_t target_rate_decimation = constrain_int16(g2.att_decimation.get(), 1, DIV_ROUND_INT(ins.get_raw_gyro_rate_hz(), 400));
     uint8_t rate_decimation = target_rate_decimation;
     uint32_t rate_loop_count = 0;
     uint32_t prev_loop_count = 0;
@@ -51,12 +57,11 @@ void Copter::rate_controller_thread()
     // run the filters at half the gyro rate
     uint8_t filter_rate_decimate = 2;
 #if HAL_LOGGING_ENABLED
-    uint8_t log_fast_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz() + 1000 - 1) / 1000);   // 1Khz
-    uint8_t log_med_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz() + 10 - 1) / 10);        // 10Hz
+    uint8_t log_fast_rate_decimate = calc_gyro_decimation(rate_decimation, 1000);   // 1Khz
+    uint8_t log_med_rate_decimate = calc_gyro_decimation(rate_decimation, 10);      // 10Hz
     uint8_t log_loop_count = 0;
 #endif
-    uint8_t main_loop_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz()
-        + AP::scheduler().get_filtered_loop_rate_hz() - 1) / AP::scheduler().get_filtered_loop_rate_hz());
+    uint8_t main_loop_rate_decimate = calc_gyro_decimation(rate_decimation, AP::scheduler().get_filtered_loop_rate_hz());
     uint8_t main_loop_count = 0;
     uint8_t filter_loop_count = 0;
 
@@ -188,8 +193,7 @@ void Copter::rate_controller_thread()
         now_ms = AP_HAL::millis();
 
         // make sure we have the latest target rate
-        target_rate_decimation = constrain_int16(g2.att_decimation.get(), 1,
-                                                 uint8_t((ins.get_raw_gyro_rate_hz() + 400 - 1) / 400));
+        target_rate_decimation = constrain_int16(g2.att_decimation.get(), 1, DIV_ROUND_INT(ins.get_raw_gyro_rate_hz(), 400));
         if (now_ms - last_notch_sample_ms >= 1000 || !was_using_rate_thread) {
             // update the PID notch sample rate at 1Hz if we are
             // enabled at runtime
@@ -237,10 +241,9 @@ void Copter::rate_controller_thread()
                     running_slow = 0;
 #if HAL_LOGGING_ENABLED
                     if (new_attitude_rate > 1000) {
-                        log_fast_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz() + 1000 - 1) / 1000);
+                        log_fast_rate_decimate = calc_gyro_decimation(rate_decimation, 1000);
                     } else {
-                        log_fast_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz()
-                            + AP::scheduler().get_filtered_loop_rate_hz() - 1) / AP::scheduler().get_filtered_loop_rate_hz());
+                        log_fast_rate_decimate = calc_gyro_decimation(rate_decimation, AP::scheduler().get_filtered_loop_rate_hz());
                     }
 #endif
                 }
@@ -258,10 +261,9 @@ void Copter::rate_controller_thread()
                 last_rate_increase_ms = now_ms;
 #if HAL_LOGGING_ENABLED
                 if (new_attitude_rate > 1000) {
-                    log_fast_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz() + 1000 - 1) / 1000);
+                    log_fast_rate_decimate = calc_gyro_decimation(rate_decimation, 1000);
                 } else {
-                    log_fast_rate_decimate = uint8_t((ins.get_raw_gyro_rate_hz()
-                        + AP::scheduler().get_filtered_loop_rate_hz() - 1) / AP::scheduler().get_filtered_loop_rate_hz());
+                    log_fast_rate_decimate = calc_gyro_decimation(rate_decimation, AP::scheduler().get_filtered_loop_rate_hz());
                 }
 #endif
             }
