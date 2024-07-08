@@ -181,7 +181,7 @@ bool AP_BattMonitor_INA2XX::configure(DevType dtype)
 	// configure for MAX_AMPS
 	voltage_LSB = 25.6e-3; // 25.6 mV/LSB
 	current_LSB = max_amps / (1<<11);
-	const uint16_t shunt_cal = uint16_t(0.08192 * current_LSB * rShunt) & 0x7FFF;
+	const uint16_t shunt_cal = uint16_t(0.08192 / (current_LSB * rShunt)) & 0x7FFF;
 	if (write_word(REG_234_CONFIG, REG_234_CONFIG_RESET) && // reset
 	    write_word(REG_234_CAL, shunt_cal)) {
 	    dev_type = dtype;
