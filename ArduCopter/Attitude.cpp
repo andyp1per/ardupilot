@@ -29,6 +29,7 @@ void Copter::rate_controller_thread()
 
     HAL_CondMutex cmutex;
     ins.set_rate_loop_mutex(&cmutex);
+    hal.rcout->set_dshot_rate(SRV_Channels::get_dshot_rate(), ins.get_raw_gyro_rate_hz() / rate_decimation);
 
     uint32_t last_run_us = AP_HAL::micros();
     float max_dt = 0.0;
@@ -79,6 +80,7 @@ void Copter::rate_controller_thread()
                 // setup the notch filter sample rate
                 const float loop_rate_hz = AP::scheduler().get_filtered_loop_rate_hz();
                 attitude_control->set_notch_sample_rate(loop_rate_hz);
+                hal.rcout->set_dshot_rate(SRV_Channels::get_dshot_rate(), loop_rate_hz);
                 motors->set_dt(1.0/loop_rate_hz);
                 ins.set_rate_decimation(0);
                 hal.rcout->force_trigger_groups(false);
@@ -212,7 +214,9 @@ void Copter::rate_controller_thread()
             && ((get_fast_rate_type() == FastRateType::FAST_RATE_FIXED_ARMED && motors->armed())
                 || get_fast_rate_type() == FastRateType::FAST_RATE_FIXED)) {
             rate_decimation = target_rate_decimation;
-            attitude_control->set_notch_sample_rate(ins.get_raw_gyro_rate_hz() / rate_decimation);
+            const uint32_t att_rate = ins.get_raw_gyro_rate_hz() / rate_decimation;
+            attitude_control->set_notch_sample_rate(att_rate);
+            hal.rcout->set_dshot_rate(SRV_Channels::get_dshot_rate(), att_rate);
             gcs().send_text(MAV_SEVERITY_INFO, "Attitude rate active at %uHz", (unsigned)ins.get_raw_gyro_rate_hz() / rate_decimation);
             notify_fixed_rate_active = false;
         }
@@ -234,6 +238,7 @@ void Copter::rate_controller_thread()
                 if (new_attitude_rate > AP::scheduler().get_filtered_loop_rate_hz()) {
                     rate_decimation = new_rate_decimation;
                     attitude_control->set_notch_sample_rate(new_attitude_rate);
+                    hal.rcout->set_dshot_rate(SRV_Channels::get_dshot_rate(), new_attitude_rate);
                     gcs().send_text(MAV_SEVERITY_WARNING, "Attitude CPU high, dropping rate to %uHz",
                                     (unsigned)new_attitude_rate);
                     prev_loop_count = rate_loop_count;
@@ -254,6 +259,7 @@ void Copter::rate_controller_thread()
                 const uint32_t new_attitude_rate = ins.get_raw_gyro_rate_hz()/(rate_decimation-1);
                 rate_decimation = rate_decimation - 1;
                 attitude_control->set_notch_sample_rate(new_attitude_rate);
+                hal.rcout->set_dshot_rate(SRV_Channels::get_dshot_rate(), new_attitude_rate);
                 gcs().send_text(MAV_SEVERITY_INFO, "Attitude CPU normal, increasing rate to %uHz",
                                 (unsigned) new_attitude_rate);
                 prev_loop_count = 0;
