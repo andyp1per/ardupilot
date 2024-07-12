@@ -180,6 +180,8 @@ void Copter::rate_controller_thread()
                 rate_controller_log_update();
             }
         }
+#else
+        (void)log_fast_rate_decimate;
 #endif
 
 #ifdef RATE_LOOP_TIMING_DEBUG
