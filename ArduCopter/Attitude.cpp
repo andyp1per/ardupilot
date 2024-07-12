@@ -57,8 +57,8 @@ void Copter::rate_controller_thread()
 
     // run the filters at half the gyro rate
     uint8_t filter_rate_decimate = 2;
-#if HAL_LOGGING_ENABLED
     uint8_t log_fast_rate_decimate = calc_gyro_decimation(rate_decimation, 1000);   // 1Khz
+#if HAL_LOGGING_ENABLED
     uint8_t log_med_rate_decimate = calc_gyro_decimation(rate_decimation, 10);      // 10Hz
     uint8_t log_loop_count = 0;
 #endif
@@ -76,12 +76,7 @@ void Copter::rate_controller_thread()
         if (get_fast_rate_type() == FastRateType::FAST_RATE_DISABLED || ap.motor_test) {
             using_rate_thread = false;
             if (was_using_rate_thread) {
-                // if we were using the rate thread, we need to
-                // setup the notch filter sample rate
-                const float loop_rate_hz = AP::scheduler().get_filtered_loop_rate_hz();
-                attitude_control->set_notch_sample_rate(loop_rate_hz);
-                hal.rcout->set_dshot_rate(SRV_Channels::get_dshot_rate(), loop_rate_hz);
-                motors->set_dt(1.0/loop_rate_hz);
+                rate_controller_set_rates(calc_gyro_decimation(1, AP::scheduler().get_filtered_loop_rate_hz()), false);
                 ins.set_rate_decimation(0);
                 hal.rcout->force_trigger_groups(false);
                 was_using_rate_thread = false;
@@ -214,10 +209,7 @@ void Copter::rate_controller_thread()
             && ((get_fast_rate_type() == FastRateType::FAST_RATE_FIXED_ARMED && motors->armed())
                 || get_fast_rate_type() == FastRateType::FAST_RATE_FIXED)) {
             rate_decimation = target_rate_decimation;
-            const uint32_t att_rate = ins.get_raw_gyro_rate_hz() / rate_decimation;
-            attitude_control->set_notch_sample_rate(att_rate);
-            hal.rcout->set_dshot_rate(SRV_Channels::get_dshot_rate(), att_rate);
-            gcs().send_text(MAV_SEVERITY_INFO, "Attitude rate active at %uHz", (unsigned)ins.get_raw_gyro_rate_hz() / rate_decimation);
+            log_fast_rate_decimate = rate_controller_set_rates(rate_decimation, false);
             notify_fixed_rate_active = false;
         }
 
@@ -237,41 +229,21 @@ void Copter::rate_controller_thread()
                 const uint32_t new_attitude_rate = ins.get_raw_gyro_rate_hz() / new_rate_decimation;
                 if (new_attitude_rate > AP::scheduler().get_filtered_loop_rate_hz()) {
                     rate_decimation = new_rate_decimation;
-                    attitude_control->set_notch_sample_rate(new_attitude_rate);
-                    hal.rcout->set_dshot_rate(SRV_Channels::get_dshot_rate(), new_attitude_rate);
-                    gcs().send_text(MAV_SEVERITY_WARNING, "Attitude CPU high, dropping rate to %uHz",
-                                    (unsigned)new_attitude_rate);
+                    log_fast_rate_decimate = rate_controller_set_rates(rate_decimation, true);
                     prev_loop_count = rate_loop_count;
                     rate_loop_count = 0;
                     running_slow = 0;
-#if HAL_LOGGING_ENABLED
-                    if (new_attitude_rate > 1000) {
-                        log_fast_rate_decimate = calc_gyro_decimation(rate_decimation, 1000);
-                    } else {
-                        log_fast_rate_decimate = calc_gyro_decimation(rate_decimation, AP::scheduler().get_filtered_loop_rate_hz());
-                    }
-#endif
                 }
             } else if (rate_decimation > target_rate_decimation && rate_loop_count > att_rate/10 // ensure 100ms worth of good readings
                 && (prev_loop_count > att_rate/10   // ensure there was 100ms worth of good readings at the higher rate
                     || prev_loop_count == 0         // last rate was actually a lower rate so keep going quickly
                     || now_ms - last_rate_increase_ms >= 10000)) { // every 10s retry
-                const uint32_t new_attitude_rate = ins.get_raw_gyro_rate_hz()/(rate_decimation-1);
                 rate_decimation = rate_decimation - 1;
-                attitude_control->set_notch_sample_rate(new_attitude_rate);
-                hal.rcout->set_dshot_rate(SRV_Channels::get_dshot_rate(), new_attitude_rate);
-                gcs().send_text(MAV_SEVERITY_INFO, "Attitude CPU normal, increasing rate to %uHz",
-                                (unsigned) new_attitude_rate);
+
+                log_fast_rate_decimate = rate_controller_set_rates(rate_decimation, false);
                 prev_loop_count = 0;
                 rate_loop_count = 0;
                 last_rate_increase_ms = now_ms;
-#if HAL_LOGGING_ENABLED
-                if (new_attitude_rate > 1000) {
-                    log_fast_rate_decimate = calc_gyro_decimation(rate_decimation, 1000);
-                } else {
-                    log_fast_rate_decimate = calc_gyro_decimation(rate_decimation, AP::scheduler().get_filtered_loop_rate_hz());
-                }
-#endif
             }
         }
 
@@ -306,6 +278,28 @@ void Copter::rate_controller_filter_update()
 
     // this copies backend data to the frontend and updates the notches
     ins.update_backend_filters();
+}
+
+/*
+  update rate controller rates and return the logging rate
+*/
+uint8_t Copter::rate_controller_set_rates(uint8_t rate_decimation, bool warn_cpu_high)
+{
+    const uint32_t attitude_rate = ins.get_raw_gyro_rate_hz() / rate_decimation;
+    attitude_control->set_notch_sample_rate(attitude_rate);
+    hal.rcout->set_dshot_rate(SRV_Channels::get_dshot_rate(), attitude_rate);
+    motors->set_dt(1.0f / attitude_rate);
+    gcs().send_text(warn_cpu_high ? MAV_SEVERITY_WARNING : MAV_SEVERITY_INFO,
+                    "Attitude CPU %s, rate set to %uHz",
+                    warn_cpu_high ? "high" : "normal", (unsigned) attitude_rate);
+#if HAL_LOGGING_ENABLED
+    if (attitude_rate > 1000) {
+        return calc_gyro_decimation(rate_decimation, 1000);
+    } else {
+        return calc_gyro_decimation(rate_decimation, AP::scheduler().get_filtered_loop_rate_hz());
+    }
+#endif
+    return 0;
 }
 
 /*

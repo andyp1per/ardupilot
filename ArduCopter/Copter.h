@@ -751,6 +751,7 @@ private:
     void rate_controller_thread();
     void rate_controller_filter_update();
     void rate_controller_log_update();
+    uint8_t rate_controller_set_rates(uint8_t rate_decimation, bool warn_cpu_high);
 #endif
 
 #if AC_CUSTOMCONTROL_MULTI_ENABLED == ENABLED
