@@ -15,8 +15,8 @@ this must be set to 1 to enable the script
 
 ## RTSW_RC_FUNC
 
-The RCz_OPTIONS scripting function binding to be used for this script.
-Default RCz_OPTIONS binding is 300 (scripting1).
+The RCz_OPTION scripting function binding to be used for this script.
+Default RCz_OPTION binding is 300 (scripting1).
 
 The script also adds backups of all of the switched parameters using the prefix "X_"
 This allows the tune to be persistent.
@@ -27,7 +27,7 @@ Install the script in the APM/SCRIPTS folder on your microSD (you can
 use mavFTP for that). Then reboot and re-fetch parameters. You will
 find you now have PREV_ENABLE and PREV_RC_FUNC parameters.
 
-Set PREV_ENABLE to 1 and set PREV_RC_FUNC to an available RC
+Set RTSW_ENABLE to 1 and set RTSW_RC_FUNC to an available RC
 option. You would typically use 300 if not used by another
 script. Then set RCn_OPTION for your chosen R/C channel to switch 
 parameters to the PREV_RC_FUNC value (eg. 300).
