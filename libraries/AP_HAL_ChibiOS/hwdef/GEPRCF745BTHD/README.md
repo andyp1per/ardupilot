@@ -7,7 +7,7 @@ The TAKER F745 BT is a flight controller produced by [GEPRC](https://geprc.com/)
  - STM32F745 microcontroller
  - MPU6000+ICM42688 dual IMU
  - BMP280 barometer
- - SDCard
+ - microSD based 512MB flash logging
  - AT7456E OSD
  - 7 UARTs
  - 8 PWM outputs
