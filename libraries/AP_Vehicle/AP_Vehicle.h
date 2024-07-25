@@ -442,10 +442,8 @@ protected:
     // Check if this mode can be entered from the GCS
     bool block_GCS_mode_change(uint8_t mode_num, const uint8_t *mode_list, uint8_t mode_list_length) const;
 
-#if AP_INERTIALSENSOR_HARMONICNOTCH_ENABLED
     // update the harmonic notch
     void update_dynamic_notch(AP_InertialSensor::HarmonicNotch &notch);
-#endif
     bool using_rate_thread;
 
 private:
