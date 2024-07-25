@@ -660,7 +660,7 @@ private:
     FastRateType get_fast_rate_type() const { return FastRateType(g2.att_enable.get()); }
 #endif
     // returns true if option is enabled for this vehicle
-    bool option_is_enabled(FlightOption option) const {
+    bool option_is_enabled(FlightOptions option) const {
         return (g2.flight_options & uint32_t(option)) != 0;
     }
 
