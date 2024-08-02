@@ -21,9 +21,9 @@ def run_program(cmd_list):
         print("Build failed: %s" % ' '.join(cmd_list))
         sys.exit(1)
 
-version='v1'
+version='v2'
 
-for f in ["Pixhawk6C-bdshot", "Pixhawk6X-bdshot", "CUAVv5Nano-bdshot"]:
+for f in ["MambaH743v4", "MatekH743-bdshot","Pixhawk6C-bdshot", "Pixhawk6X-bdshot", "CUAVv5Nano-bdshot"]:
     print("Building firmware %s" % f)
     run_program(["./waf", "configure", "--board", f])
     run_program(["./waf", "clean"])
