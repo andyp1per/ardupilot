@@ -17,13 +17,6 @@
 #define AP_HEATER_IMU_INSTANCE 0
 #endif
 
-#if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
-// hal.console can be accessed from bus threads on ChibiOS
-#define debug(fmt, args ...)  do {hal.console->printf("IMU: " fmt "\n", ## args); } while(0)
-#else
-#define debug(fmt, args ...)  do {printf("IMU: " fmt "\n", ## args); } while(0)
-#endif
-
 const extern AP_HAL::HAL& hal;
 
 AP_InertialSensor_Backend::AP_InertialSensor_Backend(AP_InertialSensor &imu) :
@@ -175,17 +168,13 @@ void AP_InertialSensor_Backend::_publish_gyro(uint8_t instance, const Vector3f &
         return;
     }
 
-#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
     if (!_imu.push_rate_loop_gyro(instance)) { // rate loop thread is not consuming samples
-#endif
         _imu._gyro[instance] = gyro;
 #if HAL_GYROFFT_ENABLED
         // copy the gyro samples from the backend to the frontend window for FFTs sampling at less than IMU rate
         _imu._gyro_for_fft[instance] = _imu._last_gyro_for_fft[instance];
 #endif
-#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
     }
-#endif
 
     _imu._gyro_healthy[instance] = true;
     // publish delta angle
@@ -269,27 +258,7 @@ void AP_InertialSensor_Backend::apply_gyro_filters(const uint8_t instance, const
         _imu._gyro_filtered[instance] = gyro_filtered;
     }
 
-#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
-    if (_imu.push_rate_loop_gyro(instance)) {
-        /*
-          tell the rate thread we have a new sample
-        */
-        if (++_imu.rate_decimation_count >= _imu.rate_decimation) {
-            _imu._cmutex->lock_and_signal();
-            if (!_imu._rate_loop_gyro_window.push(_imu._gyro_filtered[instance])) {
-                debug("dropped rate loop sample");
-            }
-            _imu.rate_decimation_count = 0;
-            // semaphore is already held so we can directly publish the gyro data
-            _imu._gyro[instance] = _imu._gyro_filtered[instance];
-#if HAL_GYROFFT_ENABLED
-            // copy the gyro samples from the backend to the frontend window for FFTs sampling at less than IMU rate
-            _imu._gyro_for_fft[instance] = _imu._last_gyro_for_fft[instance];
-#endif
-            _imu._cmutex->unlock();
-        }
-    }
-#endif
+    _imu.push_next_gyro_sample(instance);
 }
 
 void AP_InertialSensor_Backend::_notify_new_gyro_raw_sample(uint8_t instance,
@@ -871,16 +840,6 @@ void AP_InertialSensor_Backend::update_accel_filters(uint8_t instance) /* front 
         _last_accel_filter_hz = _accel_filter_cutoff();
     }
 }
-
-#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
-void AP_InertialSensor_Backend::update_filters()
-{
-    WITH_SEMAPHORE(_sem);
-
-    update_accel_filters(accel_instance);
-    update_gyro_filters(gyro_instance);
-}
-#endif
 
 #if HAL_LOGGING_ENABLED
 bool AP_InertialSensor_Backend::should_log_imu_raw() const
