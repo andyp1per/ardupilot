@@ -648,7 +648,6 @@ private:
         RELEASE_GRIPPER_ON_THRUST_LOSS = (1<<2),  // 4
     };
 
-#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
     // type of fast rate attitude controller in operation
     enum class FastRateType : uint8_t {
         FAST_RATE_DISABLED            = 0,
@@ -658,7 +657,7 @@ private:
     };
 
     FastRateType get_fast_rate_type() const { return FastRateType(g2.att_enable.get()); }
-#endif
+
     // returns true if option is enabled for this vehicle
     bool option_is_enabled(FlightOptions option) const {
         return (g2.flight_options & uint32_t(option)) != 0;
@@ -746,13 +745,12 @@ private:
     void rotate_body_frame_to_NE(float &x, float &y);
     uint16_t get_pilot_speed_dn() const;
     void run_rate_controller_main();
-#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+
     uint8_t calc_gyro_decimation(uint16_t gyro_decimation, uint16_t rate_hz);
     void rate_controller_thread();
     void rate_controller_filter_update();
     void rate_controller_log_update();
     uint8_t rate_controller_set_rates(uint8_t rate_decimation, bool warn_cpu_high);
-#endif
 
 #if AC_CUSTOMCONTROL_MULTI_ENABLED == ENABLED
     void run_custom_controller() { custom_control.update(); }
