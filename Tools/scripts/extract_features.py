@@ -191,7 +191,7 @@ class ExtractFeatures(object):
             ('AP_DRONECAN_SEND_GPS', r'AP_GPS_DroneCAN::instance_exists\b',),
 
             ('HAL_WITH_DSP', r'AP_HAL::DSP::find_peaks\b',),
-            ('AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED', r'AP_InertialSensor::HarmonicNotch::update_params\b',),
+            ('AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED', r'FastRateBuffer::get_next_gyro_sample\b',),
             ('HAL_GYROFFT_ENABLED', r'AP_GyroFFT::AP_GyroFFT\b',),
             ('HAL_DISPLAY_ENABLED', r'Display::init\b',),
             ('HAL_NMEA_OUTPUT_ENABLED', r'AP_NMEA_Output::update\b',),
