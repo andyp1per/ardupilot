@@ -31,7 +31,7 @@ extern const AP_HAL::HAL& hal;
 
 void AP_InertialSensor::enable_fast_rate_buffer()
 {
-    fast_rate_buffer = NEW_NOTHROW FastRateBuffer();
+    fast_rate_buffer = new FastRateBuffer();
 }
 
 void AP_InertialSensor::disable_fast_rate_buffer()
