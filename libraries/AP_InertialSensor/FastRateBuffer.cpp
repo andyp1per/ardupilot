@@ -16,7 +16,7 @@
 #include "AP_InertialSensor.h"
 #include "AP_InertialSensor_Backend.h"
 
-#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+#if AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW_ENABLED
 #include "FastRateBuffer.h"
 #include <stdio.h>
 
@@ -128,4 +128,4 @@ void AP_InertialSensor_Backend::update_filters()
 bool AP_InertialSensor::push_rate_loop_gyro(uint8_t instance) const { return false; }
 void AP_InertialSensor::push_next_gyro_sample(uint8_t instance) { }
 
-#endif // AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+#endif // AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW_ENABLED

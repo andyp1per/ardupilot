@@ -490,7 +490,7 @@ bool AP_InertialSensor_Invensense::update() /* front end */
 
 void AP_InertialSensor_Invensense::set_primary_gyro(uint8_t instance)
 {
-#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
+#if AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW_ENABLED
     if (!_imu.use_rate_loop_gyro_samples()) {
         return;
     }
