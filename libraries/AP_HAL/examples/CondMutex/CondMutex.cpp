@@ -32,6 +32,8 @@ public:
     void setup(void);
     void producer(void);
     void consumer(void);
+    void producer_tick(void);
+    void consumer_tick(void);
     void update();
     void update_sent();
     bool check() { return bsize>0; }
@@ -49,6 +51,7 @@ void ProducerConsumerTest::setup(void)
 {
     hal.scheduler->thread_create(
         FUNCTOR_BIND_MEMBER(&ProducerConsumerTest::producer, void), "producer", 2048, AP_HAL::Scheduler::PRIORITY_IO, 0);
+    hal.scheduler->delay_microseconds(1000);
     hal.scheduler->thread_create(
         FUNCTOR_BIND_MEMBER(&ProducerConsumerTest::consumer, void), "consumer", 2048, AP_HAL::Scheduler::PRIORITY_IO, 1);
     ::printf("Setup threads\n");
@@ -56,15 +59,15 @@ void ProducerConsumerTest::setup(void)
 
 void ProducerConsumerTest::consumer(void)
 {
+    // startup test
+    uint32_t start_time_us = AP_HAL::micros();
+    for (uint i = 0; i < 10; i++) {
+        consumer_tick();
+    }
+    ::printf("startup delay %uus\n", AP_HAL::micros() - start_time_us);
+
     while (true) {
-#ifdef USE_COND_MUTEX
-        cmtx.lock_and_wait(FUNCTOR_BIND_MEMBER(&ProducerConsumerTest::check, bool));
-        update();
-        cmtx.unlock();
-#else
-        sem1.wait_blocking();
-        update();
-#endif
+        consumer_tick();
         uint32_t delay = 150;
         if (delay_count++ > 10) {
             delay += 200;
@@ -74,20 +77,42 @@ void ProducerConsumerTest::consumer(void)
     }
 }
 
+void ProducerConsumerTest::consumer_tick(void)
+{
+#ifdef USE_COND_MUTEX
+    cmtx.lock_and_wait(FUNCTOR_BIND_MEMBER(&ProducerConsumerTest::check, bool));
+    update();
+    cmtx.unlock();
+#else
+    sem1.wait_blocking();
+    update();
+#endif
+}
+
 void ProducerConsumerTest::producer(void)
 {
+    // startup test
+    for (uint i = 0; i < 10; i++) {
+        producer_tick();
+    }
+
     while (true) {
-#ifdef USE_COND_MUTEX
-        cmtx.lock_and_signal();
-        update_sent();
-        cmtx.unlock();
-#else
-        sem1.signal();
-        update_sent();
-#endif
+        producer_tick();
         // 4Khz with some jitter
         hal.scheduler->delay_microseconds(250 + get_random()/8);
     }
+}
+
+void ProducerConsumerTest::producer_tick(void)
+{
+#ifdef USE_COND_MUTEX
+    cmtx.lock_and_signal();
+    update_sent();
+    cmtx.unlock();
+#else
+    update_sent();
+    sem1.signal();
+#endif
 }
 
 void ProducerConsumerTest::update()
