@@ -741,6 +741,8 @@ private:
     void rate_controller_filter_update();
     void rate_controller_log_update();
     uint8_t rate_controller_set_rates(uint8_t rate_decimation, bool warn_cpu_high);
+    void enable_fast_rate_loop(uint8_t rate_decimation);
+    void disable_fast_rate_loop();
 
 #if AC_CUSTOMCONTROL_MULTI_ENABLED == ENABLED
     void run_custom_controller() { custom_control.update(); }
