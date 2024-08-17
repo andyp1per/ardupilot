@@ -77,11 +77,12 @@ bool FastRateBuffer::get_next_gyro_sample(Vector3f& gyro)
         return false;
     }
 
-    _cmutex.lock_and_wait(FUNCTOR_BIND_MEMBER(&FastRateBuffer::gyro_samples_available, bool));
-    bool ret = _rate_loop_gyro_window.pop(gyro);
-    _cmutex.unlock();
+    // wait for a sample to be available
+    _notifier.wait_blocking();
 
-    return ret;
+    WITH_SEMAPHORE(_mutex);
+
+    return _rate_loop_gyro_window.pop(gyro);
 }
 
 void AP_InertialSensor::push_next_gyro_sample(uint8_t instance)
@@ -91,7 +92,9 @@ void AP_InertialSensor::push_next_gyro_sample(uint8_t instance)
           tell the rate thread we have a new sample
         */
         if (++fast_rate_buffer->rate_decimation_count >= fast_rate_buffer->rate_decimation) {
-            fast_rate_buffer->_cmutex.lock_and_signal();
+
+            WITH_SEMAPHORE(fast_rate_buffer->_mutex);
+
             if (!fast_rate_buffer->_rate_loop_gyro_window.push(_gyro_filtered[instance])) {
                 debug("dropped rate loop sample");
             }
@@ -102,7 +105,7 @@ void AP_InertialSensor::push_next_gyro_sample(uint8_t instance)
             // copy the gyro samples from the backend to the frontend window for FFTs sampling at less than IMU rate
             _gyro_for_fft[instance] = _last_gyro_for_fft[instance];
 #endif
-            fast_rate_buffer->_cmutex.unlock();
+            fast_rate_buffer->_notifier.signal();
         }
     }
 }
