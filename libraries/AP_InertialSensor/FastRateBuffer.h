@@ -23,7 +23,7 @@
 #include <AP_HAL/AP_HAL_Boards.h>
 #include <AP_HAL/utility/RingBuffer.h>
 #include <AP_Math/AP_Math.h>
-#include <AP_HAL/CondMutex.h>
+#include <AP_HAL/Semaphores.h>
 
 class FastRateBuffer
 {
@@ -44,6 +44,7 @@ private:
     ObjectBuffer<Vector3f> _rate_loop_gyro_window{AP_INERTIAL_SENSOR_RATE_LOOP_BUFFER_SIZE};
     uint8_t rate_decimation; // 0 means off
     uint8_t rate_decimation_count;
-    HAL_CondMutex _cmutex;
+    HAL_BinarySemaphore _notifier;
+    HAL_Semaphore _mutex;
 };
 #endif
