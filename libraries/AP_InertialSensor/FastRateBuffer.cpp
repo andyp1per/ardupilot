@@ -77,8 +77,17 @@ bool FastRateBuffer::get_next_gyro_sample(Vector3f& gyro)
         return false;
     }
 
-    // wait for a sample to be available
-    _notifier.wait_blocking();
+    bool have_samples = false;
+    {
+        WITH_SEMAPHORE(_mutex);
+
+        have_samples = _rate_loop_gyro_window.available() > 0;
+    }
+
+    if (!have_samples) {
+        // wait for a sample to be available
+        _notifier.wait_blocking();
+    }
 
     WITH_SEMAPHORE(_mutex);
 
