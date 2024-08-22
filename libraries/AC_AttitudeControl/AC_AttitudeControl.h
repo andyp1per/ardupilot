@@ -419,8 +419,8 @@ public:
     // purposes
     void set_PD_scale_mult(const Vector3f &pd_scale) { _pd_scale *= pd_scale; }
 
-    // get the value of the PD scale that was used in the last loop, for logging
-    const Vector3f &get_PD_scale_logging(void) const { return _pd_scale_used; }
+    // write RATE message
+    void Write_Rate(const AC_PosControl &pos_control) const;
 
     // get the latest gyro value that was used by the rate controller
     const Vector3f &get_gyro_latest(void) const { return _rate_gyro; }
@@ -478,6 +478,11 @@ protected:
 
     // latest gyro value use by the rate_controller
     Vector3f            _rate_gyro;
+
+    // latest gyro value use by the rate_controller
+    Vector3f            _rate_gyro;
+    // timestamp of the latest gyro value used by the rate controller
+    uint64_t            _rate_gyro_time_us;
 
     // Intersampling period in seconds
     float               _dt;

@@ -421,6 +421,7 @@ void AC_AttitudeControl_Heli::rate_controller_run()
     _ang_vel_body += _sysid_ang_vel_body;
 
     _rate_gyro = _ahrs.get_gyro_latest();
+    _rate_gyro_time_us = AP_HAL::micros64();
 
     // call rate controllers and send output to motors object
     // if using a flybar passthrough roll and pitch directly to motors
