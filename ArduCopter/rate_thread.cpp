@@ -226,7 +226,9 @@ void Copter::rate_controller_thread()
 
         // wait for an IMU sample
         Vector3f gyro;
-        ins.get_next_gyro_sample(gyro);
+        if (!ins.get_next_gyro_sample(gyro)) {
+            continue;   // go around again
+        }
 
 #ifdef RATE_LOOP_TIMING_DEBUG
         gyro_sample_time_us += AP_HAL::micros() - rate_now_us;
