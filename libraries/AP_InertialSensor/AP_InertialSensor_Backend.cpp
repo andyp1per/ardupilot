@@ -169,16 +169,10 @@ void AP_InertialSensor_Backend::_publish_gyro(uint8_t instance, const Vector3f &
         return;
     }
 
-#if AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW_ENABLED
-    if (!_imu.push_rate_loop_gyro(instance)) { // rate loop thread is not consuming samples
-#endif
-        _imu._gyro[instance] = gyro;
+    _imu._gyro[instance] = gyro;
 #if HAL_GYROFFT_ENABLED
-        // copy the gyro samples from the backend to the frontend window for FFTs sampling at less than IMU rate
-        _imu._gyro_for_fft[instance] = _imu._last_gyro_for_fft[instance];
-#endif
-#if AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW_ENABLED
-    }
+    // copy the gyro samples from the backend to the frontend window for FFTs sampling at less than IMU rate
+    _imu._gyro_for_fft[instance] = _imu._last_gyro_for_fft[instance];
 #endif
 
     _imu._gyro_healthy[instance] = true;
@@ -266,12 +260,16 @@ void AP_InertialSensor_Backend::apply_gyro_filters(const uint8_t instance, const
             notch.filter[instance].reset();
         }
 #endif
-    } else {
-        _imu._gyro_filtered[instance] = gyro_filtered;
+        gyro_filtered = _imu._gyro_filtered[instance];
     }
 
 #if AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW_ENABLED
-    _imu.push_next_gyro_sample(instance);
+    if (_imu.push_next_gyro_sample(instance, gyro_filtered)) {
+        // if we used the value, record it for publication to the front-end
+        _imu._gyro_filtered[instance] = gyro_filtered;
+    }
+#else
+    _imu._gyro_filtered[instance] = gyro_filtered;
 #endif
 }
 

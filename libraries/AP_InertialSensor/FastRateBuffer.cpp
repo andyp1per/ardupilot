@@ -86,27 +86,22 @@ bool FastRateBuffer::get_next_gyro_sample(Vector3f& gyro)
     return ret;
 }
 
-void AP_InertialSensor::push_next_gyro_sample(uint8_t instance)
+bool AP_InertialSensor::push_next_gyro_sample(uint8_t instance, const Vector3f& gyro)
 {
-    if (push_rate_loop_gyro(instance)) {
+    if (push_rate_loop_gyro(instance)
+        && ++fast_rate_buffer->rate_decimation_count >= fast_rate_buffer->rate_decimation) {
         /*
           tell the rate thread we have a new sample
         */
-        if (++fast_rate_buffer->rate_decimation_count >= fast_rate_buffer->rate_decimation) {
-            fast_rate_buffer->_cmutex.lock_and_signal();
-            if (!fast_rate_buffer->_rate_loop_gyro_window.push(_gyro_filtered[instance])) {
-                debug("dropped rate loop sample");
-            }
-            fast_rate_buffer->rate_decimation_count = 0;
-            // semaphore is already held so we can directly publish the gyro data
-            _gyro[instance] = _gyro_filtered[instance];
-#if HAL_GYROFFT_ENABLED
-            // copy the gyro samples from the backend to the frontend window for FFTs sampling at less than IMU rate
-            _gyro_for_fft[instance] = _last_gyro_for_fft[instance];
-#endif
-            fast_rate_buffer->_cmutex.unlock();
+        fast_rate_buffer->_cmutex.lock_and_signal();
+        if (!fast_rate_buffer->_rate_loop_gyro_window.push(gyro)) {
+            debug("dropped rate loop sample");
         }
+        fast_rate_buffer->rate_decimation_count = 0;
+        fast_rate_buffer->_cmutex.unlock();
+        return true;
     }
+    return false;
 }
 
 void AP_InertialSensor::update_backend_filters()
