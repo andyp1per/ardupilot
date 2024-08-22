@@ -443,6 +443,9 @@ public:
     // get the value of the PD scale that was used in the last loop, for logging
     const Vector3f &get_PD_scale_logging(void) const { return _pd_scale_used; }
 
+    // get the latest gyro value that was used by the rate controller
+    const Vector3f &get_gyro_latest(void) const { return _rate_gyro; }
+
     // User settable parameters
     static const struct AP_Param::GroupInfo var_info[];
 
