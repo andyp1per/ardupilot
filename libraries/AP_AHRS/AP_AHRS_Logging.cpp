@@ -149,7 +149,7 @@ void AP_AHRS_View::Write_Rate(const AP_Motors &motors, AC_AttitudeControl &attit
 {
     Vector3f rate_targets = attitude_control.rate_bf_targets();
     const Vector3f &accel_target = pos_control.get_accel_target_cmss();
-    const Vector3f gyro_rate = get_gyro_latest();
+    const Vector3f gyro_rate = attitude_control.get_gyro_latest();
     const auto timeus = AP_HAL::micros64();
     const struct log_Rate pkt_rate{
         LOG_PACKET_HEADER_INIT(LOG_RATE_MSG),
