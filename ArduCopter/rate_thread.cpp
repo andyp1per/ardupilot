@@ -465,11 +465,9 @@ void Copter::rate_controller_log_update()
         Log_Write_Rate();
         Log_Write_PIDS(); // only logs if PIDS bitmask is set
     }
-#if AP_INERTIALSENSOR_HARMONICNOTCH_ENABLED
     if (should_log(MASK_LOG_FTN_FAST)) {
         AP::ins().write_notch_log_messages();
     }
-#endif
 #endif
 }
 
