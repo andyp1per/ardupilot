@@ -266,6 +266,7 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #endif
 #if STATS_ENABLED == ENABLED
     SCHED_TASK_CLASS(AP_Stats,             &copter.g2.stats,            update,           1, 100, 171),
+#endif
 #if AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW_ENABLED
     SCHED_TASK(update_dynamic_notch_at_specified_rate_main,                       LOOP_RATE, 200, 215),
 #endif
