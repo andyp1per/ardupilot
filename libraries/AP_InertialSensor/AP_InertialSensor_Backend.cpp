@@ -264,8 +264,12 @@ void AP_InertialSensor_Backend::apply_gyro_filters(const uint8_t instance, const
     }
 
 #if AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW_ENABLED
-    if (_imu.push_next_gyro_sample(instance, gyro_filtered)) {
-        // if we used the value, record it for publication to the front-end
+    if (_imu.is_rate_loop_gyro_enabled(instance)) {
+        if (_imu.push_next_gyro_sample(gyro_filtered)) {
+            // if we used the value, record it for publication to the front-end
+            _imu._gyro_filtered[instance] = gyro_filtered;
+        }
+    } else {
         _imu._gyro_filtered[instance] = gyro_filtered;
     }
 #else

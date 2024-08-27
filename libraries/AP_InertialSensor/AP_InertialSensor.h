@@ -821,11 +821,11 @@ public:
     // are gyro samples being sourced from the rate loop buffer
     bool use_rate_loop_gyro_samples() const;
     // push a new gyro sample into the fast rate buffer
-    bool push_next_gyro_sample(uint8_t instance, const Vector3f& gyro);
+    bool push_next_gyro_sample(const Vector3f& gyro);
     // run the filter parmeter update code.
     void update_backend_filters();
-private:
-    bool push_rate_loop_gyro(uint8_t instance) const;
+    // are rate loop samples enabled for this instance?
+    bool is_rate_loop_gyro_enabled(uint8_t instance) const;
 };
 
 namespace AP {
