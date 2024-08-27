@@ -59,7 +59,7 @@ bool AP_InertialSensor::use_rate_loop_gyro_samples() const
 }
 
 // whether or not to push the current gyro sample
-bool AP_InertialSensor::push_rate_loop_gyro(uint8_t instance) const
+bool AP_InertialSensor::is_rate_loop_gyro_enabled(uint8_t instance) const
 {
     return use_rate_loop_gyro_samples() && fast_rate_buffer->use_rate_loop_gyro_samples() && instance == AP::ahrs().get_primary_gyro_index();
 }
@@ -88,23 +88,22 @@ bool FastRateBuffer::get_next_gyro_sample(Vector3f& gyro)
     return _rate_loop_gyro_window.pop(gyro);
 }
 
-bool AP_InertialSensor::push_next_gyro_sample(uint8_t instance, const Vector3f& gyro)
+bool AP_InertialSensor::push_next_gyro_sample(const Vector3f& gyro)
 {
-    if (push_rate_loop_gyro(instance)
-        && ++fast_rate_buffer->rate_decimation_count >= fast_rate_buffer->rate_decimation) {
-        /*
-          tell the rate thread we have a new sample
-        */
-        WITH_SEMAPHORE(fast_rate_buffer->_mutex);
-
-        if (!fast_rate_buffer->_rate_loop_gyro_window.push(gyro)) {
-            debug("dropped rate loop sample");
-        }
-        fast_rate_buffer->rate_decimation_count = 0;
-        fast_rate_buffer->_notifier.signal();
-        return true;
+    if (++fast_rate_buffer->rate_decimation_count < fast_rate_buffer->rate_decimation) {
+        return false;
     }
-    return false;
+    /*
+        tell the rate thread we have a new sample
+    */
+    WITH_SEMAPHORE(fast_rate_buffer->_mutex);
+
+    if (!fast_rate_buffer->_rate_loop_gyro_window.push(gyro)) {
+        debug("dropped rate loop sample");
+    }
+    fast_rate_buffer->rate_decimation_count = 0;
+    fast_rate_buffer->_notifier.signal();
+    return true;
 }
 
 void AP_InertialSensor::update_backend_filters()
