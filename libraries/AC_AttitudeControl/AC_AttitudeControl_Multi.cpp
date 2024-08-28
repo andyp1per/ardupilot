@@ -442,6 +442,7 @@ void AC_AttitudeControl_Multi::update_throttle_rpy_mix()
 void AC_AttitudeControl_Multi::rate_controller_run_dt(float dt, const Vector3f& gyro)
 {
     _rate_gyro = gyro;
+    _rate_gyro_time_us = AP_HAL::micros64();
     // take a copy of the target so that it can't be changed from under us.
     Vector3f ang_vel_body = _ang_vel_body;
 

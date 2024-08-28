@@ -73,9 +73,14 @@ public:
 
     // set_dt / get_dt - dt is the time since the last time the attitude controllers were updated
     // _dt should be set based on the time of the last IMU read used by these controllers
+    // sample_time_us is the time of the last IMU read used by these controllers
     // the attitude controller should run updates for active controllers on each loop to ensure normal operation
-    void set_dt(float dt) { _dt = dt; }
+    void set_dt(float dt, uint64_t sample_time_us) {
+        _dt = dt;
+        _sample_time_us = sample_time_us;
+    }
     float get_dt() const { return _dt; }
+    uint64_t get_sample_time_us() const { return _sample_time_us; }
 
     // pid accessors
     AC_P& get_angle_roll_p() { return _p_angle_roll; }
@@ -446,6 +451,13 @@ public:
     // get the latest gyro value that was used by the rate controller
     const Vector3f &get_gyro_latest(void) const { return _rate_gyro; }
 
+    // get the timestamp of the latest gyro value that was used by the rate controller
+    // primarily used by logging
+    uint64_t get_gyro_latest_timestamp_us(void) const { return _rate_gyro_time_us; }
+
+    // write RATE message
+    void Write_Rate(const class AP_Motors &motors, const AC_PosControl &pos_control) const;
+
     // User settable parameters
     static const struct AP_Param::GroupInfo var_info[];
 
@@ -504,9 +516,13 @@ protected:
 
     // latest gyro value use by the rate_controller
     Vector3f            _rate_gyro;
+    // timestamp of the latest gyro value used by the rate controller
+    uint64_t            _rate_gyro_time_us;
 
     // Intersampling period in seconds
     float               _dt;
+    // scheduler sample time in microseconds (could be different to rate loop)
+    uint64_t            _sample_time_us;
 
     // This represents a 321-intrinsic rotation in NED frame to the target (setpoint)
     // attitude used in the attitude controller, in radians.
