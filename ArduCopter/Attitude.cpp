@@ -12,7 +12,7 @@ void Copter::run_rate_controller_main()
     // set attitude and position controller loop time
     const float last_loop_time_s = AP::scheduler().get_last_loop_time_s();
     pos_control->set_dt(last_loop_time_s);
-    attitude_control->set_dt(last_loop_time_s);
+    attitude_control->set_dt(last_loop_time_s, AP::scheduler().get_loop_start_time_us());
 
     if (!using_rate_thread) {
         motors->set_dt(last_loop_time_s);
