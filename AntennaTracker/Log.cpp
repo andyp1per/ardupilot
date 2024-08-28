@@ -10,7 +10,7 @@ void Tracker::Log_Write_Attitude()
     Vector3f targets;
     targets.y = nav_status.pitch * 100.0f;
     targets.z = wrap_360_cd(nav_status.bearing * 100.0f);
-    ahrs.Write_Attitude(targets);
+    ahrs.Write_Attitude(targets, AP_HAL::micros64());
     AP::ahrs().Log_Write();
 }
 
