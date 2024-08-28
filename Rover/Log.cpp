@@ -10,7 +10,7 @@ void Rover::Log_Write_Attitude()
     float desired_pitch_cd = degrees(g2.attitude_control.get_desired_pitch()) * 100.0f;
     const Vector3f targets(0.0f, desired_pitch_cd, 0.0f);
 
-    ahrs.Write_Attitude(targets);
+    ahrs.Write_Attitude(targets, AP::scheduler().get_loop_start_time_us());
 
     AP::ahrs().Log_Write();
 
