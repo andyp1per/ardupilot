@@ -94,7 +94,7 @@ void Blimp::Log_Write_Attitude()
 {
     //Attitude targets are all zero since Blimp doesn't have attitude control,
     //but the rest of the log message is useful.
-    ahrs.Write_Attitude(Vector3f{0,0,0});
+    ahrs.Write_Attitude(Vector3f{0,0,0}, AP_HAL::micros64());
 }
 
 // Write an EKF and POS packet
