@@ -173,10 +173,7 @@ public:
     }
 
     // Logging Functions
-    void Write_AttitudeView(const Vector3f &targets) const;    
-    void Write_Rate(const class AP_Motors &motors,
-                    class AC_AttitudeControl &attitude_control,
-                    const AC_PosControl &pos_control) const;
+    void Write_AttitudeView(const Vector3f &targets, uint64_t sample_time_us) const;    
 
     float roll;
     float pitch;
