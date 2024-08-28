@@ -1760,7 +1760,7 @@ void QuadPlane::update(void)
         const bool motors_active = in_vtol_mode() || assisted_flight;
         if (motors_active && (motors->get_spool_state() != AP_Motors::SpoolState::SHUT_DOWN)) {
             // log RATE at main loop rate
-            ahrs_view->Write_Rate(*motors, *attitude_control, *pos_control);
+            attitude_control->Write_Rate(*motors, *pos_control);
 
             // log CTRL and MOTB at 10 Hz
             if (now - last_ctrl_log_ms > 100) {
@@ -1948,7 +1948,7 @@ void QuadPlane::motors_output(bool run_rate_controller)
         // run low level rate controllers that only require IMU data and set loop time
         const float last_loop_time_s = AP::scheduler().get_last_loop_time_s();
         motors->set_dt(last_loop_time_s);
-        attitude_control->set_dt(last_loop_time_s);
+        attitude_control->set_dt(last_loop_time_s, AP::scheduler().get_loop_start_time_us());
         pos_control->set_dt(last_loop_time_s);
         attitude_control->rate_controller_run();
         last_att_control_ms = now;

@@ -19,11 +19,11 @@ void Plane::Log_Write_Attitude(void)
         // Get them from the quaternion instead:
         quadplane.attitude_control->get_attitude_target_quat().to_euler(targets.x, targets.y, targets.z);
         targets *= degrees(100.0f);
-        quadplane.ahrs_view->Write_AttitudeView(targets);
+        quadplane.ahrs_view->Write_AttitudeView(targets, quadplane.attitude_control->get_sample_time_us());
     } else
 #endif
             {
-        ahrs.Write_Attitude(targets);
+        ahrs.Write_Attitude(targets, AP::scheduler().get_loop_start_time_us());
     }
 
 #if HAL_QUADPLANE_ENABLED
