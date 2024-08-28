@@ -61,7 +61,7 @@ void Sub::Log_Write_Attitude()
 {
     Vector3f targets = attitude_control.get_att_target_euler_cd();
     targets.z = wrap_360_cd(targets.z);
-    ahrs.Write_Attitude(targets);
+    ahrs.Write_Attitude(targets, attitude_control.get_sample_time_us());
 
     AP::ahrs().Log_Write();
 }
