@@ -68,7 +68,7 @@ void AP_Frsky_D::send(void)
     if (now - _D.last_1000ms_frame >= 1000) {
         _D.last_1000ms_frame = now;
         AP_AHRS &_ahrs = AP::ahrs();
-        send_uint16(DATA_ID_GPS_COURS_BP, (uint16_t)((_ahrs.yaw_sensor / 100) % 360)); // send heading in degree based on AHRS and not GPS
+        send_uint16(DATA_ID_GPS_COURS_BP, (uint16_t)(((int32_t)_ahrs.yaw_sensor / 100) % 360)); // send heading in degree based on AHRS and not GPS
         calc_gps_position();
         if (AP::gps().status() >= 3) {
             send_uint16(DATA_ID_GPS_LAT_BP, _SPort_data.latdddmm); // send gps latitude degree and minute integer part
