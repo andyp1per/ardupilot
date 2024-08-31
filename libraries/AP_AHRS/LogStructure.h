@@ -63,14 +63,14 @@ struct PACKED log_AOA_SSA {
 struct PACKED log_Attitude {
     LOG_PACKET_HEADER;
     uint64_t time_us;
-    int16_t  control_roll;
-    int16_t  roll;
-    int16_t  control_pitch;
-    int16_t  pitch;
-    uint16_t control_yaw;
-    uint16_t yaw;
-    uint16_t error_rp;
-    uint16_t error_yaw;
+    float control_roll;
+    int32_t roll;
+    float control_pitch;
+    int32_t pitch;
+    float control_yaw;
+    int32_t yaw;
+    float error_rp;
+    float error_yaw;
     uint8_t  active;
 };
 
@@ -165,7 +165,7 @@ struct PACKED log_ATSC {
     { LOG_AOA_SSA_MSG, sizeof(log_AOA_SSA), \
         "AOA", "Qff", "TimeUS,AOA,SSA", "sdd", "F00" , true }, \
     { LOG_ATTITUDE_MSG, sizeof(log_Attitude),\
-        "ATT", "QccccCCCCB", "TimeUS,DesRoll,Roll,DesPitch,Pitch,DesYaw,Yaw,ErrRP,ErrYaw,AEKF", "sddddhhdh-", "FBBBBBBBB-" , true }, \
+        "ATT", "QfifififfB", "TimeUS,DesRoll,Roll,DesPitch,Pitch,DesYaw,Yaw,ErrRP,ErrYaw,AEKF", "sddddhhdh-", "FBBBBBBBB-" , true }, \
     { LOG_ORGN_MSG, sizeof(log_ORGN), \
         "ORGN","QBLLe","TimeUS,Type,Lat,Lng,Alt", "s#DUm", "F-GGB" }, \
     { LOG_POS_MSG, sizeof(log_POS), \
