@@ -575,9 +575,9 @@ public:
     }
 
     // integer Euler angles (Degrees * 100)
-    int32_t roll_sensor;
-    int32_t pitch_sensor;
-    int32_t yaw_sensor;
+    float roll_sensor;
+    float pitch_sensor;
+    float yaw_sensor;
 
     const Matrix3f &get_rotation_body_to_ned(void) const { return state.dcm_matrix; }
 

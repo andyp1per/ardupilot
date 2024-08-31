@@ -178,9 +178,9 @@ public:
     float roll;
     float pitch;
     float yaw;
-    int32_t roll_sensor;
-    int32_t pitch_sensor;
-    int32_t yaw_sensor;
+    float roll_sensor;
+    float pitch_sensor;
+    float yaw_sensor;
 
 
     // get current rotation
