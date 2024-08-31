@@ -481,8 +481,8 @@ void AP_Spektrum_Telem::calc_attandmag(void)
     // Yaw is a rotation about the Z Axis of the vehicle using the RHR.
     _telem.attMag.attRoll = _ahrs.roll_sensor / 10;
     _telem.attMag.attPitch = _ahrs.pitch_sensor / 10;
-    _telem.attMag.attYaw = _ahrs.yaw_sensor / 10;
-    _telem.attMag.heading = (_ahrs.yaw_sensor / 10) % 3600;  // Heading, 0.1deg
+    _telem.attMag.attYaw = (int32_t)_ahrs.yaw_sensor / 10;
+    _telem.attMag.heading = ((int32_t)_ahrs.yaw_sensor / 10) % 3600;  // Heading, 0.1deg
 
     const Vector3f& field = AP::compass().get_field();
 
