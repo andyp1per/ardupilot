@@ -173,7 +173,7 @@ public:
     }
 
     // Logging Functions
-    void Write_AttitudeView(const Vector3f &targets, uint64_t sample_time_us) const;    
+    void Write_AttitudeView(const Vector3f &targets, uint64_t sample_time_us, float dt) const;    
 
     float roll;
     float pitch;

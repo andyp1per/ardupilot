@@ -53,13 +53,14 @@ struct PACKED log_AOA_SSA {
 // @Field: TimeUS: Time since system startup
 // @Field: DesRoll: vehicle desired roll
 // @Field: Roll: achieved vehicle roll
-// @Field: DesPitch: vehicle desired pitch
-// @Field: Pitch: achieved vehicle pitch
+// @Field: DesPit: vehicle desired pitch
+// @Field: Pit: achieved vehicle pitch
 // @Field: DesYaw: vehicle desired yaw
 // @Field: Yaw: achieved vehicle yaw
 // @Field: ErrRP: lowest estimated gyro drift error
 // @Field: ErrYaw: difference between measured yaw and DCM yaw estimate
 // @Field: AEKF: active EKF type
+// @Field: Dt: attitude delta time
 struct PACKED log_Attitude {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -72,6 +73,7 @@ struct PACKED log_Attitude {
     float error_rp;
     float error_yaw;
     uint8_t  active;
+    float sensor_dt;
 };
 
 // @LoggerMessage: ORGN
@@ -165,7 +167,7 @@ struct PACKED log_ATSC {
     { LOG_AOA_SSA_MSG, sizeof(log_AOA_SSA), \
         "AOA", "Qff", "TimeUS,AOA,SSA", "sdd", "F00" , true }, \
     { LOG_ATTITUDE_MSG, sizeof(log_Attitude),\
-        "ATT", "QffffffffB", "TimeUS,DesRoll,Roll,DesPitch,Pitch,DesYaw,Yaw,ErrRP,ErrYaw,AEKF", "sddddhhdh-", "FBBBBBBBB-" , true }, \
+        "ATT", "QffffffffBf", "TimeUS,DesRoll,Roll,DesPit,Pit,DesYaw,Yaw,ErrRP,ErrYaw,AEKF,Dt", "sddddhhdh-s", "FBBBBBBBB--" , true }, \
     { LOG_ORGN_MSG, sizeof(log_ORGN), \
         "ORGN","QBLLe","TimeUS,Type,Lat,Lng,Alt", "s#DUm", "F-GGB" }, \
     { LOG_POS_MSG, sizeof(log_POS), \
