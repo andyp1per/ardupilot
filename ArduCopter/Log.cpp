@@ -77,7 +77,7 @@ void Copter::Log_Write_Attitude()
 {
     Vector3f targets = attitude_control->get_att_target_euler_cd();
     targets.z = wrap_360_cd(targets.z);
-    ahrs.Write_Attitude(targets, attitude_control->get_sample_time_us());
+    ahrs.Write_Attitude(targets, attitude_control->get_sample_time_us(), attitude_control->get_dt());
 }
 
 void Copter::Log_Write_Rate()
