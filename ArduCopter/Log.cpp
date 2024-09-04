@@ -72,7 +72,7 @@ void Copter::Log_Write_Attitude()
 
 void Copter::Log_Write_Rate()
 {
-    ahrs_view->Write_Rate(*motors, *attitude_control, *pos_control);
+    attitude_control->Write_Rate(*pos_control);
 }
 
 // Write PIDS packets
