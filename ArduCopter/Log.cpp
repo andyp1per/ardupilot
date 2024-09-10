@@ -67,7 +67,7 @@ void Copter::Log_Write_Control_Tuning()
 // Write an attitude packet
 void Copter::Log_Write_Attitude()
 {
-    ahrs.Write_Attitude(attitude_control->get_att_target_euler_rad() * RAD_TO_DEG);
+    attitude_control->Write_ANG();
 }
 
 void Copter::Log_Write_Rate()
