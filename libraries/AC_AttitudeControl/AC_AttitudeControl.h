@@ -422,8 +422,8 @@ public:
     // write RATE message
     void Write_Rate(const AC_PosControl &pos_control) const;
 
-    // get the latest gyro value that was used by the rate controller
-    const Vector3f &get_gyro_latest(void) const { return _rate_gyro; }
+    // write ANG message
+    void Write_ANG() const;
 
     // User settable parameters
     static const struct AP_Param::GroupInfo var_info[];
