@@ -8,7 +8,6 @@
     LOG_ATTITUDE_MSG, \
     LOG_ORGN_MSG, \
     LOG_POS_MSG, \
-    LOG_RATE_MSG, \
     LOG_ATSC_MSG
 
 // @LoggerMessage: AHR2
