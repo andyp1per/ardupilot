@@ -143,6 +143,7 @@ const struct MultiplierStructure log_Multipliers[] = {
 #include <AP_RPM/LogStructure.h>
 #include <AC_Fence/LogStructure.h>
 #include <AP_Landing/LogStructure.h>
+#include <AC_AttitudeControl/LogStructure.h>
 
 // structure used to define logging format
 // It is packed on ChibiOS to save flash space; however, this causes problems
@@ -1327,6 +1328,7 @@ LOG_STRUCTURE_FROM_VISUALODOM \
       "PSCE", PIDx_FMT, "TimeUS,TPE,PE,DVE,TVE,VE,DAE,TAE,AE", PIDx_UNITS, PIDx_MULTS }, \
     { LOG_PSCD_MSG, sizeof(log_PSCx), \
       "PSCD", PIDx_FMT, "TimeUS,TPD,PD,DVD,TVD,VD,DAD,TAD,AD", PIDx_UNITS, PIDx_MULTS }, \
+    LOG_STRUCTURE_FROM_AC_ATTITUDECONTROL, \
     { LOG_STAK_MSG, sizeof(log_STAK), \
       "STAK", "QBBHHN", "TimeUS,Id,Pri,Total,Free,Name", "s#----", "F-----", true }, \
     { LOG_FILE_MSG, sizeof(log_File), \
@@ -1414,6 +1416,7 @@ enum LogMessages : uint8_t {
     LOG_PSCN_MSG,
     LOG_PSCE_MSG,
     LOG_PSCD_MSG,
+    LOG_IDS_FROM_AC_ATTITUDECONTROL,
     LOG_IDS_FROM_PRECLAND,
     LOG_IDS_FROM_AIS,
     LOG_STAK_MSG,
