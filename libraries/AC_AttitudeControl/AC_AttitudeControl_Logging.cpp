@@ -6,7 +6,6 @@
 #include "AC_PosControl.h"
 #include <AP_Logger/AP_Logger.h>
 #include <AP_Scheduler/AP_Scheduler.h>
-#include "LogStructure.h"
 
 // Write an ANG packet
 void AC_AttitudeControl::Write_ANG() const
