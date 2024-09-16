@@ -482,8 +482,6 @@ protected:
     // latest gyro value use by the rate_controller
     Vector3f            _rate_gyro;
 
-    // latest gyro value use by the rate_controller
-    Vector3f            _rate_gyro;
     // timestamp of the latest gyro value used by the rate controller
     uint64_t            _rate_gyro_time_us;
 

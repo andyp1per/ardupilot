@@ -1,7 +1,5 @@
 #pragma once
 
-#include <AP_Logger/LogStructure.h>
-
 #define LOG_IDS_FROM_AC_ATTITUDECONTROL \
     LOG_RATE_MSG, \
     LOG_ANG_MSG
