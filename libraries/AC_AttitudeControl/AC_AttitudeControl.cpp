@@ -628,19 +628,26 @@ void AC_AttitudeControl::input_angle_step_bf_roll_pitch_yaw(float roll_angle_ste
 // Done as a single thread-safe function to avoid intermediate zero values being seen by the attitude controller
 void AC_AttitudeControl::input_rate_step_bf_roll_pitch_yaw(float roll_rate_step_bf_cd, float pitch_rate_step_bf_cd, float yaw_rate_step_bf_cd)
 {
-    // Set x-axis angular velocity in centidegrees/s
-    _ang_vel_target.x = radians(roll_rate_step_bf_cd * 0.01f);
-    _ang_vel_target.y = radians(pitch_rate_step_bf_cd * 0.01f);
-    _ang_vel_target.z = radians(yaw_rate_step_bf_cd * 0.01f);
+    // Compute acceleration-limited body frame rates
+    // When acceleration limiting is enabled, the input shaper constrains angular acceleration about the axis, slewing
+    // the output rate towards the input rate.
+    _ang_vel_target.x = input_shaping_ang_vel(_ang_vel_target.x, 0.0f, get_accel_roll_max_radss(), _dt, _rate_rp_tc);
+    _ang_vel_target.y = input_shaping_ang_vel(_ang_vel_target.y, 0.0f, get_accel_pitch_max_radss(), _dt, _rate_rp_tc);
+    _ang_vel_target.z = input_shaping_ang_vel(_ang_vel_target.z, 0.0f, get_accel_yaw_max_radss(), _dt, _rate_y_tc);
 
     // Update the unused targets attitude based on current attitude to condition mode change
     _ahrs.get_quat_body_to_ned(_attitude_target);
     _attitude_target.to_euler(_euler_angle_target);
     // Convert body-frame angular velocity into euler angle derivative of desired attitude
     ang_vel_to_euler_rate(_attitude_target, _ang_vel_target, _euler_rate_target);
-    
+
+    Vector3f ang_vel_body;
+    // Set x-axis angular velocity in centidegrees/s
+    ang_vel_body.x = radians(roll_rate_step_bf_cd * 0.01f);
+    ang_vel_body.y = radians(pitch_rate_step_bf_cd * 0.01f);
+    ang_vel_body.z = radians(yaw_rate_step_bf_cd * 0.01f);
     // finally update the attitude target
-    _ang_vel_body = _ang_vel_target;
+    _ang_vel_body = ang_vel_body;
 }
 
 // Command a thrust vector and heading rate
