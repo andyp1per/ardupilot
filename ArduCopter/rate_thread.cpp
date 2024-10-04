@@ -284,7 +284,7 @@ void Copter::rate_controller_thread()
         // run the rate controller on all available samples
         // it is important not to drop samples otherwise the filtering will be fubar
         // there is no need to output to the motors more than once for every batch of samples
-        attitude_control->rate_controller_run_dt(sensor_dt, gyro + ahrs.get_gyro_drift());
+        attitude_control->rate_controller_run_dt(gyro + ahrs.get_gyro_drift(), sensor_dt);
 
 #ifdef RATE_LOOP_TIMING_DEBUG
         rate_controller_time_us += AP_HAL::micros() - rate_now_us;
