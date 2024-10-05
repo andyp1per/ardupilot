@@ -143,8 +143,8 @@ gcs:send_text(MAV_SEVERITY.INFO, string.format("Rate switch: stored %u parameter
 local AuxSwitchPos = {LOW=0, MIDDLE=1, HIGH=2}
 local AuxSwitchPosNames = {"LOW", "MIDDLE", "HIGH"}
 
--- start in LOW start
-local prev_pos = AuxSwitchPos.LOW
+-- start in the current state so that we don't switch on boot
+local prev_pos = rc:get_aux_cached(PREV_RC_FUNC:get())
 
 -- main update function
 function update()
