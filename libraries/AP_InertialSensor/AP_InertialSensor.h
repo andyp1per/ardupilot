@@ -472,6 +472,10 @@ public:
         float last_attenuation_dB[INS_MAX_INSTANCES];
         bool inactive;
     } harmonic_notches[HAL_INS_NUM_HARMONIC_NOTCH_FILTERS];
+
+#if AP_SCRIPTING_ENABLED
+    HarmonicNotch& get_harmonic_notch(uint8_t idx);
+#endif
 #endif  // AP_INERTIALSENSOR_HARMONICNOTCH_ENABLED
 
 private:
