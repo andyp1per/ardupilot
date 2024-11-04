@@ -634,7 +634,7 @@ singleton AP_InertialSensor rename ins
 singleton AP_InertialSensor method get_temperature float uint8_t 0 INS_MAX_INSTANCES
 singleton AP_InertialSensor method get_gyro_health boolean uint8_t'skip_check
 singleton AP_InertialSensor method get_accel_health boolean uint8_t'skip_check
-ap_object AP_InertialSensor::HarmonicNotch depends AP_INERTIALSENSOR_HARMONICNOTCH_ENABLED
+ap_object AP_InertialSensor::HarmonicNotch depends AP_INERTIALSENSOR_ENABLED
 singleton AP_InertialSensor method get_harmonic_notch AP_InertialSensor::HarmonicNotch uint8_t 0 HAL_INS_NUM_HARMONIC_NOTCH_FILTERS
 
 ap_object AP_InertialSensor::HarmonicNotch method set_frequency void uint8_t 0 INS_MAX_NOTCHES float'skip_check
