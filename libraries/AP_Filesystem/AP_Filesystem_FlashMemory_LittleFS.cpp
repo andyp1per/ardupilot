@@ -431,6 +431,10 @@ void AP_Filesystem_FlashMemory_LittleFS::mark_dead()
 #define JEDEC_STATUS_SEC             0x40
 #define JEDEC_STATUS_SRP0            0x80
 
+#define W25N01G_STATUS_EFAIL         0x04
+#define W25N01G_STATUS_PFAIL         0x08
+
+
 /*
   flash device IDs taken from betaflight flash_m25p16.c
 
@@ -474,10 +478,10 @@ uint8_t AP_Filesystem_FlashMemory_LittleFS::read_status_register()
     uint8_t status;
     uint8_t length = 1;
 
-    if (jedec_id == JEDEC_ID_WINBOND_W25N01GV) {
+    //if (jedec_id == JEDEC_ID_WINBOND_W25N01GV) {
         length = 2;
         cmd[1] = W25N01G_STATUS_REG;
-    }
+    //}
 
     dev->transfer(cmd, length, &status, 1);
 
@@ -487,7 +491,7 @@ uint8_t AP_Filesystem_FlashMemory_LittleFS::read_status_register()
 bool AP_Filesystem_FlashMemory_LittleFS::is_busy()
 {
     // TODO(ntamas): slightly different for W25N01GV?
-    return (read_status_register() & (JEDEC_STATUS_BUSY | JEDEC_STATUS_SRP0)) != 0;
+    return (read_status_register() & (JEDEC_STATUS_BUSY | W25N01G_STATUS_PFAIL | W25N01G_STATUS_EFAIL)) != 0;
 }
 
 void AP_Filesystem_FlashMemory_LittleFS::send_command_addr(uint8_t command, uint32_t addr)
