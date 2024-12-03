@@ -1841,6 +1841,64 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
         self.do_fence_disable() # Disable fence so we can land
         self.fly_home_land_and_disarm() # Pack it up, we're going home.
 
+    def FenceAutoEnableDisableSwitch(self):
+        '''Tests autoenablement of regular fences and manual disablement'''
+        self.set_parameters({
+            "FENCE_TYPE": 11,     # Set fence type to min alt
+            "FENCE_ACTION": 1,   # Set action to RTL
+            "FENCE_ALT_MIN": 50,
+            "FENCE_ALT_MAX": 100,
+            "FENCE_AUTOENABLE": 2,
+            "FENCE_OPTIONS" : 1,
+            "FENCE_ENABLE" : 1,
+            "FENCE_RADIUS" : 300,
+            "FENCE_RET_ALT" : 0,
+            "FENCE_RET_RALLY" : 0,
+            "FENCE_TOTAL" : 0,
+            "TKOFF_ALT" : 75,
+            "RC7_OPTION" : 11,   # AC_Fence uses Aux switch functionality
+        })
+        fence_bit = mavutil.mavlink.MAV_SYS_STATUS_GEOFENCE
+        # Grab Home Position
+        self.mav.recv_match(type='HOME_POSITION', blocking=True)
+        self.set_rc_from_map({7: 1000}) # Turn fence off with aux function
+
+        self.wait_ready_to_arm()
+        cruise_alt = 75
+        self.takeoff(cruise_alt, mode='TAKEOFF', timeout=120)
+
+        self.progress("Fly above ceiling and check there is no breach")
+        self.set_rc(3, 2000)
+        self.change_altitude(cruise_alt + 80, relative=True)
+        m = self.mav.recv_match(type='SYS_STATUS', blocking=True)
+        self.progress("Got (%s)" % str(m))
+        if (not (m.onboard_control_sensors_health & fence_bit)):
+            raise NotAchievedException("Fence Ceiling breached")
+
+        self.progress("Return to cruise alt")
+        self.set_rc(3, 1500)
+        self.change_altitude(cruise_alt, relative=True)
+
+        self.progress("Fly below floor and check for no breach")
+        self.change_altitude(25, relative=True)
+        m = self.mav.recv_match(type='SYS_STATUS', blocking=True)
+        self.progress("Got (%s)" % str(m))
+        if (not (m.onboard_control_sensors_health & fence_bit)):
+            raise NotAchievedException("Fence Ceiling breached")
+
+        self.progress("Fly above floor and check fence is not re-enabled")
+        self.set_rc(3, 2000)
+        self.change_altitude(75, relative=True)
+        m = self.mav.recv_match(type='SYS_STATUS', blocking=True)
+        self.progress("Got (%s)" % str(m))
+        if (m.onboard_control_sensors_enabled & fence_bit):
+            raise NotAchievedException("Fence Ceiling re-enabled")
+
+        self.progress("Return to cruise alt")
+        self.set_rc(3, 1500)
+        self.change_altitude(cruise_alt, relative=True)
+        self.fly_home_land_and_disarm(timeout=250)
+
     def TerrainRally(self):
         """ Tests terrain follow with a rally point """
         self.context_push()
@@ -5341,6 +5399,7 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
             self.AIRSPEED_AUTOCAL,
             self.RangeFinder,
             self.FenceStatic,
+            self.FenceAutoEnableDisableSwitch,
             self.FenceRTL,
             self.FenceRTLRally,
             self.FenceRetRally,
