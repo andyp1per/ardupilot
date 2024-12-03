@@ -1859,6 +1859,7 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
             "RC7_OPTION" : 11,   # AC_Fence uses Aux switch functionality
         })
         fence_bit = mavutil.mavlink.MAV_SYS_STATUS_GEOFENCE
+        self.homeloc = self.mav.location()
         # Grab Home Position
         self.mav.recv_match(type='HOME_POSITION', blocking=True)
         self.set_rc_from_map({7: 1000}) # Turn fence off with aux function
@@ -1869,7 +1870,7 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
 
         self.progress("Fly above ceiling and check there is no breach")
         self.set_rc(3, 2000)
-        self.change_altitude(cruise_alt + 80, relative=True)
+        self.change_altitude(self.homeloc.alt + cruise_alt + 80)
         m = self.mav.recv_match(type='SYS_STATUS', blocking=True)
         self.progress("Got (%s)" % str(m))
         if (not (m.onboard_control_sensors_health & fence_bit)):
@@ -1877,10 +1878,10 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
 
         self.progress("Return to cruise alt")
         self.set_rc(3, 1500)
-        self.change_altitude(cruise_alt, relative=True)
+        self.change_altitude(self.homeloc.alt + cruise_alt)
 
         self.progress("Fly below floor and check for no breach")
-        self.change_altitude(25, relative=True)
+        self.change_altitude(self.homeloc.alt + 25)
         m = self.mav.recv_match(type='SYS_STATUS', blocking=True)
         self.progress("Got (%s)" % str(m))
         if (not (m.onboard_control_sensors_health & fence_bit)):
@@ -1896,7 +1897,7 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
 
         self.progress("Return to cruise alt")
         self.set_rc(3, 1500)
-        self.change_altitude(cruise_alt, relative=True)
+        self.change_altitude(self.homeloc.alt + cruise_alt)
         self.fly_home_land_and_disarm(timeout=250)
 
     def TerrainRally(self):
