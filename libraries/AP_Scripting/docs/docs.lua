@@ -4025,3 +4025,87 @@ function visual_odom:healthy() end
 -- visual odometry quality as a percentage from 1 to 100 or 0 if unknown
 ---@return integer
 function visual_odom:quality() end
+
+-- desc
+---@class (exact) CRSFParameter_ud
+local CRSFParameter_ud = {}
+
+---@return CRSFParameter_ud
+function CRSFParameter() end
+
+-- get field
+---@return integer
+function CRSFParameter_ud:id() end
+
+-- set field
+---@param value integer
+function CRSFParameter_ud:id(value) end
+
+-- get field
+---@return integer
+function CRSFParameter_ud:length() end
+
+-- set field
+---@param value integer
+function CRSFParameter_ud:length(value) end
+
+-- get field
+---@return string
+function CRSFParameter_ud:data(index) end
+
+-- set field
+---@param value string
+function CRSFParameter_ud:data(value) end
+
+-- desc
+---@class (exact) CRSFMenu_ud
+local CRSFMenu_ud = {}
+
+---@return CRSFMenu_ud
+function CRSFMenu() end
+
+-- initialize menu
+---@param size integer
+---@return boolean
+function CRSFMenu_ud:init(size) end
+
+-- get field
+---@return integer
+function CRSFMenu_ud:id() end
+
+-- set field
+---@param value integer
+function CRSFMenu_ud:id(value) end
+
+-- get field
+---@return string
+function CRSFMenu_ud:name() end
+
+-- set field
+---@param value string
+function CRSFMenu_ud:name(value) end
+
+-- get field
+---@return integer
+function CRSFMenu_ud:num_params() end
+
+-- set field
+---@param value integer
+function CRSFMenu_ud:num_params(value) end
+
+-- get array field
+---@param index integer
+---@return CRSFParameter_ud
+function CRSFMenu_ud:params(index) end
+
+-- set array field
+---@param index integer
+---@param value CRSFParameter_ud
+function CRSFMenu_ud:params(index, value) end
+
+-- desc
+crsf = {}
+
+-- update telemetry data for an ESC instance
+---@param menu CRSFMenu_ud -- menu
+function crsf:add_menu(menu) end
