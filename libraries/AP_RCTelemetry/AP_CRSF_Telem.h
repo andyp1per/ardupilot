@@ -175,6 +175,32 @@ public:
         uint8_t payload[57];   // largest possible frame is 60
     };
 
+    const static uint8_t MAX_SCRIPTED_MENUS = 5U;
+    const static uint8_t MAX_SCRIPTED_PARAMETERS = 255U;
+    const static uint8_t MAX_SCRIPTED_PARAMETER_SIZE = 255U;
+    const static uint8_t MAX_SCRIPTED_MENU_NAME_LEN = 16;
+    const static uint8_t PARAMETER_MENU_ID = 1; // id of the parameter menu
+    const static uint8_t SCRIPTED_MENU_START_ID = AP_OSD_ParamScreen::NUM_PARAMS * AP_OSD_NUM_PARAM_SCREENS + 2;
+
+    struct ScriptedParameter {
+        uint8_t id;
+        uint16_t length;
+        const char* data;
+    };
+
+    struct ScriptedMenu {
+        uint8_t id;
+        uint8_t num_params;
+        const char* name;
+        ScriptedParameter* params;
+
+        bool init(uint8_t size);
+    };
+
+    ScriptedMenu scripted_menus[MAX_SCRIPTED_MENUS];
+    uint8_t num_scripted_menus;
+    void add_menu(const ScriptedMenu& menu);
+
     // Frame to hold passthrough telemetry
     struct PACKED PassthroughSinglePacketFrame {
         uint8_t sub_type;
