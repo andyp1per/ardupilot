@@ -40,6 +40,7 @@ class Board:
 
     def __init__(self):
         self.with_can = False
+        self.with_littlefs = False
 
     def configure(self, cfg):
         cfg.env.TOOLCHAIN = cfg.options.toolchain or self.toolchain
@@ -674,7 +675,10 @@ Please use a replacement build as follows:
 class sitl(Board):
 
     def __init__(self):
+        super().__init__()
+
         self.with_can = True
+        self.with_littlefs = True
 
     def configure_env(self, cfg, env):
         super(sitl, self).configure_env(cfg, env)
@@ -1338,6 +1342,8 @@ class chibios(Board):
 
 class linux(Board):
     def __init__(self):
+        super().__init__()
+
         if self.toolchain == 'native':
             self.with_can = True
         else:
@@ -1483,6 +1489,8 @@ class edge(linux):
     toolchain = 'arm-linux-gnueabihf'
 
     def __init__(self):
+        super().__init__()
+
         self.with_can = True
 
     def configure_env(self, cfg, env):
@@ -1516,6 +1524,8 @@ class bbbmini(linux):
     toolchain = 'arm-linux-gnueabihf'
 
     def __init__(self):
+        super().__init__()
+
         self.with_can = True
 
     def configure_env(self, cfg, env):
@@ -1529,6 +1539,8 @@ class blue(linux):
     toolchain = 'arm-linux-gnueabihf'
 
     def __init__(self):
+        super().__init__()
+
         self.with_can = True
 
     def configure_env(self, cfg, env):
@@ -1543,6 +1555,8 @@ class pocket(linux):
     toolchain = 'arm-linux-gnueabihf'
 
     def __init__(self):
+        super().__init__()
+
         self.with_can = True
 
     def configure_env(self, cfg, env):
@@ -1635,6 +1649,8 @@ class pxfmini(linux):
 
 class aero(linux):
     def __init__(self):
+        super().__init__()
+
         self.with_can = True
 
     def configure_env(self, cfg, env):
@@ -1668,6 +1684,8 @@ class canzero(linux):
     toolchain = 'arm-linux-gnueabihf'
 
     def __init__(self):
+        super().__init__()
+
         self.with_can = True
 
     def configure_env(self, cfg, env):
@@ -1693,6 +1711,8 @@ class QURT(Board):
     toolchain = 'custom'
 
     def __init__(self):
+        super().__init__()
+
         self.with_can = False
 
     def configure_toolchain(self, cfg):
