@@ -1929,6 +1929,28 @@ RC_Channel::AuxSwitchPos RC_Channels::get_channel_pos(const uint8_t rcmapchan) c
     return chan != nullptr ? chan->get_aux_switch_pos() : RC_Channel::AuxSwitchPos::LOW;
 }
 
+// return stick gesture pos as LOW, MIDDLE, HIGH
+// this function uses different threshold values to RC_Chanel::get_aux_switch_pos()
+// to avoid glitching on the stick travel and also always honours channel reversal
+RC_Channel::AuxSwitchPos RC_Channel::get_stick_gesture_pos() const
+{
+    const uint16_t in = get_radio_in();
+    if (in <= 900 || in >= 2200) {
+        return RC_Channel::AuxSwitchPos::LOW;
+    }
+
+    // switch is reversed if 'reversed' option set on channel and switches reverse is allowed by RC_OPTIONS
+    bool switch_reversed = get_reverse();
+
+    if (in < RC_Channel::AUX_PWM_TRIGGER_LOW) {
+        return switch_reversed ? RC_Channel::AuxSwitchPos::HIGH : RC_Channel::AuxSwitchPos::LOW;
+    } else if (in > RC_Channel::AUX_PWM_TRIGGER_HIGH) {
+        return switch_reversed ? RC_Channel::AuxSwitchPos::LOW : RC_Channel::AuxSwitchPos::HIGH;
+    } else {
+        return RC_Channel::AuxSwitchPos::MIDDLE;
+    }
+}
+
 RC_Channel *RC_Channels::find_channel_for_option(const RC_Channel::AUX_FUNC option)
 {
     for (uint8_t i=0; i<NUM_RC_CHANNELS; i++) {
