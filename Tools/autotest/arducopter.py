@@ -10115,7 +10115,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.takeoff(10)
         self.do_RTL()
 
-    def acro_fence(self, timeout=180):
+    def acro_fence(self, timeout=60):
         '''Test acro fence'''
         self.customise_SITL_commandline(
             [],
@@ -10123,18 +10123,32 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             model="quad:@ROMFS/models/freestyle.json",
             wipe=True,
         )
-        # enable fence, disable avoidance
+
+        def print_attitude_and_position(self):
+            m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
+            att = self.mav.recv_match(type='ATTITUDE', blocking=True)
+            alt = m.relative_alt / 1000.0 # mm -> m
+            home_distance = self.distance_to_home(use_cached_home=True)
+            self.progress("alt: %.01f, home: %.01f, roll: %0.01f, pitch: %0.01f, yaw: %0.01f" %
+                          (alt, home_distance, math.degrees(att.roll), math.degrees(att.pitch), math.degrees(att.yaw)))
+
         self.set_parameters({
             "FENCE_ENABLE": 1,
+            "SCR_ENABLE": 1,
+        })
+        self.reboot_sitl()
+        # enable fence, disable avoidance
+        self.set_parameters({
+            "AHRS_EKF_TYPE": 10,
             "FENCE_TYPE": 11,
             "FENCE_ALT_MIN": 10,
             "FENCE_ALT_MAX": 100,
             "FENCE_RADIUS": 150,
-            "FENCE_ACTION": 1,
+            "FENCE_ACTION": 0,
             "ANGLE_MAX": 7500,
             "AVOID_ENABLE": 0,
+            "AFNCE_FAIL_ACT": 6,  # RTL
         })
-
         self.change_mode("LOITER")
         self.wait_ready_to_arm()
 
@@ -10157,26 +10171,32 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         pitching_forward = True
         self.set_rc(2, 1100)
 
-        self.progress("Waiting for fence breach")
-        tstart = self.get_sim_time()
-        while not self.mode_is("RTL"):
-            if self.get_sim_time_cached() - tstart > 30:
-                raise NotAchievedException("Did not breach fence")
+        self.progress("Waiting for fence breach switch to GUIDED")
 
-            m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
-            alt = m.relative_alt / 1000.0 # mm -> m
-            home_distance = self.distance_to_home(use_cached_home=True)
-            self.progress("Alt: %.02f  HomeDistance: %.02f (fence radius=%f)" %
-                          (alt, home_distance, fence_radius))
+        bounce_count = 5
+        while (bounce_count > 0):
+            tstart = self.get_sim_time()
+            while not self.mode_is("GUIDED"):
+                print_attitude_and_position(self)
+                if self.get_sim_time_cached() - tstart > 30:
+                    raise NotAchievedException("Did not breach fence")
+            tstart = self.get_sim_time()
+            while not self.mode_is("LOITER"):
+                print_attitude_and_position(self)
+                if self.get_sim_time_cached() - tstart > 30:
+                    raise NotAchievedException("Did not switch back to loiter")
+            bounce_count = bounce_count - 1
 
         self.progress("Waiting until we get home and disarm")
+        self.change_mode("RTL")
         tstart = self.get_sim_time()
         while self.get_sim_time_cached() < tstart + timeout:
             m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
+            att = self.mav.recv_match(type='ATTITUDE', blocking=True)
             alt = m.relative_alt / 1000.0 # mm -> m
             home_distance = self.distance_to_home(use_cached_home=True)
-            self.progress("Alt: %.02f  HomeDistance: %.02f" %
-                          (alt, home_distance))
+            self.progress("Alt: %.01f  Home: %.01f, roll: %0.01f, pitch: %0.01f, yaw: %0.01f" %
+                          (alt, home_distance, math.degrees(att.roll), math.degrees(att.pitch), math.degrees(att.yaw)))
             # recenter pitch sticks once we're home so we don't fly off again
             if pitching_forward and home_distance < 50:
                 pitching_forward = False
