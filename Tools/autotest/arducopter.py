@@ -10115,6 +10115,89 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.takeoff(10)
         self.do_RTL()
 
+    def acro_fence(self, timeout=180):
+        '''Test acro fence'''
+        self.customise_SITL_commandline(
+            [],
+            defaults_filepath=self.model_defaults_filepath('freestyle'),
+            model="quad:@ROMFS/models/freestyle.json",
+            wipe=True,
+        )
+        # enable fence, disable avoidance
+        self.set_parameters({
+            "FENCE_ENABLE": 1,
+            "FENCE_TYPE": 11,
+            "FENCE_ALT_MIN": 10,
+            "FENCE_ALT_MAX": 100,
+            "FENCE_RADIUS": 150,
+            "FENCE_ACTION": 1,
+            "ANGLE_MAX": 7500,
+            "AVOID_ENABLE": 0,
+        })
+
+        self.change_mode("LOITER")
+        self.wait_ready_to_arm()
+
+        # fence requires home to be set:
+        m = self.poll_home_position(quiet=False)
+
+        self.start_subtest("Check breach-fence behaviour")
+        self.set_parameter("FENCE_TYPE", 2)
+        self.takeoff(20, mode="LOITER")
+
+        # first east
+        self.progress("turn east")
+        self.set_rc(4, 1580)
+        self.wait_heading(160, timeout=60)
+        self.set_rc(4, 1500)
+
+        fence_radius = self.get_parameter("FENCE_RADIUS")
+
+        self.progress("flying forward (east) until we hit fence")
+        pitching_forward = True
+        self.set_rc(2, 1100)
+
+        self.progress("Waiting for fence breach")
+        tstart = self.get_sim_time()
+        while not self.mode_is("RTL"):
+            if self.get_sim_time_cached() - tstart > 30:
+                raise NotAchievedException("Did not breach fence")
+
+            m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
+            alt = m.relative_alt / 1000.0 # mm -> m
+            home_distance = self.distance_to_home(use_cached_home=True)
+            self.progress("Alt: %.02f  HomeDistance: %.02f (fence radius=%f)" %
+                          (alt, home_distance, fence_radius))
+
+        self.progress("Waiting until we get home and disarm")
+        tstart = self.get_sim_time()
+        while self.get_sim_time_cached() < tstart + timeout:
+            m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
+            alt = m.relative_alt / 1000.0 # mm -> m
+            home_distance = self.distance_to_home(use_cached_home=True)
+            self.progress("Alt: %.02f  HomeDistance: %.02f" %
+                          (alt, home_distance))
+            # recenter pitch sticks once we're home so we don't fly off again
+            if pitching_forward and home_distance < 50:
+                pitching_forward = False
+                self.set_rc(2, 1475)
+                # disable fence
+                self.set_parameter("FENCE_ENABLE", 0)
+            if (alt <= 1 and home_distance < 10) or (not self.armed() and home_distance < 10):
+                # reduce throttle
+                self.zero_throttle()
+                self.change_mode("LAND")
+                self.wait_landed_and_disarmed()
+                self.progress("Reached home OK")
+                self.zero_throttle()
+                return
+
+        # give we're testing RTL, doing one here probably doesn't make sense
+        home_distance = self.distance_to_home(use_cached_home=True)
+        raise AutoTestTimeoutException(
+            "Fence test failed to reach home (%fm distance) - "
+            "timed out after %u seconds" % (home_distance, timeout,))
+
     def FlyEachFrame(self):
         '''Fly each supported internal frame'''
         vinfo = vehicleinfo.VehicleInfo()
@@ -13336,6 +13419,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.DataFlash,
             Test(self.DataFlashErase, attempts=8),
             self.Callisto,
+            self.acro_fence,
             self.PerfInfo,
             self.Replay,
             self.FETtecESC,
