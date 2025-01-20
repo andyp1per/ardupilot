@@ -10871,6 +10871,141 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.takeoff(10)
         self.do_RTL()
 
+    def acro_fence(self, timeout=90):
+        '''Test acro fence'''
+        self.customise_SITL_commandline(
+            [],
+            defaults_filepath=self.model_defaults_filepath('freestyle'),
+            model="quad:@ROMFS/models/freestyle.json",
+            wipe=True,
+        )
+
+        def get_attitude_and_position(self):
+            m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
+            att = self.mav.recv_match(type='ATTITUDE', blocking=True)
+            alt = m.relative_alt / 1000.0 # mm -> m
+            home_distance = self.distance_to_home(use_cached_home=True)
+            self.progress("alt: %.01f, home: %.01f, roll: %0.01f, pitch: %0.01f, yaw: %0.01f" %
+                          (alt, home_distance, math.degrees(att.roll), math.degrees(att.pitch), math.degrees(att.yaw)))
+            return alt, home_distance
+
+        self.set_parameters({
+            "FENCE_ENABLE": 1,
+            "SCR_ENABLE": 1,
+        })
+        self.reboot_sitl()
+        # enable fence, disable avoidance
+        self.set_parameters({
+            "AHRS_EKF_TYPE": 10,
+            "FENCE_TYPE": 11,
+            "FENCE_ALT_MIN": 10,
+            "FENCE_MARGIN": 20,
+            "FENCE_ALT_MAX": 100,
+            "FENCE_RADIUS": 150,
+            "FENCE_ACTION": 0,
+            "ANGLE_MAX": 7500,
+            "AVOID_ENABLE": 0,
+            "AFNCE_FAIL_ACT": 6,  # RTL
+            "AFNCE_DEBUG": 2,
+            "PSC_JERK_XY": 40,
+            "RC7_OPTION": 300,      # Scripting
+            "RTL_LOIT_TIME": 5000,  # Loiter for 5s
+        })
+        self.change_mode("LOITER")
+        self.set_rc(7, 2000)    # enable acro fencing
+        self.wait_ready_to_arm()
+
+        # fence requires home to be set:
+        m = self.poll_home_position(quiet=False)
+        home_loc = self.mav.location()
+        radius = self.get_parameter("FENCE_RADIUS")
+        margin = self.get_parameter("FENCE_MARGIN")
+        self.mavproxy.send("map circle %f %f %f green\n" % (home_loc.lat, home_loc.lng, radius-margin))
+        self.mavproxy.send("map circle %f %f %f red\n" % (home_loc.lat, home_loc.lng, radius))
+
+        self.start_subtest("Check breach-fence behaviour")
+        self.takeoff(20, mode="LOITER")
+
+        # first east
+        self.progress("turn east")
+        self.set_rc(4, 1580)
+        self.wait_heading(160, timeout=60)
+        self.set_rc(4, 1500)
+
+        fence_radius = self.get_parameter("FENCE_RADIUS")
+
+        self.progress("flying forward (east) until we hit fence")
+        pitching_forward = True
+        self.set_rc(2, 1100)
+        # at 50m turn back a bit
+        self.wait_distance_to_home(distance_min=30, distance_max=60, timeout=60)
+        self.set_rc(2, 1500)
+        self.progress("turning west")
+        self.set_rc(4, 1420)
+        self.wait_heading(90, timeout=60)
+        self.set_rc(4, 1500)
+        self.set_rc(2, 1100)
+
+        self.progress("Waiting for fence breach switch to GUIDED")
+
+        # bounce flat
+        bounce_count = 6
+        while (bounce_count > 0):
+            tstart = self.get_sim_time()
+            while not self.mode_is("GUIDED"):
+                get_attitude_and_position(self)
+                if self.get_sim_time_cached() - tstart > 30:
+                    raise NotAchievedException("Did not breach fence")
+            tstart = self.get_sim_time()
+            while not self.mode_is("LOITER"):
+                get_attitude_and_position(self)
+                if self.get_sim_time_cached() - tstart > 30:
+                    raise NotAchievedException("Did not switch back to loiter")
+            bounce_count = bounce_count - 1
+
+        # bounce 3d
+        bounce_count = 6
+        self.set_rc(3, 1700)
+        while (bounce_count > 0):
+            tstart = self.get_sim_time()
+            while not self.mode_is("GUIDED"):
+                get_attitude_and_position(self)
+                if self.get_sim_time_cached() - tstart > 30:
+                    raise NotAchievedException("Did not breach fence")
+            tstart = self.get_sim_time()
+            while not self.mode_is("LOITER"):
+                get_attitude_and_position(self)
+                if self.get_sim_time_cached() - tstart > 30:
+                    raise NotAchievedException("Did not switch back to loiter")
+            bounce_count = bounce_count - 1
+
+
+        self.progress("Waiting until we get home and disarm")
+        self.change_mode("RTL")
+        tstart = self.get_sim_time()
+        while self.get_sim_time_cached() < tstart + timeout:
+            alt, home_distance = get_attitude_and_position(self)
+            # recenter pitch sticks once we're home so we don't fly off again
+            if pitching_forward and home_distance < 50:
+                pitching_forward = False
+                self.set_rc(2, 1475)
+                # disable fence
+                self.set_parameter("FENCE_ENABLE", 0)
+            if (alt <= 1 and home_distance < 10) or (not self.armed() and home_distance < 10):
+                # reduce throttle
+                self.zero_throttle()
+                self.change_mode("LAND")
+                self.wait_landed_and_disarmed()
+                self.progress("Reached home OK")
+                self.zero_throttle()
+                return
+
+        # give we're testing RTL, doing one here probably doesn't make sense
+        home_distance = self.distance_to_home(use_cached_home=True)
+        raise AutoTestTimeoutException(
+            "Fence test failed to reach home (%fm distance) - "
+            "timed out after %u seconds" % (home_distance, timeout,))
+
     def FlyEachFrame(self):
         '''Fly each supported internal frame'''
         vinfo = vehicleinfo.VehicleInfo()
@@ -14536,6 +14671,7 @@ return update, 1000
             self.DataFlash,
             Test(self.DataFlashErase, attempts=8),
             self.Callisto,
+            self.acro_fence,
             self.PerfInfo,
             self.ModeAllowsEntryWhenNoPilotInput,
             self.Replay,
