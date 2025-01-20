@@ -1798,6 +1798,10 @@ function motors:get_throttle() end
 ---@return number
 function motors:get_throttle_in() end
 
+-- get thrust motor output
+---@return number
+function motors:get_throttle_out() end
+
 -- get throttle motor output
 ---@return integer
 ---| '0' # Shut down
