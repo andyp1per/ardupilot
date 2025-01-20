@@ -361,17 +361,18 @@ bool Copter::set_target_velocity_NED(const Vector3f& vel_ned, bool align_yaw_to_
         return false;
     }
 
+    // convert vector to neu in cm
+    const Vector3f vel_ned_cms(vel_ned.x * 100.0f, vel_ned.y * 100.0f, -vel_ned.z * 100.0f);
+
     // optionally line up the copter with the velocity vector
     float yaw_cd = 0.0f;
     if (align_yaw_to_target) {
-        const float speed_sq = vel_ned.xy().length_squared();
+        const float speed_sq = vel_ned_cms.xy().length_squared();
         if (copter.position_ok() && (speed_sq > (YAW_LOOK_AHEAD_MIN_SPEED * YAW_LOOK_AHEAD_MIN_SPEED))) {
-            yaw_cd = degrees(atan2f(vel_ned.y,vel_ned.x))*100.0f;
+            yaw_cd = degrees(atan2f(vel_ned.y, vel_ned.x))*100.0f;
         }
     }
-    // convert vector to neu in cm
-    const Vector3f vel_neu_cms(vel_ned.x * 100.0f, vel_ned.y * 100.0f, -vel_ned.z * 100.0f);
-    mode_guided.set_velaccel(vel_neu_cms, Vector3f(), align_yaw_to_target, yaw_cd);
+    mode_guided.set_velaccel(vel_ned_cms, Vector3f(), align_yaw_to_target, yaw_cd);
     return true;
 }
 
