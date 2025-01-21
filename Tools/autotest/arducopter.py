@@ -10154,6 +10154,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         # fence requires home to be set:
         m = self.poll_home_position(quiet=False)
+        home_loc = self.mav.location()
+        radius = self.get_parameter("FENCE_RADIUS")
+        self.mavproxy.send("map circle %f %f %f green\n" % (home_loc.lat, home_loc.lng, radius))
 
         self.start_subtest("Check breach-fence behaviour")
         self.set_parameter("FENCE_TYPE", 2)
