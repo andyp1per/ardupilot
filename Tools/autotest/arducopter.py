@@ -10143,7 +10143,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "AHRS_EKF_TYPE": 10,
             "FENCE_TYPE": 11,
             "FENCE_ALT_MIN": 10,
-            "FENCE_ALT_MAX": 100,
+            "FENCE_ALT_MAX": 50,
             "FENCE_RADIUS": 150,
             "FENCE_ACTION": 0,
             "ANGLE_MAX": 7500,
@@ -10160,7 +10160,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.mavproxy.send("map circle %f %f %f green\n" % (home_loc.lat, home_loc.lng, radius))
 
         self.start_subtest("Check breach-fence behaviour")
-        self.set_parameter("FENCE_TYPE", 2)
         self.takeoff(20, mode="LOITER")
 
         # first east
