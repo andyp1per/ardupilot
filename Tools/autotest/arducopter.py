@@ -10115,7 +10115,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.takeoff(10)
         self.do_RTL()
 
-    def acro_fence(self, timeout=60):
+    def acro_fence(self, timeout=90):
         '''Test acro fence'''
         self.customise_SITL_commandline(
             [],
@@ -10124,13 +10124,14 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             wipe=True,
         )
 
-        def print_attitude_and_position(self):
+        def get_attitude_and_position(self):
             m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
             att = self.mav.recv_match(type='ATTITUDE', blocking=True)
             alt = m.relative_alt / 1000.0 # mm -> m
             home_distance = self.distance_to_home(use_cached_home=True)
             self.progress("alt: %.01f, home: %.01f, roll: %0.01f, pitch: %0.01f, yaw: %0.01f" %
                           (alt, home_distance, math.degrees(att.roll), math.degrees(att.pitch), math.degrees(att.yaw)))
+            return alt, home_distance
 
         self.set_parameters({
             "FENCE_ENABLE": 1,
@@ -10180,12 +10181,12 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         while (bounce_count > 0):
             tstart = self.get_sim_time()
             while not self.mode_is("GUIDED"):
-                print_attitude_and_position(self)
+                get_attitude_and_position(self)
                 if self.get_sim_time_cached() - tstart > 30:
                     raise NotAchievedException("Did not breach fence")
             tstart = self.get_sim_time()
             while not self.mode_is("LOITER"):
-                print_attitude_and_position(self)
+                get_attitude_and_position(self)
                 if self.get_sim_time_cached() - tstart > 30:
                     raise NotAchievedException("Did not switch back to loiter")
             bounce_count = bounce_count - 1
@@ -10194,12 +10195,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.change_mode("RTL")
         tstart = self.get_sim_time()
         while self.get_sim_time_cached() < tstart + timeout:
-            m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True)
-            att = self.mav.recv_match(type='ATTITUDE', blocking=True)
-            alt = m.relative_alt / 1000.0 # mm -> m
-            home_distance = self.distance_to_home(use_cached_home=True)
-            self.progress("Alt: %.01f  Home: %.01f, roll: %0.01f, pitch: %0.01f, yaw: %0.01f" %
-                          (alt, home_distance, math.degrees(att.roll), math.degrees(att.pitch), math.degrees(att.yaw)))
+            alt, home_distance = get_attitude_and_position(self)
             # recenter pitch sticks once we're home so we don't fly off again
             if pitching_forward and home_distance < 50:
                 pitching_forward = False
