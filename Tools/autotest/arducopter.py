@@ -10173,10 +10173,19 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.progress("flying forward (east) until we hit fence")
         pitching_forward = True
         self.set_rc(2, 1100)
+        # at 50m turn back a bit
+        self.wait_distance_to_home(distance_min=30, distance_max=60, timeout=60)
+        self.set_rc(2, 1500)
+        self.progress("turning west")
+        self.set_rc(4, 1420)
+        self.wait_heading(90, timeout=60)
+        self.set_rc(4, 1500)
+        self.set_rc(2, 1100)
 
         self.progress("Waiting for fence breach switch to GUIDED")
 
-        bounce_count = 5
+        # bounce flat
+        bounce_count = 0
         while (bounce_count > 0):
             tstart = self.get_sim_time()
             while not self.mode_is("GUIDED"):
@@ -10189,6 +10198,23 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 if self.get_sim_time_cached() - tstart > 30:
                     raise NotAchievedException("Did not switch back to loiter")
             bounce_count = bounce_count - 1
+
+        # bounce 3d
+        bounce_count = 8
+        self.set_rc(3, 1600)
+        while (bounce_count > 0):
+            tstart = self.get_sim_time()
+            while not self.mode_is("GUIDED"):
+                get_attitude_and_position(self)
+                if self.get_sim_time_cached() - tstart > 30:
+                    raise NotAchievedException("Did not breach fence")
+            tstart = self.get_sim_time()
+            while not self.mode_is("LOITER"):
+                get_attitude_and_position(self)
+                if self.get_sim_time_cached() - tstart > 30:
+                    raise NotAchievedException("Did not switch back to loiter")
+            bounce_count = bounce_count - 1
+
 
         self.progress("Waiting until we get home and disarm")
         self.change_mode("RTL")
