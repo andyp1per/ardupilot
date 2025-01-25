@@ -10185,7 +10185,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.progress("Waiting for fence breach switch to GUIDED")
 
         # bounce flat
-        bounce_count = 0
+        bounce_count = 6
         while (bounce_count > 0):
             tstart = self.get_sim_time()
             while not self.mode_is("GUIDED"):
@@ -10200,8 +10200,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             bounce_count = bounce_count - 1
 
         # bounce 3d
-        bounce_count = 8
-        self.set_rc(3, 1600)
+        bounce_count = 6
+        self.set_rc(3, 1700)
         while (bounce_count > 0):
             tstart = self.get_sim_time()
             while not self.mode_is("GUIDED"):
