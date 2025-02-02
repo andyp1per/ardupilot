@@ -1619,7 +1619,7 @@ void AP_CRSF_Telem::add_menu(const ScriptedMenu& menu)
         param_start += scripted_menus[m].num_params;
     }
     scripted_menus[num_scripted_menus].id = SCRIPTED_MENU_START_ID + num_scripted_menus;
-    scripted_menus[num_scripted_menus].name = (const char*)malloc(MAX_SCRIPTED_MENU_NAME_LEN);
+    scripted_menus[num_scripted_menus].name = (const char*)malloc(MAX_SCRIPTED_MENU_NAME_LEN+1);
     strncpy((char*)scripted_menus[num_scripted_menus].name, menu.name, MAX_SCRIPTED_MENU_NAME_LEN);
     scripted_menus[num_scripted_menus].init(menu.num_params);
     for (uint8_t i = 0; i < menu.num_params; i++) {
