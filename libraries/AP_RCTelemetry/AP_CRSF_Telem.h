@@ -175,6 +175,8 @@ public:
         uint8_t payload[57];   // largest possible frame is 60
     };
 
+    // scripted CRSF menus
+    // menus follow the predefined ardupilot parameter menu
     const static uint8_t MAX_SCRIPTED_MENUS = 5U;
     const static uint8_t MAX_SCRIPTED_PARAMETERS = 255U;
     const static uint8_t MAX_SCRIPTED_PARAMETER_SIZE = 255U;
@@ -182,12 +184,17 @@ public:
     const static uint8_t PARAMETER_MENU_ID = 1; // id of the parameter menu
     const static uint8_t SCRIPTED_MENU_START_ID = AP_OSD_ParamScreen::NUM_PARAMS * AP_OSD_NUM_PARAM_SCREENS + 2;
 
+    // 8-bit parameter ids must be unique within the whole menu structure
+    // each parameter has an id, length and packed data
+    // to avoid heavy flash usage in the CRSF protocol implementation, the data encoding is
+    // managed in lua
     struct ScriptedParameter {
         uint8_t id;
         uint16_t length;
         const char* data;
     };
 
+    // each menu contains a number of parameters and has a name
     struct ScriptedMenu {
         uint8_t id;
         uint8_t num_params;
@@ -197,9 +204,24 @@ public:
         bool init(uint8_t size);
     };
 
+    enum ScriptedParameterEvents : uint8_t {
+        PARAMETER_READ = 1<<0,
+        PARAMETER_WRITE = 1<<1
+    };
+
     ScriptedMenu scripted_menus[MAX_SCRIPTED_MENUS];
+
+    struct ScriptedParameterWrite {
+        ScriptedParameter* param;
+        ParameterSettingsWriteFrame frame;
+    };
+
+    ObjectBuffer<ScriptedParameterWrite> inbound_params{8};
+
     uint8_t num_scripted_menus;
     void add_menu(const ScriptedMenu& menu);
+    void process_scripted_param_write(ParameterSettingsWriteFrame* write);
+    uint8_t get_menu_event(uint8_t menu_events, ScriptedParameter* param, uint8_t* payload);
 
     // Frame to hold passthrough telemetry
     struct PACKED PassthroughSinglePacketFrame {
