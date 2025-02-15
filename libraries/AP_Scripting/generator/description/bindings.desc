@@ -730,6 +730,7 @@ singleton AP::crsf_telem() depends HAL_CRSF_TELEM_ENABLED
 singleton AP::crsf_telem() literal
 singleton AP::crsf_telem() rename crsf
 singleton AP::crsf_telem() method add_menu void AP_CRSF_Telem::ScriptedMenu
+singleton AP::crsf_telem() method get_menu_event uint8_t uint8_t AP_CRSF_Telem::ScriptedParameter string
 
 include AP_DroneCAN/AP_DroneCAN.h
 global manual DroneCAN_get_FlexDebug lua_DroneCAN_get_FlexDebug 4 2 depends (HAL_ENABLE_DRONECAN_DRIVERS==1)
