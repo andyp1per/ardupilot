@@ -4179,8 +4179,30 @@ function CRSFMenu_ud:params(index) end
 function CRSFMenu_ud:params(index, value) end
 
 -- desc
+---@class (exact) CRSFPayload_ud
+local CRSFPayload_ud = {}
+
+---@return CRSFPayload_ud
+function CRSFPayload() end
+
+-- get field
+---@return string
+function CRSFPayload_ud:data(index) end
+
+-- set field
+---@param value string
+function CRSFPayload_ud:data(value) end
+
+-- desc
 crsf = {}
 
--- update telemetry data for an ESC instance
+-- add CRSF menu
 ---@param menu CRSFMenu_ud -- menu
 function crsf:add_menu(menu) end
+
+-- get pending CRSF menu event and associated data
+---@param events integer -- events
+---@param param CRSFParameter_ud -- parameter
+---@param payload CRSFPayload_ud -- payload
+---@return integer -- events
+function crsf:get_menu_event(events, param, payload) end
