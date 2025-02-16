@@ -204,6 +204,10 @@ public:
         bool init(uint8_t size);
     };
 
+    struct ScriptedPayload {
+        uint8_t data[57];
+    };
+
     enum ScriptedParameterEvents : uint8_t {
         PARAMETER_READ = 1<<0,
         PARAMETER_WRITE = 1<<1
@@ -221,7 +225,7 @@ public:
     uint8_t num_scripted_menus;
     void add_menu(const ScriptedMenu& menu);
     void process_scripted_param_write(ParameterSettingsWriteFrame* write);
-    uint8_t get_menu_event(uint8_t menu_events, ScriptedParameter* param, uint8_t* payload);
+    uint8_t get_menu_event(uint8_t menu_events, ScriptedParameter& param, ScriptedPayload& payload);
 
     // Frame to hold passthrough telemetry
     struct PACKED PassthroughSinglePacketFrame {

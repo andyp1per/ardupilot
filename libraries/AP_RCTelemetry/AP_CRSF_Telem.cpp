@@ -1611,15 +1611,15 @@ void AP_CRSF_Telem::process_param_write_frame(ParameterSettingsWriteFrame* write
 
 #if AP_CRSF_SCRIPTING
 // scripting interface to parameter menus
-uint8_t AP_CRSF_Telem::get_menu_event(uint8_t menu_events, ScriptedParameter* param, uint8_t* payload)
+uint8_t AP_CRSF_Telem::get_menu_event(uint8_t menu_events, ScriptedParameter& param, ScriptedPayload& payload)
 {
     uint8_t events = 0;
     if (menu_events & PARAMETER_WRITE) {
         ScriptedParameterWrite spw;
         if (inbound_params.pop(spw)) {
             events |= PARAMETER_WRITE;
-            memcpy(spw.frame.payload, payload, 57);
-            *param = *spw.param;
+            memcpy(spw.frame.payload, payload.data, 57);
+            param = *spw.param;
         }
     }
 
