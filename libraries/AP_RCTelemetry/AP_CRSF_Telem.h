@@ -226,6 +226,7 @@ public:
     void add_menu(const ScriptedMenu& menu);
     void process_scripted_param_write(ParameterSettingsWriteFrame* write);
     uint8_t get_menu_event(uint8_t menu_events, ScriptedParameter& param, ScriptedPayload& payload);
+    ScriptedParameter* find_parameter(uint8_t param_num);
 
     // Frame to hold passthrough telemetry
     struct PACKED PassthroughSinglePacketFrame {

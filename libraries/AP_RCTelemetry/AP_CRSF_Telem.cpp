@@ -1252,29 +1252,25 @@ void AP_CRSF_Telem::calc_parameter() {
 
     if (num_scripted_menus > 0
         && _param_request.param_num >= SCRIPTED_MENU_START_ID + MAX_SCRIPTED_MENUS) { // scripted menu entry request
-#if 0
-        const uint8_t menu_idx = _param_request.param_num - SCRIPTED_MENU_START_ID;
+
+            // find the parameter to write
+        AP_CRSF_Telem::ScriptedParameter* param = find_parameter(_param_request.param_num);
+
+        if (param == nullptr) {
+            return;
+        }
 
         _telem.ext.param_entry.header.param_num = _param_request.param_num;
         _telem.ext.param_entry.header.chunks_left = 0;
 
         _telem.ext.param_entry.payload[idx++] = 0; // parent folder
-        _telem.ext.param_entry.payload[idx++] = ParameterType::FOLDER; // type
-        // name
-        strncpy((char*)&_telem.ext.param_entry.payload[idx], scripted_menus[menu_idx].name, 16);
-        idx += strnlen(scripted_menus[menu_idx].name, 16);
-        _telem.ext.param_entry.payload[idx++] = 0; // null terminator
-
-        for (uint8_t i = 0; i < scripted_menus[menu_idx].num_params; i++) {
-            _telem.ext.param_entry.payload[idx++] = scripted_menus[menu_idx].params[i].id;
-        }
-        _telem.ext.param_entry.payload[idx] = 0xFF; // terminator
-
+        memcpy((uint8_t*)&_telem.ext.param_entry.payload[idx], param->data, param->length);
+        idx += param->length;
         _telem_size = sizeof(AP_CRSF_Telem::ParameterSettingsEntryHeader) + 1 + idx;
         _telem_type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY;
         _pending_request.frame_type = 0;
         _telem_pending = true;
-#endif
+
         return;
     }
 #endif // AP_CRSF_SCRIPTING
@@ -1626,18 +1622,29 @@ uint8_t AP_CRSF_Telem::get_menu_event(uint8_t menu_events, ScriptedParameter& pa
     return events;
 }
 
-void AP_CRSF_Telem::process_scripted_param_write(ParameterSettingsWriteFrame* write_frame)
+AP_CRSF_Telem::ScriptedParameter* AP_CRSF_Telem::find_parameter(uint8_t param_num)
 {
     // find the parameter to write
     uint8_t param_start = SCRIPTED_MENU_START_ID;
     for (uint8_t m = 0; m < num_scripted_menus; m++) {
-        if (param_start + scripted_menus[m].num_params > write_frame->param_num) {
-            ScriptedParameter* param = &scripted_menus[m].params[write_frame->param_num - param_start];
-            inbound_params.push({param, *write_frame});
-            return;
+        if (param_start + scripted_menus[m].num_params > param_num) {
+            return &scripted_menus[m].params[param_num - param_start];
         }
         param_start += scripted_menus[m].num_params;
     }
+    return nullptr;
+}
+
+void AP_CRSF_Telem::process_scripted_param_write(ParameterSettingsWriteFrame* write_frame)
+{
+    // find the parameter to write
+    ScriptedParameter* param = find_parameter(write_frame->param_num);
+
+    if (param == nullptr) {
+        return;
+    }
+
+    inbound_params.push({param, *write_frame});
 }
 
 void AP_CRSF_Telem::add_menu(const ScriptedMenu& menu)
