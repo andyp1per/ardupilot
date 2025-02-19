@@ -38,7 +38,7 @@
 
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
-//#define CRSF_DEBUG
+#define CRSF_DEBUG
 #ifdef CRSF_DEBUG
 # define debug(fmt, args...)	hal.console->printf("CRSF: " fmt "\n", ##args)
 #else
@@ -1074,8 +1074,8 @@ void AP_CRSF_Telem::calc_device_info() {
 #if OSD_PARAM_ENABLED
     _telem.ext.info.payload[n] = AP_OSD_ParamScreen::NUM_PARAMS * AP_OSD_NUM_PARAM_SCREENS; // param count
 #if HAL_CRSF_TELEM_TEXT_SELECTION_ENABLED && AP_SCRIPTING_ENABLED
-    for (uint8_t i=0; i<MAX_SCRIPTED_MENUS; i++) {
-        _telem.ext.info.payload[n] += scripted_menus[i].num_params;
+    for (ScriptedMenu* m = &scripted_menus; m != nullptr; m = m->next_menu) {
+        _telem.ext.info.payload[n] += m->num_params;
     }
 #endif
     n++;
@@ -1175,10 +1175,10 @@ void AP_CRSF_Telem::calc_parameter() {
         _telem.ext.param_entry.payload[idx++] = 0; // null terminator
 
 #if AP_CRSF_SCRIPTING
-        if (num_scripted_menus > 0) {
+        if (scripted_menus.next_menu != nullptr) {
             _telem.ext.param_entry.payload[idx++] = PARAMETER_MENU_ID; // root parameter screen ardupilot menu
-            for (uint8_t i = 0; i < num_scripted_menus; i++) {
-                _telem.ext.param_entry.payload[idx++] = scripted_menus[i].id;   // scripted menus
+            for (ScriptedMenu* m = scripted_menus.next_menu; m != nullptr; m = m->next_menu) {
+                _telem.ext.param_entry.payload[idx++] = m->id;   // scripted menus
             }
         } else
 #endif // AP_CRSF_SCRIPTING
@@ -1199,7 +1199,7 @@ void AP_CRSF_Telem::calc_parameter() {
 
 #if AP_CRSF_SCRIPTING
     // root folder request
-    if (num_scripted_menus > 0 && _param_request.param_num == PARAMETER_MENU_ID) {
+    if (scripted_menus.next_menu != nullptr && _param_request.param_num == PARAMETER_MENU_ID) {
         _telem.ext.param_entry.header.param_num = PARAMETER_MENU_ID;
         _telem.ext.param_entry.header.chunks_left = 0;
         _telem.ext.param_entry.payload[idx++] = 0; // parent folder
@@ -1221,11 +1221,17 @@ void AP_CRSF_Telem::calc_parameter() {
         return;
     }
 
-    if (num_scripted_menus > 0
+    // scripted menu folder request indexed as the set of parameter ids from SCRIPTED_MENU_START_ID
+    if (scripted_menus.next_menu != nullptr
         && _param_request.param_num >= SCRIPTED_MENU_START_ID
         && _param_request.param_num < SCRIPTED_MENU_START_ID + MAX_SCRIPTED_MENUS) { // scripted menu request
 
-        const uint8_t menu_idx = _param_request.param_num - SCRIPTED_MENU_START_ID;
+        debug("menu request %d", _param_request.param_num);
+        AP_CRSF_Telem::ScriptedMenu* menu = scripted_menus.find_menu(_param_request.param_num);
+
+        if (menu == nullptr) {
+            return;
+        }
 
         _telem.ext.param_entry.header.param_num = _param_request.param_num;
         _telem.ext.param_entry.header.chunks_left = 0;
@@ -1233,13 +1239,13 @@ void AP_CRSF_Telem::calc_parameter() {
         _telem.ext.param_entry.payload[idx++] = 0; // parent folder
         _telem.ext.param_entry.payload[idx++] = ParameterType::FOLDER; // type
         // name
-        strncpy((char*)&_telem.ext.param_entry.payload[idx], scripted_menus[menu_idx].name, 16);
-        idx += strnlen(scripted_menus[menu_idx].name, 16);
+        strncpy((char*)&_telem.ext.param_entry.payload[idx], menu->name, 16);
+        idx += strnlen(menu->name, 16);
         _telem.ext.param_entry.payload[idx++] = 0; // null terminator
 
-        // menu entries
-        for (uint8_t i = 0; i < scripted_menus[menu_idx].num_params; i++) {
-            _telem.ext.param_entry.payload[idx++] = scripted_menus[menu_idx].params[i].id;
+        // menu entries of parameter ids
+        for (uint8_t i = 0; i < menu->num_params; i++) {
+            _telem.ext.param_entry.payload[idx++] = menu->params[i].id;
         }
         _telem.ext.param_entry.payload[idx] = 0xFF; // terminator
 
@@ -1250,20 +1256,22 @@ void AP_CRSF_Telem::calc_parameter() {
         return;
     }
 
-    if (num_scripted_menus > 0
+    // scripted menu parameter request indexed after scripted menu ids
+    if (scripted_menus.next_menu != nullptr
         && _param_request.param_num >= SCRIPTED_MENU_START_ID + MAX_SCRIPTED_MENUS) { // scripted menu entry request
 
-            // find the parameter to write
-        AP_CRSF_Telem::ScriptedParameter* param = find_parameter(_param_request.param_num);
+        debug("param request: %d", _param_request.param_num);
+        // find the parameter to write
+        AP_CRSF_Telem::ScriptedParameter* param = scripted_menus.find_parameter(_param_request.param_num);
 
         if (param == nullptr) {
             return;
         }
 
         _telem.ext.param_entry.header.param_num = _param_request.param_num;
-        _telem.ext.param_entry.header.chunks_left = 0;
-
+        _telem.ext.param_entry.header.chunks_left = 0;  // TODO chunk long parameters
         _telem.ext.param_entry.payload[idx++] = 0; // parent folder
+        // payload encoded from lua
         memcpy((uint8_t*)&_telem.ext.param_entry.payload[idx], param->data, param->length);
         idx += param->length;
         _telem_size = sizeof(AP_CRSF_Telem::ParameterSettingsEntryHeader) + 1 + idx;
@@ -1622,23 +1630,79 @@ uint8_t AP_CRSF_Telem::get_menu_event(uint8_t menu_events, ScriptedParameter& pa
     return events;
 }
 
-AP_CRSF_Telem::ScriptedParameter* AP_CRSF_Telem::find_parameter(uint8_t param_num)
+AP_CRSF_Telem::ScriptedParameter* AP_CRSF_Telem::ScriptedMenu::find_parameter(uint8_t param_num)
 {
     // find the parameter to write
-    uint8_t param_start = SCRIPTED_MENU_START_ID;
-    for (uint8_t m = 0; m < num_scripted_menus; m++) {
-        if (param_start + scripted_menus[m].num_params > param_num) {
-            return &scripted_menus[m].params[param_num - param_start];
+    for (ScriptedMenu* m = next_menu; m != nullptr; m = m->next_menu) {
+        if (param_num > m->id && param_num <= m->id + MAX_SCRIPTED_MENU_SIZE) {
+            return &m->params[param_num - (m->id + 1)];
         }
-        param_start += scripted_menus[m].num_params;
     }
     return nullptr;
+}
+
+AP_CRSF_Telem::ScriptedMenu* AP_CRSF_Telem::ScriptedMenu::find_menu(uint8_t param_num)
+{
+    // find the parameter to write
+    for (ScriptedMenu* m = next_menu; m != nullptr; m = m->next_menu) {
+        if (m->id == param_num) {
+            return m;
+        }
+    }
+    return nullptr;
+}
+
+bool AP_CRSF_Telem::ScriptedMenu::remove_menu(uint8_t param_num)
+{
+    // find the parameter to write
+    ScriptedMenu* prev = this;
+    for (ScriptedMenu* m = next_menu; m != nullptr; m = m->next_menu) {
+        if (m->id == param_num) {
+            prev->next_menu = m->next_menu;
+            delete m;
+            return true;
+        }
+    }
+    return false;
+}
+
+AP_CRSF_Telem::ScriptedMenu::~ScriptedMenu()
+{
+    if (params != nullptr) {
+        for (uint8_t i = 0; i < num_params; i++) {
+            free((char*)params[i].data);
+        }
+        free(params);
+    }
+    if (name != nullptr) {
+        free((char*)name);
+    }
+}
+
+AP_CRSF_Telem::ScriptedMenu* AP_CRSF_Telem::ScriptedMenu::add_menu(uint8_t size)
+{
+    // find the menu to create
+    ScriptedMenu* tail = this;
+    for (; tail->next_menu != nullptr; tail = tail->next_menu) {
+    }
+
+    ScriptedMenu* menu = new ScriptedMenu(size);
+    menu->id = tail->id == 0 ? SCRIPTED_MENU_START_ID : tail->id + MAX_SCRIPTED_MENU_SIZE + 1;
+    tail->next_menu = menu;
+    return menu;
+}
+
+AP_CRSF_Telem::ScriptedMenu::ScriptedMenu(uint8_t size)
+{
+    name = (const char*)malloc(MAX_SCRIPTED_MENU_NAME_LEN+1);
+    num_params = size;
+    params = (ScriptedParameter*)calloc(size, sizeof(ScriptedParameter));
 }
 
 void AP_CRSF_Telem::process_scripted_param_write(ParameterSettingsWriteFrame* write_frame)
 {
     // find the parameter to write
-    ScriptedParameter* param = find_parameter(write_frame->param_num);
+    ScriptedParameter* param = scripted_menus.find_parameter(write_frame->param_num);
 
     if (param == nullptr) {
         return;
@@ -1647,30 +1711,32 @@ void AP_CRSF_Telem::process_scripted_param_write(ParameterSettingsWriteFrame* wr
     inbound_params.push({param, *write_frame});
 }
 
-void AP_CRSF_Telem::add_menu(const ScriptedMenu& menu)
+bool AP_CRSF_Telem::add_menu(const ScriptedMenu& menu)
 {
-    uint8_t param_start = SCRIPTED_MENU_START_ID + MAX_SCRIPTED_MENUS; // menu ids
-    for (uint8_t m = 0; m < num_scripted_menus; m++) {
-        param_start += scripted_menus[m].num_params;
+    // create a new menu
+    ScriptedMenu* new_menu = scripted_menus.add_menu(menu.num_params);
+    debug("adding menu %d", new_menu->id);
+    if (!new_menu->copy(menu)) {
+        scripted_menus.remove_menu(new_menu->id);
+        return false;
     }
-    scripted_menus[num_scripted_menus].id = SCRIPTED_MENU_START_ID + num_scripted_menus;
-    scripted_menus[num_scripted_menus].name = (const char*)malloc(MAX_SCRIPTED_MENU_NAME_LEN+1);
-    strncpy((char*)scripted_menus[num_scripted_menus].name, menu.name, MAX_SCRIPTED_MENU_NAME_LEN);
-    scripted_menus[num_scripted_menus].init(menu.num_params);
-    for (uint8_t i = 0; i < menu.num_params; i++) {
-        scripted_menus[num_scripted_menus].params[i].id = param_start + menu.params[i].id;
-        scripted_menus[num_scripted_menus].params[i].length = menu.params[i].length;
-        scripted_menus[num_scripted_menus].params[i].data = (const char*)malloc(menu.params[i].length);
-        memcpy((char*)scripted_menus[num_scripted_menus].params[i].data, menu.params[i].data, menu.params[i].length);
-    }
-    num_scripted_menus++;
+    return true;
 }
 
-bool AP_CRSF_Telem::ScriptedMenu::init(uint8_t size)
+bool AP_CRSF_Telem::ScriptedMenu::copy(const ScriptedMenu& menu)
 {
-    num_params = size;
-    params = (ScriptedParameter*)calloc(size, sizeof(ScriptedParameter));
-    return params != nullptr;
+    strncpy((char*)name, menu.name, MAX_SCRIPTED_MENU_NAME_LEN);
+    for (uint8_t i = 0; i < menu.num_params; i++) {
+        params[i].id = menu.id + menu.params[i].id;
+        params[i].length = menu.params[i].length;
+        params[i].data = (const char*)malloc(menu.params[i].length);
+        if (params[i].data == nullptr) {
+            return false;
+        }
+        debug("adding menu item %d", params[i].id);
+        memcpy((char*)params[i].data, menu.params[i].data, menu.params[i].length);
+    }
+    return true;
 }
 #endif //AP_CRSF_SCRIPTING
 

@@ -177,7 +177,11 @@ public:
 
     // scripted CRSF menus
     // menus follow the predefined ardupilot parameter menu
-    const static uint8_t MAX_SCRIPTED_MENUS = 5U;
+    // to avoid a lot of id shuffling at most 10 menus each with at most 20 parameters are allowed
+    // menu indexes are SCRIPTED_MENU_START_ID -> SCRIPTED_MENU_START_ID + 10
+    // parameter indexes are SCRIPTED_MENU_START_ID + 10 + menu_id * MAX_SCRIPTED_MENU_SIZE
+    const static uint8_t MAX_SCRIPTED_MENUS = 10U;
+    const static uint8_t MAX_SCRIPTED_MENU_SIZE = 20U;
     const static uint8_t MAX_SCRIPTED_PARAMETERS = 255U;
     const static uint8_t MAX_SCRIPTED_PARAMETER_SIZE = 255U;
     const static uint8_t MAX_SCRIPTED_MENU_NAME_LEN = 16;
@@ -189,19 +193,30 @@ public:
     // to avoid heavy flash usage in the CRSF protocol implementation, the data encoding is
     // managed in lua
     struct ScriptedParameter {
-        uint8_t id;
+        uint8_t id; // indexed from the menu id + 1 to menu id + MAX_SCRIPTED_MENU_SIZE
         uint16_t length;
         const char* data;
     };
 
     // each menu contains a number of parameters and has a name
     struct ScriptedMenu {
-        uint8_t id;
+        friend class AP_CRSF_Telem;
+    
+        uint8_t id; // indexed from SCRIPTED_MENU_START_ID with space left for parameters
         uint8_t num_params;
         const char* name;
         ScriptedParameter* params;
+        ScriptedMenu* next_menu;    // linked list of menus to make addition/removal/modification easy
 
-        bool init(uint8_t size);
+        ScriptedMenu(uint8_t size);
+        ~ScriptedMenu();
+        bool copy(const ScriptedMenu& menu);
+        ScriptedMenu* find_menu(uint8_t param_num);
+        bool remove_menu(uint8_t param_num);
+        ScriptedMenu* add_menu(uint8_t size);
+        ScriptedParameter* find_parameter(uint8_t param_num);
+
+        ScriptedMenu() {}
     };
 
     struct ScriptedPayload {
@@ -213,7 +228,7 @@ public:
         PARAMETER_WRITE = 1<<1
     };
 
-    ScriptedMenu scripted_menus[MAX_SCRIPTED_MENUS];
+    ScriptedMenu scripted_menus;
 
     struct ScriptedParameterWrite {
         ScriptedParameter* param;
@@ -222,11 +237,9 @@ public:
 
     ObjectBuffer<ScriptedParameterWrite> inbound_params{8};
 
-    uint8_t num_scripted_menus;
-    void add_menu(const ScriptedMenu& menu);
+    bool add_menu(const ScriptedMenu& menu);
     void process_scripted_param_write(ParameterSettingsWriteFrame* write);
     uint8_t get_menu_event(uint8_t menu_events, ScriptedParameter& param, ScriptedPayload& payload);
-    ScriptedParameter* find_parameter(uint8_t param_num);
 
     // Frame to hold passthrough telemetry
     struct PACKED PassthroughSinglePacketFrame {
