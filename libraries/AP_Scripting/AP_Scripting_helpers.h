@@ -1,9 +1,11 @@
 #pragma once
 
 #include <AP_Param/AP_Param.h>
+#include <AP_RCTelemetry/AP_CRSF_Telem.h>
 #include "lua/src/lua.hpp"
 
 int lua_new_Parameter(lua_State *L);
+int lua_new_ScriptedMenu(lua_State *L);
 
 /// Fast param access via pointer helper
 class Parameter

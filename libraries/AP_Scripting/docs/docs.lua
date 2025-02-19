@@ -4136,21 +4136,13 @@ function CRSFParameter_ud:data(value) end
 ---@class (exact) CRSFMenu_ud
 local CRSFMenu_ud = {}
 
+---@param size integer -- size
 ---@return CRSFMenu_ud
-function CRSFMenu() end
-
--- initialize menu
----@param size integer
----@return boolean
-function CRSFMenu_ud:init(size) end
+function CRSFMenu(size) end
 
 -- get field
 ---@return integer
 function CRSFMenu_ud:id() end
-
--- set field
----@param value integer
-function CRSFMenu_ud:id(value) end
 
 -- get field
 ---@return string
@@ -4202,7 +4194,7 @@ function crsf:add_menu(menu) end
 
 -- get pending CRSF menu event and associated data
 ---@param events integer -- events
----@param param CRSFParameter_ud -- parameter
----@param payload CRSFPayload_ud -- payload
+---@return CRSFParameter_ud -- parameter
+---@return CRSFPayload_ud -- payload
 ---@return integer -- events
-function crsf:get_menu_event(events, param, payload) end
+function crsf:get_menu_event(events) end

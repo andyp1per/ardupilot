@@ -12,18 +12,17 @@ CRSF_EVENT = {PARAMETER_READ=1, PARAMETER_WRITE=2}
 local params = {}
 local param = CRSFParameter()
 param:id(3)
-param:data(string.pack("<BBB", 1, 2, 3)) -- pack a string little endian followed by 1,2,3 as unsigned byte
-param:length(string.len(params[0]:data()))
+-- pack a string big endian followed by 10 (string type), a name a value and string max length
+param:data(string.pack(">BzzB", 10, "Menu Item 1", "It goes here", 16))
+param:length(string.len(param:data()))
 params[0] = param
 
 params[1] = CRSFParameter()
 params[1]:id(4)
-params[1]:data(string.pack("<BBB", 1, 2, 3))
+params[1]:data(string.pack(">BzzB", 10, "Menu Item 2", "Another one", 16))
 params[1]:length(string.len(params[1]:data()))
 
-local menu = CRSFMenu()
-menu:id(1)
-menu:init(2)
+local menu = CRSFMenu(2)
 menu:name('Example Menu')
 menu:params(0, params[0])
 menu:params(1, params[1])
@@ -33,9 +32,9 @@ crsf:add_menu(menu)
 gcs:send_text(MAV_SEVERITY.INFO, string.format("Loaded CRSF menu"))
 
 function update()
-    local payload = CRSFPayload()
-    local param = CRSFParameter()
-    if crsf:get_menu_event(CRSF_EVENT.PARAMETER_WRITE, param, payload) & CRSF_EVENT.PARAMETER_WRITE ~= 0 then
+    local param, payload, events = crsf:get_menu_event(CRSF_EVENT.PARAMETER_WRITE)
+    if (events & CRSF_EVENT.PARAMETER_WRITE) ~= 0 then
+        gcs:send_text(MAV_SEVERITY.INFO, "Parameter write " .. param:id())
         if param:id() == 3 then
             notify:play_tune("L16GGGL4E-L16FFFL4D") -- Beethoven's 5th intro
         end

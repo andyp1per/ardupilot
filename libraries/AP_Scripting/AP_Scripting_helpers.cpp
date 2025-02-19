@@ -195,4 +195,23 @@ bool Parameter::set_default(float value)
     return false;
 }
 
+int lua_new_ScriptedMenu(lua_State *L)
+{
+    const int args = lua_gettop(L);
+    if (args > 1) {
+        return luaL_argerror(L, args, "too many arguments");
+    }
+    uint8_t menu_size = 0;
+    if (args == 1) {
+        menu_size = get_uint8_t(L, 1);
+    }
+
+    void *ud = lua_newuserdata(L, sizeof(AP_CRSF_Telem::ScriptedMenu));
+    new (ud) AP_CRSF_Telem::ScriptedMenu(menu_size);
+    luaL_getmetatable(L, "CRSFMenu");
+    lua_setmetatable(L, -2);
+
+    return 1;
+}
+
 #endif  // AP_SCRIPTING_ENABLED
