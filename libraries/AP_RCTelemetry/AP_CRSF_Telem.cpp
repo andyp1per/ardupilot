@@ -1222,16 +1222,10 @@ void AP_CRSF_Telem::calc_parameter() {
     }
 
     // scripted menu folder request indexed as the set of parameter ids from SCRIPTED_MENU_START_ID
-    if (scripted_menus.next_menu != nullptr
-        && _param_request.param_num >= SCRIPTED_MENU_START_ID
-        && _param_request.param_num < SCRIPTED_MENU_START_ID + MAX_SCRIPTED_MENUS) { // scripted menu request
+    AP_CRSF_Telem::ScriptedMenu* menu = scripted_menus.find_menu(_param_request.param_num);
 
+    if (menu != nullptr) {
         debug("menu request %d", _param_request.param_num);
-        AP_CRSF_Telem::ScriptedMenu* menu = scripted_menus.find_menu(_param_request.param_num);
-
-        if (menu == nullptr) {
-            return;
-        }
 
         _telem.ext.param_entry.header.param_num = _param_request.param_num;
         _telem.ext.param_entry.header.chunks_left = 0;
@@ -1257,16 +1251,11 @@ void AP_CRSF_Telem::calc_parameter() {
     }
 
     // scripted menu parameter request indexed after scripted menu ids
-    if (scripted_menus.next_menu != nullptr
-        && _param_request.param_num >= SCRIPTED_MENU_START_ID + MAX_SCRIPTED_MENUS) { // scripted menu entry request
+    AP_CRSF_Telem::ScriptedParameter* param = scripted_menus.find_parameter(_param_request.param_num);
 
+    if (param != nullptr) {
         debug("param request: %d", _param_request.param_num);
         // find the parameter to write
-        AP_CRSF_Telem::ScriptedParameter* param = scripted_menus.find_parameter(_param_request.param_num);
-
-        if (param == nullptr) {
-            return;
-        }
 
         _telem.ext.param_entry.header.param_num = _param_request.param_num;
         _telem.ext.param_entry.header.chunks_left = 0;  // TODO chunk long parameters
@@ -1289,7 +1278,7 @@ void AP_CRSF_Telem::calc_parameter() {
         return;
     }
 
-    AP_OSD_ParamSetting* param = osd->get_setting((_param_request.param_num - 1) / AP_OSD_ParamScreen::NUM_PARAMS,
+    AP_OSD_ParamSetting* setting = osd->get_setting((_param_request.param_num - 1) / AP_OSD_ParamScreen::NUM_PARAMS,
         (_param_request.param_num - 1) % AP_OSD_ParamScreen::NUM_PARAMS);
 
     if (param == nullptr) {
@@ -1298,45 +1287,45 @@ void AP_CRSF_Telem::calc_parameter() {
 
     _telem.ext.param_entry.header.param_num = _param_request.param_num;
 #if HAL_CRSF_TELEM_TEXT_SELECTION_ENABLED
-    if (param->get_custom_metadata() != nullptr) {
-        calc_text_selection(param, _param_request.param_chunk);
+    if (setting->get_custom_metadata() != nullptr) {
+        calc_text_selection(setting, _param_request.param_chunk);
         return;
     }
 #endif
     _telem.ext.param_entry.header.chunks_left = 0;
     _telem.ext.param_entry.payload[idx++] = 0; // parent folder
     idx++;  // leave a gap for the type
-    param->copy_name_camel_case((char*)&_telem.ext.param_entry.payload[idx], 17);
+    setting->copy_name_camel_case((char*)&_telem.ext.param_entry.payload[idx], 17);
     idx += strnlen((char*)&_telem.ext.param_entry.payload[idx], 16) + 1;
 
-    switch (param->_param_type) {
+    switch (setting->_param_type) {
     case AP_PARAM_INT8: {
-        AP_Int8* p = (AP_Int8*)param->_param;
+        AP_Int8* p = (AP_Int8*)setting->_param;
         _telem.ext.param_entry.payload[1] = ParameterType::INT8;
         _telem.ext.param_entry.payload[idx] = p->get();  // value
-        _telem.ext.param_entry.payload[idx+1] = int8_t(param->_param_min);  // min
-        _telem.ext.param_entry.payload[idx+2] = int8_t(param->_param_max); // max
+        _telem.ext.param_entry.payload[idx+1] = int8_t(setting->_param_min);  // min
+        _telem.ext.param_entry.payload[idx+2] = int8_t(setting->_param_max); // max
         _telem.ext.param_entry.payload[idx+3] = int8_t(0);  // default
         idx += 4;
         break;
     }
     case AP_PARAM_INT16: {
-        AP_Int16* p = (AP_Int16*)param->_param;
+        AP_Int16* p = (AP_Int16*)setting->_param;
         _telem.ext.param_entry.payload[1] = ParameterType::INT16;
         put_be16_ptr(&_telem.ext.param_entry.payload[idx], p->get());  // value
-        put_be16_ptr(&_telem.ext.param_entry.payload[idx+2], param->_param_min);  // min
-        put_be16_ptr(&_telem.ext.param_entry.payload[idx+4], param->_param_max); // max
+        put_be16_ptr(&_telem.ext.param_entry.payload[idx+2], setting->_param_min);  // min
+        put_be16_ptr(&_telem.ext.param_entry.payload[idx+4], setting->_param_max); // max
         put_be16_ptr(&_telem.ext.param_entry.payload[idx+6], 0);  // default
         idx += 8;
         break;
     }
     case AP_PARAM_INT32: {
-        AP_Int32* p = (AP_Int32*)param->_param;
+        AP_Int32* p = (AP_Int32*)setting->_param;
         _telem.ext.param_entry.payload[1] = ParameterType::FLOAT;
 #define FLOAT_ENCODE(f) (int32_t(roundf(f)))
         put_be32_ptr(&_telem.ext.param_entry.payload[idx], p->get());  // value
-        put_be32_ptr(&_telem.ext.param_entry.payload[idx+4], FLOAT_ENCODE(param->_param_min));  // min
-        put_be32_ptr(&_telem.ext.param_entry.payload[idx+8], FLOAT_ENCODE(param->_param_max)); // max
+        put_be32_ptr(&_telem.ext.param_entry.payload[idx+4], FLOAT_ENCODE(setting->_param_min));  // min
+        put_be32_ptr(&_telem.ext.param_entry.payload[idx+8], FLOAT_ENCODE(setting->_param_max)); // max
         put_be32_ptr(&_telem.ext.param_entry.payload[idx+12], FLOAT_ENCODE(0.0f));  // default
 #undef FLOAT_ENCODE
         _telem.ext.param_entry.payload[idx+16] = 0; // decimal point
@@ -1345,10 +1334,10 @@ void AP_CRSF_Telem::calc_parameter() {
         break;
     }
     case AP_PARAM_FLOAT: {
-        AP_Float* p = (AP_Float*)param->_param;
+        AP_Float* p = (AP_Float*)setting->_param;
         _telem.ext.param_entry.payload[1] = ParameterType::FLOAT;
         uint8_t digits = 0;
-        const float incr = MAX(0.001f, param->_param_incr); // a bug in OpenTX prevents this going any smaller
+        const float incr = MAX(0.001f, setting->_param_incr); // a bug in OpenTX prevents this going any smaller
 
         for (float floatp = incr; floatp < 1.0f; floatp *= 10) {
             digits++;
@@ -1356,8 +1345,8 @@ void AP_CRSF_Telem::calc_parameter() {
         const float mult = powf(10, digits);
 #define FLOAT_ENCODE(f) (int32_t(roundf(mult * f)))
         put_be32_ptr(&_telem.ext.param_entry.payload[idx], FLOAT_ENCODE(p->get()));  // value
-        put_be32_ptr(&_telem.ext.param_entry.payload[idx+4], FLOAT_ENCODE(param->_param_min));  // min
-        put_be32_ptr(&_telem.ext.param_entry.payload[idx+8], FLOAT_ENCODE(param->_param_max)); // max
+        put_be32_ptr(&_telem.ext.param_entry.payload[idx+4], FLOAT_ENCODE(setting->_param_min));  // min
+        put_be32_ptr(&_telem.ext.param_entry.payload[idx+8], FLOAT_ENCODE(setting->_param_max)); // max
         put_be32_ptr(&_telem.ext.param_entry.payload[idx+12], FLOAT_ENCODE(0.0f));  // default
         _telem.ext.param_entry.payload[idx+16] = digits; // decimal point
         put_be32_ptr(&_telem.ext.param_entry.payload[idx+17], FLOAT_ENCODE(incr));  // step size
@@ -1727,7 +1716,7 @@ bool AP_CRSF_Telem::ScriptedMenu::copy(const ScriptedMenu& menu)
 {
     strncpy((char*)name, menu.name, MAX_SCRIPTED_MENU_NAME_LEN);
     for (uint8_t i = 0; i < menu.num_params; i++) {
-        params[i].id = menu.id + menu.params[i].id;
+        params[i].id = id + menu.params[i].id;
         params[i].length = menu.params[i].length;
         params[i].data = (const char*)malloc(menu.params[i].length);
         if (params[i].data == nullptr) {
