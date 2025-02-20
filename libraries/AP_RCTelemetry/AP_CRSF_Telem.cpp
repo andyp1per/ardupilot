@@ -1624,7 +1624,11 @@ AP_CRSF_Telem::ScriptedParameter* AP_CRSF_Telem::ScriptedMenu::find_parameter(ui
     // find the parameter to write
     for (ScriptedMenu* m = next_menu; m != nullptr; m = m->next_menu) {
         if (param_num > m->id && param_num <= m->id + MAX_SCRIPTED_MENU_SIZE) {
-            return &m->params[param_num - (m->id + 1)];
+            for (uint8_t i = 0; i < m->num_params; i++) {
+                if (m->params[i].id == param_num) {
+                    return &m->params[i];
+                }
+            }
         }
     }
     return nullptr;
