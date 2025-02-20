@@ -31,26 +31,17 @@ CRSF_COMMAND_STATUS = {
 
 -- create a CRSF menu float item
 function create_float_entry(name, value, min, max, default, dpoint, step, unit)
-    local param CRSFParameter()
-    param:data(string.pack(">BzllllBlz", CRSF_PARAM_TYPE.FLOAT, name, value, min, max, default, dpoint, step, unit))
-    param:length(#name + #unit + 24)
-    return param
+    return string.pack(">BzllllBlz", CRSF_PARAM_TYPE.FLOAT, name, value, min, max, default, dpoint, step, unit)
 end
 
 -- create a CRSF menu text selection item
 function create_text_entry(name, options, value, min, max, default, unit)
-    local param CRSFParameter()
-    param:data(string.pack(">BzzBBBBz", CRSF_PARAM_TYPE.TEXT_SELECTION, name, options, value, min, max, default, unit))
-    param:length(#name + #options + #unit + 8)
-    return param
+    return string.pack(">BzzBBBBz", CRSF_PARAM_TYPE.TEXT_SELECTION, name, options, value, min, max, default, unit)
 end
 
 -- create a CRSF menu string item
 function create_string_entry(name, value, max)
-    local param CRSFParameter()
-    param:data(string.pack(">BzzB", CRSF_PARAM_TYPE.STRING, name, value, max))
-    param:length(#name + #value + 4)
-    return param
+    return string.pack(">BzzB", CRSF_PARAM_TYPE.STRING, name, value, max)
 end
 
 -- create a CRSF menu info item
@@ -60,23 +51,22 @@ end
 
 -- create a CRSF command entry
 function create_command_entry(name, status, timeout, info)
-    timeout = timeout or 5000
-    local param CRSFParameter()
-    param:data(string.pack(">BzBBz", CRSF_PARAM_TYPE.COMMAND, name, status, timeout, info))
-    param:length(#name + #info + 5)
-    return param
+    timeout = timeout or 10 -- 1s
+    return string.pack(">BzBBz", CRSF_PARAM_TYPE.COMMAND, name, status, timeout, info)
 end
 
-local params = {}
 local param1 = create_info_entry("Menu Item 1", "It goes here")
 local param2 = create_info_entry("Menu Item 2", "Another one")
--- local param3 = create_command_entry("Menu Item 3", CRSF_COMMAND_STATUS.START, 5000, "Command")
+local param3 = create_command_entry("Menu Item 3", CRSF_COMMAND_STATUS.START, 50, "Command")
+
+local command
 
 local menu = crsf:add_menu('Example Menu')
 
 if menu ~= nil then
     menu:add_parameter(#param1, param1)
     menu:add_parameter(#param2, param2)
+    command = menu:add_parameter(#param3, param3)
     gcs:send_text(MAV_SEVERITY.INFO, string.format("Loaded CRSF menu"))
 end
 
@@ -84,8 +74,10 @@ function update()
     local param, payload, events = crsf:get_menu_event(CRSF_EVENT.PARAMETER_WRITE)
     if (events & CRSF_EVENT.PARAMETER_WRITE) ~= 0 then
         gcs:send_text(MAV_SEVERITY.INFO, "Parameter write " .. param:id())
-        if param:id() == 3 then
-            notify:play_tune("L16GGGL4E-L16FFFL4D") -- Beethoven's 5th intro
+        if command ~= nil then
+            if param:id() == command:id() then
+                notify:play_tune("L16GGGL4E-L16FFFL4D") -- Beethoven's 5th intro
+            end
         end
     end
     return update, 100
