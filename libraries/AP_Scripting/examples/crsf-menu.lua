@@ -5,32 +5,80 @@ SCRIPT_NAME = "CRSF Menu"
 SCRIPT_NAME_SHORT = "CRSFMenu"
 SCRIPT_VERSION = "0.1"
 
-
 MAV_SEVERITY = {EMERGENCY=0, ALERT=1, CRITICAL=2, ERROR=3, WARNING=4, NOTICE=5, INFO=6, DEBUG=7}
 CRSF_EVENT = {PARAMETER_READ=1, PARAMETER_WRITE=2}
+CRSF_PARAM_TYPE = {
+    UINT8 = 0, INT8 = 1,
+    UINT16 = 2,
+    INT16 = 3,
+    FLOAT = 8,
+    TEXT_SELECTION = 9,
+    STRING = 10,
+    FOLDER = 11,
+    INFO = 12,
+    COMMAND = 13,
+}
+
+CRSF_COMMAND_STATUS = {
+    READY = 0, --               --> feedback
+    START = 1, --               <-- input
+    PROGRESS = 2, --            --> feedback
+    CONFIRMATION_NEEDED = 3, -- --> feedback
+    CONFIRM = 4, --             <-- input
+    CANCEL = 5, --              <-- input
+    POLL = 6 --                 <-- input
+}
+
+-- create a CRSF menu float item
+function create_float_entry(name, value, min, max, default, dpoint, step, unit)
+    local param CRSFParameter()
+    param:data(string.pack(">BzllllBlz", CRSF_PARAM_TYPE.FLOAT, name, value, min, max, default, dpoint, step, unit))
+    param:length(#name + #unit + 24)
+    return param
+end
+
+-- create a CRSF menu text selection item
+function create_text_entry(name, options, value, min, max, default, unit)
+    local param CRSFParameter()
+    param:data(string.pack(">BzzBBBBz", CRSF_PARAM_TYPE.TEXT_SELECTION, name, options, value, min, max, default, unit))
+    param:length(#name + #options + #unit + 8)
+    return param
+end
+
+-- create a CRSF menu string item
+function create_string_entry(name, value, max)
+    local param CRSFParameter()
+    param:data(string.pack(">BzzB", CRSF_PARAM_TYPE.STRING, name, value, max))
+    param:length(#name + #value + 4)
+    return param
+end
+
+-- create a CRSF menu info item
+function create_info_entry(name, info)
+    return string.pack(">Bzz", CRSF_PARAM_TYPE.INFO, name, info)
+end
+
+-- create a CRSF command entry
+function create_command_entry(name, status, timeout, info)
+    timeout = timeout or 5000
+    local param CRSFParameter()
+    param:data(string.pack(">BzBBz", CRSF_PARAM_TYPE.COMMAND, name, status, timeout, info))
+    param:length(#name + #info + 5)
+    return param
+end
 
 local params = {}
-local param = CRSFParameter()
-param:id(3)
--- pack a string big endian followed by 12 (info type), a name and a value
-param:data(string.pack(">Bzz", 12, "Menu Item 1", "It goes here"))
-gcs:send_text(MAV_SEVERITY.INFO, "wrote string of length " .. string.len(param:data()))
-param:length(26)
-params[0] = param
+local param1 = create_info_entry("Menu Item 1", "It goes here")
+local param2 = create_info_entry("Menu Item 2", "Another one")
+-- local param3 = create_command_entry("Menu Item 3", CRSF_COMMAND_STATUS.START, 5000, "Command")
 
-params[1] = CRSFParameter()
-params[1]:id(4)
-params[1]:data(string.pack(">Bzz", 12, "Menu Item 2", "Another one"))
-params[1]:length(25)
+local menu = crsf:add_menu('Example Menu')
 
-local menu = CRSFMenu(2)
-menu:name('Example Menu')
-menu:params(0, params[0])
-menu:params(1, params[1])
-
-crsf:add_menu(menu)
-
-gcs:send_text(MAV_SEVERITY.INFO, string.format("Loaded CRSF menu"))
+if menu ~= nil then
+    menu:add_parameter(#param1, param1)
+    menu:add_parameter(#param2, param2)
+    gcs:send_text(MAV_SEVERITY.INFO, string.format("Loaded CRSF menu"))
+end
 
 function update()
     local param, payload, events = crsf:get_menu_event(CRSF_EVENT.PARAMETER_WRITE)

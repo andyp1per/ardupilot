@@ -5,7 +5,7 @@
 #include "lua/src/lua.hpp"
 
 int lua_new_Parameter(lua_State *L);
-int lua_new_ScriptedMenu(lua_State *L);
+int lua_new_Menu(lua_State *L);
 
 /// Fast param access via pointer helper
 class Parameter
@@ -29,4 +29,3 @@ private:
     enum ap_var_type vtype;
     AP_Param *vp;
 };
-
