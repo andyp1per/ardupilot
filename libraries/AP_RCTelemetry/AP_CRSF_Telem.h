@@ -198,25 +198,29 @@ public:
         const char* data;
     };
 
-    // each menu contains a number of parameters and has a name
     struct ScriptedMenu {
-        friend class AP_CRSF_Telem;
-    
         uint8_t id; // indexed from SCRIPTED_MENU_START_ID with space left for parameters
         uint8_t num_params;
         const char* name;
         ScriptedParameter* params;
-        ScriptedMenu* next_menu;    // linked list of menus to make addition/removal/modification easy
+        bool add_parameter(uint8_t length, const char* data, ScriptedParameter& param);
+    };
 
-        ScriptedMenu(uint8_t size);
-        ~ScriptedMenu();
-        bool copy(const ScriptedMenu& menu);
-        ScriptedMenu* find_menu(uint8_t param_num);
+    // each menu contains a number of parameters and has a name
+    struct ScriptedMenuEntry : public ScriptedMenu {
+        friend class AP_CRSF_Telem;
+
+        ScriptedMenuEntry* next_menu;    // linked list of menus to make addition/removal/modification easy
+
+        ScriptedMenuEntry(const char* menu_name, uint8_t size);
+        ~ScriptedMenuEntry();
+        ScriptedMenuEntry* find_menu(uint8_t param_num);
         bool remove_menu(uint8_t param_num);
-        ScriptedMenu* add_menu(uint8_t size);
+        ScriptedMenuEntry* add_menu(const char* menu_name, uint8_t size);
         ScriptedParameter* find_parameter(uint8_t param_num);
+        ScriptedParameter* add_parameter(uint8_t length, const char* data);
 
-        ScriptedMenu() {}
+        ScriptedMenuEntry() {}
     };
 
     struct ScriptedPayload {
@@ -228,7 +232,7 @@ public:
         PARAMETER_WRITE = 1<<1
     };
 
-    ScriptedMenu scripted_menus;
+    ScriptedMenuEntry scripted_menus;
 
     struct ScriptedParameterWrite {
         ScriptedParameter* param;
@@ -237,7 +241,7 @@ public:
 
     ObjectBuffer<ScriptedParameterWrite> inbound_params{8};
 
-    bool add_menu(const ScriptedMenu& menu);
+    bool add_menu(const char* name, ScriptedMenu& menu);
     void process_scripted_param_write(ParameterSettingsWriteFrame* write);
     uint8_t get_menu_event(uint8_t menu_events, ScriptedParameter& param, ScriptedPayload& payload);
 
