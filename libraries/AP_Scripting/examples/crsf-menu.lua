@@ -12,15 +12,16 @@ CRSF_EVENT = {PARAMETER_READ=1, PARAMETER_WRITE=2}
 local params = {}
 local param = CRSFParameter()
 param:id(3)
--- pack a string big endian followed by 10 (string type), a name a value and string max length
-param:data(string.pack(">BzzB", 10, "Menu Item 1", "It goes here", 16))
-param:length(string.len(param:data()))
+-- pack a string big endian followed by 12 (info type), a name and a value
+param:data(string.pack(">Bzz", 12, "Menu Item 1", "It goes here"))
+gcs:send_text(MAV_SEVERITY.INFO, "wrote string of length " .. string.len(param:data()))
+param:length(26)
 params[0] = param
 
 params[1] = CRSFParameter()
 params[1]:id(4)
-params[1]:data(string.pack(">BzzB", 10, "Menu Item 2", "Another one", 16))
-params[1]:length(string.len(params[1]:data()))
+params[1]:data(string.pack(">Bzz", 12, "Menu Item 2", "Another one"))
+params[1]:length(25)
 
 local menu = CRSFMenu(2)
 menu:name('Example Menu')
