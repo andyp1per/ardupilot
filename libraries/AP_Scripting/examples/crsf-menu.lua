@@ -67,7 +67,7 @@ if menu ~= nil then
     menu:add_parameter(#param1, param1)
     menu:add_parameter(#param2, param2)
     command = menu:add_parameter(#param3, param3)
-    gcs:send_text(MAV_SEVERITY.INFO, string.format("Loaded CRSF menu"))
+    gcs:send_text(MAV_SEVERITY.INFO, string.format("Loaded CRSF menu \'" .. menu:name() .. "\'"))
 end
 
 function update()
@@ -77,6 +77,10 @@ function update()
             if param:id() == command:id() then
                 local command_action = string.unpack(">B", payload)
                 if command_action == CRSF_COMMAND_STATUS.START then
+                    -- we have been asked to start a command, ask for confirmarion
+                    local new_data = create_command_entry("Beethoven", CRSF_COMMAND_STATUS.CONFIRMATION_NEEDED, 0, "Play?")
+                    crsf:send_write_response(#new_data, new_data)
+                elseif command_action == CRSF_COMMAND_STATUS.CONFIRM then
                     -- we have been asked to start a command, update the parameter to reflect the status
                     local new_data = create_command_entry("Beethoven", CRSF_COMMAND_STATUS.PROGRESS, 0, "Playing")
                     crsf:send_write_response(#new_data, new_data)
