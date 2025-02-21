@@ -224,7 +224,8 @@ public:
     };
 
     struct ScriptedPayload {
-        uint8_t data[57];
+        uint8_t payload[57];
+        uint8_t payload_length;
     };
 
     enum ScriptedParameterEvents : uint8_t {
@@ -236,14 +237,18 @@ public:
 
     struct ScriptedParameterWrite {
         ScriptedParameter* param;
+        uint8_t payload_length;
         ParameterSettingsWriteFrame frame;
     };
 
     ObjectBuffer<ScriptedParameterWrite> inbound_params{8};
+    ObjectBuffer<ScriptedParameterWrite> outbound_params{8};
 
     bool add_menu(const char* name, ScriptedMenu& menu);
-    void process_scripted_param_write(ParameterSettingsWriteFrame* write);
+    void clear_menus();
+    void process_scripted_param_write(ParameterSettingsWriteFrame* write, uint8_t length);
     uint8_t get_menu_event(uint8_t menu_events, ScriptedParameter& param, ScriptedPayload& payload);
+    bool send_write_response(uint8_t length, const char* data);
 
     // Frame to hold passthrough telemetry
     struct PACKED PassthroughSinglePacketFrame {
@@ -312,7 +317,7 @@ public:
     bool is_tracer() const { return _crsf_version.protocol == AP_RCProtocol_CRSF::ProtocolType::PROTOCOL_TRACER; }
 
     // Process a frame from the CRSF protocol decoder
-    static bool process_frame(AP_RCProtocol_CRSF::FrameType frame_type, void* data);
+    static bool process_frame(AP_RCProtocol_CRSF::FrameType frame_type, void* data, uint8_t length);
     // get next telemetry data for external consumers of SPort data
     static bool get_telem_data(AP_RCProtocol_CRSF::Frame* frame, bool is_tx_active);
     // start bind request
@@ -378,7 +383,7 @@ private:
     void process_vtx_telem_frame(VTXTelemetryFrame* vtx);
     void process_ping_frame(ParameterPingFrame* ping);
     void process_param_read_frame(ParameterSettingsReadFrame* read);
-    void process_param_write_frame(ParameterSettingsWriteFrame* write);
+    void process_param_write_frame(ParameterSettingsWriteFrame* write, uint8_t length);
     void process_device_info_frame(ParameterDeviceInfoFrame* info);
     void process_command_frame(CommandFrame* command);
 
@@ -393,7 +398,7 @@ private:
 
     // get next telemetry data for external consumers
     bool _get_telem_data(AP_RCProtocol_CRSF::Frame* data, bool is_tx_active);
-    bool _process_frame(AP_RCProtocol_CRSF::FrameType frame_type, void* data);
+    bool _process_frame(AP_RCProtocol_CRSF::FrameType frame_type, void* data, uint8_t length);
 
     TelemetryPayload _telem;
     uint8_t _telem_size;

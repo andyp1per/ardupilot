@@ -38,7 +38,7 @@
 
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
-#define CRSF_DEBUG
+//#define CRSF_DEBUG
 #ifdef CRSF_DEBUG
 # define debug(fmt, args...)	hal.console->printf("CRSF: " fmt "\n", ##args)
 #else
@@ -520,10 +520,12 @@ void AP_CRSF_Telem::process_packet(uint8_t idx)
 }
 
 // Process a frame from the CRSF protocol decoder
-bool AP_CRSF_Telem::_process_frame(AP_RCProtocol_CRSF::FrameType frame_type, void* data) {
+bool AP_CRSF_Telem::_process_frame(AP_RCProtocol_CRSF::FrameType frame_type, void* data, uint8_t length) {
     switch (frame_type) {
     // this means we are connected to an RC receiver and can send telemetry
     case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_RC_CHANNELS_PACKED:
+    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED:
+    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_RC_CHANNELS_PACKED_11BIT:
     // the EVO sends battery frames and we should send telemetry back to populate the OSD
     case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_BATTERY_SENSOR:
         _enable_telemetry = true;
@@ -548,7 +550,7 @@ bool AP_CRSF_Telem::_process_frame(AP_RCProtocol_CRSF::FrameType frame_type, voi
         break;
 
     case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAMETER_WRITE:
-        process_param_write_frame((ParameterSettingsWriteFrame*)data);
+        process_param_write_frame((ParameterSettingsWriteFrame*)data, length);
         break;
 
     case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAM_DEVICE_INFO:
@@ -1526,7 +1528,7 @@ void AP_CRSF_Telem::calc_text_selection(AP_OSD_ParamSetting* param, uint8_t chun
 #endif  // HAL_CRSF_TELEM_TEXT_SELECTION_ENABLED
 
 // write parameter information back into AP - assumes we already know the encoding for floats
-void AP_CRSF_Telem::process_param_write_frame(ParameterSettingsWriteFrame* write_frame)
+void AP_CRSF_Telem::process_param_write_frame(ParameterSettingsWriteFrame* write_frame, uint8_t length)
 {
     debug("process_param_write_frame: %d -> %d", write_frame->origin, write_frame->destination);
     if (write_frame->destination != AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER) {
@@ -1535,7 +1537,7 @@ void AP_CRSF_Telem::process_param_write_frame(ParameterSettingsWriteFrame* write
 
     // write paramter in scripted menus
     if (write_frame->param_num >= SCRIPTED_MENU_START_ID) {
-        process_scripted_param_write(write_frame);
+        process_scripted_param_write(write_frame, length);
         return;
     }
 #if OSD_PARAM_ENABLED
@@ -1611,12 +1613,31 @@ uint8_t AP_CRSF_Telem::get_menu_event(uint8_t menu_events, ScriptedParameter& pa
         ScriptedParameterWrite spw;
         if (inbound_params.pop(spw)) {
             events |= PARAMETER_WRITE;
-            memcpy(spw.frame.payload, payload.data, 57);
+            memcpy(payload.payload, spw.frame.payload, spw.payload_length);
+            payload.payload_length = spw.payload_length;
             param = *spw.param;
+            // respond with parameter entry
+            outbound_params.push(spw);
         }
     }
 
     return events;
+}
+
+bool AP_CRSF_Telem::send_write_response(uint8_t length, const char* data)
+{
+    ScriptedParameterWrite spw;
+    if (outbound_params.pop(spw)) {
+        // respond with parameter entry
+        spw.param->data = (const char*)hal.util->std_realloc((char*)spw.param->data, length);
+        memcpy((char*)spw.param->data, data, length);
+        spw.param->length = length;
+
+        _param_request = {spw.frame.origin, spw.frame.destination, spw.frame.param_num, 0};
+        _pending_request.frame_type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAMETER_READ;
+        return true;
+    }
+    return false;
 }
 
 AP_CRSF_Telem::ScriptedParameter* AP_CRSF_Telem::ScriptedMenuEntry::find_parameter(uint8_t param_num)
@@ -1728,7 +1749,7 @@ AP_CRSF_Telem::ScriptedMenuEntry::ScriptedMenuEntry(const char* menu_name, uint8
     params = (ScriptedParameter*)calloc(size, sizeof(ScriptedParameter));
 }
 
-void AP_CRSF_Telem::process_scripted_param_write(ParameterSettingsWriteFrame* write_frame)
+void AP_CRSF_Telem::process_scripted_param_write(ParameterSettingsWriteFrame* write_frame, uint8_t length)
 {
     // find the parameter to write
     ScriptedParameter* param = scripted_menus.find_parameter(write_frame->param_num);
@@ -1736,8 +1757,7 @@ void AP_CRSF_Telem::process_scripted_param_write(ParameterSettingsWriteFrame* wr
     if (param == nullptr) {
         return;
     }
-
-    inbound_params.push({param, *write_frame});
+    inbound_params.push({param, uint8_t(length - 3U), *write_frame}); // payload size in frame
 }
 
 bool AP_CRSF_Telem::add_menu(const char* name, ScriptedMenu& menu)
@@ -1748,6 +1768,16 @@ bool AP_CRSF_Telem::add_menu(const char* name, ScriptedMenu& menu)
     menu = *new_menu;
 
     return true;
+}
+
+void AP_CRSF_Telem::clear_menus()
+{
+    for (ScriptedMenuEntry* m = scripted_menus.next_menu; m != nullptr; ) {
+        ScriptedMenuEntry* next = m->next_menu;
+        delete m;
+        m = next;
+    }
+    scripted_menus.next_menu = nullptr;
 }
 
 #endif //AP_CRSF_SCRIPTING
@@ -1870,12 +1900,12 @@ bool AP_CRSF_Telem::_get_telem_data(AP_RCProtocol_CRSF::Frame* data, bool is_tx_
 /*
   fetch data for an external transport, such as CRSF
  */
-bool AP_CRSF_Telem::process_frame(AP_RCProtocol_CRSF::FrameType frame_type, void* data)
+bool AP_CRSF_Telem::process_frame(AP_RCProtocol_CRSF::FrameType frame_type, void* data, uint8_t length)
 {
     if (!get_singleton()) {
         return false;
     }
-    return singleton->_process_frame(frame_type, data);
+    return singleton->_process_frame(frame_type, data, length);
 }
 
 /*
