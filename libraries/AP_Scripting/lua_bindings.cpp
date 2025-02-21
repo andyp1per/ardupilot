@@ -1267,4 +1267,27 @@ int lua_DroneCAN_get_FlexDebug(lua_State *L)
 }
 #endif // HAL_ENABLE_DRONECAN_DRIVERS
 
+#if AP_CRSF_SCRIPTING
+int lua_CRSF_get_menu_event(lua_State *L)
+{
+    binding_argcheck(L, 2);
+    const uint8_t raw_events = get_uint8_t(L, 2);
+    const uint8_t events = static_cast<uint8_t>(raw_events);
+    AP_CRSF_Telem::ScriptedParameter param {};
+    AP_CRSF_Telem::ScriptedPayload payload {};
+    const uint8_t data = static_cast<uint8_t>(AP::crsf_telem()->get_menu_event(
+            events,
+            param,
+            payload));
+
+#if 3 > LUA_MINSTACK
+    luaL_checkstack(L, 3, nullptr);
+#endif
+
+    *new_AP_CRSF_Telem__ScriptedParameter(L) = param;
+    lua_pushlstring(L, (const char*)payload.payload, payload.payload_length);
+    lua_pushinteger(L, data);
+    return 3;
+}
+#endif // AP_CRSF_SCRIPTING
 #endif  // AP_SCRIPTING_ENABLED

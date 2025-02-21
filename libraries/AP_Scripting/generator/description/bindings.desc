@@ -712,13 +712,13 @@ ap_object ScriptingCANBuffer method read_frame boolean AP_HAL::CANFrame'Null
 ap_object ScriptingCANBuffer method add_filter boolean uint32_t'skip_check uint32_t'skip_check
 
 include AP_RCTelemetry/AP_CRSF_Telem.h
-userdata AP_CRSF_Telem::ScriptedParameter depends OSD_PARAM_ENABLED
+userdata AP_CRSF_Telem::ScriptedParameter depends AP_CRSF_SCRIPTING
 userdata AP_CRSF_Telem::ScriptedParameter rename CRSFParameter
 userdata AP_CRSF_Telem::ScriptedParameter field id uint8_t'skip_check read
 userdata AP_CRSF_Telem::ScriptedParameter field length uint16_t'skip_check read
 userdata AP_CRSF_Telem::ScriptedParameter field data string read
 
-userdata AP_CRSF_Telem::ScriptedMenu depends OSD_PARAM_ENABLED
+userdata AP_CRSF_Telem::ScriptedMenu depends AP_CRSF_SCRIPTING
 userdata AP_CRSF_Telem::ScriptedMenu rename CRSFMenu
 userdata AP_CRSF_Telem::ScriptedMenu creation lua_new_Menu 2
 userdata AP_CRSF_Telem::ScriptedMenu field id uint8_t'skip_check read
@@ -727,15 +727,12 @@ userdata AP_CRSF_Telem::ScriptedMenu field num_params uint8_t'skip_check read
 userdata AP_CRSF_Telem::ScriptedMenu field params'array AP_CRSF_Telem::MAX_SCRIPTED_PARAMETERS AP_CRSF_Telem::ScriptedParameter read
 userdata AP_CRSF_Telem::ScriptedMenu method add_parameter boolean uint8_t'skip_check string AP_CRSF_Telem::ScriptedParameter'Null
 
-userdata AP_CRSF_Telem::ScriptedPayload depends OSD_PARAM_ENABLED
-userdata AP_CRSF_Telem::ScriptedPayload rename CRSFPayload
-userdata AP_CRSF_Telem::ScriptedPayload field data'array int(ARRAY_SIZE(ud->data)) uint8_t'skip_check read write
-
-singleton AP::crsf_telem() depends HAL_CRSF_TELEM_ENABLED
+singleton AP::crsf_telem() depends AP_CRSF_SCRIPTING
 singleton AP::crsf_telem() literal
 singleton AP::crsf_telem() rename crsf
 singleton AP::crsf_telem() method add_menu boolean string AP_CRSF_Telem::ScriptedMenu'Null
-singleton AP::crsf_telem() method get_menu_event uint8_t uint8_t'skip_check AP_CRSF_Telem::ScriptedParameter'Ref AP_CRSF_Telem::ScriptedPayload'Ref
+singleton AP::crsf_telem() manual get_menu_event lua_CRSF_get_menu_event 1 3
+singleton AP::crsf_telem() method send_write_response boolean uint8_t'skip_check string
 
 include AP_DroneCAN/AP_DroneCAN.h
 global manual DroneCAN_get_FlexDebug lua_DroneCAN_get_FlexDebug 4 2 depends (HAL_ENABLE_DRONECAN_DRIVERS==1)

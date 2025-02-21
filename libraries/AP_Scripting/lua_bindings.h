@@ -35,3 +35,4 @@ int lua_print(lua_State *L);
 int lua_range_finder_handle_script_msg(lua_State *L);
 int lua_GCS_command_int(lua_State *L);
 int lua_DroneCAN_get_FlexDebug(lua_State *L);
+int lua_CRSF_get_menu_event(lua_State *L);

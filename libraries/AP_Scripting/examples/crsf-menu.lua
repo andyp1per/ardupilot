@@ -57,7 +57,7 @@ end
 
 local param1 = create_info_entry("Menu Item 1", "It goes here")
 local param2 = create_info_entry("Menu Item 2", "Another one")
-local param3 = create_command_entry("Menu Item 3", CRSF_COMMAND_STATUS.START, 50, "Command")
+local param3 = create_command_entry("Beethoven", CRSF_COMMAND_STATUS.READY, 50, "Command")
 
 local command
 
@@ -73,10 +73,18 @@ end
 function update()
     local param, payload, events = crsf:get_menu_event(CRSF_EVENT.PARAMETER_WRITE)
     if (events & CRSF_EVENT.PARAMETER_WRITE) ~= 0 then
-        gcs:send_text(MAV_SEVERITY.INFO, "Parameter write " .. param:id())
         if command ~= nil then
             if param:id() == command:id() then
-                notify:play_tune("L16GGGL4E-L16FFFL4D") -- Beethoven's 5th intro
+                local command_action = string.unpack(">B", payload)
+                if command_action == CRSF_COMMAND_STATUS.START then
+                    -- we have been asked to start a command, update the parameter to reflect the status
+                    local new_data = create_command_entry("Beethoven", CRSF_COMMAND_STATUS.PROGRESS, 0, "Playing")
+                    crsf:send_write_response(#new_data, new_data)
+                    notify:play_tune("L16GGGL4E-L16FFFL4D") -- Beethoven's 5th intro
+                elseif command_action == CRSF_COMMAND_STATUS.POLL then
+                    -- we have been asked to start a command, update the parameter to reflect the status
+                    crsf:send_write_response(#param3, param3)
+                end
             end
         end
     end
