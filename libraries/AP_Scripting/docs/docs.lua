@@ -4149,11 +4149,9 @@ function CRSFMenu_ud:num_params() end
 ---@return CRSFParameter_ud
 function CRSFMenu_ud:params(index) end
 
--- set array field
----@param length integer
----@param data string
+---@param data string -- binary encoded parameter
 ---@return CRSFParameter_ud|nil
-function CRSFMenu_ud:add_parameter(length, data) end
+function CRSFMenu_ud:add_parameter(data) end
 
 -- desc
 crsf = {}
@@ -4166,11 +4164,11 @@ function crsf:add_menu(name) end
 -- get pending CRSF menu event and associated data
 ---@param events integer -- events
 ---@return CRSFParameter_ud -- parameter
----@return string -- payload
+---@return string -- binary encoded response payload
 ---@return integer -- events
 function crsf:get_menu_event(events) end
 
----@param length integer
----@param data string
+-- send a CRSF parameter response
+---@param data string -- binary encoded response payload
 ---@return boolean
-function crsf:send_write_response(length, data) end
+function crsf:send_write_response(data) end

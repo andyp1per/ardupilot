@@ -1289,5 +1289,40 @@ int lua_CRSF_get_menu_event(lua_State *L)
     lua_pushinteger(L, data);
     return 3;
 }
+
+int lua_CRSF_send_response(lua_State *L)
+{
+    binding_argcheck(L, 2);
+    size_t len = 0;
+    const char * payload= luaL_checklstring(L, 2, &len);
+    const bool data = static_cast<bool>(AP::crsf_telem()->send_write_response(
+            len,
+            payload));
+
+    lua_pushboolean(L, data);
+    return 1;
+}
+
+int lua_CRSF_add_parameter(lua_State *L) {
+    binding_argcheck(L, 2);
+    AP_CRSF_Telem::ScriptedMenu * ud = check_AP_CRSF_Telem__ScriptedMenu(L, 1);
+    size_t len = 0;
+    const char * data_3 = luaL_checklstring(L, 2, &len);
+    AP_CRSF_Telem::ScriptedParameter data_5004 {};
+    const bool data = static_cast<bool>(ud->add_parameter(
+            len,
+            data_3,
+            data_5004));
+
+    if (data) {
+#if 2 > LUA_MINSTACK
+        luaL_checkstack(L, 2, nullptr);
+#endif
+
+        *new_AP_CRSF_Telem__ScriptedParameter(L) = data_5004;
+        return 1;
+    }
+    return 0;
+}
 #endif // AP_CRSF_SCRIPTING
 #endif  // AP_SCRIPTING_ENABLED

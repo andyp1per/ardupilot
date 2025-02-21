@@ -67,12 +67,12 @@ local command, text, astring, afloat
 local menu = crsf:add_menu('Example Menu')
 
 if menu ~= nil then
-    menu:add_parameter(#param1, param1)
-    menu:add_parameter(#param2, param2)
-    command = menu:add_parameter(#param3, param3)
-    text = menu:add_parameter(#param4, param4)
-    astring = menu:add_parameter(#param5, param5)
-    afloat = menu:add_parameter(#param6, param6)
+    menu:add_parameter(param1)
+    menu:add_parameter(param2)
+    command = menu:add_parameter(param3)
+    text = menu:add_parameter(param4)
+    astring = menu:add_parameter(param5)
+    afloat = menu:add_parameter(param6)
     gcs:send_text(MAV_SEVERITY.INFO, string.format("Loaded CRSF menu \'" .. menu:name() .. "\'"))
 end
 
@@ -84,28 +84,28 @@ function update()
             if command_action == CRSF_COMMAND_STATUS.START then
                 -- we have been asked to start a command, ask for confirmarion
                 local new_data = create_command_entry("Beethoven", CRSF_COMMAND_STATUS.CONFIRMATION_NEEDED, 0, "Play?")
-                crsf:send_write_response(#new_data, new_data)
+                crsf:send_write_response(new_data)
             elseif command_action == CRSF_COMMAND_STATUS.CONFIRM then
                 -- we have been asked to start a command, update the parameter to reflect the status
                 local new_data = create_command_entry("Beethoven", CRSF_COMMAND_STATUS.PROGRESS, 0, "Playing")
-                crsf:send_write_response(#new_data, new_data)
+                crsf:send_write_response(new_data)
                 notify:play_tune("L16GGGL4E-L16FFFL4D") -- Beethoven's 5th intro
             elseif command_action == CRSF_COMMAND_STATUS.POLL then
                 -- we have been asked to start a command, update the parameter to reflect the status
-                crsf:send_write_response(#param3, param3)
+                crsf:send_write_response(param3)
             end
         elseif text ~= nil and param:id() == text:id() then
             local selection = string.unpack(">B", payload)
             gcs:send_text(MAV_SEVERITY.INFO, "Selected option " .. selection)
-            crsf:send_write_response(#payload, payload)
+            crsf:send_write_response(payload)
         elseif astring ~= nil and param:id() == astring:id() then
             local selection = string.unpack(">z", payload)
             gcs:send_text(MAV_SEVERITY.INFO, "New string is " .. selection)
-            crsf:send_write_response(#payload, payload)
+            crsf:send_write_response(payload)
         elseif afloat ~= nil and param:id() == afloat:id() then
             local selection = string.unpack(">i", payload)
             gcs:send_text(MAV_SEVERITY.INFO, "Value is " .. selection / 10*3)
-            crsf:send_write_response(#payload, payload)
+            crsf:send_write_response(payload)
         end
     end
     return update, 100
