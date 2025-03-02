@@ -686,7 +686,7 @@ AP_GPS_Backend *AP_GPS::_detect_instance(uint8_t instance)
     // the correct baud rate, and should have the selected baud broadcast
     dstate->auto_detected_baud = true;
     const uint32_t now = AP_HAL::millis();
-
+    bool baud_change_msg = false;
     if (now - dstate->last_baud_change_ms > GPS_BAUD_TIME_MS) {
         // try the next baud rate
         // incrementing like this will skip the first element in array of bauds
@@ -710,7 +710,7 @@ AP_GPS_Backend *AP_GPS::_detect_instance(uint8_t instance)
         _port[instance]->begin(dstate->probe_baud, rx_size, tx_size);
         _port[instance]->set_flow_control(AP_HAL::UARTDriver::FLOW_CONTROL_DISABLE);
         dstate->last_baud_change_ms = now;
-
+        baud_change_msg = true;
         if (_auto_config >= GPS_AUTO_CONFIG_ENABLE_SERIAL_ONLY) {
             send_blob_start(instance);
         }
@@ -747,6 +747,10 @@ AP_GPS_Backend *AP_GPS::_detect_instance(uint8_t instance)
     }
 
     uint16_t bytecount = MIN(8192U, _port[instance]->available());
+
+    if (bytecount > 0 && baud_change_msg) {
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "GPS %d: negotiating at %ubaud", instance + 1, unsigned(dstate->probe_baud));
+    }
 
     while (bytecount-- > 0) {
         const uint8_t data = _port[instance]->read();
