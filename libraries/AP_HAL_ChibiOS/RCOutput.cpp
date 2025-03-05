@@ -349,6 +349,7 @@ void RCOutput::dshot_collect_dma_locks(rcout_timer_t cycle_start_us, rcout_timer
             if (!mask) {
                 dma_cancel(group);
             }
+            osalDbgAssert(group.dshot_waiter == nullptr, "Dshot waiter was not reset");
 #ifdef HAL_WITH_BIDIR_DSHOT
             // if using input capture DMA then clean up
             if (group.bdshot.enabled) {
