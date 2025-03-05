@@ -181,6 +181,9 @@ void Copter::init_ardupilot()
     custom_control.init();
 #endif
 
+#if AP_FENCE_ENABLED
+    fence_init();
+#endif
     // set landed flags
     set_land_complete(true);
     set_land_complete_maybe(true);
