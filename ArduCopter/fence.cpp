@@ -6,6 +6,9 @@
 
 // fence_check - ask fence library to check for breaches and initiate the response
 // called at 1hz
+uint32_t last_check_us = 0;
+uint32_t check_count = 0;
+uint32_t check_elapsed_us = 0;
 void Copter::fence_check()
 {
     const uint8_t orig_breaches = fence.get_breaches();
@@ -13,7 +16,16 @@ void Copter::fence_check()
     bool is_landing_or_landed = flightmode->is_landing() || ap.land_complete  || !motors->armed();
 
     // check for new breaches; new_breaches is bitmask of fence types breached
+    uint32_t now = AP_HAL::micros();
     const uint8_t new_breaches = fence.check(is_landing_or_landed);
+    check_count++;
+    check_elapsed_us += (AP_HAL::micros() - now);
+    if (now - last_check_us > 1e6) {
+        hal.console->printf("Avg check %luus @%luHz\n", check_elapsed_us/check_count, check_count);
+        check_count = 0;
+        check_elapsed_us = 0;
+        last_check_us = now;
+    }
 
     // we still don't do anything when disarmed, but we do check for fence breaches.
     // fence pre-arm check actually checks if any fence has been breached 
