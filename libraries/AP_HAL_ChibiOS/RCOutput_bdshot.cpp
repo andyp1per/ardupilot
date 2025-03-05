@@ -496,6 +496,8 @@ __RAMFUNC__ void RCOutput::bdshot_finish_dshot_gcr_transaction(virtual_timer_t* 
 #ifdef HAL_GPIO_LINE_GPIO56
     TOGGLE_PIN_DEBUG(56);
 #endif
+    osalDbgAssert(group->dshot_waiter, "No dshot waiter to signal");
+
     if (group->dshot_waiter == nullptr) {   // transaction was cancelled, leave everything alone
         chSysUnlockFromISR();
         return;
