@@ -27,15 +27,15 @@ void Copter::fence_run_checks()
     bool is_landing_or_landed = flightmode->is_landing() || ap.land_complete  || !motors->armed();
 
     // check for new breaches; new_breaches is bitmask of fence types breached
-    uint32_t now = AP_HAL::micros();
+    uint32_t now_us = AP_HAL::micros();
     const uint8_t new_breaches = fence.check(is_landing_or_landed);
     check_count++;
-    check_elapsed_us += (AP_HAL::micros() - now);
-    if (now - last_check_us > 1e6) {
+    check_elapsed_us += (AP_HAL::micros() - now_us);
+    if (now_us - last_check_us > 1e6) {
         hal.console->printf("Avg check %luus @%luHz\n", check_elapsed_us/check_count, check_count);
         check_count = 0;
         check_elapsed_us = 0;
-        last_check_us = now;
+        last_check_us = now_us;
     }
 
     if (new_breaches) {
