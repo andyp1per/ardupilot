@@ -63,6 +63,7 @@ void Plane::Log_Write_FullRate(void)
     // MASK_LOG_ATTITUDE_FULLRATE logs at 400Hz, MASK_LOG_ATTITUDE_FAST at 25Hz, MASK_LOG_ATTIUDE_MED logs at 10Hz
     // highest rate selected wins
     if (should_log(MASK_LOG_ATTITUDE_FULLRATE)) {
+        logger.Write_RCOUT();
         Log_Write_Attitude();
     }
     if (should_log(MASK_LOG_NOTCH_FULLRATE)) {
@@ -252,7 +253,9 @@ void Plane::Log_Write_AETR()
 void Plane::Log_Write_RC(void)
 {
     logger.Write_RCIN();
-    logger.Write_RCOUT();
+    if (!should_log(MASK_LOG_ATTITUDE_FULLRATE)) {
+        logger.Write_RCOUT();
+    }
     if (rssi.enabled()) {
         logger.Write_RSSI();
     }
