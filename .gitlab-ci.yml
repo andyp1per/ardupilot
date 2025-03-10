@@ -1,0 +1,32 @@
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
+.parallel-matrix:
+  parallel:
+    matrix:
+      - BOARD: 
+        - 3DRQuadZeroPro
+        TARGET:
+        - copter
+
+stages:          # List of stages for jobs, and their order of execution
+  - build
+
+build-job:       # This job runs in the build stage, which runs first.
+  stage: build
+  tags:
+    - ardupilot
+  parallel: !reference [.parallel-matrix, parallel]
+  script:
+    - git config --global --add safe.directory '*'
+    - git submodule update --init --recursive
+    - ./waf configure --board=$BOARD
+    - ./waf $TARGET
+  artifacts:
+    untracked: false
+    when: on_success
+    access: all
+    expire_in: 7 days
+    paths:
+      - build/$BOARD/bin/*
+
