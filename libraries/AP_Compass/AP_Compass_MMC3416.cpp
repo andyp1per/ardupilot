@@ -251,7 +251,7 @@ void AP_Compass_MMC3416::timer()
         last_sample_ms = AP_HAL::millis();
 
         // sensor is not FRD
-        field.y = -field.y;
+        field.x = -field.x;
 
         accumulate_sample(field, compass_instance);
 
@@ -280,7 +280,7 @@ void AP_Compass_MMC3416::timer()
         field += offset;
 
         // sensor is not FRD
-        field.y = -field.y;
+        field.x = -field.x;
 
         last_sample_ms = AP_HAL::millis();
         accumulate_sample(field, compass_instance);
