@@ -3964,23 +3964,6 @@ function fence:get_safe_alt_min() end
 ---@return number 
 function fence:get_safe_alt_max() end
 
--- Returns the type bitmask of any fence whose margins have been crossed
----@return integer fence_type bitmask
----| 1 # Maximim altitude
----| 2 # Circle
----| 4 # Polygon
----| 8 # Minimum altitude
-function fence:get_margin_breaches() end
-
--- Returns the distance in meters to the nearest fence given by the type bitmask
----@param fence_type integer
----| 1 # Maximim altitude
----| 2 # Circle
----| 4 # Polygon
----| 8 # Minimum altitude
----@return number -- distance
-function fence:get_breach_distance(fence_type) end
-
 -- Returns configured fences
 ---@return integer fence_type bitmask
 ---| 1 # Maximim altitude
