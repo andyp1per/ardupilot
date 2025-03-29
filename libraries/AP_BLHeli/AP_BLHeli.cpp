@@ -177,7 +177,7 @@ AP_BLHeli::AP_BLHeli(void)
 uint8_t AP_BLHeli::blheli_chan_to_output_chan(uint8_t motor)
 {
     uint8_t chan = 0;
-    SRV_Channels::find_channel(SRV_Channel::Function(motor + uint16_t(SRV_Channel::k_motor1)), chan);
+    SRV_Channels::find_channel(SRV_Channel::Aux_servo_function_t(motor + uint16_t(SRV_Channel::k_motor1)), chan);
     return chan;
 }
 
