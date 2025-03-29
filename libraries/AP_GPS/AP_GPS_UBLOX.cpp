@@ -244,16 +244,18 @@ const AP_GPS_UBLOX::config_list AP_GPS_UBLOX::config_MB_Rover_uart2[] {
   and also disable Glonass and enable QZSS
  */
 const AP_GPS_UBLOX::config_list AP_GPS_UBLOX::config_M10[] {
+ { ConfigKey::CFG_SIGNAL_GLO_ENA, 0},
+ { ConfigKey::CFG_SIGNAL_GPS_ENA, 1},
+ { ConfigKey::CFG_SIGNAL_GPS_L1CA_ENA, 1},
+ { ConfigKey::CFG_SIGNAL_QZSS_ENA, 1},
+ { ConfigKey::CFG_SIGNAL_QZSS_L1CA_ENA, 1},
+ { ConfigKey::CFG_SIGNAL_GAL_ENA, 1},
+ { ConfigKey::CFG_SIGNAL_GAL_E1_ENA, 1},
  { ConfigKey::CFG_SIGNAL_BDS_ENA, 1},
  { ConfigKey::CFG_SIGNAL_BDS_B1_ENA, 0},
  { ConfigKey::CFG_SIGNAL_BDS_B1C_ENA, 1},
- { ConfigKey::CFG_SIGNAL_GLO_ENA, 0},
- { ConfigKey::CFG_SIGNAL_QZSS_ENA, 1},
- { ConfigKey::CFG_SIGNAL_QZSS_L1CA_ENA, 1},
- { ConfigKey::CFG_SIGNAL_QZSS_L1S_ENA, 1},
  { ConfigKey::CFG_NAVSPG_DYNMODEL, 8}, // Air < 4g
 };
-
 
 /*
   config changes for L5 modules
