@@ -42,6 +42,7 @@
 #include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_ESC_Telem/AP_ESC_Telem.h>
 #include <SRV_Channel/SRV_Channel.h>
+#include <AP_BattMonitor/AP_BattMonitor.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -469,12 +470,32 @@ void AP_BLHeli::msp_process_command(void)
 
     case MSP_BATTERY_STATE: {
         debug("MSP_BATTERY_STATE");
-        uint8_t buf[8];
-        buf[0] = 4; // cell count
-        putU16(&buf[1], 1500); // mAh
-        buf[3] = 16; // V
-        putU16(&buf[4], 1500); // mAh
-        putU16(&buf[6], 1); // A
+        // ESC configurator seems to care a lot about the battery state,
+        // try and at least provide something believable
+        uint8_t buf[11] {};
+#if AP_BATTERY_ENABLED
+        AP_BattMonitor &battery = AP::battery();
+        float v;
+#if HAL_WITH_ESC_TELEM
+        if (!AP::esc_telem().get_voltage(blheli_chan_to_output_chan(blheli.chan), v))
+#endif
+            v = battery.voltage();
+        buf[0] = battery.healthy() ? uint8_t(roundf(v / 3.85)) : 0; // cell count, 0 means no battery
+        uint16_t cap = uint16_t(battery.pack_capacity_mah());
+        putU16(&buf[1], cap); // capacity in mAh
+        buf[3] = uint8_t(roundf(v * 10.0)); // legacy V in 0.1V steps
+
+        float cons = 0;
+        UNUSED_RESULT(battery.consumed_mah(cons));
+        putU16(&buf[4], uint16_t(roundf(cons))); // mAh used
+
+        float amps = 0.0;
+        UNUSED_RESULT(battery.current_amps(amps));
+        putU16(&buf[6], uint16_t(roundf(amps * 100.0))); // A in 0.01A steps
+        buf[8] = battery.healthy(); // alerts/state
+        // We are advertising MSP v1.42 which means supporting the new voltage field
+        putU16(&buf[9], uint16_t(roundf(v * 100.0))); // Voltage in 0.01V steps
+#endif
         msp_send_reply(msp.cmdMSP, buf, sizeof(buf));
         break;
     }
