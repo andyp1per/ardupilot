@@ -108,15 +108,16 @@ void AP_BoardConfig::board_setup_drivers(void)
     case FMUV6_BOARD_HOLYBRO_6X:
     case FMUV6_BOARD_HOLYBRO_6X_REV6:
     case FMUV6_BOARD_HOLYBRO_6X_45686:
+    case FMUV6_BOARD_HOLYBRO_6X_42653:
     case FMUV6_BOARD_CUAV_6X:
         break;
     default:
-        config_error("Unknown board type");
+        config_error("Unknown board type %u", state.board_type.get());
         break;
     }
 }
 
-#define SPI_PROBE_DEBUG 0
+#define SPI_PROBE_DEBUG 1
 
 /*
   check a SPI device for a register value
@@ -259,6 +260,7 @@ bool AP_BoardConfig::check_ms5611(const char* devname) {
 #define INV3_WHOAMI_ICM42670  0x67
 #define INV3_WHOAMI_ICM45686  0xE9
 #define INV3_WHOAMI_IIM42652  0x6f
+#define INV3_WHOAMI_IIM42653  0x56
 
 /*
   validation of the board type
@@ -524,6 +526,11 @@ void AP_BoardConfig::detect_fmuv6_variant()
                spi_check_register("icm45686", INV3REG_456_WHOAMI, INV3_WHOAMI_ICM45686)) {
         state.board_type.set_and_notify(FMUV6_BOARD_HOLYBRO_6X_REV6);
         DEV_PRINTF("Detected Holybro 6X_Rev6\n");
+    } else if (spi_check_register("iim42653-1", INV3REG_WHOAMI, INV3_WHOAMI_IIM42653) &&
+               spi_check_register("iim42653-2", INV3REG_WHOAMI, INV3_WHOAMI_IIM42653) &&
+               spi_check_register("iim42653-3", INV3REG_WHOAMI, INV3_WHOAMI_IIM42653)) {
+        state.board_type.set_and_notify(FMUV6_BOARD_HOLYBRO_6X_42653);
+        DEV_PRINTF("Detected Holybro 6X_42653\n");
     }
 }
 #endif
