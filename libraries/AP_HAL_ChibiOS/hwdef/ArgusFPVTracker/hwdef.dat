@@ -1,0 +1,131 @@
+# Hardware definition file for processing by chibios_hwdef.py
+# ARGUSFPV AAT
+
+# 11/25/2024
+# Revision 00
+
+# Hardware Specifications
+# MCU: STM32F407VGT6
+# Main DCDC: MPS MP9943
+# Sensor Power: ONSEMI NCV8730
+# IMU: BOSCH Sensortec BMI270
+# Geomagnetic Sensor: QST QMC5883L
+
+# MCU class and specific type
+MCU STM32F4xx STM32F407xx
+
+# Now we need to specify the APJ_BOARD_ID. This is the ID that the
+# bootloader presents to GCS software so it knows if this firmware is
+# suitable for the board. Please see
+# https://github.com/ArduPilot/Bootloader/blob/master/hw_config.h for
+# a list of current board IDs. If you add a new board type then please
+# get it added to that repository so we don't get conflicts.
+
+# Note that APJ is "ArduPilot JSON Firmware Format".
+
+# board ID for firmware load
+APJ_BOARD_ID 7888
+
+# crystal frequency
+OSCILLATOR_HZ 8000000
+
+# This is the STM32 timer that ChibiOS will use for the low level
+# driver. This must be a 32 bit timer. We currently only support
+# timers 2, 3, 4, 5 and 21. See hal_st_lld.c in ChibiOS for details.
+
+# ChibiOS system timer
+STM32_ST_USE_TIMER 5
+
+# flash size
+FLASH_RESERVE_START_KB 64
+FLASH_SIZE_KB 1024
+
+define HAL_STORAGE_SIZE 15360
+STORAGE_FLASH_PAGE 2
+
+# USB setup
+USB_STRING_MANUFACTURER "ARGUSFPV"
+
+# order of I2C buses
+I2C_ORDER I2C1 I2C2
+
+# order of UARTs (and USB)
+SERIAL_ORDER OTG1 USART3 USART2 USART1
+
+# UART/USART definition
+
+# USART3 telem 1
+PD8 USART3_TX USART3
+PD9 USART3_RX USART3
+PD11 USART3_CTS USART3
+PD12 USART3_RTS USART3
+
+# USART2 telem 2
+PD5 USART2_TX USART2
+PD6 USART2_RX USART2
+PD3 USART2_CTS USART2
+PD4 USART2_RTS USART2
+
+# USART1 serial GPS
+PB6 USART1_TX USART1
+PB7 USART1_RX USART1
+
+# Voltage Sense
+PA2 BATT_VOLTAGE_SENS ADC1 SCALE(1)
+PA3 VDD_5V_SENS ADC1 SCALE(2)
+
+# VBUS
+PA9 VBUS INPUT OPENDRAIN
+
+# USB FS
+PA11 OTG_FS_DM OTG1
+PA12 OTG_FS_DP OTG1
+
+# Serial Debug
+PA13 JTMS-SWDIO SWD
+PA14 JTCK-SWCLK SWD
+
+# PWM output for buzzer
+PA0 TIM2_CH1 TIM2 GPIO(77) ALARM
+
+# Define Boot1 to input for EMI protection
+PB2 BOOT1 INPUT
+
+# I2C Buses
+PB8 I2C1_SCL I2C1
+PB9 I2C1_SDA I2C1
+
+PB10 I2C2_SCL I2C2
+PB11 I2C2_SDA I2C2
+
+# SPI Bus
+PA5 SPI1_SCK SPI1
+PA6 SPI1_MISO SPI1
+PA7 SPI1_MOSI SPI1
+
+# CS Pin for IMU
+PA4 IMU_CS CS
+
+# PWM Output
+PE14 TIM1_CH4 TIM1 PWM(1) GPIO(50)
+PE13 TIM1_CH3 TIM1 PWM(2) GPIO(51)
+
+# SPI Device Table
+SPIDEV bmi270 SPI1 DEVID1 IMU_CS MODE3  2*MHZ  10*MHZ
+
+IMU BMI270 SPI:bmi270 ROTATION_ROLL_180_YAW_270
+define HAL_DEFAULT_INS_FAST_SAMPLE 1
+
+# This defines the default maximum clock on I2C devices.
+define HAL_I2C_MAX_CLOCK 100000
+
+# I2C Compass
+define HAL_PERIPH_ENABLE_MAG
+define AP_COMPASS_QMC5883P_ENABLED 1
+define ALLOW_ARM_NO_COMPASS
+define HAL_I2C_INTERNAL_MASK 0
+define HAL_COMPASS_AUTO_ROT_DEFAULT 2
+COMPASS QMC5883P I2C:0:0x2C false ROTATION_ROLL_180_YAW_270
+
+# Disable Baro
+define HAL_BARO_ALLOW_INIT_NO_BARO
