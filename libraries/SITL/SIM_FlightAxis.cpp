@@ -223,16 +223,37 @@ Connection: Keep-Alive
     return true;
 }
 
+uint32_t recv_count;
+double first_receive;
+double total_receive;
+double recv_min = 100, recv_max;
+uint32_t min_count, max_count;
+
 char *FlightAxis::soap_request_end(uint32_t timeout_ms)
 {
     if (!sock) {
         return nullptr;
     }
+#if 0
     if (!sock->pollin(timeout_ms)) {
         return nullptr;
     }
+#endif
+    double now = timestamp_sec();
     sock->set_blocking(true);
     ssize_t ret = sock->recv(replybuf, sizeof(replybuf)-1, 1000);
+    double delta = timestamp_sec() - now;
+    recv_min = MIN(delta, recv_min);
+    recv_max = MAX(delta, recv_max);
+    if (delta < recv_min*2) {
+        min_count++;
+    }
+    if (delta > recv_max*0.5) {
+        max_count++;
+    }
+    first_receive += delta;
+    recv_count++;
+
     if (ret <= 0) {
         return nullptr;
     }
@@ -276,47 +297,77 @@ char *FlightAxis::soap_request_end(uint32_t timeout_ms)
         replybuf[ret+ret2] = 0;
         ret += ret2;
     }
+
+    total_receive += timestamp_sec() - now;
+
+    if (recv_count % 1000 == 0) {
+        printf("First %f, total %f min %f(%u) max %f(%u)\n", first_receive, total_receive, recv_min*1000, min_count, recv_max*1000, max_count);
+        min_count = max_count = 0;
+        first_receive = 0;
+        total_receive = 0;
+    }
     delete sock;
     sock = nullptr;
 
     return strdup(replybuf);
 }
 
-void FlightAxis::exchange_data(const struct sitl_input &input)
+bool FlightAxis::exchange_data(const struct sitl_input &input)
 {
     if (!sock &&
         (!controller_started ||
          is_zero(state.m_flightAxisControllerIsActive) ||
          !is_zero(state.m_resetButtonHasBeenPressed))) {
-        printf("Starting controller at %s\n", controller_ip);
-        // call a restore first. This allows us to connect after the aircraft is changed in RealFlight
-        soap_request_start("RestoreOriginalControllerDevice", R"(<?xml version='1.0' encoding='UTF-8'?>
+        start_controller();
+    }
+
+    if (!sock) {
+        send_request_message(input);
+    }
+    if (sock) {
+        bool ret = process_reply_message();
+        if (ret) {
+            usleep(250);
+            send_request_message(input);
+        }
+        return ret;
+    }
+    return false;
+}
+
+void FlightAxis::start_controller()
+{
+    printf("Starting controller at %s\n", controller_ip);
+    // call a restore first. This allows us to connect after the aircraft is changed in RealFlight
+    soap_request_start("RestoreOriginalControllerDevice", R"(<?xml version='1.0' encoding='UTF-8'?>
 <soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
 <soap:Body>
 <RestoreOriginalControllerDevice><a>1</a><b>2</b></RestoreOriginalControllerDevice>
 </soap:Body>
 </soap:Envelope>)");
-        soap_request_end(1000);
-        if(option_is_set(Option::ResetPosition)) {
-            soap_request_start("ResetAircraft", R"(<?xml version='1.0' encoding='UTF-8'?>
+    soap_request_end(1000);
+    if(option_is_set(Option::ResetPosition)) {
+        soap_request_start("ResetAircraft", R"(<?xml version='1.0' encoding='UTF-8'?>
 <soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
 <soap:Body>
 <ResetAircraft><a>1</a><b>2</b></ResetAircraft>
 </soap:Body>
 </soap:Envelope>)");
-            soap_request_end(1000);
-        }
-        soap_request_start("InjectUAVControllerInterface", R"(<?xml version='1.0' encoding='UTF-8'?>
+        soap_request_end(1000);
+    }
+    soap_request_start("InjectUAVControllerInterface", R"(<?xml version='1.0' encoding='UTF-8'?>
 <soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
 <soap:Body>
 <InjectUAVControllerInterface><a>1</a><b>2</b></InjectUAVControllerInterface>
 </soap:Body>
 </soap:Envelope>)");
-        soap_request_end(1000);
-        activation_frame_counter = frame_counter;
-        controller_started = true;
-    }
+    soap_request_end(1000);
+    activation_frame_counter = frame_counter;
+    controller_started = true;
+}
 
+void FlightAxis::send_request_message(const struct sitl_input &input)
+{ 
     // maximum number of servos to send is 12 with new FlightAxis
     float scaled_servos[12];
     for (uint8_t i=0; i<ARRAY_SIZE(scaled_servos); i++) {
@@ -347,8 +398,7 @@ void FlightAxis::exchange_data(const struct sitl_input &input)
     }
 
     const uint16_t channels = hal.scheduler->is_system_initialized()?4095:0;
-    if (!sock) {
-        soap_request_start("ExchangeData", R"(<?xml version='1.0' encoding='UTF-8'?><soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
+    soap_request_start("ExchangeData", R"(<?xml version='1.0' encoding='UTF-8'?><soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
 <soap:Body>
 <ExchangeData>
 <pControlInputs>
@@ -371,33 +421,33 @@ void FlightAxis::exchange_data(const struct sitl_input &input)
 </ExchangeData>
 </soap:Body>
 </soap:Envelope>)",
-                           channels,
-                           scaled_servos[0],
-                           scaled_servos[1],
-                           scaled_servos[2],
-                           scaled_servos[3],
-                           scaled_servos[4],
-                           scaled_servos[5],
-                           scaled_servos[6],
-                           scaled_servos[7],
-                           scaled_servos[8],
-                           scaled_servos[9],
-                           scaled_servos[10],
-                           scaled_servos[11]);
-    }
+                        channels,
+                        scaled_servos[0],
+                        scaled_servos[1],
+                        scaled_servos[2],
+                        scaled_servos[3],
+                        scaled_servos[4],
+                        scaled_servos[5],
+                        scaled_servos[6],
+                        scaled_servos[7],
+                        scaled_servos[8],
+                        scaled_servos[9],
+                        scaled_servos[10],
+                        scaled_servos[11]);
+}
 
+bool FlightAxis::process_reply_message()
+{
     char *reply = nullptr;
-    if (sock) {
-        reply = soap_request_end(0);
-        if (reply == nullptr) {
-            sock_error_count++;
-            if (sock_error_count >= 10000 && timestamp_sec() - last_recv_sec > 1) {
-                printf("socket timeout\n");
-                delete sock;
-                sock = nullptr;
-                sock_error_count = 0;
-                last_recv_sec = timestamp_sec();
-            }
+    reply = soap_request_end(0);
+    if (reply == nullptr) {
+        sock_error_count++;
+        if (sock_error_count >= 10000 && timestamp_sec() - last_recv_sec > 1) {
+            printf("socket timeout\n");
+            delete sock;
+            sock = nullptr;
+            sock_error_count = 0;
+            last_recv_sec = timestamp_sec();
         }
     }
 
@@ -415,17 +465,89 @@ void FlightAxis::exchange_data(const struct sitl_input &input)
         }
         socket_frame_counter++;
         free(reply);
+        return true;
     }
+    return false;
 }
 
+double last_op;
+uint32_t my_frame_count;
+double min_fps = 2000, max_fps;
+uint32_t count600, count900, count1200, dup_count;
+
+void FlightAxis::wait_for_sample(const struct sitl_input &input)
+{
+    // our next guess for a valid sample is the previous sample time + the average frame time + a fiddle factor.
+    // if we don't get a valid sample then we extend the fiddle factor and immediately re-read,
+    // if we do get a valid sample we reduce the fiddle factor until we hit the minimum.
+    // we are trying to minimize the reading of data that is not new
+    // because the read takes some time and will add latency to the eventual read
+    double now = timestamp_sec();
+
+    // see how long it is till the next sample is due
+    if (!is_zero(next_sample_s) && next_sample_s > now) {
+        // we're ahead on time, schedule next sample at expected period
+        //uint32_t wait_usec = (next_sample_s - now) * 1e6;
+        //usleep(wait_usec);
+    }
+
+    uint32_t frame_count = 0;
+    uint32_t frame_tries = 0;
+    double dt_seconds = 0;;
+    do {
+        if (exchange_data(input)) {
+            frame_count++;
+            dt_seconds = state.m_currentPhysicsTime_SEC - last_time_s;
+        }
+        frame_tries++;
+    } while (is_zero(dt_seconds));
+
+    if (frame_count == 1) {
+        frame_slop_s = MAX(frame_slop_s * 0.98 - FRAME_SLOP_MIN_S * 0.02, FRAME_SLOP_MIN_S);
+    } else {
+        frame_slop_s = MIN(frame_slop_s * 0.98 + FRAME_SLOP_MIN_S * 0.02, FRAME_SLOP_MIN_S * 10);
+    }
+
+    if (last_time_s > 0) {
+        if (dt_seconds > 0 && dt_seconds < 0.1) {
+            if (is_zero(average_delta_time_s)) {
+                average_delta_time_s = dt_seconds;
+            }
+            average_delta_time_s = average_delta_time_s * 0.98 + dt_seconds * 0.02;
+            const float fps = 1/dt_seconds;
+            if (fps < 600) {
+                count600++;
+            } else if (fps > 600 && fps < 900) {
+                count900++;
+            } else if (fps > 900) {
+                count1200++;
+            }
+            min_fps = MIN(min_fps, 1/dt_seconds);
+            max_fps = MAX(max_fps, 1/dt_seconds);
+        } else {
+            dup_count++;
+        }
+        
+        next_sample_s = now + average_delta_time_s + frame_slop_s;
+    }
+    my_frame_count++;
+    if (timestamp_sec() - last_op > 1) {
+        printf("Samples %u, frames/s %f, tries %u, min %f, max %f, low %u, mid %u, high %u, dup %u\n",
+            frame_count, my_frame_count / (timestamp_sec() - last_op), frame_tries, min_fps, max_fps, count600, count900, count1200, dup_count);
+        last_op  = timestamp_sec();
+        my_frame_count = 0;
+        min_fps = 2000;
+        max_fps = 0;
+        count900 = count600 = count1200 = dup_count = 0;
+    }
+}
 
 /*
   update the FlightAxis simulation by one time step
  */
 void FlightAxis::update(const struct sitl_input &input)
 {
-    last_input = input;
-    exchange_data(input);
+    wait_for_sample(input);
 
     double dt_seconds = state.m_currentPhysicsTime_SEC - last_time_s;
     if (dt_seconds < 0) {
@@ -435,6 +557,7 @@ void FlightAxis::update(const struct sitl_input &input)
         position_offset.zero();
         return;
     }
+
     if (dt_seconds < 0.00001f) {
         float delta_time = 0.001;
         // don't go past the next expected frame
@@ -570,7 +693,6 @@ void FlightAxis::update(const struct sitl_input &input)
     }
 
     last_time_s = state.m_currentPhysicsTime_SEC;
-
     last_velocity_ef = velocity_ef;
 
     // update magnetic field

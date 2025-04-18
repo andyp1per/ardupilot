@@ -29,6 +29,8 @@
 
 namespace SITL {
 
+#define FRAME_SLOP_MIN_S (100 * 1.0e-6)
+
 /*
   a FlightAxis simulator
  */
@@ -165,14 +167,16 @@ public:
 private:
     bool soap_request_start(const char *action, const char *fmt, ...);
     char *soap_request_end(uint32_t timeout_ms);
-    void exchange_data(const struct sitl_input &input);
+    bool exchange_data(const struct sitl_input &input);
+    void start_controller();
+    void send_request_message(const struct sitl_input &input);
+    bool process_reply_message();
     void parse_reply(const char *reply);
 
+    void wait_for_sample(const struct sitl_input &input);
     void update_loop(void);
     void report_FPS(void);
     void socket_creator(void);
-
-    struct sitl_input last_input;
 
     AP_Int32 _options;
 
@@ -201,6 +205,10 @@ private:
     double last_frame_count_s;
     Vector3d position_offset;
     Vector3f last_velocity_ef;
+
+    double next_sample_s;
+    double average_delta_time_s;
+    double frame_slop_s = FRAME_SLOP_MIN_S;
 
     const char *controller_ip = "127.0.0.1";
     uint16_t controller_port = 18083;
