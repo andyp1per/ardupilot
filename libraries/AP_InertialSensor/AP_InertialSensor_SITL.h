@@ -7,8 +7,8 @@
 #include "AP_InertialSensor_Backend.h"
 
 // simulated sensor rates in Hz. This matches a pixhawk1
-const uint16_t INS_SITL_SENSOR_A[] = { 1000, 1000 };
-const uint16_t INS_SITL_SENSOR_B[] = { 760, 800 };
+const uint16_t INS_SITL_SENSOR_A[] = { 4000, 4000 };
+const uint16_t INS_SITL_SENSOR_B[] = { 4000, 4000 };
 
 #include <SITL/SITL.h>
 
@@ -47,6 +47,7 @@ private:
 
     uint64_t next_gyro_sample;
     uint64_t next_accel_sample;
+    uint64_t frame_num;
     float gyro_time;
     float accel_time;
     float gyro_motor_phase[32];

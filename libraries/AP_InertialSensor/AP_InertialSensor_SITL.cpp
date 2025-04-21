@@ -321,6 +321,13 @@ void AP_InertialSensor_SITL::timer_update(void)
     if (sitl == nullptr) {
         return;
     }
+
+    if (frame_num == sitl->state.frame_num) {
+        return;
+    }
+
+    frame_num = sitl->state.frame_num;
+
     if (now >= next_accel_sample) {
         if (((1U << accel_instance) & sitl->accel_fail_mask) == 0) {
 #if AP_SIM_INS_FILE_ENABLED
