@@ -513,37 +513,28 @@ void FlightAxis::wait_for_sample(const struct sitl_input &input)
         frame_slop_s = MIN(frame_slop_s * 0.98 + FRAME_SLOP_MIN_S * 0.02, FRAME_SLOP_MIN_S * 10);
     }
 
+    AP::logger().WriteStreaming("RF", "TimeUS,Dt,Fps", "QdI", AP_HAL::micros64(), dt_seconds, uint32_t(roundf(1/dt_seconds)));
+
     if (last_time_s > 0) {
         if (dt_seconds > 0 && dt_seconds < 0.1) {
             if (is_zero(average_delta_time_s)) {
                 average_delta_time_s = dt_seconds;
             }
             average_delta_time_s = average_delta_time_s * 0.98 + dt_seconds * 0.02;
-            const float fps = 1/dt_seconds;
-            if (fps < 600) {
-                count600++;
-            } else if (fps > 600 && fps < 900) {
-                count900++;
-            } else if (fps > 900) {
-                count1200++;
-            }
             min_fps = MIN(min_fps, 1/dt_seconds);
             max_fps = MAX(max_fps, 1/dt_seconds);
-        } else {
-            dup_count++;
         }
         
         next_sample_s = now + average_delta_time_s + frame_slop_s;
     }
     my_frame_count++;
     if (timestamp_sec() - last_op > 1) {
-        printf("Samples %u, frames/s %f, tries %u, min %f, max %f, low %u, mid %u, high %u, dup %u\n",
-            frame_count, my_frame_count / (timestamp_sec() - last_op), frame_tries, min_fps, max_fps, count600, count900, count1200, dup_count);
+        printf("Samples %u, frames/s %f, tries %u, min %f, max %f\n",
+            frame_count, my_frame_count / (timestamp_sec() - last_op), frame_tries, min_fps, max_fps);
         last_op  = timestamp_sec();
         my_frame_count = 0;
         min_fps = 2000;
         max_fps = 0;
-        count900 = count600 = count1200 = dup_count = 0;
     }
 }
 
