@@ -248,6 +248,8 @@ private:
     // start of previous loop
     uint32_t _loop_timer_start_us;
 
+    uint32_t last_loop_time;
+
     // time of last loop in seconds
     float _last_loop_time_s;
 

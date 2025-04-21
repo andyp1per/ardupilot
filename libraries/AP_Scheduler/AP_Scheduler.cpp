@@ -358,6 +358,8 @@ void AP_Scheduler::loop()
         _last_loop_time_s = (sample_time_us - _loop_timer_start_us) * 1.0e-6;
     }
 
+    AP::logger().WriteStreaming("RF4", "TimeUS,Dt,Dtt", "QII", AP_HAL::micros64(), sample_time_us - _loop_timer_start_us, sample_time_us - last_loop_time);
+    last_loop_time = sample_time_us;
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     {
         /*
