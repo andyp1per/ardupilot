@@ -378,6 +378,10 @@ void Aircraft::fill_fdm(struct sitl_fdm &fdm)
         is_smoothed = true;
     }
     fdm.timestamp_us = time_now_us;
+    fdm.frame_num++;
+
+    AP::logger().WriteStreaming("RF2", "TimeUS,TS", "QQ", AP_HAL::micros64(), time_now_us);
+
     if (fdm.home.lat == 0 && fdm.home.lng == 0) {
         // initialise home
         fdm.home = home;
