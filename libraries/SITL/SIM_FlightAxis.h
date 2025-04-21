@@ -165,12 +165,12 @@ public:
     };
 
 private:
-    bool soap_request_start(const char *action, const char *fmt, ...);
-    char *soap_request_end(uint32_t timeout_ms);
+    SocketAPM_native* soap_request_start(const char *action, const char *fmt, ...);
+    char *soap_request_end(uint32_t timeout_ms, SocketAPM_native* sock);
     bool exchange_data(const struct sitl_input &input);
     void start_controller();
-    void send_request_message(const struct sitl_input &input);
-    bool process_reply_message();
+    SocketAPM_native* send_request_message(const struct sitl_input &input);
+    bool process_reply_message(SocketAPM_native* sock);
     void parse_reply(const char *reply);
 
     void wait_for_sample(const struct sitl_input &input);
@@ -215,7 +215,9 @@ private:
 
     // a list of sockets used to reduce inter-packet latency
     ObjectBuffer_TS<SocketAPM_native*> socks{2};
-    SocketAPM_native *sock;
+    SocketAPM_native *soap_sock[2];
+    uint8_t curr_soap_sock;
+    SocketAPM_native* get_curr_sock() { return soap_sock[curr_soap_sock]; }
     HAL_BinarySemaphore socks_outsem;
     HAL_BinarySemaphore socks_insem;
 

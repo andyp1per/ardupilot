@@ -182,16 +182,10 @@ void FlightAxis::parse_reply(const char *reply)
 /*
   make a SOAP request, returning body of reply
  */
-bool FlightAxis::soap_request_start(const char *action, const char *fmt, ...)
+SocketAPM_native* FlightAxis::soap_request_start(const char *action, const char *fmt, ...)
 {
     va_list ap;
     char *req1;
-
-    // we keep sock around to let the data flow.  But not for too long:
-    if (sock) {
-        delete sock;
-        sock = nullptr;
-    }
 
     va_start(ap, fmt);
     vasprintf(&req1, fmt, ap);
@@ -202,8 +196,10 @@ bool FlightAxis::soap_request_start(const char *action, const char *fmt, ...)
         socks_outsem.wait_blocking();
     }
 
+    SocketAPM_native* sock;
+
     if (!socks.pop(sock)) {
-        return false;
+        return nullptr;
     }
     socks_insem.signal();
 
@@ -220,7 +216,7 @@ Connection: Keep-Alive
     sock->send(req, strlen(req));
     free(req1);
     free(req);
-    return true;
+    return sock;
 }
 
 uint32_t recv_count;
@@ -229,7 +225,7 @@ double total_receive;
 double recv_min = 100, recv_max;
 uint32_t min_count, max_count;
 
-char *FlightAxis::soap_request_end(uint32_t timeout_ms)
+char *FlightAxis::soap_request_end(uint32_t timeout_ms, SocketAPM_native* sock)
 {
     if (!sock) {
         return nullptr;
@@ -314,6 +310,8 @@ char *FlightAxis::soap_request_end(uint32_t timeout_ms)
 
 bool FlightAxis::exchange_data(const struct sitl_input &input)
 {
+    SocketAPM_native* sock = get_curr_sock();
+
     if (!sock &&
         (!controller_started ||
          is_zero(state.m_flightAxisControllerIsActive) ||
@@ -321,14 +319,22 @@ bool FlightAxis::exchange_data(const struct sitl_input &input)
         start_controller();
     }
 
+    // first time through
     if (!sock) {
-        send_request_message(input);
+        sock = send_request_message(input);
+        process_reply_message(sock);
+        usleep(250);
+        soap_sock[curr_soap_sock] = send_request_message(input);
+        usleep(660);
+        soap_sock[!curr_soap_sock] = send_request_message(input);
+        return true;
     }
     if (sock) {
-        bool ret = process_reply_message();
+        bool ret = process_reply_message(sock);
         if (ret) {
+            curr_soap_sock = !curr_soap_sock;
             usleep(250);
-            send_request_message(input);
+            soap_sock[!curr_soap_sock] = send_request_message(input);
         }
         return ret;
     }
@@ -339,34 +345,34 @@ void FlightAxis::start_controller()
 {
     printf("Starting controller at %s\n", controller_ip);
     // call a restore first. This allows us to connect after the aircraft is changed in RealFlight
-    soap_request_start("RestoreOriginalControllerDevice", R"(<?xml version='1.0' encoding='UTF-8'?>
+    SocketAPM_native* sock = soap_request_start("RestoreOriginalControllerDevice", R"(<?xml version='1.0' encoding='UTF-8'?>
 <soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
 <soap:Body>
 <RestoreOriginalControllerDevice><a>1</a><b>2</b></RestoreOriginalControllerDevice>
 </soap:Body>
 </soap:Envelope>)");
-    soap_request_end(1000);
+    soap_request_end(1000, sock);
     if(option_is_set(Option::ResetPosition)) {
-        soap_request_start("ResetAircraft", R"(<?xml version='1.0' encoding='UTF-8'?>
+        sock = soap_request_start("ResetAircraft", R"(<?xml version='1.0' encoding='UTF-8'?>
 <soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
 <soap:Body>
 <ResetAircraft><a>1</a><b>2</b></ResetAircraft>
 </soap:Body>
 </soap:Envelope>)");
-        soap_request_end(1000);
+        soap_request_end(1000, sock);
     }
-    soap_request_start("InjectUAVControllerInterface", R"(<?xml version='1.0' encoding='UTF-8'?>
+    sock = soap_request_start("InjectUAVControllerInterface", R"(<?xml version='1.0' encoding='UTF-8'?>
 <soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
 <soap:Body>
 <InjectUAVControllerInterface><a>1</a><b>2</b></InjectUAVControllerInterface>
 </soap:Body>
-</soap:Envelope>)");
-    soap_request_end(1000);
+</soap:Envelope>)", sock);
+    soap_request_end(1000, sock);
     activation_frame_counter = frame_counter;
     controller_started = true;
 }
 
-void FlightAxis::send_request_message(const struct sitl_input &input)
+SocketAPM_native* FlightAxis::send_request_message(const struct sitl_input &input)
 { 
     // maximum number of servos to send is 12 with new FlightAxis
     float scaled_servos[12];
@@ -398,7 +404,7 @@ void FlightAxis::send_request_message(const struct sitl_input &input)
     }
 
     const uint16_t channels = hal.scheduler->is_system_initialized()?4095:0;
-    soap_request_start("ExchangeData", R"(<?xml version='1.0' encoding='UTF-8'?><soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
+    SocketAPM_native* sock = soap_request_start("ExchangeData", R"(<?xml version='1.0' encoding='UTF-8'?><soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
 <soap:Body>
 <ExchangeData>
 <pControlInputs>
@@ -434,23 +440,13 @@ void FlightAxis::send_request_message(const struct sitl_input &input)
                         scaled_servos[9],
                         scaled_servos[10],
                         scaled_servos[11]);
+    return sock;
 }
 
-bool FlightAxis::process_reply_message()
+bool FlightAxis::process_reply_message(SocketAPM_native* sock)
 {
     char *reply = nullptr;
-    reply = soap_request_end(0);
-    if (reply == nullptr) {
-        sock_error_count++;
-        if (sock_error_count >= 10000 && timestamp_sec() - last_recv_sec > 1) {
-            printf("socket timeout\n");
-            delete sock;
-            sock = nullptr;
-            sock_error_count = 0;
-            last_recv_sec = timestamp_sec();
-        }
-    }
-
+    reply = soap_request_end(0, sock);
     if (reply) {
         sock_error_count = 0;
         last_recv_sec = timestamp_sec();
@@ -467,13 +463,22 @@ bool FlightAxis::process_reply_message()
         free(reply);
         return true;
     }
+
+    sock_error_count++;
+    if (sock_error_count >= 10000 && timestamp_sec() - last_recv_sec > 1) {
+        printf("socket timeout\n");
+        delete sock;
+        sock = nullptr;
+        sock_error_count = 0;
+        last_recv_sec = timestamp_sec();
+    }
+
     return false;
 }
 
 double last_op;
 uint32_t my_frame_count;
 double min_fps = 2000, max_fps;
-uint32_t count600, count900, count1200, dup_count;
 
 void FlightAxis::wait_for_sample(const struct sitl_input &input)
 {
