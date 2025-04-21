@@ -40,6 +40,7 @@
 #include "AP_InertialSensor_NONE.h"
 #include "AP_InertialSensor_SCHA63T.h"
 #include <AP_Scheduler/AP_Scheduler.h>
+#include <AP_Logger/AP_Logger.h>
 
 /* Define INS_TIMING_DEBUG to track down scheduling issues with the main loop.
  * Output is on the debug console. */
@@ -2051,6 +2052,8 @@ void AP_InertialSensor::wait_for_sample(void)
     }
 
     uint32_t now = AP_HAL::micros();
+
+    AP::logger().WriteStreaming("RF3", "TimeUS,Dt", "QI", AP_HAL::micros64(), now - _last_sample_usec);
 
     if (_next_sample_usec == 0 && _delta_time <= 0) {
         // this is the first call to wait_for_sample()
