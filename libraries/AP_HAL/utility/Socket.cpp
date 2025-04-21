@@ -439,6 +439,14 @@ void SOCKET_CLASS_NAME::set_broadcast(void) const
  */
 bool SOCKET_CLASS_NAME::pollin(uint32_t timeout_ms)
 {
+    return pollin_us(timeout_ms * 1000UL);
+}
+
+/*
+  return true if there is pending data for input
+ */
+bool SOCKET_CLASS_NAME::pollin_us(uint32_t timeout_us)
+{
     fd_set fds;
     struct timeval tv;
 
@@ -449,15 +457,14 @@ bool SOCKET_CLASS_NAME::pollin(uint32_t timeout_ms)
     }
     FD_SET(fin, &fds);
 
-    tv.tv_sec = timeout_ms / 1000;
-    tv.tv_usec = (timeout_ms % 1000) * 1000UL;
+    tv.tv_sec = timeout_us / 1000000UL;
+    tv.tv_usec = (timeout_us % 1000000UL);
 
     if (CALL_PREFIX(select)(fin+1, &fds, nullptr, nullptr, &tv) != 1) {
         return false;
     }
     return true;
 }
-
 
 /*
   return true if there is room for output data

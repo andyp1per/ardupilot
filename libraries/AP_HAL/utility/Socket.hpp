@@ -58,6 +58,9 @@ public:
     // return true if there is pending data for input
     bool pollin(uint32_t timeout_ms);
 
+    // return true if there is pending data for input
+    bool pollin_us(uint32_t timeout_us);
+
     // return true if there is room for output data
     bool pollout(uint32_t timeout_ms);
 
