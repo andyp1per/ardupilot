@@ -29,7 +29,7 @@
 
 namespace SITL {
 
-#define FRAME_SLOP_MIN_S (100 * 1.0e-6)
+#define SAMPLES_PER_FRAME 10
 
 /*
   a FlightAxis simulator
@@ -166,14 +166,14 @@ public:
 
 private:
     bool soap_request_start(const char *action, const char *fmt, ...);
-    char *soap_request_end(uint32_t timeout_ms);
-    bool exchange_data(const struct sitl_input &input);
+    char *soap_request_end(uint32_t timeout_us);
+    bool exchange_data(const struct sitl_input &input, uint32_t timeout_us);
     void start_controller();
     void send_request_message(const struct sitl_input &input);
-    bool process_reply_message();
+    bool process_reply_message(uint32_t timeout_us);
     void parse_reply(const char *reply);
 
-    void wait_for_sample(const struct sitl_input &input);
+    bool wait_for_sample(const struct sitl_input &input);
     void update_loop(void);
     void report_FPS(void);
     void socket_creator(void);
@@ -196,6 +196,8 @@ private:
     double extrapolated_s;
     double initial_time_s;
     double last_time_s;
+    double last_dt_sample_s;
+    double last_delta_time_s;
     bool controller_started;
     uint32_t glitch_count;
     uint64_t frame_counter;
@@ -208,7 +210,6 @@ private:
 
     double next_sample_s;
     double average_delta_time_s;
-    double frame_slop_s = FRAME_SLOP_MIN_S;
 
     const char *controller_ip = "127.0.0.1";
     uint16_t controller_port = 18083;

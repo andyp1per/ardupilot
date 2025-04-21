@@ -229,16 +229,16 @@ double total_receive;
 double recv_min = 100, recv_max;
 uint32_t min_count, max_count;
 
-char *FlightAxis::soap_request_end(uint32_t timeout_ms)
+char *FlightAxis::soap_request_end(uint32_t timeout_us)
 {
     if (!sock) {
         return nullptr;
     }
-#if 0
-    if (!sock->pollin(timeout_ms)) {
+
+    if (!sock->pollin_us(timeout_us)) {
         return nullptr;
     }
-#endif
+
     double now = timestamp_sec();
     sock->set_blocking(true);
     ssize_t ret = sock->recv(replybuf, sizeof(replybuf)-1, 1000);
@@ -312,7 +312,7 @@ char *FlightAxis::soap_request_end(uint32_t timeout_ms)
     return strdup(replybuf);
 }
 
-bool FlightAxis::exchange_data(const struct sitl_input &input)
+bool FlightAxis::exchange_data(const struct sitl_input &input, uint32_t timeout_us)
 {
     if (!sock &&
         (!controller_started ||
@@ -325,7 +325,7 @@ bool FlightAxis::exchange_data(const struct sitl_input &input)
         send_request_message(input);
     }
     if (sock) {
-        bool ret = process_reply_message();
+        bool ret = process_reply_message(timeout_us);
         if (ret) {
             usleep(250);
             send_request_message(input);
@@ -345,7 +345,7 @@ void FlightAxis::start_controller()
 <RestoreOriginalControllerDevice><a>1</a><b>2</b></RestoreOriginalControllerDevice>
 </soap:Body>
 </soap:Envelope>)");
-    soap_request_end(1000);
+    soap_request_end(1000000UL);
     if(option_is_set(Option::ResetPosition)) {
         soap_request_start("ResetAircraft", R"(<?xml version='1.0' encoding='UTF-8'?>
 <soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
@@ -353,7 +353,7 @@ void FlightAxis::start_controller()
 <ResetAircraft><a>1</a><b>2</b></ResetAircraft>
 </soap:Body>
 </soap:Envelope>)");
-        soap_request_end(1000);
+        soap_request_end(1000000UL);
     }
     soap_request_start("InjectUAVControllerInterface", R"(<?xml version='1.0' encoding='UTF-8'?>
 <soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
@@ -361,7 +361,7 @@ void FlightAxis::start_controller()
 <InjectUAVControllerInterface><a>1</a><b>2</b></InjectUAVControllerInterface>
 </soap:Body>
 </soap:Envelope>)");
-    soap_request_end(1000);
+    soap_request_end(1000000UL);
     activation_frame_counter = frame_counter;
     controller_started = true;
 }
@@ -436,10 +436,10 @@ void FlightAxis::send_request_message(const struct sitl_input &input)
                         scaled_servos[11]);
 }
 
-bool FlightAxis::process_reply_message()
+bool FlightAxis::process_reply_message(uint32_t timeout_us)
 {
     char *reply = nullptr;
-    reply = soap_request_end(0);
+    reply = soap_request_end(timeout_us);
     if (reply == nullptr) {
         sock_error_count++;
         if (sock_error_count >= 10000 && timestamp_sec() - last_recv_sec > 1) {
@@ -475,38 +475,37 @@ uint32_t my_frame_count;
 double min_fps = 2000, max_fps;
 uint32_t count600, count900, count1200, dup_count;
 
-void FlightAxis::wait_for_sample(const struct sitl_input &input)
+bool FlightAxis::wait_for_sample(const struct sitl_input &input)
 {
     // our next guess for a valid sample is the previous sample time + the average frame time + a fiddle factor.
     // if we don't get a valid sample then we extend the fiddle factor and immediately re-read,
     // if we do get a valid sample we reduce the fiddle factor until we hit the minimum.
     // we are trying to minimize the reading of data that is not new
     // because the read takes some time and will add latency to the eventual read
-    double now = timestamp_sec();
-
-    // see how long it is till the next sample is due
-    if (!is_zero(next_sample_s) && next_sample_s > now) {
-        // we're ahead on time, schedule next sample at expected period
-        //uint32_t wait_usec = (next_sample_s - now) * 1e6;
-        //usleep(wait_usec);
-    }
 
     uint32_t frame_count = 0;
     uint32_t frame_tries = 0;
-    double dt_seconds = 0;;
+    double dt_seconds = 0;
+    bool have_frame;
     do {
-        if (exchange_data(input)) {
+        if (exchange_data(input, last_delta_time_s * 1e6 / SAMPLES_PER_FRAME)) {
             frame_count++;
-            dt_seconds = state.m_currentPhysicsTime_SEC - last_time_s;
+            dt_seconds = state.m_currentPhysicsTime_SEC - last_dt_sample_s;
+            last_delta_time_s = state.m_currentPhysicsTime_SEC - last_time_s;
+            last_dt_sample_s = state.m_currentPhysicsTime_SEC;
+            have_frame = true;
+        } else {
+            dt_seconds = last_delta_time_s / SAMPLES_PER_FRAME;
+            time_now_us += dt_seconds * 1.0e6;
+            extrapolate_sensors(dt_seconds);
+            update_position();
+            update_mag_field_bf();
+            last_dt_sample_s += dt_seconds;
         }
         frame_tries++;
     } while (is_zero(dt_seconds));
 
-    if (frame_count == 1) {
-        frame_slop_s = MAX(frame_slop_s * 0.98 - FRAME_SLOP_MIN_S * 0.02, FRAME_SLOP_MIN_S);
-    } else {
-        frame_slop_s = MIN(frame_slop_s * 0.98 + FRAME_SLOP_MIN_S * 0.02, FRAME_SLOP_MIN_S * 10);
-    }
+    AP::logger().WriteStreaming("RF", "TimeUS,Dt,Fps", "QdI", time_now_us, dt_seconds, uint32_t(roundf(1/dt_seconds)));
 
     if (last_time_s > 0) {
         if (dt_seconds > 0 && dt_seconds < 0.1) {
@@ -514,32 +513,21 @@ void FlightAxis::wait_for_sample(const struct sitl_input &input)
                 average_delta_time_s = dt_seconds;
             }
             average_delta_time_s = average_delta_time_s * 0.98 + dt_seconds * 0.02;
-            const float fps = 1/dt_seconds;
-            if (fps < 600) {
-                count600++;
-            } else if (fps > 600 && fps < 900) {
-                count900++;
-            } else if (fps > 900) {
-                count1200++;
-            }
             min_fps = MIN(min_fps, 1/dt_seconds);
             max_fps = MAX(max_fps, 1/dt_seconds);
-        } else {
-            dup_count++;
         }
-        
-        next_sample_s = now + average_delta_time_s + frame_slop_s;
     }
     my_frame_count++;
     if (timestamp_sec() - last_op > 1) {
-        printf("Samples %u, frames/s %f, tries %u, min %f, max %f, low %u, mid %u, high %u, dup %u\n",
-            frame_count, my_frame_count / (timestamp_sec() - last_op), frame_tries, min_fps, max_fps, count600, count900, count1200, dup_count);
+        printf("Samples %u, frames/s %f, tries %u, min %f, max %f\n",
+            frame_count, my_frame_count / (timestamp_sec() - last_op), frame_tries, min_fps, max_fps);
         last_op  = timestamp_sec();
         my_frame_count = 0;
         min_fps = 2000;
         max_fps = 0;
-        count900 = count600 = count1200 = dup_count = 0;
     }
+
+    return have_frame;
 }
 
 /*
@@ -547,7 +535,9 @@ void FlightAxis::wait_for_sample(const struct sitl_input &input)
  */
 void FlightAxis::update(const struct sitl_input &input)
 {
-    wait_for_sample(input);
+    if (!wait_for_sample(input)) {
+        return;
+    }
 
     double dt_seconds = state.m_currentPhysicsTime_SEC - last_time_s;
     if (dt_seconds < 0) {
@@ -688,6 +678,9 @@ void FlightAxis::update(const struct sitl_input &input)
             printf("glitch %.2fs\n", adjustment_s);
             dt_us = glitch_threshold_us;
             glitch_count++;
+        }
+        if (dt_us) {
+            adjust_frame_time(1.0e6/dt_us);
         }
         time_now_us += dt_us;
     }
