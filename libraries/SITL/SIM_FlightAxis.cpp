@@ -52,6 +52,9 @@ const AP_Param::GroupInfo FlightAxis::var_info[] = {
 // the asprintf() calls are not worth checking for SITL
 #pragma GCC diagnostic ignored "-Wunused-result"
 
+#define SAMPLE_INTERVAL_S 100.0e-6  // 100us
+#define FRAMES_PER_REPORT 1000
+
 static const struct {
     const char *name;
     float value;
@@ -234,24 +237,26 @@ char *FlightAxis::soap_request_end(uint32_t timeout_us)
     if (!sock) {
         return nullptr;
     }
-
+#if 0
     if (!sock->pollin_us(timeout_us)) {
         return nullptr;
     }
-
+#endif
     double now = timestamp_sec();
     sock->set_blocking(true);
     ssize_t ret = sock->recv(replybuf, sizeof(replybuf)-1, 1000);
     double delta = timestamp_sec() - now;
-    recv_min = MIN(delta, recv_min);
-    recv_max = MAX(delta, recv_max);
-    if (delta < recv_min*2) {
-        min_count++;
+    if (delta > 0) {
+        recv_min = MIN(delta, recv_min);
+        recv_max = MAX(delta, recv_max);
+        if (delta < recv_min*2) {
+            min_count++;
+        }
+        if (delta > recv_max*0.5) {
+            max_count++;
+        }
+        first_receive += delta;
     }
-    if (delta > recv_max*0.5) {
-        max_count++;
-    }
-    first_receive += delta;
     recv_count++;
 
     if (ret <= 0) {
@@ -301,7 +306,7 @@ char *FlightAxis::soap_request_end(uint32_t timeout_us)
     total_receive += timestamp_sec() - now;
 
     if (recv_count % 1000 == 0) {
-        printf("First %f, total %f min %f(%u) max %f(%u)\n", first_receive, total_receive, recv_min*1000, min_count, recv_max*1000, max_count);
+        printf("Pipeline: first %f, total %f min %f(%u) max %f(%u)\n", first_receive, total_receive, recv_min*1000, min_count, recv_max*1000, max_count);
         min_count = max_count = 0;
         first_receive = 0;
         total_receive = 0;
@@ -316,8 +321,8 @@ bool FlightAxis::exchange_data(const struct sitl_input &input, uint32_t timeout_
 {
     if (!sock &&
         (!controller_started ||
-         is_zero(state.m_flightAxisControllerIsActive) ||
-         !is_zero(state.m_resetButtonHasBeenPressed))) {
+         is_zero(next_state.m_flightAxisControllerIsActive) ||
+         !is_zero(next_state.m_resetButtonHasBeenPressed))) {
         start_controller();
     }
 
@@ -454,16 +459,7 @@ bool FlightAxis::process_reply_message(uint32_t timeout_us)
     if (reply) {
         sock_error_count = 0;
         last_recv_sec = timestamp_sec();
-        double lastt_s = state.m_currentPhysicsTime_SEC;
         parse_reply(reply);
-        double dt = state.m_currentPhysicsTime_SEC - lastt_s;
-        if (dt > 0 && dt < 0.1) {
-            if (average_frame_time_s < 1.0e-6) {
-                average_frame_time_s = dt;
-            }
-            average_frame_time_s = average_frame_time_s * 0.98 + dt * 0.02;
-        }
-        socket_frame_counter++;
         free(reply);
         return true;
     }
@@ -486,37 +482,68 @@ bool FlightAxis::wait_for_sample(const struct sitl_input &input)
     uint32_t frame_count = 0;
     uint32_t frame_tries = 0;
     double dt_seconds = 0;
-    bool have_frame;
-    do {
-        if (exchange_data(input, last_delta_time_s * 1e6 / SAMPLES_PER_FRAME)) {
-            frame_count++;
-            dt_seconds = state.m_currentPhysicsTime_SEC - last_dt_sample_s;
-            last_delta_time_s = state.m_currentPhysicsTime_SEC - last_time_s;
-            last_dt_sample_s = state.m_currentPhysicsTime_SEC;
-            have_frame = true;
-        } else {
-            dt_seconds = last_delta_time_s / SAMPLES_PER_FRAME;
-            time_now_us += dt_seconds * 1.0e6;
-            extrapolate_sensors(dt_seconds);
-            update_position();
-            update_mag_field_bf();
-            last_dt_sample_s += dt_seconds;
-        }
-        frame_tries++;
-    } while (is_zero(dt_seconds));
 
-    AP::logger().WriteStreaming("RF", "TimeUS,Dt,Fps", "QdI", time_now_us, dt_seconds, uint32_t(roundf(1/dt_seconds)));
+    double lastt_s = state.m_currentPhysicsTime_SEC;
+
+    if (is_zero(prev_state.m_currentPhysicsTime_SEC)) {
+        if (exchange_data(input, 0)) {
+            state = prev_state = next_state;
+        }
+        return false;
+    }
+
+    // get a new frame
+    if (state.m_currentPhysicsTime_SEC >= next_state.m_currentPhysicsTime_SEC) {
+        prev_state = next_state;
+        do {
+            if (exchange_data(input, 0)) {  // updates next_state
+                state = prev_state; // ensure state is at the beginning of the data range
+
+                if (is_zero(last_time_s)) {
+                    last_time_s = state.m_currentPhysicsTime_SEC - SAMPLE_INTERVAL_S;
+                }
+                frame_count++;
+                dt_seconds = next_state.m_currentPhysicsTime_SEC - last_dt_sample_s;
+                last_delta_time_s = next_state.m_currentPhysicsTime_SEC - last_time_s;
+                last_dt_sample_s = next_state.m_currentPhysicsTime_SEC;
+            }
+            frame_tries++;
+        } while (is_zero(dt_seconds));
+    }
+
+    //double new_time = MIN(next_state.m_currentPhysicsTime_SEC, state.m_currentPhysicsTime_SEC + SAMPLE_INTERVAL_S);
+    //state = interpolate_frame(next_state, prev_state, new_time);
+    //double new_time = next_state.m_currentPhysicsTime_SEC;
+    state = next_state;
+
+    socket_frame_counter++;
+
+    double dt = state.m_currentPhysicsTime_SEC - lastt_s;
+    if (dt > 0 && dt < 0.1) {
+        if (average_frame_time_s < 1.0e-6) {
+            average_frame_time_s = dt;
+        }
+        average_frame_time_s = average_frame_time_s * 0.98 + dt * 0.02;
+    }
+
+    uint64_t time_now = uint64_t(state.m_currentPhysicsTime_SEC * 1.0e6);
+    AP::logger().WriteStreaming("RF", "TimeUS,Dt,Fps", "QdI", time_now, dt, uint32_t(roundf(1/dt)));
 
     if (last_time_s > 0) {
-        if (dt_seconds > 0 && dt_seconds < 0.1) {
+        if (dt > 0 && dt < 0.1) {
             if (is_zero(average_delta_time_s)) {
-                average_delta_time_s = dt_seconds;
+                average_delta_time_s = dt;
             }
-            average_delta_time_s = average_delta_time_s * 0.98 + dt_seconds * 0.02;
-            min_fps = MIN(min_fps, 1/dt_seconds);
-            max_fps = MAX(max_fps, 1/dt_seconds);
+            average_delta_time_s = average_delta_time_s * 0.98 + dt * 0.02;
+            min_fps = MIN(min_fps, 1/dt);
+            max_fps = MAX(max_fps, 1/dt);
         }
     }
+
+    if (is_equal(last_time_s, state.m_currentPhysicsTime_SEC)) {
+        AP_HAL::panic("Time did not move %u", my_frame_count);
+    }
+
     my_frame_count++;
     if (timestamp_sec() - last_op > 1) {
         printf("Samples %u, frames/s %f, tries %u, min %f, max %f\n",
@@ -527,7 +554,7 @@ bool FlightAxis::wait_for_sample(const struct sitl_input &input)
         max_fps = 0;
     }
 
-    return have_frame;
+    return true;
 }
 
 /*
@@ -545,24 +572,6 @@ void FlightAxis::update(const struct sitl_input &input)
         initial_time_s = time_now_us * 1.0e-6f;
         last_time_s = state.m_currentPhysicsTime_SEC;
         position_offset.zero();
-        return;
-    }
-
-    if (dt_seconds < 0.00001f) {
-        float delta_time = 0.001;
-        // don't go past the next expected frame
-        if (delta_time + extrapolated_s > average_frame_time_s) {
-            delta_time = average_frame_time_s - extrapolated_s;
-        }
-        if (delta_time <= 0) {
-            return;
-        }
-        time_now_us += delta_time * 1.0e6;
-        extrapolate_sensors(delta_time);
-        update_position();
-        update_mag_field_bf();
-        extrapolated_s += delta_time;
-        report_FPS();
         return;
     }
 
@@ -662,6 +671,7 @@ void FlightAxis::update(const struct sitl_input &input)
     time_advance();
     uint64_t new_time_us = (state.m_currentPhysicsTime_SEC - initial_time_s)*1.0e6;
     if (new_time_us < time_now_us) {
+        //printf("Time going backwards by %u\n", uint32_t(time_now_us - new_time_us));
         uint64_t dt_us = time_now_us - new_time_us;
         if (dt_us > 500000) {
             // time going backwards
@@ -701,19 +711,55 @@ void FlightAxis::update(const struct sitl_input &input)
     report_FPS();
 }
 
+struct FlightAxis::state FlightAxis::interpolate_frame(struct state& new_state, struct state& old_state, double new_time)
+{
+    struct state intermediate_state = old_state;
+    double dt = new_state.m_currentPhysicsTime_SEC - old_state.m_currentPhysicsTime_SEC;
+    double interval = new_time - old_state.m_currentPhysicsTime_SEC;
+
+#define INTERPOLATE(name) (intermediate_state.name = (old_state.name + interval * (new_state.name - old_state.name) / dt))
+    INTERPOLATE(m_airspeed_MPS);
+    INTERPOLATE(m_altitudeAGL_MTR);
+    INTERPOLATE(m_pitchRate_DEGpSEC);
+    INTERPOLATE(m_rollRate_DEGpSEC);
+    INTERPOLATE(m_yawRate_DEGpSEC);
+    INTERPOLATE(m_aircraftPositionX_MTR);
+    INTERPOLATE(m_aircraftPositionY_MTR);
+    INTERPOLATE(m_velocityWorldU_MPS);
+    INTERPOLATE(m_velocityWorldV_MPS);
+    INTERPOLATE(m_velocityWorldW_MPS);
+    INTERPOLATE(m_accelerationBodyAX_MPS2);
+    INTERPOLATE(m_accelerationBodyAY_MPS2);
+    INTERPOLATE(m_accelerationBodyAZ_MPS2);
+    INTERPOLATE(m_windX_MPS);
+    INTERPOLATE(m_windY_MPS);
+    INTERPOLATE(m_windZ_MPS);
+    INTERPOLATE(m_propRPM);
+    INTERPOLATE(m_heliMainRotorRPM);
+    INTERPOLATE(m_batteryVoltage_VOLTS);
+    INTERPOLATE(m_batteryCurrentDraw_AMPS);
+    INTERPOLATE(m_orientationQuaternion_X);
+    INTERPOLATE(m_orientationQuaternion_Y);
+    INTERPOLATE(m_orientationQuaternion_Z);
+    INTERPOLATE(m_orientationQuaternion_W);
+    intermediate_state.m_currentPhysicsTime_SEC = new_time;
+
+    return intermediate_state;
+}
+
 /*
   report frame rates
  */
 void FlightAxis::report_FPS(void)
 {
-    if (frame_counter++ % 1000 == 0) {
+    if (frame_counter++ % FRAMES_PER_REPORT == 0) {
         if (!is_zero(last_frame_count_s)) {
             uint64_t frames = socket_frame_counter - last_socket_frame_counter;
             last_socket_frame_counter = socket_frame_counter;
             double dt = state.m_currentPhysicsTime_SEC - last_frame_count_s;
             if(!option_is_set(Option::SilenceFPS)) {
                 printf("%.2f/%.2f FPS avg=%.2f glitches=%u\n",
-                    frames / dt, 1000 / dt, 1.0/average_frame_time_s, unsigned(glitch_count));
+                    frames / dt, FRAMES_PER_REPORT / dt, 1.0/average_frame_time_s, unsigned(glitch_count));
             }
         } else {
             printf("Initial position %f %f %f\n", position.x, position.y, position.z);
