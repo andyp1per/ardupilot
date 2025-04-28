@@ -227,12 +227,6 @@ Connection: Keep-Alive
     return true;
 }
 
-uint32_t recv_count;
-double first_receive;
-double total_receive;
-double recv_min = 100, recv_max;
-uint32_t min_count, max_count;
-
 char *FlightAxis::soap_request_end(uint32_t timeout_ms)
 {
     if (!sock) {
@@ -241,22 +235,8 @@ char *FlightAxis::soap_request_end(uint32_t timeout_ms)
     if (!sock->pollin(timeout_ms)) {
         return nullptr;
     }
-    double now = timestamp_sec();
     sock->set_blocking(true);
     ssize_t ret = sock->recv(replybuf, sizeof(replybuf)-1, 1000);
-    double delta = timestamp_sec() - now;
-    if (delta > 0) {
-        recv_min = MIN(delta, recv_min);
-        recv_max = MAX(delta, recv_max);
-        if (delta < recv_min*2) {
-            min_count++;
-        }
-        if (delta > recv_max*0.5) {
-            max_count++;
-        }
-        first_receive += delta;
-    }
-    recv_count++;
 
     if (ret <= 0) {
         return nullptr;
@@ -300,15 +280,6 @@ char *FlightAxis::soap_request_end(uint32_t timeout_ms)
         // nul terminate
         replybuf[ret+ret2] = 0;
         ret += ret2;
-    }
-
-    total_receive += timestamp_sec() - now;
-
-    if (recv_count % 1000 == 0) {
-        printf("Pipeline: first %f, total %f min %f(%u) max %f(%u)\n", first_receive, total_receive, recv_min*1000, min_count, recv_max*1000, max_count);
-        min_count = max_count = 0;
-        first_receive = 0;
-        total_receive = 0;
     }
     delete sock;
     sock = nullptr;
