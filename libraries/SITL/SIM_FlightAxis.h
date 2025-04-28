@@ -200,6 +200,7 @@ private:
     double last_time_s;
     double last_dt_sample_s;
     double last_delta_time_s;
+    double sample_interval_s;
     bool controller_started;
     uint32_t glitch_count;
     uint64_t frame_counter;

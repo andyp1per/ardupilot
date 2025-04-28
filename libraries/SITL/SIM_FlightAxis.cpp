@@ -53,7 +53,8 @@ const AP_Param::GroupInfo FlightAxis::var_info[] = {
 #pragma GCC diagnostic ignored "-Wunused-result"
 
 #define SAMPLE_INTERVAL_S 100.0e-6  // 100us
-#define FRAMES_PER_REPORT 1000
+#define SAMPLE_INTERVAL_MIN_S (SAMPLE_INTERVAL_S/2)   // smallest interval before moving on to the next
+#define FRAMES_PER_REPORT 10000
 
 static const struct {
     const char *name;
@@ -488,12 +489,13 @@ bool FlightAxis::wait_for_sample(const struct sitl_input &input)
     if (is_zero(prev_state.m_currentPhysicsTime_SEC)) {
         if (exchange_data(input, 0)) {
             state = prev_state = next_state;
+            sample_interval_s = SAMPLE_INTERVAL_S;
         }
         return false;
     }
 
-    // get a new frame
-    if (state.m_currentPhysicsTime_SEC >= next_state.m_currentPhysicsTime_SEC) {
+    // get a new frame if we have processed all the whole samples in the previous one
+    if (state.m_currentPhysicsTime_SEC + SAMPLE_INTERVAL_MIN_S >= next_state.m_currentPhysicsTime_SEC) {
         prev_state = next_state;
         do {
             if (exchange_data(input, 0)) {  // updates next_state
@@ -509,12 +511,13 @@ bool FlightAxis::wait_for_sample(const struct sitl_input &input)
             }
             frame_tries++;
         } while (is_zero(dt_seconds));
+        // adjust the sample interval so that the number of samples in a frame is an integer
+        // this prevents very small dt's which can cause havoc with flight control
+        sample_interval_s = dt_seconds / roundf(dt_seconds / SAMPLE_INTERVAL_S);
     }
 
-    //double new_time = MIN(next_state.m_currentPhysicsTime_SEC, state.m_currentPhysicsTime_SEC + SAMPLE_INTERVAL_S);
-    //state = interpolate_frame(next_state, prev_state, new_time);
-    //double new_time = next_state.m_currentPhysicsTime_SEC;
-    state = next_state;
+    double new_time = MIN(next_state.m_currentPhysicsTime_SEC, state.m_currentPhysicsTime_SEC + sample_interval_s);
+    state = interpolate_frame(next_state, prev_state, new_time);
 
     socket_frame_counter++;
 
@@ -689,7 +692,7 @@ void FlightAxis::update(const struct sitl_input &input)
             dt_us = glitch_threshold_us;
             glitch_count++;
         }
-        if (dt_us) {
+        if (dt_us) {    // adjust the frame time to match the dt which will vary over time
             adjust_frame_time(1.0e6/dt_us);
         }
         time_now_us += dt_us;
