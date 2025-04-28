@@ -195,7 +195,6 @@ private:
     }
 
     double average_frame_time_s;
-    double extrapolated_s;
     double initial_time_s;
     double last_time_s;
     double last_dt_sample_s;

@@ -523,8 +523,6 @@ void FlightAxis::update(const struct sitl_input &input)
         position_offset.zero();
         return;
     }
-
-    extrapolated_s = 0;
     
     if (initial_time_s <= 0) {
         dt_seconds = 0.001f;
