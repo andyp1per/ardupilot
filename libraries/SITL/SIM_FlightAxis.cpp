@@ -233,16 +233,14 @@ double total_receive;
 double recv_min = 100, recv_max;
 uint32_t min_count, max_count;
 
-char *FlightAxis::soap_request_end(uint32_t timeout_us)
+char *FlightAxis::soap_request_end(uint32_t timeout_ms)
 {
     if (!sock) {
         return nullptr;
     }
-#if 0
-    if (!sock->pollin_us(timeout_us)) {
+    if (!sock->pollin(timeout_ms)) {
         return nullptr;
     }
-#endif
     double now = timestamp_sec();
     sock->set_blocking(true);
     ssize_t ret = sock->recv(replybuf, sizeof(replybuf)-1, 1000);
@@ -318,7 +316,7 @@ char *FlightAxis::soap_request_end(uint32_t timeout_us)
     return strdup(replybuf);
 }
 
-bool FlightAxis::exchange_data(const struct sitl_input &input, uint32_t timeout_us)
+bool FlightAxis::exchange_data(const struct sitl_input &input)
 {
     if (!sock &&
         (!controller_started ||
@@ -331,7 +329,7 @@ bool FlightAxis::exchange_data(const struct sitl_input &input, uint32_t timeout_
         send_request_message(input);
     }
     if (sock) {
-        bool ret = process_reply_message(timeout_us);
+        bool ret = process_reply_message();
         if (ret) {
             usleep(250);
             send_request_message(input);
@@ -351,7 +349,7 @@ void FlightAxis::start_controller()
 <RestoreOriginalControllerDevice><a>1</a><b>2</b></RestoreOriginalControllerDevice>
 </soap:Body>
 </soap:Envelope>)");
-    soap_request_end(1000000UL);
+    soap_request_end(1000UL);
     if(option_is_set(Option::ResetPosition)) {
         soap_request_start("ResetAircraft", R"(<?xml version='1.0' encoding='UTF-8'?>
 <soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
@@ -359,7 +357,7 @@ void FlightAxis::start_controller()
 <ResetAircraft><a>1</a><b>2</b></ResetAircraft>
 </soap:Body>
 </soap:Envelope>)");
-        soap_request_end(1000000UL);
+        soap_request_end(1000UL);
     }
     soap_request_start("InjectUAVControllerInterface", R"(<?xml version='1.0' encoding='UTF-8'?>
 <soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
@@ -367,7 +365,7 @@ void FlightAxis::start_controller()
 <InjectUAVControllerInterface><a>1</a><b>2</b></InjectUAVControllerInterface>
 </soap:Body>
 </soap:Envelope>)");
-    soap_request_end(1000000UL);
+    soap_request_end(1000UL);
     activation_frame_counter = frame_counter;
     controller_started = true;
 }
@@ -442,10 +440,10 @@ void FlightAxis::send_request_message(const struct sitl_input &input)
                         scaled_servos[11]);
 }
 
-bool FlightAxis::process_reply_message(uint32_t timeout_us)
+bool FlightAxis::process_reply_message()
 {
     char *reply = nullptr;
-    reply = soap_request_end(timeout_us);
+    reply = soap_request_end(1);
     if (reply == nullptr) {
         sock_error_count++;
         if (sock_error_count >= 10000 && timestamp_sec() - last_recv_sec > 1) {
@@ -487,7 +485,7 @@ bool FlightAxis::wait_for_sample(const struct sitl_input &input)
     double lastt_s = state.m_currentPhysicsTime_SEC;
 
     if (is_zero(prev_state.m_currentPhysicsTime_SEC)) {
-        if (exchange_data(input, 0)) {
+        if (exchange_data(input)) {
             state = prev_state = next_state;
             sample_interval_s = SAMPLE_INTERVAL_S;
         }
@@ -498,7 +496,7 @@ bool FlightAxis::wait_for_sample(const struct sitl_input &input)
     if (state.m_currentPhysicsTime_SEC + SAMPLE_INTERVAL_MIN_S >= next_state.m_currentPhysicsTime_SEC) {
         prev_state = next_state;
         do {
-            if (exchange_data(input, 0)) {  // updates next_state
+            if (exchange_data(input)) {  // updates next_state
                 state = prev_state; // ensure state is at the beginning of the data range
 
                 if (is_zero(last_time_s)) {

@@ -166,11 +166,11 @@ public:
 
 private:
     bool soap_request_start(const char *action, const char *fmt, ...);
-    char *soap_request_end(uint32_t timeout_us);
-    bool exchange_data(const struct sitl_input &input, uint32_t timeout_us);
+    char *soap_request_end(uint32_t timeout_ms);
+    bool exchange_data(const struct sitl_input &input);
     void start_controller();
     void send_request_message(const struct sitl_input &input);
-    bool process_reply_message(uint32_t timeout_us);
+    bool process_reply_message();
     void parse_reply(const char *reply);
 
     bool wait_for_sample(const struct sitl_input &input);
