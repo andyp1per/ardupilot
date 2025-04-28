@@ -436,19 +436,8 @@ bool FlightAxis::process_reply_message()
     return false;
 }
 
-double last_op;
-uint32_t my_frame_count;
-double min_fps = 2000, max_fps;
-uint32_t count600, count900, count1200, dup_count;
-
 bool FlightAxis::wait_for_sample(const struct sitl_input &input)
 {
-    // our next guess for a valid sample is the previous sample time + the average frame time + a fiddle factor.
-    // if we don't get a valid sample then we extend the fiddle factor and immediately re-read,
-    // if we do get a valid sample we reduce the fiddle factor until we hit the minimum.
-    // we are trying to minimize the reading of data that is not new
-    // because the read takes some time and will add latency to the eventual read
-
     uint32_t frame_count = 0;
     uint32_t frame_tries = 0;
     double dt_seconds = 0;
@@ -502,28 +491,16 @@ bool FlightAxis::wait_for_sample(const struct sitl_input &input)
     AP::logger().WriteStreaming("RF", "TimeUS,Dt,Fps", "QdI", time_now, dt, uint32_t(roundf(1/dt)));
 
     if (last_time_s > 0) {
-        if (dt > 0 && dt < 0.1) {
+        if (dt_seconds > 0 && dt_seconds < 0.1) {
             if (is_zero(average_delta_time_s)) {
-                average_delta_time_s = dt;
+                average_delta_time_s = dt_seconds;
             }
-            average_delta_time_s = average_delta_time_s * 0.98 + dt * 0.02;
-            min_fps = MIN(min_fps, 1/dt);
-            max_fps = MAX(max_fps, 1/dt);
+            average_delta_time_s = average_delta_time_s * 0.98 + dt_seconds * 0.02;
         }
     }
 
     if (is_equal(last_time_s, state.m_currentPhysicsTime_SEC)) {
-        AP_HAL::panic("Time did not move %u", my_frame_count);
-    }
-
-    my_frame_count++;
-    if (timestamp_sec() - last_op > 1) {
-        printf("Samples %u, frames/s %f, tries %u, min %f, max %f\n",
-            frame_count, my_frame_count / (timestamp_sec() - last_op), frame_tries, min_fps, max_fps);
-        last_op  = timestamp_sec();
-        my_frame_count = 0;
-        min_fps = 2000;
-        max_fps = 0;
+        AP_HAL::panic("Time did not move");
     }
 
     return true;
@@ -730,8 +707,8 @@ void FlightAxis::report_FPS(void)
             last_socket_frame_counter = socket_frame_counter;
             double dt = state.m_currentPhysicsTime_SEC - last_frame_count_s;
             if(!option_is_set(Option::SilenceFPS)) {
-                printf("%.2f/%.2f FPS avg=%.2f glitches=%u\n",
-                    frames / dt, FRAMES_PER_REPORT / dt, 1.0/average_frame_time_s, unsigned(glitch_count));
+                printf("%.2f/%.2f FPS avg=%.2f FPS net=%.2f glitches=%u\n",
+                    frames / dt, FRAMES_PER_REPORT / dt, 1.0/average_frame_time_s, 1.0/average_delta_time_s, unsigned(glitch_count));
             }
         } else {
             printf("Initial position %f %f %f\n", position.x, position.y, position.z);
@@ -755,7 +732,7 @@ void FlightAxis::socket_creator(void)
             continue;
         }
         /*
-          don't let the connection take more than 100ms (10Hz). Longer
+          don't let the connection take more than 10ms (100Hz). Longer
           than this and we are better off trying for a new socket
          */
         if (!sck->connect_timeout(controller_ip, controller_port, 10)) {
