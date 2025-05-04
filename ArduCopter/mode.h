@@ -129,6 +129,7 @@ public:
     virtual bool has_user_takeoff(bool must_navigate) const { return false; }
     virtual bool in_guided_mode() const { return false; }
     virtual bool logs_attitude() const { return false; }
+    virtual void log_attitude_data(float delta_angle_dt, const Vector3f& delta_angle) const {}
     virtual bool allows_save_trim() const { return false; }
     virtual bool allows_autotune() const { return false; }
     virtual bool allows_flip() const { return false; }
@@ -1672,6 +1673,7 @@ public:
     bool allows_arming(AP_Arming::Method method) const override { return false; };
     bool is_autopilot() const override { return false; }
     bool logs_attitude() const override { return true; }
+    void log_attitude_data(float delta_angle_dt, const Vector3f& delta_angle) const override;
 
     void set_magnitude(float input) { waveform_magnitude.set(input); }
 
