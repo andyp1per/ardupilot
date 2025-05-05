@@ -135,6 +135,7 @@ bool ModeSystemId::init(bool ignore_checks)
 
     att_bf_feedforward = attitude_control->get_bf_feedforward();
     waveform_time = 0.0f;
+    waveform_tick = 0;
     time_const_freq = 2.0f / frequency_start; // Two full cycles at the starting frequency
     systemid_state = SystemIDModeState::SYSTEMID_STATE_TESTING;
     log_subsample = 0;
@@ -239,6 +240,7 @@ void ModeSystemId::run()
     waveform_time += G_Dt;
     waveform_sample = chirp_input.update(waveform_time - SYSTEM_ID_DELAY, waveform_magnitude);
     waveform_freq_rads = chirp_input.get_frequency_rads();
+    waveform_tick++;
     Vector2f disturb_state;
     switch (systemid_state) {
         case SystemIDModeState::SYSTEMID_STATE_STOPPED:
@@ -403,24 +405,38 @@ void ModeSystemId::run()
 }
 
 // log system id and just attitude data
-void ModeSystemId::log_attitude_data(float delta_angle_dt, const Vector3f& delta_angle) const
+void ModeSystemId::log_attitude_data(float delta_angle_dt, const Vector3f& delta_angle)
 {
+    // Full rate logging of attitude and rate loops
+    copter.Log_Write_Attitude();
+    copter.Log_Write_Rate();
+
+    // accumulate delta angles
+    delta_angle_acc += delta_angle;
+    delta_angle_acc_dt += delta_angle_dt;
+
+    // check if the waveform has moved forward
+    if (waveform_tick <= last_waveform_tick) {
+        delta_angle_acc += delta_angle;
+        delta_angle_acc_dt += delta_angle_dt;
+        return;
+    }
+
     Vector3f delta_velocity;
     float delta_velocity_dt;
     copter.ins.get_delta_velocity(delta_velocity, delta_velocity_dt);
 
-    if (is_positive(delta_angle_dt) && is_positive(delta_velocity_dt)) {
-        copter.Log_Write_SysID_Data(waveform_time, waveform_sample, waveform_freq_rads / (2 * M_PI), degrees(delta_angle.x / delta_angle_dt), degrees(delta_angle.y / delta_angle_dt), degrees(delta_angle.z / delta_angle_dt), delta_velocity.x / delta_velocity_dt, delta_velocity.y / delta_velocity_dt, delta_velocity.z / delta_velocity_dt);
+    if (is_positive(delta_angle_acc_dt) && is_positive(delta_velocity_dt)) {
+        copter.Log_Write_SysID_Data(waveform_time, waveform_sample, waveform_freq_rads / (2 * M_PI), degrees(delta_angle_acc.x / delta_angle_acc_dt), degrees(delta_angle_acc.y / delta_angle_acc_dt), degrees(delta_angle_acc.z / delta_angle_acc_dt), delta_velocity.x / delta_velocity_dt, delta_velocity.y / delta_velocity_dt, delta_velocity.z / delta_velocity_dt);
     }
 
-    // Full rate logging of attitude, rate and pid loops
-    copter.Log_Write_Attitude();
-    copter.Log_Write_Rate();
-    copter.Log_Write_PIDS();
+    delta_angle_acc.zero();
+    delta_angle_acc_dt = 0;
+    last_waveform_tick = waveform_tick;
 }
 
 // log system id and all data
-void ModeSystemId::log_data() const
+void ModeSystemId::log_data()
 {
     Vector3f delta_angle;
     float delta_angle_dt;

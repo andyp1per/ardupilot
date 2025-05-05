@@ -131,7 +131,7 @@ public:
     virtual bool has_user_takeoff(bool must_navigate) const { return false; }
     virtual bool in_guided_mode() const { return false; }
     virtual bool logs_attitude() const { return false; }
-    virtual void log_attitude_data(float delta_angle_dt, const Vector3f& delta_angle) const {}
+    virtual void log_attitude_data(float delta_angle_dt, const Vector3f& delta_angle) {}
     virtual bool allows_save_trim() const { return false; }
     virtual bool allows_auto_trim() const { return false; }
     virtual bool allows_autotune() const { return false; }
@@ -1704,7 +1704,7 @@ public:
     bool allows_arming(AP_Arming::Method method) const override { return false; };
     bool is_autopilot() const override { return false; }
     bool logs_attitude() const override { return true; }
-    void log_attitude_data(float delta_angle_dt, const Vector3f& delta_angle) const override;
+    void log_attitude_data(float delta_angle_dt, const Vector3f& delta_angle) override;
 
     void set_magnitude(float input) { waveform_magnitude.set(input); }
 
@@ -1719,7 +1719,7 @@ protected:
 
 private:
 
-    void log_data() const;
+    void log_data();
     bool is_poscontrol_axis_type() const;
 
     enum class AxisType {
@@ -1758,6 +1758,7 @@ private:
     float waveform_sample;      // Current waveform sample
     float waveform_freq_rads;   // Instantaneous waveform frequency
     float time_const_freq;      // Time at constant frequency before chirp starts
+    uint32_t waveform_tick;     // Current waveform tick
     int8_t log_subsample;       // Subsample multiple for logging.
     Vector2f target_vel;        // target velocity for position controller modes
     Vector2f target_pos;       // target position
@@ -1767,6 +1768,9 @@ private:
         SYSTEMID_STATE_STOPPED,
         SYSTEMID_STATE_TESTING
     } systemid_state;
+    Vector3f delta_angle_acc;
+    float delta_angle_acc_dt;
+    uint32_t last_waveform_tick;
 };
 
 class ModeThrow : public Mode {
