@@ -52,14 +52,17 @@
 #define QMC5883P_OSR1_2	(0x02 << 4)
 #define QMC5883P_OSR1_1	(0x03 << 4)
 
-// Down sampling Rate OSR2
-#define QMC5883P_OSR2_8	0x08
+// Down sampling Ratio OSR2
+#define QMC5883P_OSR2_1 (0x00 << 6)
+#define QMC5883P_OSR2_2 (0x01 << 6)
+#define QMC5883P_OSR2_4	(0x02 << 6)
+#define QMC5883P_OSR2_8	(0x03 << 6)
 
 //RNG
 #define QMC5883P_RNG_30G (0x00 << 2)
 #define QMC5883P_RNG_12G (0x01 << 2)
-#define QMC5883P_RNG_8G  (0x10 << 2)
-#define QMC5883P_RNG_2G  (0x11 << 2)
+#define QMC5883P_RNG_8G  (0x02 << 2)
+#define QMC5883P_RNG_2G  (0x03 << 2)
 
 #define QMC5883P_SET_XYZ_SIGN 0x29
 
@@ -117,7 +120,7 @@ bool AP_Compass_QMC5883P::init()
                               QMC5883P_ODR_100HZ|
                               QMC5883P_OSR1_8|
                               QMC5883P_OSR2_8)||
-        !_dev->write_register(QMC5883P_REG_CONF2,QMC5883P_OSR2_8)) {
+        !_dev->write_register(QMC5883P_REG_CONF2, QMC5883P_RNG_8G)) {
         goto fail;
     }
 
