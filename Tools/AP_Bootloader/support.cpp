@@ -563,13 +563,19 @@ void check_ecc_errors(void)
         return;
     }
     uint32_t ofs = 0;
+    uint32_t ofs_lwm = BOARD_FLASH_SIZE*1024;
+    uint32_t ofs_hwm = 0;
     while (ofs < BOARD_FLASH_SIZE*1024) {
         if (FLASH->SR1 & (FLASH_SR_SNECCERR | FLASH_SR_DBECCERR)) {
-            break;
+            ofs_lwm = MIN(ofs, ofs_lwm);
+            ofs_hwm = MAX(ofs, ofs_hwm);
+            FLASH->CCR1 |= (FLASH_CCR_CLR_SNECCERR | FLASH_CCR_CLR_DBECCERR);
         }
 #if BOARD_FLASH_SIZE > 1024
         if (FLASH->SR2 & (FLASH_SR_SNECCERR | FLASH_SR_DBECCERR)) {
-            break;
+            ofs_lwm = MIN(ofs, ofs_lwm);
+            ofs_hwm = MAX(ofs, ofs_hwm);
+            FLASH->CCR2 |= (FLASH_CCR_CLR_SNECCERR | FLASH_CCR_CLR_DBECCERR);
         }
 #endif
         dmaStartMemCopy(dma,
@@ -581,11 +587,20 @@ void check_ecc_errors(void)
     }
     dmaStreamFree(dma);
     
-    if (ofs < BOARD_FLASH_SIZE*1024) {
+    if (ofs_lwm != 0 || ofs_hwm != 0) {
         // we must have ECC errors in flash
+        uint16_t page_size = stm32_flash_getpagesize(flash_base_page);
+        // by default erase everything
+        uint16_t start_page = flash_base_page;
+        uint16_t end_page = flash_base_page + num_pages;
+        // if only the parameters are corrupt, then just erase those pages
+        if (ofs_lwm >= STORAGE_FLASH_START_KB*1024 && ofs_hwm <= STORAGE_FLASH_END_KB*1024) {
+            start_page = STORAGE_FLASH_START_KB*1024 / page_size;
+            end_page = STORAGE_FLASH_END_KB*1024 / page_size;
+        }
         flash_set_keep_unlocked(true);
-        for (uint32_t i=0; i<num_pages; i++) {
-            stm32_flash_erasepage(flash_base_page+i);
+        for (uint32_t i=start_page; i<end_page; i++) {
+            stm32_flash_erasepage(i);
         }
         flash_set_keep_unlocked(false);
     }
