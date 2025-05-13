@@ -48,11 +48,13 @@ void ModeTurtle::arm_motors()
     hal.rcout->disable_channel_mask_updates();
     change_motor_direction(true);
 
-    // disable throttle and gps failsafe
+    // disable throttle and gcs failsafe
     g.failsafe_throttle.set(FS_THR_DISABLED);
     g.failsafe_gcs.set(FS_GCS_DISABLED);
     g.fs_ekf_action.set(0);
 
+    // ensure the arming library is aware of our meddling
+    AP::arming().AP_Arming::arm(AP_Arming::Method::TURTLE_MODE, false);
     // arm
     motors->armed(true);
     hal.util->set_soft_armed(true);
@@ -80,6 +82,9 @@ void ModeTurtle::disarm_motors()
     if (!hal.util->get_soft_armed()) {
         return;
     }
+
+    // ensure the arming library is aware of our meddling
+    AP::arming().AP_Arming::disarm(AP_Arming::Method::TURTLE_MODE, false);
 
     // disarm
     motors->armed(false);
