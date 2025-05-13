@@ -8,6 +8,8 @@
 
 bool ModeTurtle::init(bool ignore_checks)
 {
+    shutdown = true;
+
     // do not enter the mode when already armed or when flying
     if (motors->armed() || SRV_Channels::get_dshot_esc_type() == 0) {
         return false;
@@ -26,13 +28,15 @@ bool ModeTurtle::init(bool ignore_checks)
         return false;
     }
 
-    enable = true;
+    shutdown = false;
 
     return true;
 }
 
 void ModeTurtle::arm_motors()
 {
+    WITH_SEMAPHORE(msem);
+
     if (hal.util->get_soft_armed()) {
         return;
     }
@@ -61,11 +65,18 @@ bool ModeTurtle::allows_arming(AP_Arming::Method method) const
 
 void ModeTurtle::exit()
 {
-    enable = false;
+    shutdown = true;
+
+    disarm_motors();
+
+    // turn off notify leds
+    AP_Notify::flags.esc_calibration = false;
 }
 
 void ModeTurtle::disarm_motors()
 {
+    WITH_SEMAPHORE(msem);
+
     if (!hal.util->get_soft_armed()) {
         return;
     }
@@ -165,7 +176,7 @@ void ModeTurtle::run()
 // actually write values to the motors
 void ModeTurtle::output_to_motors()
 {
-    if (!enable) {
+    if (shutdown) {
         disarm_motors();
 
         // turn off notify leds
