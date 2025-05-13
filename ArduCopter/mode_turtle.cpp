@@ -8,7 +8,7 @@
 
 bool ModeTurtle::init(bool ignore_checks)
 {
-    shutdown = true;
+    WITH_SEMAPHORE(msem);
 
     // do not enter the mode when already armed or when flying
     if (motors->armed() || SRV_Channels::get_dshot_esc_type() == 0) {
@@ -83,7 +83,6 @@ void ModeTurtle::disarm_motors()
 
     // disarm
     motors->armed(false);
-    hal.util->set_soft_armed(false);
 
     // un-reverse the motors
     change_motor_direction(false);
@@ -93,6 +92,8 @@ void ModeTurtle::disarm_motors()
     g.failsafe_throttle.load();
     g.failsafe_gcs.load();
     g.fs_ekf_action.load();
+
+    hal.util->set_soft_armed(false);
 }
 
 void ModeTurtle::change_motor_direction(bool reverse)
