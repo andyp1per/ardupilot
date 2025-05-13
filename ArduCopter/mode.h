@@ -1824,6 +1824,7 @@ private:
     float motors_output;
     Vector2f motors_input;
     uint32_t last_throttle_warning_output_ms;
+    bool enable;
 };
 #endif
 

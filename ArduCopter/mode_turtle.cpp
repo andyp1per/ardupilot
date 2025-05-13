@@ -26,8 +26,7 @@ bool ModeTurtle::init(bool ignore_checks)
         return false;
     }
 
-    // turn on notify leds
-    AP_Notify::flags.esc_calibration = true;
+    enable = true;
 
     return true;
 }
@@ -62,10 +61,7 @@ bool ModeTurtle::allows_arming(AP_Arming::Method method) const
 
 void ModeTurtle::exit()
 {
-    disarm_motors();
-
-    // turn off notify leds
-    AP_Notify::flags.esc_calibration = false;
+    enable = false;
 }
 
 void ModeTurtle::disarm_motors()
@@ -169,6 +165,14 @@ void ModeTurtle::run()
 // actually write values to the motors
 void ModeTurtle::output_to_motors()
 {
+    if (!enable) {
+        disarm_motors();
+
+        // turn off notify leds
+        AP_Notify::flags.esc_calibration = false;
+        return;
+    }
+
     // throttle needs to be raised
     if (is_zero(channel_throttle->norm_input_dz())) {
         const uint32_t now = AP_HAL::millis();
@@ -180,6 +184,9 @@ void ModeTurtle::output_to_motors()
         disarm_motors();
         return;
     }
+
+    // turn on notify leds
+    AP_Notify::flags.esc_calibration = true;
 
     arm_motors();
 
