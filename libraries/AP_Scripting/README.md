@@ -65,3 +65,29 @@ differences have been marked of the code.
 
 Lua (not including modifications) is distributed under the terms of the
 MIT license.
+
+## Lua Encryption
+
+Lua Encryption leverages Open Drone ID support to provide secure encryption and 
+execution of lua scripts.
+
+- Create a public/private key pair:
+```
+Tools/scripts/signing/generate_keys.py <keyname>
+```
+- Create a secure bootloader using this key:
+```
+./Tools/scripts/build_bootloaders.py <target> --signing-key <keyname>_public_key.dat
+```
+- Build signed firmware with encryption support:
+```
+./waf configure --board <target> --signed-fw --private-key=<keyname>_private_key.dat --enable-check-firmware
+./waf copter
+```
+- Upload the firmware. From now on any lua scripts on the microSD card will be encrypted on boot using a combination of the public key and the board serial id. The plain text lua scripts will be removed. Encrypted lua scripts will be decrypted and executed as normal. Encrypted lua scripts have the suffix .lxa
+
+- A determined hacker could still use a debugger or dfu to download the firmware image an retrieve the encryption key. This can be   prevented using STM32 readout protection which can be enabled by addin this to the hwdef:
+```
+  define HAL_FLASH_READOUT_PROTECTION 1
+```
+Note that this is a one-way operation. See the comments in flash.c as to how this can be undone.

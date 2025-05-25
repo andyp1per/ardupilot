@@ -62,10 +62,14 @@ private:
     } script_info;
 
     script_info *load_script(lua_State *L, char *filename);
+    void load_script_error(lua_State *L, char *filename, int error);
 
     void reset_loop_overtime(lua_State *L);
 
     void load_all_scripts_in_dir(lua_State *L, const char *dirname);
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+    void encrypt_all_scripts_in_dir(const char *dirname);
+#endif
 
     void run_next_script(lua_State *L);
 
@@ -99,6 +103,12 @@ private:
 
     // helper for print and log of runtime stats
     void update_stats(const char *name, uint32_t run_time, int total_mem, int run_mem);
+
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+    bool decrypt_script(char* script, const uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen);
+    bool encrypt_script(char* script, uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen);
+    void create_nonce(uint8_t nonce[24], const char* scriptname);
+#endif
 
     // must be static for use in atpanic
     static void print_error(MAV_SEVERITY severity);
