@@ -21,6 +21,10 @@
 #include <AP_HAL/AP_HAL.h>
 #include "AP_Scripting.h"
 #include <AP_Logger/AP_Logger.h>
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+#include <AP_Filesystem/AP_Filesystem.h>
+#include <AP_CheckFirmware/monocypher.h>
+#endif
 
 #include <AP_Scripting/lua_generated_bindings.h>
 
@@ -166,26 +170,116 @@ void lua_scripts::update_stats(const char *name, uint32_t run_time, int total_me
 #endif // HAL_LOGGING_ENABLED
 }
 
+void lua_scripts::load_script_error(lua_State *L, char *filename, int error)
+{
+    switch (error) {
+        case LUA_ERRSYNTAX:
+            set_and_print_new_error_message(MAV_SEVERITY_CRITICAL, "Error: %s", get_error_object_message(L));
+            lua_pop(L, lua_gettop(L));
+            break;
+        case LUA_ERRMEM:
+            set_and_print_new_error_message(MAV_SEVERITY_CRITICAL, "Insufficent memory loading %s", filename);
+            lua_pop(L, lua_gettop(L));
+            break;
+        case LUA_ERRFILE:
+            set_and_print_new_error_message(MAV_SEVERITY_CRITICAL, "Unable to load the file %s: %s", filename, get_error_object_message(L));
+            lua_pop(L, lua_gettop(L));
+            break;
+        default:
+            set_and_print_new_error_message(MAV_SEVERITY_CRITICAL, "Unknown error (%d) loading %s", error, filename);
+            lua_pop(L, lua_gettop(L));
+            break;
+    }
+}
+
 lua_scripts::script_info *lua_scripts::load_script(lua_State *L, char *filename) {
-    if (int error = luaL_loadfile(L, filename)) {
-        switch (error) {
-            case LUA_ERRSYNTAX:
-                set_and_print_new_error_message(MAV_SEVERITY_CRITICAL, "Error: %s", get_error_object_message(L));
-                lua_pop(L, lua_gettop(L));
-                return nullptr;
-            case LUA_ERRMEM:
-                set_and_print_new_error_message(MAV_SEVERITY_CRITICAL, "Insufficent memory loading %s", filename);
-                lua_pop(L, lua_gettop(L));
-                return nullptr;
-            case LUA_ERRFILE:
-                set_and_print_new_error_message(MAV_SEVERITY_CRITICAL, "Unable to load the file: %s", get_error_object_message(L));
-                lua_pop(L, lua_gettop(L));
-                return nullptr;
-            default:
-                set_and_print_new_error_message(MAV_SEVERITY_CRITICAL, "Unknown error (%d) loading %s", error, filename);
-                lua_pop(L, lua_gettop(L));
-                return nullptr;
+    int error = 0;
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+    if (!strncmp(&filename[strlen(filename)-4], ".lxa", 4)) {    // encrypted script
+        int fd = AP::FS().open(filename, O_RDONLY);
+
+        if (fd < 0) {
+            load_script_error(L, filename, LUA_ERRFILE);
+            return nullptr;
         }
+
+        // Get the size of the file
+        AP_Filesystem::stat_t st;
+        if (!AP::FS().stat(filename, st)) {
+            AP::FS().close(fd);
+            load_script_error(L, filename, LUA_ERRFILE);
+            return nullptr;
+        }
+
+        off_t filesize = st.size - 46;
+
+        // Allocate buffer
+        char *buffer = (char *)malloc(filesize);
+        if (buffer == nullptr) {
+            AP::FS().close(fd);
+            load_script_error(L, filename, LUA_ERRMEM);
+            return nullptr;
+        }
+
+        char header[6];
+        if (AP::FS().read(fd, header, 6) != 6 || strncmp(header, "LUA1.0", 6) != 0) {
+            free(buffer);
+            AP::FS().close(fd);
+            load_script_error(L, filename, LUA_ERRFILE);
+            return nullptr;
+        }
+
+        uint8_t mac[16] = {};
+        if (AP::FS().read(fd, mac, 16) != 16) {
+            free(buffer);
+            AP::FS().close(fd);
+            load_script_error(L, filename, LUA_ERRFILE);
+            return nullptr;
+        }
+
+        uint8_t nonce[24] = {};
+        if (AP::FS().read(fd, nonce, 24) != 24) {
+            free(buffer);
+            AP::FS().close(fd);
+            load_script_error(L, filename, LUA_ERRFILE);
+            return nullptr;
+        }
+
+        // Read into buffer
+        ssize_t total_read = 0;
+        while (total_read < filesize) {
+            ssize_t bytes_read = AP::FS().read(fd, buffer + total_read, filesize - total_read);
+            if (bytes_read < 0 ) {
+                free(buffer);
+                AP::FS().close(fd);
+                load_script_error(L, filename, LUA_ERRFILE);
+                return nullptr;
+            }
+            if (bytes_read == 0) {
+                break; // EOF
+            }
+            total_read += bytes_read;
+        }
+        AP::FS().close(fd);
+#if AP_SCRIPTING_ENCRYPTION_UUID_ENABLED
+        create_nonce(nonce, filename);
+#endif
+        if (!decrypt_script(buffer, mac, nonce, filesize)) {
+            load_script_error(L, filename, LUA_ERRFILE);
+            return nullptr;
+        }
+
+        error = luaL_loadbuffer(L, buffer, filesize, buffer);
+
+        free(buffer);
+    } else
+#endif
+    {
+        error = luaL_loadfile(L, filename);
+    }
+    if (error != 0) {
+        load_script_error(L, filename, error);
+        return nullptr;
     }
 
     const int loadMem = lua_gc(L, LUA_GCCOUNT, 0) * 1024 + lua_gc(L, LUA_GCCOUNTB, 0);
@@ -283,8 +377,12 @@ void lua_scripts::load_all_scripts_in_dir(lua_State *L, const char *dirname) {
             continue;
         }
 
-        if ((de->d_name[0] == '.') || strncmp(&de->d_name[length-4], ".lua", 4)) {
-            // starts with . (hidden file) or doesn't end in .lua
+        if ((de->d_name[0] == '.') || (strncmp(&de->d_name[length-4], ".lua", 4)
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+            && strncmp(&de->d_name[length-4], ".lxa", 4)
+#endif
+        )){
+            // starts with . (hidden file) or doesn't end in .lua or .lxa
             continue;
         }
 
@@ -302,6 +400,7 @@ void lua_scripts::load_all_scripts_in_dir(lua_State *L, const char *dirname) {
             _heap.deallocate(filename);
             continue;
         }
+
         reschedule_script(script);
 
 #if HAL_LOGGER_FILE_CONTENTS_ENABLED
@@ -312,6 +411,128 @@ void lua_scripts::load_all_scripts_in_dir(lua_State *L, const char *dirname) {
     }
     AP::FS().closedir(d);
 }
+
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+void lua_scripts::encrypt_all_scripts_in_dir(const char *dirname)
+{
+    if (dirname == nullptr) {
+        return;
+    }
+
+    auto *d = AP::FS().opendir(dirname);
+    if (d == nullptr) {
+        return;
+    }
+
+    // load anything that ends in .lua
+    for (struct dirent *de=AP::FS().readdir(d); de; de=AP::FS().readdir(d)) {
+        uint8_t length = strlen(de->d_name);
+        if (length < 5) {
+            // not long enough
+            continue;
+        }
+
+        if ((de->d_name[0] == '.') || strncmp(&de->d_name[length-4], ".lua", 4)) {
+            // starts with . (hidden file) or doesn't end in .lua
+            continue;
+        }
+
+        size_t nmsize = strlen(dirname) + strlen(de->d_name) + 2;
+        char * filename = (char *) malloc(nmsize);
+        if (filename == nullptr) {
+            return;
+        }
+        snprintf(filename, nmsize, "%s/%s", dirname, de->d_name);
+
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Lua: encrypting script %s", filename);
+
+        int fd = AP::FS().open(filename, O_RDONLY);
+
+        if (fd < 0) {
+            continue;
+        }
+
+        // Get the size of the file
+        AP_Filesystem::stat_t st;
+        if (!AP::FS().stat(filename, st)) {
+            AP::FS().close(fd);
+            continue;
+        }
+
+        off_t filesize = st.size;
+
+        // Allocate buffer
+        char *buffer = (char *)malloc(filesize);
+        if (buffer == nullptr) {
+            AP::FS().close(fd);
+            return;
+        }
+
+        // Read into buffer
+        ssize_t total_read = 0;
+        while (total_read < filesize) {
+            ssize_t bytes_read = AP::FS().read(fd, buffer + total_read, filesize - total_read);
+            if (bytes_read < 0 ) {
+                free(buffer);
+                AP::FS().close(fd);
+                return;
+            }
+            if (bytes_read == 0) {
+                break; // EOF
+            }
+            total_read += bytes_read;
+        }
+        AP::FS().close(fd);
+
+        uint8_t mac[16];
+        uint8_t nonce[24] = {};
+        create_nonce(nonce, filename);
+        if (!encrypt_script(buffer, mac, nonce, filesize)) {
+            continue;
+        }
+
+        AP::FS().unlink(filename);
+
+        strcpy(filename + (nmsize - 5), ".lxa");
+
+        fd = AP::FS().open(filename, O_WRONLY | O_CREAT | O_TRUNC);
+
+        if (fd < 0) {
+            free(buffer);
+            continue;
+        }
+
+        if (AP::FS().write(fd, "LUA1.0", 6) != 6) {
+            free(buffer);
+            AP::FS().close(fd);
+            continue;
+        }
+
+        if (AP::FS().write(fd, mac, 16) != 16) {
+            free(buffer);
+            AP::FS().close(fd);
+            continue;
+        }
+
+        if (AP::FS().write(fd, nonce, 24) != 24) {
+            free(buffer);
+            AP::FS().close(fd);
+            continue;
+        }
+
+        if (AP::FS().write(fd, buffer, filesize) != filesize) {
+            free(buffer);
+            AP::FS().close(fd);
+            continue;
+        }
+        AP::FS().close(fd);
+
+        // Cleanup
+        free(buffer);
+    }
+    AP::FS().closedir(d);
+}
+#endif
 
 void lua_scripts::reset_loop_overtime(lua_State *L) {
     overtime = false;
@@ -532,6 +753,9 @@ void lua_scripts::run(void) {
     uint16_t dir_disable = AP_Scripting::get_singleton()->get_disabled_dir();
     bool loaded = false;
     if ((dir_disable & uint16_t(AP_Scripting::SCR_DIR::SCRIPTS)) == 0) {
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+        encrypt_all_scripts_in_dir(SCRIPTING_DIRECTORY);
+#endif
         load_all_scripts_in_dir(L, SCRIPTING_DIRECTORY);
         loaded = true;
     }
@@ -668,5 +892,52 @@ uint32_t lua_scripts::get_running_checksum()
     WITH_SEMAPHORE(crc_sem);
     return running_checksum;
 }
+
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+void lua_scripts::create_nonce(uint8_t nonce[24], const char* scriptname)
+{
+    for (uint8_t i = 0; i < 24; i++) {
+        nonce[i] = rand();
+    }
+#if AP_SCRIPTING_ENCRYPTION_UUID_ENABLED
+    uint8_t nonce_len;
+    // use the serial number of the board for the nonce so that it can only be
+    // decrypted on this board
+    hal.util->get_system_id_unformatted(nonce, nonce_len);
+#endif
+}
+
+bool lua_scripts::encrypt_script(char* script, uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen)
+{
+    const struct ap_secure_data* keys = AP_CheckFirmware::find_public_keys();
+
+    if (keys == nullptr) {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "No encryption key found");
+        return false;
+    }
+
+    // the first three keys will be ArduPilot_public_keyx.dat
+    crypto_lock(mac, (uint8_t*)script, keys->public_key[3].key, nonce, (const uint8_t*)script, scriptlen);
+    return true;
+}
+
+bool lua_scripts::decrypt_script(char* script, const uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen)
+{
+    const struct ap_secure_data* keys = AP_CheckFirmware::find_public_keys();
+
+    if (keys == nullptr) {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "No encryption key found");
+        return false;
+    }
+
+    // try decrypting with all the available keys until we have success or run out of key
+    for (uint8_t i = 0; i < AP_PUBLIC_KEY_MAX_KEYS; i++) {
+        if (crypto_unlock((uint8_t*)script, keys->public_key[i].key, nonce, mac, (const uint8_t*)script, scriptlen) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
 
 #endif  // AP_SCRIPTING_ENABLED
