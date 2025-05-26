@@ -4,16 +4,12 @@
 #pragma once
 
 #include <AP_HAL/AP_HAL_Boards.h>
-#include <AP_OpenDroneID/AP_OpenDroneID_config.h>
 #include <AP_HAL/AP_HAL.h>
 #include <GCS_MAVLink/GCS_config.h>
 #if HAL_GCS_ENABLED
 #include <GCS_MAVLink/GCS_MAVLink.h>
 #endif
-
-#ifndef AP_CHECK_FIRMWARE_ENABLED
-#define AP_CHECK_FIRMWARE_ENABLED AP_OPENDRONEID_ENABLED
-#endif
+#include "AP_CheckFirmware_config.h"
 
 #if AP_CHECK_FIRMWARE_ENABLED
 
