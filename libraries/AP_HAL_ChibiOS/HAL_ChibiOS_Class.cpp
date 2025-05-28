@@ -279,12 +279,16 @@ static void main_loop()
 #endif
 
 #if HAL_FLASH_PROTECTION
+    // write protection
     if (AP_BoardConfig::unlock_flash()) {
         stm32_flash_unprotect_flash();
     } else {
         stm32_flash_protect_flash(false, AP_BoardConfig::protect_flash());
         stm32_flash_protect_flash(true, AP_BoardConfig::protect_bootloader());
     }
+#endif
+#if HAL_FLASH_READOUT_PROTECTION
+    stm32_flash_read_protect_flash();
 #endif
 
 #if !defined(DISABLE_WATCHDOG)
