@@ -17,6 +17,10 @@
  */
 #include "hal.h"
 
+#ifndef HAL_FLASH_READOUT_PROTECTION
+#define HAL_FLASH_READOUT_PROTECTION 0
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -29,6 +33,8 @@ void stm32_flash_keep_unlocked(bool set);
 bool stm32_flash_ispageerased(uint32_t page);
 void stm32_flash_protect_flash(bool bootloader, bool protect);
 void stm32_flash_unprotect_flash(void);
+void stm32_flash_set_rdp_flash(uint32_t optbyte);
+void stm32_flash_read_protect_flash(void);
 void stm32_flash_set_NRST_MODE(uint8_t nrst_mode);
 #if defined(STM32H7)
 void stm32_flash_corrupt(uint32_t addr);
