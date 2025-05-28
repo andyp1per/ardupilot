@@ -318,7 +318,7 @@ void stm32_flash_lock(void)
 #endif
 }
 
-#if (defined(STM32H7) && HAL_FLASH_PROTECTION) || defined(HAL_FLASH_SET_NRST_MODE)
+#if (defined(STM32H7) && (HAL_FLASH_PROTECTION || HAL_FLASH_READOUT_PROTECTION)) || defined(HAL_FLASH_SET_NRST_MODE)
 static void stm32_flash_wait_opt_idle(void)
 {
     __DSB();
@@ -1140,6 +1140,36 @@ void stm32_flash_unprotect_flash()
     }
 #endif
 }
+
+/**
+ * @brief read protect the flash. prevents 3rd-parties accessing the firmware via DFU or a debugger
+ */
+void stm32_flash_read_protect_flash()
+{
+#if defined(STM32H7) && HAL_FLASH_READOUT_PROTECTION
+    stm32_flash_set_rdp_flash(0xBB);
+    // if you have protected firmware you can unprotect it (with an erase) by using this version
+    //stm32_flash_set_rdp_flash(0xAA);
+#endif
+}
+
+#if defined(STM32H7) && HAL_FLASH_READOUT_PROTECTION
+void stm32_flash_set_rdp_flash(uint32_t optbyte)
+{
+    stm32_flash_opt_clear_errors();
+    stm32_flash_clear_errors();
+
+    if ((FLASH->OPTSR_CUR & FLASH_OPTSR_RDP_Msk) == (optbyte << FLASH_OPTSR_RDP_Pos)) {
+        return;
+    }
+    if (stm32_flash_unlock_options()) {
+        FLASH->OPTSR_PRG = (FLASH->OPTSR_CUR & ~FLASH_OPTSR_RDP_Msk) | (optbyte << FLASH_OPTSR_RDP_Pos);
+        FLASH->OPTCR |= FLASH_OPTCR_OPTSTART;
+        stm32_flash_wait_opt_idle();
+        stm32_flash_lock_options();
+    }
+}
+#endif
 
 #if defined(HAL_FLASH_SET_NRST_MODE)
 /*
