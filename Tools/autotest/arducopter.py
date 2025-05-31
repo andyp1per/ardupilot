@@ -13766,15 +13766,24 @@ RTL_ALT 111
         self.context_collect('STATUSTEXT')
         self.change_mode('SYSTEMID')
         self.wait_statustext('SystemID Starting: axis=1', check_context=True)
-        tstart = self.get_sim_time_cached()
-        while True:
-            if self.get_sim_time_cached() - tstart > 120:
-                raise NotAchievedException("Did not finish System ID")
-            alt = self.get_altitude(relative=True)
-            self.progress("Altitude %s" % alt)
-            m = self.mav.recv_match(type='STATUSTEXT', blocking=True, timeout=0.1)
-            if m is not None and m.text == 'SystemID Finished':
-                break
+        self.context_push()
+
+        global decimator
+        decimator = 0
+
+        def alt_printer(mav, m):
+            global decimator
+            if m.get_type() != 'GLOBAL_POSITION_INT':
+                return
+            decimator += 1
+            if decimator < 30:
+                return
+            decimator = 0
+            self.progress(f"Altitude {m.relative_alt*0.001}")
+
+        self.install_message_hook_context(alt_printer)
+        self.wait_statustext('SystemID Finished', timeout=200)
+        self.context_pop()
         self.do_land()
 
     def SystemIDFastRate(self):
@@ -13802,9 +13811,17 @@ RTL_ALT 111
 
         self.context_push()
 
+        global decimator
+        decimator = 0
+
         def alt_printer(mav, m):
+            global decimator
             if m.get_type() != 'GLOBAL_POSITION_INT':
                 return
+            decimator += 1
+            if decimator < 30:
+                return
+            decimator = 0
             self.progress(f"Altitude {m.relative_alt*0.001}")
 
         self.install_message_hook_context(alt_printer)
