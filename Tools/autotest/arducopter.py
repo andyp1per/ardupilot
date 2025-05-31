@@ -13749,6 +13749,14 @@ RTL_ALT 111
     def SystemID(self):
         '''Run SystemID'''
         self.progress("Run System ID")
+
+        self.customise_SITL_commandline(
+            [],
+            defaults_filepath=self.model_defaults_filepath('3DR_X8-M'),
+            model="statespace-multi:@ROMFS/models/3DR_X8-M.json",
+            wipe=True,
+        )
+
         self.set_parameters({
             'SID_AXIS': 1,
         })
