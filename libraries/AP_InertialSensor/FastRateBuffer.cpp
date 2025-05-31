@@ -135,7 +135,9 @@ bool AP_InertialSensor::push_next_gyro_sample(const Vector3f& gyro)
     WITH_SEMAPHORE(fast_rate_buffer->_mutex);
 
     if (!fast_rate_buffer->_rate_loop_gyro_window.push(gyro)) {
+#if CONFIG_HAL_BOARD != HAL_BOARD_SITL
         debug("dropped rate loop sample");
+#endif
     }
     fast_rate_buffer->rate_decimation_count = 0;
     fast_rate_buffer->_notifier.signal();
