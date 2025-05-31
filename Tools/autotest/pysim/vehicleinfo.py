@@ -233,12 +233,10 @@ class VehicleInfo(object):
                     "models/freestyle.param",
                 ],
             },
-            "statespace-multi": {
+            "3DR_X8-M": {
                 "model": "statespace-multi:@ROMFS/models/3DR_X8-M.json",
                 "waf_target": "bin/arducopter",
                 "default_params_filename": [
-                    "default_params/copter.parm",
-                    "default_params/copter-octaquad.parm",
                     "models/3DR_X8-M.param",
                 ],
             },

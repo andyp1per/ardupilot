@@ -13777,6 +13777,42 @@ RTL_ALT 111
                 break
         self.do_land()
 
+    def SystemIDFastRate(self):
+        '''Run SystemID with FastRate enabled'''
+        self.progress("Run System ID with Fast Rate")
+
+        self.customise_SITL_commandline(
+            [],
+            defaults_filepath=self.model_defaults_filepath('3DR_X8-M'),
+            model="statespace-multi:@ROMFS/models/3DR_X8-M.json",
+            wipe=True,
+        )
+
+        self.set_parameters({
+            'SID_AXIS': 1,
+            'FSTRATE_ENABLE':2,
+            'SCHED_LOOP_RATE':200,
+        })
+        self.reboot_sitl()
+        self.takeoff(5, mode='STABILIZE')
+        self.set_rc(3, 1475)
+        self.context_collect('STATUSTEXT')
+        self.change_mode('SYSTEMID')
+        self.wait_statustext('SystemID Starting: axis=1', check_context=True)
+
+        self.context_push()
+
+        def alt_printer(mav, m):
+            if m.get_type() != 'GLOBAL_POSITION_INT':
+                return
+            self.progress(f"Altitude {m.relative_alt*0.001}")
+
+        self.install_message_hook_context(alt_printer)
+        self.wait_statustext('SystemID Finished', timeout=200)
+        self.context_pop()
+
+        self.do_land()
+
     def RTLStoppingDistanceSpeed(self):
         '''test stopping distance unaffected by RTL speed'''
         self.upload_simple_relhome_mission([
@@ -14077,7 +14113,8 @@ RTL_ALT 111
             self.TestEKF3CompassFailover,
             self.test_EKF3_option_disable_lane_switch,
             self.PLDNoParameters,
-            self.SystemID
+            self.SystemID,
+            self.SystemIDFastRate
         ])
         return ret
 
