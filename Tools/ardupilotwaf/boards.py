@@ -136,6 +136,13 @@ class Board:
         else:
             cfg.msg("Enabled firmware ID checking", 'no', color='YELLOW')
 
+        # allow enable of readout protection for any board
+        if cfg.options.enable_readout_protection:
+            env.DEFINES.update(
+                HAL_FLASH_READOUT_PROTECTION=1,
+            )
+            cfg.msg("Enabled readout protection", 'yes')
+
         if cfg.options.enable_gps_logging:
             env.DEFINES.update(
                 AP_GPS_DEBUG_LOGGING_ENABLED=1,
