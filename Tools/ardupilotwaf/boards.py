@@ -141,7 +141,13 @@ class Board:
             env.DEFINES.update(
                 HAL_FLASH_READOUT_PROTECTION=1,
             )
-            cfg.msg("Enabled readout protection", 'yes')
+            cfg.msg("Enabled readout protection", 'yes', color='YELLOW')
+
+        # allow disabling of bootloader
+        if cfg.options.no_embed_bootloader:
+            cfg.msg("Disable embedding of bootloader", 'yes', color='YELLOW')
+        else:
+            cfg.msg("Disable embedding of bootloader", 'no')
 
         if cfg.options.enable_gps_logging:
             env.DEFINES.update(
@@ -1304,6 +1310,11 @@ class chibios(Board):
             env.CFLAGS += [
                 '-DAP_SIGNED_FIRMWARE=0',
             ]
+
+        if cfg.options.no_embed_bootloader:
+            env.NO_EMBED_BOOTLOADER = True
+        else:
+            env.NO_EMBED_BOOTLOADER = False
 
         try:
             import intelhex
