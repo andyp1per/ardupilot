@@ -39,6 +39,7 @@ class ChibiOSHWDef(object):
         self.default_params_filepath = default_params_filepath
         self.quiet = quiet
         self.have_defaults_file = False
+        self.no_embed_bootloader = no_embed_bootloader
 
         # if true then parameters will be appended in special apj-tool
         # section at end of binary:
@@ -2689,7 +2690,8 @@ Please run: Tools/scripts/build_bootloaders.py %s
         self.setup_apj_IDs()
         self.write_USB_config(f)
 
-        self.embed_bootloader(f)
+        if not self.no_embed_bootloader:
+            self.embed_bootloader(f)
 
         if self.mcu_series.startswith('STM32F1'):
             f.write('''
@@ -3355,6 +3357,8 @@ if __name__ == '__main__':
         '--params', type=str, default=None, help='user default params path')
     parser.add_argument(
         '--quiet', action='store_true', default=False, help='quiet running')
+    parser.add_argument(
+        '--no-embed-bootloader', action='store_true', default=False, help='do not embed the bootloader bootloader')
 
     args = parser.parse_args()
 
@@ -3365,5 +3369,6 @@ if __name__ == '__main__':
         hwdef=args.hwdef,
         default_params_filepath=args.params,
         quiet=args.quiet,
+        no_embed_bootloader=args.no_embed_bootloader
     )
     c.run()
