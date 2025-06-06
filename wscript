@@ -283,6 +283,10 @@ submodules at specific revisions.
                  default=False,
                  help="Enables firmware ID checking on boot")
 
+    g.add_option('--enable-readout-protection', action='store_true',
+                 default=False,
+                 help="Enables firmware readout protection")
+
     g.add_option('--enable-custom-controller', action='store_true',
                  default=False,
                  help="Enables custom controller")
@@ -494,6 +498,9 @@ def configure(cfg):
     if cfg.options.signed_fw:
         cfg.env.AP_SIGNED_FIRMWARE = True
         cfg.options.enable_check_firmware = True
+
+    if cfg.options.enable_readout_protection:
+        cfg.options.enable_readout_protection = True
 
     cfg.env.BOARD = cfg.options.board
     cfg.env.DEBUG = cfg.options.debug
