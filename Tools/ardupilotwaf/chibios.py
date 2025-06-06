@@ -433,7 +433,9 @@ def chibios_firmware(self):
     cleanup_task.set_run_after(generate_apj_task)
 
     bootloader_bin = self.bld.srcnode.make_node("Tools/bootloaders/%s_bl.bin" % self.env.BOARD)
-    if self.bld.env.HAVE_INTEL_HEX:
+    if self.bld.env.NO_EMBED_BOOTLOADER:
+        print("Bootloader embedding disabled")
+    elif self.bld.env.HAVE_INTEL_HEX:
         if os.path.exists(bootloader_bin.abspath()):
             if int(self.bld.env.FLASH_RESERVE_START_KB) > 0:
                 hex_target = self.bld.bldnode.find_or_declare('bin/' + link_output.change_ext('_with_bl.hex').name)
@@ -638,6 +640,12 @@ def generate_hwdef_h(env):
         print(env.BOOTLOADER_OPTION)
         env.BOOTLOADER_OPTION += " --signed-fw"
         print(env.BOOTLOADER_OPTION)
+
+    if env.NO_EMBED_BOOTLOADER:
+        print(env.BOOTLOADER_OPTION)
+        env.BOOTLOADER_OPTION += " --no-embed-bootloader"
+        print(env.BOOTLOADER_OPTION)
+
     hwdef_script = os.path.join(env.SRCROOT, 'libraries/AP_HAL_ChibiOS/hwdef/scripts/chibios_hwdef.py')
     hwdef_out = env.BUILDROOT
     if not os.path.exists(hwdef_out):
