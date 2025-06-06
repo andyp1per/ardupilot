@@ -250,6 +250,11 @@ def options(opt):
         default=False,
         help='Configure for building a bootloader.')
 
+    g.add_option('--no-embed-bootloader',
+        action='store_true',
+        default=False,
+        help='Do not embed the bootloader in the binary even if its exists.')
+
     g.add_option('--signed-fw',
         action='store_true',
         default=False,
@@ -537,6 +542,9 @@ def configure(cfg):
 
     if cfg.options.enable_readout_protection:
         cfg.options.enable_readout_protection = True
+
+    if cfg.options.no_embed_bootloader:
+        cfg.env.NO_EMBED_BOOTLOADER = True
 
     cfg.env.BOARD = cfg.options.board
     cfg.env.DEBUG = cfg.options.debug
