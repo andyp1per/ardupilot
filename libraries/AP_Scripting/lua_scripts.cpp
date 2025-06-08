@@ -426,16 +426,6 @@ void lua_scripts::encrypt_all_scripts_in_dir(const char *dirname)
 
     // load anything that ends in .lua
     for (struct dirent *de=AP::FS().readdir(d); de; de=AP::FS().readdir(d)) {
-        uint8_t length = strlen(de->d_name);
-        if (length < 5) {
-            // not long enough
-            continue;
-        }
-
-        if ((de->d_name[0] == '.') || strncmp(&de->d_name[length-4], ".lua", 4)) {
-            // starts with . (hidden file) or doesn't end in .lua
-            continue;
-        }
 
         size_t nmsize = strlen(dirname) + strlen(de->d_name) + 2;
         char * filename = (char *) malloc(nmsize);
@@ -444,18 +434,37 @@ void lua_scripts::encrypt_all_scripts_in_dir(const char *dirname)
         }
         snprintf(filename, nmsize, "%s/%s", dirname, de->d_name);
 
+        AP_Filesystem::stat_t st;
+        if (!AP::FS().stat(filename, st)) {
+            free(filename);
+            continue;
+        }
+
+        if (st.is_directory()) {
+            encrypt_all_scripts_in_dir(filename);
+            free(filename);
+            continue;
+        }
+
+        uint8_t length = strlen(de->d_name);
+        if (length < 5) {
+            // not long enough
+            free(filename);
+            continue;
+        }
+
+        if ((de->d_name[0] == '.') || strncmp(&de->d_name[length-4], ".lua", 4)) {
+            // starts with . (hidden file) or doesn't end in .lua
+            free(filename);
+            continue;
+        }
+
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Lua: encrypting script %s", filename);
 
         int fd = AP::FS().open(filename, O_RDONLY);
 
         if (fd < 0) {
-            continue;
-        }
-
-        // Get the size of the file
-        AP_Filesystem::stat_t st;
-        if (!AP::FS().stat(filename, st)) {
-            AP::FS().close(fd);
+            free(filename);
             continue;
         }
 
@@ -465,6 +474,7 @@ void lua_scripts::encrypt_all_scripts_in_dir(const char *dirname)
         char *buffer = (char *)malloc(filesize);
         if (buffer == nullptr) {
             AP::FS().close(fd);
+            free(filename);
             return;
         }
 
@@ -475,6 +485,7 @@ void lua_scripts::encrypt_all_scripts_in_dir(const char *dirname)
             if (bytes_read < 0 ) {
                 free(buffer);
                 AP::FS().close(fd);
+                free(filename);
                 return;
             }
             if (bytes_read == 0) {
@@ -488,7 +499,7 @@ void lua_scripts::encrypt_all_scripts_in_dir(const char *dirname)
         uint8_t nonce[24] = {};
         create_nonce(nonce, filename);
         if (!encrypt_script(buffer, mac, nonce, filesize)) {
-            continue;
+            goto cleanup;
         }
 
         AP::FS().unlink(filename);
@@ -498,37 +509,30 @@ void lua_scripts::encrypt_all_scripts_in_dir(const char *dirname)
         fd = AP::FS().open(filename, O_WRONLY | O_CREAT | O_TRUNC);
 
         if (fd < 0) {
-            free(buffer);
-            continue;
+            goto cleanup;
         }
 
         if (AP::FS().write(fd, "LUA1.0", 6) != 6) {
-            free(buffer);
-            AP::FS().close(fd);
-            continue;
+            goto cleanup;
         }
 
         if (AP::FS().write(fd, mac, 16) != 16) {
-            free(buffer);
-            AP::FS().close(fd);
-            continue;
+            goto cleanup;
         }
 
         if (AP::FS().write(fd, nonce, 24) != 24) {
-            free(buffer);
-            AP::FS().close(fd);
-            continue;
+            goto cleanup;
         }
 
         if (AP::FS().write(fd, buffer, filesize) != filesize) {
-            free(buffer);
-            AP::FS().close(fd);
-            continue;
+            goto cleanup;
         }
-        AP::FS().close(fd);
 
+    cleanup:
         // Cleanup
+        AP::FS().close(fd);
         free(buffer);
+        free(filename);
     }
     AP::FS().closedir(d);
 }
