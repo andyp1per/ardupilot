@@ -1,0 +1,5 @@
+# The Pixel has a MatekH743 with bidirectional DShot
+
+include ../lightdynamix-pixel/hwdef-bl.dat
+
+define CHIBIOS_SHORT_BOARD_NAME "LD-Motherboard"
