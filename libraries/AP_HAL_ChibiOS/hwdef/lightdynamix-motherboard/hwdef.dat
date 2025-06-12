@@ -1,0 +1,12 @@
+# The Pixel has a MatekH743 with bidirectional DShot
+
+include ../lightdynamix-pixel/hwdef.dat
+
+define CHIBIOS_SHORT_BOARD_NAME "LD-Motherboard"
+
+undef IMU
+
+IMU Invensensev3 SPI:icm42688 ROTATION_PITCH_180_YAW_270
+IMU Invensensev3 SPI:icm42605 ROTATION_PITCH_180_YAW_270
+IMU Invensense SPI:icm20602 ROTATION_PITCH_180_YAW_270
+IMU Invensense SPI:mpu6000 ROTATION_PITCH_180_YAW_270
