@@ -10626,8 +10626,12 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "ANGLE_MAX": 7500,
             "AVOID_ENABLE": 0,
             "AFNCE_FAIL_ACT": 6,  # RTL
+            "AFNCE_DEBUG": 2,
+            "PSC_JERK_XY": 40,
+            "RC7_OPTION": 300,      # Scripting
         })
         self.change_mode("LOITER")
+        self.set_rc(7, 2000)    # enable acro fencing
         self.wait_ready_to_arm()
 
         # fence requires home to be set:
