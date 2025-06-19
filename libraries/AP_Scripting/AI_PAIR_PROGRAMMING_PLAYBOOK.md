@@ -1,0 +1,457 @@
+# **AI Playbook for Drone Control LUA Script Generation**
+
+## **1\. Core Concepts**
+
+This playbook is designed to provide a Large Language Model (LLM) with the necessary context to generate Lua scripts for controlling drones running the ArduPilot firmware. Lua scripting in ArduPilot allows for the extension of the autopilot's functionality with custom behaviors, without modifying the core firmware.
+
+**Key Principles:**
+
+* **Sandboxed Environment:** Scripts run in a sandboxed environment, meaning they have limited access to the system's resources and cannot crash the main flight controller.  
+* **Event-Driven:** Scripts are typically event-driven, reacting to changes in the drone's state, sensor data, or RC controller inputs.  
+* **ArduPilot API:** Scripts interact with the drone through a specific ArduPilot Lua API, which provides functions for controlling the vehicle, reading sensors, and more.
+
+## **2\. Environment Setup**
+
+For a Lua script to be used, the drone's flight controller must be configured to support scripting.
+
+* **Enable Scripting:** In the ArduPilot parameters, SCR\_ENABLE must be set to 1\.  
+* **Upload Scripts:** Scripts are uploaded to the APM/scripts directory on the flight controller's SD card.  
+* **Reboot:** The flight controller must be rebooted after enabling scripting or uploading new scripts.
+
+## **3\. ArduPilot LUA API Reference**
+
+This section details the most common functions and libraries available in the ArduPilot Lua API.
+
+### **3.1. Vehicle Control**
+
+* **vehicle:get\_location()**: Returns a Location object with the current position of the drone.  
+* **vehicle:set\_target\_location(Location)**: Commands the drone to fly to a specific Location.  
+* **vehicle:set\_target\_velocity\_NED(Vector3f)**: Sets the drone's target velocity in a North-East-Down (NED) frame.  
+* **vehicle:arm()**: Arms the drone.  
+* **vehicle:disarm()**: Disarms the drone.  
+* **vehicle:get\_mode()**: Returns the current flight mode of the drone.  
+* **vehicle:set\_mode(mode)**: Sets the drone's flight mode (e.g., GUIDED, LOITER, RTL).  
+* **vehicle:start\_takeoff(altitude)**: Initiates an auto-takeoff to the specified altitude.
+
+**Example:**
+
+\-- Fly to a GPS coordinate  
+local target\_location \= Location()  
+target\_location:lat(47.397742)  
+target\_location:lng(8.545594)  
+target\_location:alt(10) \-- 10 meters altitude  
+vehicle:set\_target\_location(target\_location)
+
+### **3.2. GPS**
+
+* **gps:num\_sensors()**: Returns the number of connected GPS sensors.  
+* **gps:status(instance)**: Returns the fix status of a specific GPS sensor.  
+* **gps:location(instance)**: Returns a Location object with the position from a specific GPS sensor.  
+* **gps:primary\_sensor()**: Returns the index of the primary GPS sensor.
+
+### **3.3. Sensors**
+
+* **rangefinder:num\_sensors()**: Returns the number of connected rangefinders.  
+* **rangefinder:distance(instance)**: Returns the distance measured by a specific rangefinder.  
+* **battery:num\_instances()**: Returns the number of connected batteries.  
+* **battery:voltage(instance)**: Returns the voltage of a specific battery.  
+* **battery:remaining\_capacity(instance)**: Returns the remaining capacity of a specific battery.
+
+### **3.4. RC Channels**
+
+* **rc:get\_channel(channel\_num)**: Returns the current PWM value of a specific RC channel.  
+* **rc:get\_aux\_cached(aux\_channel)**: Returns the cached value of an auxiliary channel.
+
+## **4\. Available Scripts**
+
+The ArduPilot repository contains a wide variety of pre-written Lua scripts that can be used as-is or adapted for specific needs. These scripts are categorized into applets, drivers, examples, and tests.
+
+### **4.1. Applets**
+
+Applets are complete, ready-to-use scripts that require no user editing. They often provide high-level functionality and can be enabled through parameters. Each applet is accompanied by a markdown file (.md) that details its operation.
+
+* BattEstimate  
+* BatteryTag  
+* Gimbal\_Camera\_Mode  
+* Heli\_IM\_COL\_Tune  
+* Heli\_idle\_control  
+* Hexsoon LEDs  
+* MissionSelector  
+* ONVIF\_Camera\_Control  
+* Param\_Controller  
+* QuadPlane\_Low\_Alt\_FW\_mode\_prevention  
+* RockBlock  
+* Script\_Controller  
+* SmartAudio  
+* UniversalAutoLand  
+* VTOL-quicktune  
+* advance-wp  
+* ahrs-set-origin  
+* ahrs-source-extnav-optflow  
+* camera-change-setting  
+* copter-deadreckon-home  
+* copter-slung-payload  
+* copter\_terrain\_brake  
+* crsf-calibrate  
+* follow-target-send  
+* forward\_flight\_motor\_shutdown  
+* leds\_on\_a\_switch  
+* motor\_failure\_test  
+* mount-poi  
+* net\_webserver  
+* param-set  
+* pelco\_d\_antennatracker  
+* plane\_package\_place  
+* plane\_precland  
+* plane\_ship\_landing  
+* repl  
+* revert\_param  
+* rover-quicktune  
+* runcam\_on\_arm  
+* video-stream-information  
+* winch-control  
+* x-quad-cg-allocation  
+* **Aerobatics:**  
+  * plane\_aerobatics  
+  * sport\_aerobatics  
+* **WebExamples:**  
+  * test.lua  
+  * test.shtml
+
+### **4.2. Drivers**
+
+Drivers provide support for specific hardware or protocols.
+
+* BattMon\_ANX  
+* EFI\_DLA  
+* EFI\_HFE  
+* EFI\_Halo6000  
+* EFI\_NMEA2k  
+* EFI\_SkyPower  
+* Generator\_SVFFI  
+* Hobbywing\_DataLink  
+* INF\_Inject  
+* LTE\_modem  
+* UltraMotion  
+* mount-djirs2-driver  
+* mount-viewpro-driver  
+* torqeedo-torqlink  
+* **TOFSense-M:**  
+  * TOFSENSE-M\_CAN  
+  * TOFSENSE-M\_Serial
+
+### **4.3. Examples**
+
+Examples provide demonstrations of specific functionalities and can be used as a starting point for custom scripts.
+
+* 6DoF\_roll\_pitch  
+* AHRS\_switch  
+* BQ40Z\_bms\_shutdown  
+* CAN\_MiniCheetah\_drive  
+* CAN\_logger  
+* CAN\_read  
+* CAN\_write  
+* DroneCAN\_test  
+* EFI\_tester  
+* ESC\_slew\_rate  
+* FenceBreach  
+* FlexDebug  
+* Flip\_Mode  
+* LED\_matrix\_image  
+* LED\_matrix\_text  
+* LED\_poslight  
+* LED\_roll  
+* MAVLinkHL  
+* MAVLink\_Commands  
+* Mission\_test  
+* MotorMatrix\_dotriaconta\_octaquad\_x  
+* MotorMatrix\_fault\_tolerant\_hex  
+* MotorMatrix\_hexadeca\_octa  
+* MotorMatrix\_hexadeca\_octa\_cw\_x  
+* MotorMatrix\_setup  
+* Motor\_mixer\_dynamic\_setup  
+* Motors\_6DoF  
+* NMEA-decode  
+* OOP\_example  
+* RCIN\_test  
+* RC\_override  
+* RM3100\_self\_test  
+* SN-GCJA5-particle-sensor  
+* Safety\_States  
+* Serial\_Dump  
+* UART\_log  
+* active\_source\_set  
+* ahrs-print-angle-and-rates  
+* ahrs-print-home-and-origin  
+* ahrs-print-variances  
+* ahrs-set-home-to-vehicle-location  
+* ahrs-source-gps-optflow  
+* ahrs-source-gps-wheelencoders  
+* ahrs-source  
+* analog\_input\_and\_GPIO  
+* arming-check-batt-temp  
+* arming-check-wp1-takeoff  
+* aux\_cached  
+* battery\_internal\_resistance\_check  
+* benewakeH30\_can\_rangefinder  
+* button\_test  
+* camera-test  
+* cell\_balance\_check  
+* command\_int  
+* copter-circle-speed  
+* copter-fast-descent  
+* copter-fly-vertical-circle  
+* copter-nav-script-time  
+* copter-posoffset  
+* copter-wall-climber  
+* copter\_alt\_offset  
+* copter\_deploy  
+* copter\_pingpong  
+* copy\_userdata  
+* crosstrack\_restore  
+* crsf-menu  
+* easter-egg  
+* efi\_speed\_check  
+* esc\_rpm\_scale  
+* fault\_handling  
+* frsky\_battery  
+* frsky\_rpm  
+* frsky\_wp  
+* fw\_vtol\_failsafe  
+* gen\_control  
+* get\_notify\_RGB  
+* glide\_into\_wind  
+* gps\_synth  
+* hello\_world  
+* hello\_world\_display  
+* i2c\_scan  
+* jump\_tags\_calibrate\_agl  
+* jump\_tags\_into\_wind\_landing  
+* land\_hagl  
+* lidar\_control  
+* logging  
+* mag\_heading  
+* message\_interval  
+* mission-edit-demo  
+* mission-load  
+* mission-save  
+* mission\_spiral  
+* motor\_lost  
+* mount-test  
+* net\_test  
+* notch\_switch  
+* opendog\_demo  
+* orbit\_follow  
+* param\_add  
+* param\_get\_set\_test  
+* plane-callout-alt  
+* plane-doublets  
+* plane-wind-failsafe  
+* plane-wind-fs  
+* plane\_guided\_follow  
+* plane\_guided\_terrain  
+* protected\_call  
+* proximity\_test  
+* qnh\_alt  
+* quadruped  
+* rangefinder\_quality\_test  
+* rangefinder\_test  
+* readstring\_test  
+* relay\_control  
+* rgb\_led\_test  
+* rgb\_notify\_patterns  
+* rover-MinFixType  
+* rover-SaveTurns  
+* rover-TerrainDetector  
+* rover-motor-driver  
+* rover-set-steering-and-throttle  
+* rover-set-turn-rate  
+* serial\_test  
+* servo\_scan  
+* servo\_set\_get  
+* servo\_slew  
+* set-angle  
+* set-target-location  
+* set-target-velocity  
+* set\_CAMERA\_INFORMATION  
+* set\_target\_posvel\_circle  
+* ship\_vel\_match  
+* sim\_arming\_pos  
+* simple\_loop  
+* sitl\_standby\_sim  
+* smbus-check-cycles  
+* sub\_test\_synthetic\_seafloor  
+* temperature\_sensor  
+* terrain\_warning  
+* test\_get\_target\_location  
+* test\_load  
+* test\_script\_button  
+* test\_update\_target\_location  
+* trisonica-mini  
+* wp\_test  
+* wrap32\_test
+
+## **5\. Code Generation Constraints**
+
+The following constraints apply to all Lua code generation:
+
+### **5.1. Lua Version and Libraries**
+
+* **Lua Version:** All generated code must be compatible with Lua 5.3.  
+* **Allowed Functions:** Functions are limited to:  
+  * Standard Lua 5.3 language features.  
+  * Functions documented in the provided docs.lua file.  
+  * The standard io library for file operations.  
+  * The require() function, for loading modules from the script's local APM/scripts directory.
+
+### **5.2. Script Structure and Execution**
+
+* **No Threads:** Scripts must not create or manage their own threads. The ArduPilot environment handles script execution in a single-threaded manner.  
+* **Non-Blocking:** Scripts must not contain any blocking calls or long-running loops. Each execution of the script's main function should complete within a few milliseconds.  
+* **Update Function Pattern:** The required structure depends on the script's purpose:  
+  * **Applets (Continuous Tasks):** Must use a main update() function that performs its tasks and then reschedules itself to run again at a regular interval.  
+  * **One-Shot Scripts:** Can execute logic sequentially and terminate without an update() loop.  
+  * **Test Scripts:** Typically run a series of assert() checks and may optionally enter a simple loop to report a "tests passed" message.  
+* **Error Handling:** A protected\_wrapper using pcall() is mandatory for all applets. It is also required for any example or test script where a runtime error is possible (e.g., interacting with hardware, complex calculations). For very simple, infallible example scripts (like hello\_world.lua), the wrapper can be omitted for clarity.  
+  **Example protected\_wrapper:**  
+  function protected\_wrapper()  
+    local success, err \= pcall(update)  
+    if not success then  
+       gcs:send\_text(MAV\_SEVERITY.ERROR, "Internal Error: " .. err)  
+       \-- Reschedule with a longer delay after an error  
+       return protected\_wrapper, 1000  
+    end  
+    \-- Reschedule with the normal update interval  
+    return protected\_wrapper, 100  
+  end
+
+### **5.3. Initial Condition Checks**
+
+* **Use assert():** Scripts should use the assert() function at the beginning to validate essential preconditions. This ensures the script fails early and clearly if the environment is not correctly configured.  
+  **Example assert() check:**  
+  \-- Check that a required parameter is set  
+  local my\_param \= assert(param:get('MY\_PARAM'), 'MY\_PARAM not set')
+
+  \-- Check that the vehicle is the correct type  
+  assert(vehicle:get\_frame\_class() \== 1, 'Script requires a Quad frame')
+
+### **5.4. Deliverable Format**
+
+* **Assume Applet by Default:** Unless the user specifies otherwise, or the request is clearly for a simple example or test, the primary output should be a complete ArduPilot Applet.  
+* **Applet Format:** An applet must include two files:  
+  1. The Lua script file (.lua).  
+  2. A corresponding Markdown documentation file (.md) that explains the applet's purpose, parameters, and usage.  
+* **Example/Test Format:** If generating an example or test, follow the simpler structure observed in the repository (e.g., may omit headers, pcall wrappers, and documentation).
+
+### **5.5. Code Quality**
+
+* **Header Comments (Applets Only):** Every applet script must start with a comment block that briefly describes its purpose and functionality. The style should be concise and consistent with other applets in the ArduPilot repository. This is not required for examples or tests.  
+* **Use Enums for Constants:** Avoid using hardcoded integers ("magic numbers") for values like modes, states, or options. Instead, define a local table at the start of the script to act as an enumeration.  
+  **Example Enum:**  
+  local MAV\_SEVERITY \= {  
+      EMERGENCY \= 0,  
+      ALERT \= 1,  
+      CRITICAL \= 2,  
+      ERROR \= 3,  
+      WARNING \= 4,  
+      NOTICE \= 5,  
+      INFO \= 6,  
+      DEBUG \= 7  
+  }
+
+  \-- Usage:  
+  gcs:send\_text(MAV\_SEVERITY.INFO, "Script initialized")
+
+* **luacheck Compliance:** All generated Lua code must be free of errors and warnings when analyzed with the luacheck tool, using the standard ArduPilot configuration.
+
+### **5.6. Parameter Creation**
+
+* **Unique Table Key:** If a script adds new parameters, it must define a PARAM\_TABLE\_KEY. This key must be an integer between 1 and 200 and must be unique across all existing scripts in the ArduPilot repository. Do not reuse any of the following keys: 7, 8, 9, 10, 11, 12, 14, 15, 16, 31, 36, 37, 39, 40, 41, 42, 43, 44, 45, 48, 49, 70, 71, 72, 73, 75, 76, 78, 79, 80, 81, 82, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 102, 104, 106, 109, 110, 111, 117, 136, 138, 139, 193\.
+
+## **6\. Operational Constraints and Safety**
+
+When generating Lua scripts, the following constraints must be strictly adhered to, to ensure the safety and stability of the drone.
+
+* **Flight Mode Awareness:** Scripts must be aware of the vehicle's current flight mode. Actions should only be executed if the current flight mode is appropriate. For example, a script that controls the drone's position should only run in modes like GUIDED or AUTO.  
+* **Arming Status:** Scripts must always check if the vehicle is armed before executing any commands that could result in motor activation or movement.  
+* **Failsafe Integrity:** Scripts must not interfere with critical failsafe mechanisms, such as RC failsafe, battery failsafe, or geofence breaches.  
+* **Resource Limits:** Scripts should be mindful of the flight controller's processing and memory limits. Avoid long-running, blocking operations and excessive memory allocation. Use short, efficient functions and schedule them to run periodically.  
+* **Parameter Modification:** Scripts should exercise extreme caution when modifying parameters. Critical flight parameters should not be changed without a clear understanding of the consequences. If a script does modify parameters, it should restore them to their original values when the script is disabled or completes its task.  
+* **User Control Priority:** The pilot's RC input should always have the highest priority. Scripts should be designed to relinquish control immediately if the pilot provides any input on the sticks or changes the flight mode.
+
+## **7\. Best Practices for Prompting**
+
+When requesting a Lua script, provide clear and concise instructions. Referencing the available scripts in the repository can help to improve the clarity and specificity of your requests.
+
+**Prompting Template:**
+
+"Create a Lua script that \[**action**\] when \[**trigger**\]. The script should \[**specific behavior**\]."
+
+**Examples:**
+
+* "Create a Lua script that **makes the drone fly in a 20-meter square pattern** when **the pilot flips RC channel 7 high**. The script should **return the drone to its original position after completing the pattern**."  
+* "Create a Lua script that **logs the drone's altitude and battery voltage to a file every 5 seconds** when **the drone is armed**. The script should **stop logging when the drone is disarmed**."  
+* "Create a Lua script that **activates a servo connected to output 10** when **the drone's altitude is above 50 meters**. The script should **deactivate the servo when the altitude is below 50 meters**."
+
+## **8\. Example Use Cases**
+
+Here are some common drone behaviors with their corresponding text prompts and expected Lua script outputs.
+
+### **8.1. Simple Box Mission**
+
+* **Prompt:** "Create a Lua script that makes the drone fly in a 15-meter box pattern when the pilot flips RC channel 8 to high."  
+* **Expected Lua Script:**  
+  local BOX\_SIZE \= 15 \-- meters  
+  local original\_location \= nil
+
+  function update()  
+    if rc:get\_channel(8) \> 1800 then  
+      if original\_location \== nil then  
+        original\_location \= vehicle:get\_location()  
+        local target \= original\_location  
+        target:offset(BOX\_SIZE, 0\)  
+        vehicle:set\_target\_location(target)  
+      end  
+    else  
+      original\_location \= nil  
+    end  
+    return update, 100  
+  end
+
+  return update()
+
+### **8.2. Battery Failsafe**
+
+* **Prompt:** "Create a Lua script that triggers a Return-to-Launch (RTL) when the battery voltage drops below 14.8 volts."  
+* **Expected Lua Script:**  
+  local LOW\_VOLTAGE \= 14.8
+
+  function update()  
+    if battery:voltage(0) \< LOW\_VOLTAGE then  
+      vehicle:set\_mode("RTL")  
+    end  
+    return update, 1000  
+  end
+
+  return update()
+
+### **8.3. Landing Gear Control**
+
+* **Prompt:** "Create a Lua script that deploys the landing gear (servo on output 9\) when the drone's altitude is below 10 meters and retracts it above 10 meters."  
+* **Expected Lua Script:**  
+  local LANDING\_GEAR\_ALTITUDE \= 10 \-- meters  
+  local SERVO\_OUTPUT \= 9  
+  local DEPLOYED\_PWM \= 1900  
+  local RETRACTED\_PWM \= 1100
+
+  function update()  
+    local current\_alt \= vehicle:get\_location():alt()  
+    if current\_alt \< LANDING\_GEAR\_ALTITUDE then  
+      servo:set\_output(SERVO\_OUTPUT, DEPLOYED\_PWM)  
+    else  
+      servo:set\_output(SERVO\_OUTPUT, RETRACTED\_PWM)  
+    end  
+    return update, 500  
+  end
+
+  return update()  
