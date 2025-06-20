@@ -367,42 +367,38 @@ end
   1. The Lua script file (.lua).  
   2. A corresponding Markdown documentation file (.md) that explains the applet's purpose, parameters, and usage.  
 * **Example/Test Format:** If generating an example or test, follow the simpler structure observed in the repository (e.g., may omit headers, pcall wrappers, and documentation).  
-* **Autotest Generation:** For every new applet, offer to generate a corresponding SITL autotest. The autotest must load the *actual* applet file, not embed the code.  
+* **Autotest Generation:** For every new applet, offer to generate a corresponding SITL autotest. The autotest must load the *actual* applet file and follow a two-stage parameter setup.  
   **Annotated Autotest Example:**  
   \# Import the test suite for the relevant vehicle  
   from rover import AutoTestRover
 
   class MyNewTest(AutoTestRover):  
-      \# Name the test something descriptive  
       def MyNewAppletTest(self):  
-          \# Use a context manager to handle setup and teardown  
           self.start\_subtest("Test MyNewApplet functionality")  
           \# The context manager handles installing the real script file  
           self.install\_applet\_script\_context("my\_new\_applet.lua")
 
-          \# Set the script's parameters for the test scenario  
+          \# STAGE 1: Enable scripting and reboot.  
+          \# This allows the script's parameters to be created.  
           self.set\_parameters({  
               "SCR\_ENABLE": 1,  
+          })  
+          self.reboot\_sitl()
+
+          \# STAGE 2: Configure the script's parameters now that they exist.  
+          \# A second reboot is required for the script to use these new values.  
+          self.set\_parameters({  
               "MYAPL\_ENABLE": 1,  
-              \# Link an RC channel to the hardcoded Aux Function  
               "RC9\_OPTION": 300, \# Scripting1  
           })  
-          self.reboot\_sitl()  
+          self.reboot\_sitl()
+
+          \# The test can now proceed with the script fully configured  
           self.wait\_ready\_to\_arm()  
-          self.arm\_vehicle()
-
-          \# Listen for GCS messages from the script  
-          self.context\_collect('STATUSTEXT')
-
-          \# Manipulate RC inputs to trigger the script's logic  
-          self.set\_rc(9, 2000\)
-
-          \# Assert the expected outcome by waiting for the script's message  
-          self.wait\_statustext("MyNewApplet: State changed to HIGH", check\_context=True, timeout=5)
-
-          \# Return the vehicle to a known state  
-          self.set\_rc(9, 1000\)  
-          self.wait\_statustext("MyNewApplet: State changed to LOW", check\_context=True, timeout=5)  
+          self.arm\_vehicle()  
+          self.context\_collect('STATUSTEXT')  
+          self.set\_rc(9, 2000\)  
+          self.wait\_statustext("MyNewApplet: State changed to HIGH", check\_context=True, timeout=5)  
           self.disarm\_vehicle()
 
 ### **5.6. Code Quality**
