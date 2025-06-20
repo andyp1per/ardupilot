@@ -298,6 +298,7 @@ The following constraints apply to all Lua code generation:
 ### **5.1. Lua Version and Libraries**
 
 * **Lua Version:** All generated code must be compatible with Lua 5.3.  
+* **API Source of Truth:** The docs.lua file is the **definitive source of truth** for all ArduPilot-specific function signatures. In cases of discrepancy between examples and this documentation, the docs.lua file takes precedence.  
 * **Allowed Functions:** Functions are limited to:  
   * Standard Lua 5.3 language features.  
   * Functions documented in the provided docs.lua file.  
@@ -330,24 +331,88 @@ The following constraints apply to all Lua code generation:
 * **Use assert():** Scripts should use the assert() function at the beginning to validate essential preconditions. This ensures the script fails early and clearly if the environment is not correctly configured.  
   **Example assert() check:**  
   \-- Check that a required parameter is set  
-  local my\_param \= assert(param:get('MY\_PARAM'), 'MY\_PARAM not set')
+  local my\_param \= assert(param:get('MYAPL\_ENABLE'), 'MYAPL\_ENABLE not set')
 
   \-- Check that the vehicle is the correct type  
   assert(vehicle:get\_frame\_class() \== 1, 'Script requires a Quad frame')
 
-### **5.4. Deliverable Format**
+### **5.4. Default Applet Behavior**
+
+* **RC Switch Activation:** By default, all applets must be activatable via an RC switch using a hardcoded Auxiliary Function.  
+  1. The script should use a constant to define which scripting aux function to listen to (e.g., local SCRIPTING\_AUX\_FUNC \= 300).  
+  2. Use rc:get\_aux\_cached(SCRIPTING\_AUX\_FUNC) to read the switch position (0=low, 1=middle, 2=high).  
+  3. The documentation (.md file) must instruct the user to set their desired RCx\_OPTION to this number (e.g., "Set RC9\_OPTION to 300"). This removes a parameter from the script and simplifies user setup.
+
+**Example 3-Position Switch Logic:**\-- Define a constant for the auxiliary function  
+local SCRIPTING\_AUX\_FUNC \= 300 \-- Corresponds to "Scripting1"
+
+\-- In the script's main logic  
+function update()  
+    \-- Directly use the hardcoded aux function number  
+    local switch\_pos \= rc:get\_aux\_cached(SCRIPTING\_AUX\_FUNC)  
+    if switch\_pos \== 0 then  
+        \-- Handle LOW position  
+    elseif switch\_pos \== 1 then  
+        \-- Handle MIDDLE position  
+    elseif switch\_pos \== 2 then  
+        \-- Handle HIGH position  
+    end  
+    return update, 200 \-- reschedule  
+end
+
+### **5.5. Deliverable Format**
 
 * **Assume Applet by Default:** Unless the user specifies otherwise, or the request is clearly for a simple example or test, the primary output should be a complete ArduPilot Applet.  
 * **Applet Format:** An applet must include two files:  
   1. The Lua script file (.lua).  
   2. A corresponding Markdown documentation file (.md) that explains the applet's purpose, parameters, and usage.  
-* **Example/Test Format:** If generating an example or test, follow the simpler structure observed in the repository (e.g., may omit headers, pcall wrappers, and documentation).
+* **Example/Test Format:** If generating an example or test, follow the simpler structure observed in the repository (e.g., may omit headers, pcall wrappers, and documentation).  
+* **Autotest Generation:** For every new applet, offer to generate a corresponding SITL autotest. The autotest must load the *actual* applet file, not embed the code.  
+  **Annotated Autotest Example:**  
+  \# Import the test suite for the relevant vehicle  
+  from rover import AutoTestRover
 
-### **5.5. Code Quality**
+  class MyNewTest(AutoTestRover):  
+      \# Name the test something descriptive  
+      def MyNewAppletTest(self):  
+          \# Use a context manager to handle setup and teardown  
+          self.start\_subtest("Test MyNewApplet functionality")  
+          \# The context manager handles installing the real script file  
+          self.install\_applet\_script\_context("my\_new\_applet.lua")
+
+          \# Set the script's parameters for the test scenario  
+          self.set\_parameters({  
+              "SCR\_ENABLE": 1,  
+              "MYAPL\_ENABLE": 1,  
+              \# Link an RC channel to the hardcoded Aux Function  
+              "RC9\_OPTION": 300, \# Scripting1  
+          })  
+          self.reboot\_sitl()  
+          self.wait\_ready\_to\_arm()  
+          self.arm\_vehicle()
+
+          \# Listen for GCS messages from the script  
+          self.context\_collect('STATUSTEXT')
+
+          \# Manipulate RC inputs to trigger the script's logic  
+          self.set\_rc(9, 2000\)
+
+          \# Assert the expected outcome by waiting for the script's message  
+          self.wait\_statustext("MyNewApplet: State changed to HIGH", check\_context=True, timeout=5)
+
+          \# Return the vehicle to a known state  
+          self.set\_rc(9, 1000\)  
+          self.wait\_statustext("MyNewApplet: State changed to LOW", check\_context=True, timeout=5)  
+          self.disarm\_vehicle()
+
+### **5.6. Code Quality**
 
 * **Header Comments (Applets Only):** Every applet script must start with a comment block that briefly describes its purpose and functionality. The style should be concise and consistent with other applets in the ArduPilot repository. This is not required for examples or tests.  
+* **State Change Feedback:** Applets must provide brief, clear feedback via gcs:send\_text(severity, text) when significant state changes occur (e.g., activation, mode change, action completed). These messages are the primary mechanism for verification in autotests.  
 * **Use Enums for Constants:** Avoid using hardcoded integers ("magic numbers") for values like modes, states, or options. Instead, define a local table at the start of the script to act as an enumeration.  
-  **Example Enum:**  
+  **Example Enum for gcs:send\_text:**  
+  \-- Enum for MAV\_SEVERITY levels. Using this is mandatory  
+  \-- for gcs:send\_text() instead of hardcoded numbers.  
   local MAV\_SEVERITY \= {  
       EMERGENCY \= 0,  
       ALERT \= 1,  
@@ -364,9 +429,37 @@ The following constraints apply to all Lua code generation:
 
 * **luacheck Compliance:** All generated Lua code must be free of errors and warnings when analyzed with the luacheck tool, using the standard ArduPilot configuration.
 
-### **5.6. Parameter Creation**
+### **5.7. Parameter Creation**
 
-* **Unique Table Key:** If a script adds new parameters, it must define a PARAM\_TABLE\_KEY. This key must be an integer between 1 and 200 and must be unique across all existing scripts in the ArduPilot repository. Do not reuse any of the following keys: 7, 8, 9, 10, 11, 12, 14, 15, 16, 31, 36, 37, 39, 40, 41, 42, 43, 44, 45, 48, 49, 70, 71, 72, 73, 75, 76, 78, 79, 80, 81, 82, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 102, 104, 106, 109, 110, 111, 117, 136, 138, 139, 193\.
+* **Strict Syntax:** Parameter creation is a strict two-step process that must be followed exactly as documented in docs.lua.  
+  1. **Declare Table:** Use param:add\_table(table\_key, prefix, num\_params) to declare the parameter group. The prefix must **NOT** have a trailing underscore.  
+  2. **Add Parameters:** Iterate through a local table of parameter definitions and add each one using param:add\_param(table\_key, param\_num, name, default\_value).  
+* **Naming Convention:**  
+  * The prefix should be a short, uppercase string (e.g., MYAPL).  
+  * The name in the parameter definition should be the suffix (e.g., ENABLE).  
+  * The final parameter name seen by the user is PREFIX\_NAME (e.g., MYAPL\_ENABLE).  
+  * The total length of this full name **must not exceed 16 characters**.  
+  * The full name must be used when getting/setting the parameter in Lua and in autotests.  
+* **Unique Table Key:** The table\_key must be an integer between 1 and 200 and must be unique across all existing scripts in the ArduPilot repository. Do not reuse any of the following keys: 7, 8, 9, 10, 11, 12, 14, 15, 16, 31, 36, 37, 39, 40, 41, 42, 43, 44, 45, 48, 49, 70, 71, 72, 73, 75, 76, 78, 79, 80, 81, 82, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 102, 104, 106, 109, 110, 111, 117, 136, 138, 139, 193\.  
+  **Correct Parameter Creation Example:**  
+  \-- This local table is for script organization only.  
+  local parameter\_definitions \= {  
+      { name \= "ENABLE", default \= 0 },  
+      { name \= "VALUE", default \= 12.3 }  
+  }  
+  local PARAM\_TABLE\_KEY \= 101  
+  local PARAM\_TABLE\_PREFIX \= "MYAPL" \-- Note: NO trailing underscore
+
+  \-- Step 1: Declare the table with its key, prefix, and the number of parameters.  
+  assert(param:add\_table(PARAM\_TABLE\_KEY, PARAM\_TABLE\_PREFIX, \#parameter\_definitions), "Could not add param table")
+
+  \-- Step 2: Add each parameter individually using the correct signature.  
+  for i, p\_def in ipairs(parameter\_definitions) do  
+      assert(param:add\_param(PARAM\_TABLE\_KEY, i, p\_def.name, p\_def.default), "Could not add param "..p\_def.name)  
+  end
+
+  \-- Usage in code: use the full, concatenated name.  
+  local my\_val \= param:get('MYAPL\_VALUE')
 
 ## **6\. Operational Constraints and Safety**
 
@@ -405,7 +498,7 @@ Here are some common drone behaviors with their corresponding text prompts and e
   local original\_location \= nil
 
   function update()  
-    if rc:get\_channel(8) \> 1800 then  
+    if rc:get\_channel(8):get\_pwm() \> 1800 then  
       if original\_location \== nil then  
         original\_location \= vehicle:get\_location()  
         local target \= original\_location  
