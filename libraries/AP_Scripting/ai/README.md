@@ -1,19 +1,27 @@
 # **Project README: AI Drone Scripting**
 
-## **1\. Overview**
+## **Overview**
 
 This project uses a Large Language Model (LLM) to generate Lua scripts for the ArduPilot autopilot platform.
 
 The generation process is guided by a document called the **AI Playbook**. This playbook contains a set of rules and constraints that ensures the generated scripts are safe, testable, and consistent with ArduPilot development standards.
 
-## **2\. Key Components**
+## **Key Components**
 
 To generate a script, the LLM requires the following context:
 
 * **API Documentation (docs.lua):** This file is the definitive source for all ArduPilot-specific Lua function signatures and is the final authority on correct API usage.  
 * **Code Digest (digest.txt):** This file contains the AI Playbook and a snapshot of all existing scripts and tests within the ArduPilot repository. It provides the LLM with the necessary rules and real-world examples to create new scripts.
 
-## **3\. How to Use This System**
+## **Generating the digests**
+
+1. Install [gitingest](https://github.com/cyclotruc/gitingest)
+2. Run ```gitingest libraries/AP_Scripting -e '*.cpp' -e '*.c' -e '*.h' -e '*.txt'```
+3. LUA Digest will be in digest.txt
+4. Run ```gitingest Tools/autotest -i arducopter.py -i vehicle_test_suite.py```
+5. Autotest digest will be in digest.txt
+
+## **How to Use This System**
 
 The process for generating a script is as follows:
 
@@ -25,7 +33,7 @@ The process for generating a script is as follows:
    * A .md documentation file explaining how to set up and use the script.  
 4. **Generate Autotest:** For every applet, the LLM will offer to generate a corresponding SITL autotest file. This allows you to verify the script's functionality in a safe, simulated environment.
 
-## **4\. The leds\_on\_a\_switch Example**
+## **The leds\_on\_a\_switch Example**
 
 The development of the leds\_on\_a\_switch applet demonstrates the intended workflow. A simple prompt was used to generate an initial script. Through an iterative process of critiquing the output against the playbook's rules, the final script was refined to be:
 
