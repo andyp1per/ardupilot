@@ -1,4 +1,4 @@
-# **Project README: AI Drone Scripting**
+# **AI Drone Scripting**
 
 ## **Overview**
 
@@ -27,7 +27,7 @@ The process for generating a script is as follows:
 
 1. **Write a Prompt:** Clearly describe the required functionality. Focus on what the script should do, not the implementation details.  
    * *Example Prompt:* \"Create a script to control the brightness of my drone's NeoPixel LEDs using an RC switch. It should support three levels: off, medium, and high. Please look at AI_PAIR PROGRAMMER_PLAYBOOK.md: this is how I expect you to work through this problem.\" Note drawing attention explicitly to the playbook in the digest.
-2. **Provide Context:** Give the LLM your prompt and the digest.txt file. The digest contains the AI Playbook and all necessary examples for the LLM to learn from.  
+2. **Provide Context:** Give the LLM your prompt and the digest-lua.txt file. The digest contains the AI Playbook and all necessary examples for the LLM to learn from.  
 3. **Generate Artifacts:** The LLM will generate a complete ArduPilot Applet, which includes:  
    * A .lua script file.  
    * A .md documentation file explaining how to set up and use the script.  
