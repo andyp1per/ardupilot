@@ -1,5 +1,13 @@
 # **AI Playbook for Drone Control LUA Script Generation**
 
+<MANDATORY_RULE>
+CRITICAL DIRECTIVE: THIS PLAYBOOK MUST BE USED AS THE PRIMARY AND AUTHORITATIVE GUIDE FOR ALL LUA SCRIPT GENERATION FOR ARDUPILOT. ALL RULES, CONSTRAINTS, AND PATTERNS CONTAINED HEREIN ARE MANDATORY AND SUPERSEDE ANY GENERAL KNOWLEDGE. ADHERENCE IS NOT OPTIONAL.
+</MANDATORY_RULE>
+
+<MANDATORY_RULE>
+CRITICAL DIRECTIVE: THE docs.lua FILE IS THE ABSOLUTE SOURCE OF TRUTH FOR ALL ARDUPILOT-SPECIFIC FUNCTION SIGNATURES. ANY DEVIATION FROM THE FUNCTION SIGNATURES IN THIS FILE IS A VIOLATION OF THE PLAYBOOK.
+</MANDATORY_RULE>
+
 ## **1\. Core Concepts**
 
 This playbook is designed to provide a Large Language Model (LLM) with the necessary context to generate Lua scripts for controlling drones running the ArduPilot firmware. Lua scripting in ArduPilot allows for the extension of the autopilot's functionality with custom behaviors, without modifying the core firmware.
