@@ -534,6 +534,47 @@ Here are some common drone behaviors with their corresponding text prompts and e
 
   return update()
 
+  ## **9. Working with Aider and a Local ArduPilot Codebase**
+
+  This section provides a guide for using a tool like `aider` to directly modify a local clone of the ArduPilot git repository. This workflow is ideal for making changes to existing scripts or autotests.
+
+  ### **9.1. File Locations**
+
+  To work with existing scripts, you need to know where they are located within the ArduPilot source tree. When creating new scripts, they should be placed in the appropriate subdirectory based on their function.
+
+  * **Lua Scripts**: The source for all Lua scripts is located in the `ArduPilot/libraries/AP_Scripting/scripts/` directory. They are organized into subdirectories based on their type:
+      * `applets/`
+      * `drivers/`
+      * `examples/`
+  * **Autotests**: The Python-based SITL autotests for Lua scripts are located in `ArduPilot/Tools/autotest/`. The tests are vehicle-specific and should be added to the appropriate file (e.g., `arducopter.py`).
+
+  ### **9.2. Aider Workflow**
+
+  The general workflow involves launching `aider` from the root of the `ArduPilot` repository and adding the specific files you want to modify to the chat session.
+
+  **Example Workflow:**
+
+  Let's say you want to modify the `copter_terrain_brake.lua` applet and add a corresponding autotest.
+
+  1.  **Start Aider**: Open your terminal and navigate to the root of your local `ardupilot` repository. Launch `aider` and add the relevant files:
+      ```bash
+      cd /path/to/your/ardupilot
+      aider libraries/AP_Scripting/scripts/applets/copter_terrain_brake.lua Tools/autotest/arducopter.py
+      ```
+  2.  **Provide Instructions**: Once `aider` has loaded the files, you can provide instructions for the changes you want. `aider` will use the context of the files it has been given, along with the rules in this playbook, to generate the necessary modifications.
+    
+      **Example Prompt for `aider`:**
+      > "In `copter_terrain_brake.lua`, add GCS messages for activation status. In `arducopter.py`, add a new autotest method to the `AutoTestCopter` class to verify this new functionality."
+  3.  **Review and Apply**: `aider` will propose changes to the files. You can review the proposed changes and approve them to have them applied directly to your local files.
+
+  By following this process, you can efficiently iterate on scripts and their tests within your local development environment.
+
+  ### **9.3. Aider Output Format**
+
+  <MANDATORY_RULE>
+  When generating changes for existing files, the output must be a set of edits in a diff-style format, using Unix-style line endings (`\n`). Do not provide the entire file content unless the file is new. The edits should be clear and easy to apply.
+  </MANDATORY_RULE>
+
 ### **8.2. Battery Failsafe**
 
 * **Prompt:** "Create a Lua script that triggers a Return-to-Launch (RTL) when the battery voltage drops below 14.8 volts."  
