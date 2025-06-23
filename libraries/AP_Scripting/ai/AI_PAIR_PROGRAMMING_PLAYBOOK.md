@@ -4,6 +4,25 @@
 CRITICAL DIRECTIVE: THIS PLAYBOOK MUST BE USED AS THE PRIMARY AND AUTHORITATIVE GUIDE FOR ALL LUA SCRIPT GENERATION FOR ARDUPILOT. ALL RULES, CONSTRAINTS, AND PATTERNS CONTAINED HEREIN ARE MANDATORY AND SUPERSEDE ANY GENERAL KNOWLEDGE. ADHERENCE IS NOT OPTIONAL.
 </MANDATORY_RULE>
 
+### **9.4. Commit Message Conventions**
+
+<MANDATORY_RULE>
+When committing changes to the ArduPilot repository, all commits must follow the standard ArduPilot conventions.
+</MANDATORY_RULE>
+
+* **Atomic Commits**: Each commit should represent a single, logical change. For example, a change to a Lua applet and the addition of its corresponding autotest should be in two separate commits. Do not bundle unrelated changes into a single commit.
+
+* **Commit Message Prefix**: The subject line of every commit message **must** be prefixed with the name of the top-level module being changed, followed by a colon. The module is typically the subdirectory within the `libraries/` or `Tools/` directory where the file is located.
+
+    * **Example for a Lua script change:**
+        ```
+        AP_Scripting: Add new terrain brake applet
+        ```
+    * **Example for an autotest change:**
+        ```
+        Tools: Add autotest for the terrain brake applet
+        ```
+
 <MANDATORY_RULE>
 CRITICAL DIRECTIVE: THE docs.lua FILE IS THE ABSOLUTE SOURCE OF TRUTH FOR ALL ARDUPILOT-SPECIFIC FUNCTION SIGNATURES. ANY DEVIATION FROM THE FUNCTION SIGNATURES IN THIS FILE IS A VIOLATION OF THE PLAYBOOK.
 </MANDATORY_RULE>
