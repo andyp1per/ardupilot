@@ -1,24 +1,5 @@
-# **AI Playbook for Drone Control LUA Script Generation**
-
 <MANDATORY_RULE>
-When committing changes to the ArduPilot repository, all commits must follow the standard ArduPilot conventions.
-</MANDATORY_RULE>
-
-* **Atomic Commits**: Each commit should represent a single, logical change. For example, a change to a Lua applet and the addition of its corresponding autotest should be in two separate commits. Do not bundle unrelated changes into a single commit.
-
-* **Commit Message Prefix**: The subject line of every commit message **must** be prefixed with the name of the top-level module being changed, followed by a colon. The module is typically the subdirectory within the `libraries/` or `Tools/` directory where the file is located.
-
-    * **Example for a Lua script change:**
-        ```
-        AP_Scripting: Add new terrain brake applet
-        ```
-    * **Example for an autotest change:**
-        ```
-        Tools: Add autotest for the terrain brake applet
-        ```
-
-<MANDATORY_RULE>
-CRITICAL DIRECTIVE: THIS PLAYBOOK MUST BE USED AS THE PRIMARY AND AUTHORITATIVE GUIDE FOR ALL LUA SCRIPT GENERATION FOR ARDUPILOT. ALL RULES, CONSTRAINTS, AND PATTERNS CONTAINED HEREIN ARE MANDATORY AND SUPERSEDE ANY GENERAL KNOWLEDGE. ADHERENCE IS NOT OPTIONAL.
+CRITICAL DIRECTIVE: THE docs.lua FILE IS THE ABSOLUTE SOURCE OF TRUTH FOR ALL ARDUPILOT-SPECIFIC FUNCTION SIGNATURES. ANY DEVIATION FROM THE FUNCTION SIGNATURES IN THIS FILE IS A VIOLATION OF THE PLAYBOOK.
 </MANDATORY_RULE>
 
 <MANDATORY_RULE>
@@ -533,6 +514,74 @@ Here are some common drone behaviors with their corresponding text prompts and e
   end
 
   return update()
+
+## **9. Working with Aider and a Local ArduPilot Codebase**
+
+This section provides a guide for using a tool like `aider` to directly modify a local clone of the ArduPilot git repository. This workflow is ideal for making changes to existing scripts or autotests.
+
+### **9.1. File Locations**
+
+To work with existing scripts, you need to know where they are located within the ArduPilot source tree. When creating new scripts, they should be placed in the appropriate subdirectory based on their function.
+
+* **Lua Scripts**: The source for all Lua scripts is located in the `ArduPilot/libraries/AP_Scripting/scripts/` directory. They are organized into subdirectories based on their type:
+    * `applets/`
+    * `drivers/`
+    * `examples/`
+* **Autotests**: The Python-based SITL autotests for Lua scripts are located in `ArduPilot/Tools/autotest/`. The tests are vehicle-specific and should be added to the appropriate file (e.g., `arducopter.py`).
+
+### **9.2. Aider Workflow**
+
+The workflow is a two-step conversation between the primary LLM and the user operating `aider`. The primary LLM generates the code and instructions, and the user applies them via `aider`.
+
+**Example Workflow:**
+
+Let's say you want to modify the `copter_terrain_brake.lua` applet and add a corresponding autotest.
+
+1.  **LLM Requests Files**: The primary LLM first determines which files need to be modified and asks the user to add them to the `aider` chat.
+    
+    **LLM Output (Step 1):**
+    > "I have the requested changes. Please add the following files to the aider chat so I can provide the edits: `libraries/AP_Scripting/scripts/applets/copter_terrain_brake.lua` and `Tools/autotest/arducopter.py`."
+
+2.  **User Adds Files**: The user adds the requested files to their local `aider` instance.
+    ```bash
+    /add libraries/AP_Scripting/scripts/applets/copter_terrain_brake.lua Tools/autotest/arducopter.py
+    ```
+
+3.  **LLM Provides Edits**: Once the files are in the chat context, the primary LLM provides the edits in the required diff format.
+
+    **LLM Output (Step 2):**
+    > "Thank you. Please apply the following changes."
+    >
+    > (The `diff` blocks containing the code changes would follow here.)
+
+4.  **User Approves Edits**: The user then approves the changes within `aider` to apply them to the local files.
+
+By following this process, the primary LLM can handle the creative/logic-based tasks, while `aider` acts as a tool to execute the changes.
+
+### **9.3. Aider Output Format**
+
+<MANDATORY_RULE>
+When generating changes for existing files, the output must be a set of edits in a diff-style format, using Unix-style line endings (`\n`). Do not provide the entire file content unless the file is new. The edits should be clear and easy to apply.
+</MANDATORY_RULE>
+
+### **9.4. Commit Message Conventions**
+
+<MANDATORY_RULE>
+When committing changes to the ArduPilot repository, all commits must follow the standard ArduPilot conventions.
+</MANDATORY_RULE>
+
+* **Atomic Commits**: Each commit should represent a single, logical change. For example, a change to a Lua applet and the addition of its corresponding autotest should be in two separate commits. Do not bundle unrelated changes into a single commit.
+
+* **Commit Message Prefix**: The subject line of every commit message **must** be prefixed with the name of the top-level module being changed, followed by a colon. The module is typically the subdirectory within the `libraries/` or `Tools/` directory where the file is located.
+    
+    * **Example for a Lua script change:**
+        ```
+        AP_Scripting: Add new terrain brake applet
+        ```
+    * **Example for an autotest change:**
+        ```
+        Tools: Add autotest for the terrain brake applet
+        ```
 
   ## **9. Working with Aider and a Local ArduPilot Codebase**
 
