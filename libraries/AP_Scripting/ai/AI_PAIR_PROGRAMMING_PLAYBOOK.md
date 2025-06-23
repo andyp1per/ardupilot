@@ -579,11 +579,11 @@ This section provides a guide for using a tool like aider to directly modify a l
 
 To work with existing scripts, you need to know where they are located within the ArduPilot source tree. When creating new scripts, they should be placed in the appropriate subdirectory based on their function.
 
-* **Lua Scripts**: The source for all Lua scripts is located in the ArduPilot/libraries/AP\_Scripting/scripts/ directory. They are organized into subdirectories based on their type:  
+* **Lua Scripts**: The source for all Lua scripts is located in the libraries/AP\_Scripting/ directory. They are organized into subdirectories based on their type:  
   * applets/  
   * drivers/  
   * examples/  
-* **Autotests**: The Python-based SITL autotests for Lua scripts are located in ArduPilot/Tools/autotest/. The tests are vehicle-specific and should be added to the appropriate file (e.g., arducopter.py).
+* **Autotests**: The Python-based SITL autotests for Lua scripts are located in Tools/autotest/. The tests are vehicle-specific and should be added to the appropriate file (e.g., arducopter.py).
 
 ### 9.2. Aider Workflow
 
@@ -594,9 +594,9 @@ The workflow is a two-step conversation between the primary LLM and the user ope
 Let's say you want to modify the copter\_terrain\_brake.lua applet and add a corresponding autotest.
 
 1. **LLM Requests Files**: The primary LLM first determines which files need to be modified and asks the user to add them to the aider chat.  
-   **LLM Output (Step 1):**"I have the requested changes. Please add the following files to the aider chat so I can provide the edits: libraries/AP\_Scripting/scripts/applets/copter\_terrain\_brake.lua and Tools/autotest/arducopter.py."  
+   **LLM Output (Step 1):**"I have the requested changes. Please add the following files to the aider chat so I can provide the edits: libraries/AP\_Scripting/applets/copter\_terrain\_brake.lua and Tools/autotest/arducopter.py."  
 2. **User Adds Files**: The user adds the requested files to their local aider instance.  
-   /add libraries/AP\_Scripting/scripts/applets/copter\_terrain\_brake.lua Tools/autotest/arducopter.py
+   /add libraries/AP\_Scripting/applets/copter\_terrain\_brake.lua Tools/autotest/arducopter.py
 
 3. **LLM Provides Edits**: Once the files are in the chat context, the primary LLM provides the edits in the required diff format.  
    **LLM Output (Step 2):**"Thank you. Please apply the following changes."  
