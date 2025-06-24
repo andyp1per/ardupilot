@@ -4,6 +4,7 @@ Directory structure:
     ├── wscript
     ├── ai/
     │   ├── README.md
+    │   ├── AI_GIT_FORMAT_PATCH_PLAYBOOK.md
     │   └── AI_PAIR_PROGRAMMING_PLAYBOOK.md
     ├── applets/
     │   ├── README.md
@@ -49,6 +50,8 @@ Directory structure:
     │   ├── copter-deadreckon-home.md
     │   ├── copter-slung-payload.lua
     │   ├── copter-slung-payload.md
+    │   ├── copter_box_pattern.lua
+    │   ├── copter_box_pattern.md
     │   ├── copter_terrain_brake.lua
     │   ├── copter_terrain_brake.md
     │   ├── crsf-calibrate.lua
@@ -519,6 +522,91 @@ The development of the leds\_on\_a\_switch applet demonstrates the intended work
 * **Safe:** Includes error handling and fails gracefully if misconfigured.  
 * **Testable:** Provides GCS feedback for verification in an autotest.  
 * **User-Friendly:** Follows standard ArduPilot conventions and is accompanied by clear documentation.
+
+
+================================================
+File: ai/AI_GIT_FORMAT_PATCH_PLAYBOOK.md
+================================================
+# **Playbook: Generating git format-patch Diffs (v4)**
+
+## **1\. Objective**
+
+To generate a precise, machine-readable, and human-understandable diff for a file change, formatted in the style of a git format-patch output. This ensures the change is encapsulated with its metadata, the exact code modifications, and is structurally valid for use with Git tools.
+
+## **2\. Core Principles**
+
+* **Verifiability:** The original file content must be present in my context. I will **never** generate a patch based on an assumed or hallucinated file state.  
+* **Path Integrity:** The patch must target the correct file path. I will **never** generate a patch without knowing the file path. If the path is not provided, I must ask for it.  
+* **Hunk Integrity:** Each non-contiguous block of changes in a file **must** be represented by its own separate hunk (@@ ... @@ section). Combining separate changes into a single hunk will corrupt the patch.  
+* **Accuracy:** The diff must represent the change perfectly. Line numbers, context lines, additions, and deletions must be exact.  
+* **Format Purity:** The final output must be a raw text block, using Unix-style line endings (\\n), without any surrounding text or formatting.  
+* **Structural Integrity:** The patch must be complete, including the header, body, diff stats, and the mandatory patch terminator.
+
+## **3\. Anatomy of a format-patch File**
+
+A patch file contains a header, a commit message, diff statistics, one or more hunks, and a terminator.
+
+From \<commit\_hash\> \<timestamp\>  
+From: Gemini \<gemini@google.com\>  
+Date: \<current\_date\>  
+Subject: \[PATCH\] \<Short, imperative summary of the change\>
+
+\<Detailed explanation of the change.\>  
+\---  
+ path/to/the/file.ext | 4 \++--  
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff \--git a/path/to/the/file.ext b/path/to/the/file.ext  
+index \<hash1\>..\<hash2\> \<file\_mode\>  
+\--- a/path/to/the/file.ext  
+\+++ b/path/to/the/file.ext  
+@@ \-\<hunk\_1\_old\> \+\<hunk\_1\_new\> @@  
+ ... content for the first hunk ...  
+@@ \-\<hunk\_2\_old\> \+\<hunk\_2\_new\> @@  
+ ... content for the second hunk ...  
+\--   
+2.43.0
+
+## **4\. Step-by-Step Generation Process**
+
+### **Step 1: Gather and Verify Information**
+
+**Prerequisites:** Before proceeding, I must have:
+
+1. The complete **Original File Content**.  
+2. The full **File Path**.  
+3. The complete **Modified File Content**.
+
+If any information is missing, I will stop and request it.
+
+### **Step 2-4: Header, Message, and Stats**
+
+I will generate the metadata headers, the commit message, and the diff statistics as previously defined.
+
+### **Step 5: Generate the Technical Diff Hunks**
+
+This process is critical for ensuring patch integrity.
+
+1. **Write File Headers:** I will write the diff \--git, index, \--- a/..., and \+++ b/... lines.  
+2. **Identify All Change Blocks:** I will scan both files and identify every separate, non-contiguous block of added (+) and/or removed (-) lines.  
+3. **Iterate Through Each Block:** For each block of changes identified in the previous step, I will perform the following procedure to generate a distinct hunk:  
+   * **Establish Context:** I will select up to **3 lines** of unchanged code directly before the block and up to **3 lines** directly after it.  
+   * **Calculate Hunk Header (@@ ... @@):** I will precisely calculate the start line and line count for both the original (-old,old\_count) and new (+new,new\_count) versions of the file for this specific block.  
+   * **Assemble the Hunk:** I will print the calculated @@ ... @@ header, followed by the context and change lines for this block, each prefixed with the correct character ( , \-, or \+).  
+4. I will repeat this process until a separate, valid hunk has been generated for every block of changes.
+
+### **Step 6: Terminate the Patch**
+
+1. After the last line of the final hunk, I will add a line containing only \-- .  
+2. On the next line, I will add a placeholder Git version (e.g., 2.43.0).
+
+## **6\. Self-Correction Checklist**
+
+* \[ \] Do I have the full, original file content and path?  
+* \[ \] Is the metadata and commit message correctly formatted?  
+* \[ \] **(Crucial)** Have I identified all non-contiguous change blocks and created a separate, correctly calculated hunk for **each one**?  
+* \[ \] Does the patch end with the correct \-- \\n\<version\> terminator?  
+* \[ \] Is the final output a single, raw text block, ready for direct use?
 
 
 ================================================
@@ -1105,11 +1193,11 @@ This section provides a guide for using a tool like aider to directly modify a l
 
 To work with existing scripts, you need to know where they are located within the ArduPilot source tree. When creating new scripts, they should be placed in the appropriate subdirectory based on their function.
 
-* **Lua Scripts**: The source for all Lua scripts is located in the ArduPilot/libraries/AP\_Scripting/scripts/ directory. They are organized into subdirectories based on their type:  
+* **Lua Scripts**: The source for all Lua scripts is located in the libraries/AP\_Scripting/ directory. They are organized into subdirectories based on their type:  
   * applets/  
   * drivers/  
   * examples/  
-* **Autotests**: The Python-based SITL autotests for Lua scripts are located in ArduPilot/Tools/autotest/. The tests are vehicle-specific and should be added to the appropriate file (e.g., arducopter.py).
+* **Autotests**: The Python-based SITL autotests for Lua scripts are located in Tools/autotest/. The tests are vehicle-specific and should be added to the appropriate file (e.g., arducopter.py).
 
 ### 9.2. Aider Workflow
 
@@ -1120,9 +1208,9 @@ The workflow is a two-step conversation between the primary LLM and the user ope
 Let's say you want to modify the copter\_terrain\_brake.lua applet and add a corresponding autotest.
 
 1. **LLM Requests Files**: The primary LLM first determines which files need to be modified and asks the user to add them to the aider chat.  
-   **LLM Output (Step 1):**"I have the requested changes. Please add the following files to the aider chat so I can provide the edits: libraries/AP\_Scripting/scripts/applets/copter\_terrain\_brake.lua and Tools/autotest/arducopter.py."  
+   **LLM Output (Step 1):**"I have the requested changes. Please add the following files to the aider chat so I can provide the edits: libraries/AP\_Scripting/applets/copter\_terrain\_brake.lua and Tools/autotest/arducopter.py."  
 2. **User Adds Files**: The user adds the requested files to their local aider instance.  
-   /add libraries/AP\_Scripting/scripts/applets/copter\_terrain\_brake.lua Tools/autotest/arducopter.py
+   /add libraries/AP\_Scripting/applets/copter\_terrain\_brake.lua Tools/autotest/arducopter.py
 
 3. **LLM Provides Edits**: Once the files are in the chat context, the primary LLM provides the edits in the required diff format.  
    **LLM Output (Step 2):**"Thank you. Please apply the following changes."  
@@ -7227,6 +7315,194 @@ The script's algorithm is implemented as follows
 2. Calculate the payload's position vs the vehicle position
 3. Use a P controller to move the vehicle towards the payload to reduce oscillation
 4. Simultaneously the vehicle moves back towards the original location.  The speed depends upon the SLUP_WP_POS_P parameter
+
+
+
+================================================
+File: applets/copter_box_pattern.lua
+================================================
+--[[
+  Fly a box pattern of a configurable size.
+  The pattern is initiated when a RC switch is moved high.
+  The vehicle must be in Loiter or Guided mode.
+--]]
+
+local MAV_SEVERITY = {EMERGENCY=0, ALERT=1, CRITICAL=2, ERROR=3, WARNING=4, NOTICE=5, INFO=6, DEBUG=7}
+
+local PARAM_TABLE_KEY = 103  -- Unique key for this script's parameters
+local PARAM_TABLE_PREFIX = "BOX_"
+
+assert(param:add_table(PARAM_TABLE_KEY, PARAM_TABLE_PREFIX, 3), 'copter_box_pattern: could not add param table')
+
+--[[
+  // @Param: BOX_ENABLE
+  // @DisplayName: Box Pattern Enable
+  // @Description: Enable the box pattern script.
+  // @Values: 0:Disabled,1:Enabled
+  // @User: Standard
+--]]
+local BOX_ENABLE = assert(param:add_param(PARAM_TABLE_KEY, 1, 'ENABLE', 1), 'could not add BOX_ENABLE param')
+
+--[[
+  // @Param: BOX_SIZE
+  // @DisplayName: Box Pattern Size
+  // @Description: The size of one side of the box in meters.
+  // @Units: m
+  // @Range: 5 100
+  // @User: Standard
+--]]
+local BOX_SIZE = assert(param:add_param(PARAM_TABLE_KEY, 2, 'SIZE', 20), 'could not add BOX_SIZE param')
+
+--[[
+  // @Param: BOX_SPEED
+  // @DisplayName: Box Pattern Speed
+  // @Description: The speed at which to fly the pattern in meters/second. 0 means use WPNAV_SPEED.
+  // @Units: m/s
+  // @Range: 0 20
+  // @User: Standard
+--]]
+local BOX_SPEED = assert(param:add_param(PARAM_TABLE_KEY, 3, 'SPEED', 0), 'could not add BOX_SPEED param')
+
+
+local SCRIPTING_AUX_FUNC = 300 -- Corresponds to "Scripting1"
+
+local PATTERN_STATE = {
+    INACTIVE = 0,
+    STARTING = 1,
+    LEG_1 = 2, -- North
+    LEG_2 = 3, -- East
+    LEG_3 = 4, -- South
+    LEG_4 = 5, -- West
+    RETURNING = 6,
+    DONE = 7,
+}
+
+local pattern_state = PATTERN_STATE.INACTIVE
+local start_location = nil
+local leg_start_location = nil
+
+-- check preconditions for running the pattern
+function can_run()
+    if not arming:is_armed() or not vehicle:get_likely_flying() then
+        return false, "Disarmed or not flying"
+    end
+    local mode = vehicle:get_mode()
+    if mode ~= 5 and mode ~= 4 then -- 5=Loiter, 4=Guided
+        return false, "Requires Loiter or Guided mode"
+    end
+    if not ahrs:get_position() then
+        return false, "Position not available"
+    end
+    return true
+end
+
+-- function to set the target location
+function set_target(target_loc)
+    if vehicle:get_mode() ~= 4 then -- Guided
+        vehicle:set_mode(4)
+    end
+    -- set speed if specified
+    local speed = BOX_SPEED:get()
+    if speed > 0 then
+        vehicle:set_desired_speed(speed)
+    end
+    vehicle:set_target_location(target_loc)
+end
+
+function update()
+    if BOX_ENABLE:get() == 0 then
+        pattern_state = PATTERN_STATE.INACTIVE
+        return update, 1000  -- check again in a second
+    end
+
+    local switch_pos = rc:get_aux_cached(SCRIPTING_AUX_FUNC)
+
+    if switch_pos == 2 and pattern_state == PATTERN_STATE.INACTIVE then -- High position
+        local ok, reason = can_run()
+        if ok then
+            gcs:send_text(MAV_SEVERITY.INFO, "Box Pattern: Starting")
+            pattern_state = PATTERN_STATE.STARTING
+            start_location = ahrs:get_location()
+            leg_start_location = start_location:copy()
+        else
+            gcs:send_text(MAV_SEVERITY.WARNING, "Box Pattern: Cannot start: " .. reason)
+            return update, 500
+        end
+    elseif switch_pos ~= 2 and pattern_state ~= PATTERN_STATE.INACTIVE then
+        gcs:send_text(MAV_SEVERITY.INFO, "Box Pattern: Deactivated by switch")
+        pattern_state = PATTERN_STATE.INACTIVE
+        start_location = nil
+        leg_start_location = nil
+        if vehicle:get_mode() == 4 then -- Guided
+             vehicle:set_mode(5) -- Loiter
+        end
+        return update, 500
+    end
+
+    if pattern_state == PATTERN_STATE.INACTIVE then
+        return update, 200
+    end
+
+    local current_pos = ahrs:get_location()
+    if not current_pos then return update, 200 end
+
+    local distance_to_target = current_pos:get_distance(leg_start_location)
+    if (pattern_state > PATTERN_STATE.STARTING and distance_to_target < 2) or pattern_state == PATTERN_STATE.STARTING then
+        pattern_state = pattern_state + 1
+        if pattern_state > PATTERN_STATE.LEG_4 then
+            pattern_state = PATTERN_STATE.DONE
+        end
+        leg_start_location = current_pos:copy()
+        local target = start_location:copy()
+        local size = BOX_SIZE:get()
+        if pattern_state == PATTERN_STATE.LEG_1 then gcs:send_text(MAV_SEVERITY.INFO, "Box Leg 1"); target:offset(size, 0)
+        elseif pattern_state == PATTERN_STATE.LEG_2 then gcs:send_text(MAV_SEVERITY.INFO, "Box Leg 2"); target:offset(size, size)
+        elseif pattern_state == PATTERN_STATE.LEG_3 then gcs:send_text(MAV_SEVERITY.INFO, "Box Leg 3"); target:offset(0, size)
+        elseif pattern_state == PATTERN_STATE.LEG_4 then gcs:send_text(MAV_SEVERITY.INFO, "Box Leg 4"); target:offset(0, 0) -- Back to start
+        elseif pattern_state == PATTERN_STATE.DONE then
+             gcs:send_text(MAV_SEVERITY.INFO, "Box Pattern: Complete"); pattern_state = PATTERN_STATE.INACTIVE; return update, 500
+        end
+        set_target(target)
+    end
+
+    return update, 200 -- reschedule
+end
+
+
+
+================================================
+File: applets/copter_box_pattern.md
+================================================
+# Copter Box Pattern
+
+This script allows a copter to fly a square "box" pattern of a configurable size.
+
+## How to Use
+
+1.  Copy the  script to the  directory on your autopilot's SD card.
+2.  Enable Lua scripting by setting  to 1 and reboot the autopilot.
+3.  Configure the script's parameters.
+4.  Set up an RC switch to activate the script.
+
+## Parameters
+
+-   : Set to 1 to enable the script. Default is 1.
+-   : The size of each side of the box in meters. Default is 20m.
+-   : The speed (in m/s) to fly the pattern. A value of 0 will use the  parameter value. Default is 0.
+
+## RC Switch Setup
+
+To activate the script, you need to assign an RC switch to the "Scripting1" auxiliary function.
+
+-   Set an  parameter to 300, where  is the RC channel number of your desired switch.
+-   A 3-position switch is recommended.
+    -   **LOW**: The script is inactive.
+    -   **MIDDLE**: No action.
+    -   **HIGH**: The box pattern will start.
+
+## Operation
+
+The vehicle must be in **Loiter** or **Guided** mode and flying for the script to start. When the assigned RC switch is moved to the high position, the script will take control, switch to Guided mode (if not already in it), and fly a square pattern north, then east, then south, then west, returning to the starting point. The script provides feedback to the GCS at the start of each leg of the pattern. Moving the switch out of the high position will cancel the pattern.EOF
 
 
 
