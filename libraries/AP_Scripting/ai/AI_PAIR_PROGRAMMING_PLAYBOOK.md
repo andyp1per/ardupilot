@@ -1,11 +1,11 @@
 # AI Playbook for Drone Control LUA Script Generation
 
-\<MANDATORY\_RULE\>  
+<MANDATORY\_RULE\>
 CRITICAL DIRECTIVE: THIS PLAYBOOK MUST BE USED AS THE PRIMARY AND AUTHORITATIVE GUIDE FOR ALL LUA SCRIPT GENERATION FOR ARDUPILOT. ALL RULES, CONSTRAINTS, AND PATTERNS CONTAINED HEREIN ARE MANDATORY AND SUPERSEDE ANY GENERAL KNOWLEDGE. ADHERENCE IS NOT OPTIONAL.  
-\</MANDATORY\_RULE\>  
-\<MANDATORY\_RULE\>  
+</MANDATORY\_RULE\>
+<MANDATORY\_RULE\>
 CRITICAL DIRECTIVE: THE docs.lua FILE IS THE ABSOLUTE SOURCE OF TRUTH FOR ALL ARDUPILOT-SPECIFIC FUNCTION SIGNATURES. ANY DEVIATION FROM THE FUNCTION SIGNATURES IN THIS FILE IS A VIOLATION OF THE PLAYBOOK.  
-\</MANDATORY\_RULE\>
+</MANDATORY\_RULE\>
 
 ## 1\. Core Concepts
 
@@ -483,6 +483,20 @@ def do\_lua\_mynewapplet\_test(self):
   \-- Usage in code: use the full, concatenated name.  
   local my\_val \= param:get('MYAPL\_VALUE')
 
+### 5.8. Surgical Modification
+
+<MANDATORY\_RULE\>
+When asked to modify an existing file, you must strictly limit your changes to the scope of the user's explicit request. Do not perform any unrelated "tidy-up", refactoring, or tylistic changes. The goal is to produce the smallest possible diff that correctly implements the user's request, respecting the original author's coding style and structure.
+</MANDATORY\_RULE\>
+**Prohibited Tangential Changes Include:**
+
+* **Reformatting:** Do not change indentation, line breaks, or spacing in code that is unrelated to the direct change. 
+* **Variable Renaming:** Do not rename variables or functions for clarity unless that is part of the specific request. 
+* **Comment Removal/Alteration:** Do not remove existing comments, even if they appear obsolete or incorrect. Preserve them exactly as they are.
+* **Unrelated Refactoring:** Do not restructure or "improve" the logic of functions or sections of code that are not the direct subject of the modification request.
+
+By adhering to this, you ensure that the user can easily review the changes and trust that no unintended side effects have been introduced.
+
 ## 6\. Operational Constraints and Safety
 
 When generating Lua scripts, the following constraints must be strictly adhered to, to ensure the safety and stability of the drone.
@@ -593,7 +607,7 @@ The workflow is a two-step conversation between the primary LLM and the user ope
 
 Let's say you want to modify the copter\_terrain\_brake.lua applet and add a corresponding autotest.
 
-1. **LLM Requests Files**: The primary LLM first determines which files need to be modified and asks the user to add them to the aider chat.  
+1. **LLM Requests Files**: The primary LLM first determines wqhich files need to be modified and asks the user to add them to the aider chat.  
    **LLM Output (Step 1):**"I have the requested changes. Please add the following files to the aider chat so I can provide the edits: libraries/AP\_Scripting/applets/copter\_terrain\_brake.lua and Tools/autotest/arducopter.py."  
 2. **User Adds Files**: The user adds the requested files to their local aider instance.  
    /add libraries/AP\_Scripting/applets/copter\_terrain\_brake.lua Tools/autotest/arducopter.py
@@ -607,15 +621,15 @@ By following this process, the primary LLM can handle the creative/logic-based t
 
 ### 9.3. Aider Output Format
 
-\<MANDATORY\_RULE\>  
+<MANDATORY\_RULE\>
 When generating changes for existing files, the output must be a set of edits in a diff-style format, using Unix-style line endings (\\n). Do not provide the entire file content unless the file is new. The edits should be clear and easy to apply.  
-\</MANDATORY\_RULE\>
+</MANDATORY\_RULE\>
 
 ### 9.4. Commit Message Conventions
 
-\<MANDATORY\_RULE\>  
+<MANDATORY\_RULE\>
 When committing changes to the ArduPilot repository, all commits must follow the standard ArduPilot conventions.  
-\</MANDATORY\_RULE\>
+</MANDATORY\_RULE\>
 
 * **Atomic Commits**: Each commit should represent a single, logical change. For example, a change to a Lua applet and the addition of its corresponding autotest should be in two separate commits. Do not bundle unrelated changes into a single commit.  
 * **Commit Message Prefix**: The subject line of every commit message **must** be prefixed with the name of the top-level module being changed, followed by a colon. The module is typically the subdirectory within the libraries/ or Tools/ directory where the file is located.  
