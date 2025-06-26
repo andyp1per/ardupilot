@@ -10629,6 +10629,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "AFNCE_DEBUG": 2,
             "PSC_JERK_XY": 40,
             "RC7_OPTION": 300,      # Scripting
+            "RTL_LOIT_TIME": 5000,  # Loiter for 5s
         })
         self.change_mode("LOITER")
         self.set_rc(7, 2000)    # enable acro fencing
