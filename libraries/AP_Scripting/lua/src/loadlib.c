@@ -23,6 +23,9 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+#if defined(ARDUPILOT_BUILD)
+#include <AP_Scripting/AP_Scripting_config.h>
+#endif
 
 /*
 ** LUA_IGMARK is a mark to ignore all before it when building the
@@ -497,14 +500,21 @@ static int checkload (lua_State *L, int stat, const char *filename) {
 }
 
 
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+extern int load_encrypted_script(lua_State *L, const char *filename);
+#endif
+
 static int searcher_Lua (lua_State *L) {
   const char *filename;
   const char *name = luaL_checkstring(L, 1);
   filename = findfile(L, name, "path", LUA_LSUBSEP);
   if (filename == NULL) return 1;  /* module not found in this path */
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+  return checkload(L, (load_encrypted_script(L, filename) == LUA_OK), filename);
+#else
   return checkload(L, (luaL_loadfile(L, filename) == LUA_OK), filename);
+#endif
 }
-
 
 /*
 ** Try to find a load function for module 'modname' at file 'filename'.

@@ -1095,7 +1095,11 @@ int lua_get_current_env_ref()
 const char* lua_get_modules_path()
 {
 #define LUA_PATH_ROMFS "@ROMFS/scripts/modules/?.lua;" "@ROMFS/scripts/modules/?/init.lua"
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+#define LUA_PATH_SCRIPTS LUA_LDIR"?.lua;"  LUA_LDIR"?.lxa;" LUA_LDIR"?/init.lua"
+#else
 #define LUA_PATH_SCRIPTS LUA_LDIR"?.lua;"  LUA_LDIR"?/init.lua"
+#endif
 
     uint16_t dir_disable = AP_Scripting::get_singleton()->get_disabled_dir();
     dir_disable &= uint16_t(AP_Scripting::SCR_DIR::SCRIPTS) | uint16_t(AP_Scripting::SCR_DIR::ROMFS);

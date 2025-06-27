@@ -192,86 +192,86 @@ void lua_scripts::load_script_error(lua_State *L, char *filename, int error)
     }
 }
 
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+int load_encrypted_script(lua_State *L, char *filename) {
+    int error = 0;
+    int fd = AP::FS().open(filename, O_RDONLY);
+
+    if (fd < 0) {
+        return LUA_ERRFILE;
+    }
+
+    // Get the size of the file
+    AP_Filesystem::stat_t st;
+    if (!AP::FS().stat(filename, st)) {
+        AP::FS().close(fd);
+        return LUA_ERRFILE;
+    }
+
+    off_t filesize = st.size - 46;
+
+    // Allocate buffer
+    char *buffer = (char *)malloc(filesize);
+    if (buffer == nullptr) {
+        AP::FS().close(fd);
+        return LUA_ERRMEM;
+    }
+
+    char header[6];
+    if (AP::FS().read(fd, header, 6) != 6 || strncmp(header, "LUA1.0", 6) != 0) {
+        free(buffer);
+        AP::FS().close(fd);
+        return LUA_ERRFILE;
+    }
+
+    uint8_t mac[16] = {};
+    if (AP::FS().read(fd, mac, 16) != 16) {
+        free(buffer);
+        AP::FS().close(fd);
+        return LUA_ERRFILE;
+    }
+
+    uint8_t nonce[24] = {};
+    if (AP::FS().read(fd, nonce, 24) != 24) {
+        free(buffer);
+        AP::FS().close(fd);
+        return LUA_ERRFILE;
+    }
+
+    // Read into buffer
+    ssize_t total_read = 0;
+    while (total_read < filesize) {
+        ssize_t bytes_read = AP::FS().read(fd, buffer + total_read, filesize - total_read);
+        if (bytes_read < 0 ) {
+            free(buffer);
+            AP::FS().close(fd);
+            return LUA_ERRFILE;
+        }
+        if (bytes_read == 0) {
+            break; // EOF
+        }
+        total_read += bytes_read;
+    }
+    AP::FS().close(fd);
+#if AP_SCRIPTING_ENCRYPTION_UUID_ENABLED
+    lua_scripts::create_nonce(nonce, filename);
+#endif
+    if (!lua_scripts::decrypt_script(buffer, mac, nonce, filesize)) {
+        return LUA_ERRFILE;
+    }
+
+    error = luaL_loadbuffer(L, buffer, filesize, buffer);
+
+    free(buffer);
+    return error;
+}
+#endif
+
 lua_scripts::script_info *lua_scripts::load_script(lua_State *L, char *filename) {
     int error = 0;
 #if AP_SCRIPTING_ENCRYPTION_ENABLED
     if (!strncmp(&filename[strlen(filename)-4], ".lxa", 4)) {    // encrypted script
-        int fd = AP::FS().open(filename, O_RDONLY);
-
-        if (fd < 0) {
-            load_script_error(L, filename, LUA_ERRFILE);
-            return nullptr;
-        }
-
-        // Get the size of the file
-        AP_Filesystem::stat_t st;
-        if (!AP::FS().stat(filename, st)) {
-            AP::FS().close(fd);
-            load_script_error(L, filename, LUA_ERRFILE);
-            return nullptr;
-        }
-
-        off_t filesize = st.size - 46;
-
-        // Allocate buffer
-        char *buffer = (char *)malloc(filesize);
-        if (buffer == nullptr) {
-            AP::FS().close(fd);
-            load_script_error(L, filename, LUA_ERRMEM);
-            return nullptr;
-        }
-
-        char header[6];
-        if (AP::FS().read(fd, header, 6) != 6 || strncmp(header, "LUA1.0", 6) != 0) {
-            free(buffer);
-            AP::FS().close(fd);
-            load_script_error(L, filename, LUA_ERRFILE);
-            return nullptr;
-        }
-
-        uint8_t mac[16] = {};
-        if (AP::FS().read(fd, mac, 16) != 16) {
-            free(buffer);
-            AP::FS().close(fd);
-            load_script_error(L, filename, LUA_ERRFILE);
-            return nullptr;
-        }
-
-        uint8_t nonce[24] = {};
-        if (AP::FS().read(fd, nonce, 24) != 24) {
-            free(buffer);
-            AP::FS().close(fd);
-            load_script_error(L, filename, LUA_ERRFILE);
-            return nullptr;
-        }
-
-        // Read into buffer
-        ssize_t total_read = 0;
-        while (total_read < filesize) {
-            ssize_t bytes_read = AP::FS().read(fd, buffer + total_read, filesize - total_read);
-            if (bytes_read < 0 ) {
-                free(buffer);
-                AP::FS().close(fd);
-                load_script_error(L, filename, LUA_ERRFILE);
-                return nullptr;
-            }
-            if (bytes_read == 0) {
-                break; // EOF
-            }
-            total_read += bytes_read;
-        }
-        AP::FS().close(fd);
-#if AP_SCRIPTING_ENCRYPTION_UUID_ENABLED
-        create_nonce(nonce, filename);
-#endif
-        if (!decrypt_script(buffer, mac, nonce, filesize)) {
-            load_script_error(L, filename, LUA_ERRFILE);
-            return nullptr;
-        }
-
-        error = luaL_loadbuffer(L, buffer, filesize, buffer);
-
-        free(buffer);
+        error = load_encrypted_script(L, filename);
     } else
 #endif
     {

@@ -104,12 +104,6 @@ private:
     // helper for print and log of runtime stats
     void update_stats(const char *name, uint32_t run_time, int total_mem, int run_mem);
 
-#if AP_SCRIPTING_ENCRYPTION_ENABLED
-    bool decrypt_script(char* script, const uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen);
-    bool encrypt_script(char* script, uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen);
-    void create_nonce(uint8_t nonce[24], const char* scriptname);
-#endif
-
     // must be static for use in atpanic
     static void print_error(MAV_SEVERITY severity);
     static char *error_msg_buf;
@@ -123,6 +117,12 @@ private:
     static HAL_Semaphore crc_sem;
 
 public:
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+    static bool decrypt_script(char* script, const uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen);
+    static bool encrypt_script(char* script, uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen);
+    static void create_nonce(uint8_t nonce[24], const char* scriptname);
+#endif
+
     // must be static for use in atpanic, public to allow bindings to issue none fatal warnings
     static void set_and_print_new_error_message(MAV_SEVERITY severity, const char *fmt, ...) FMT_PRINTF(2,3);
 
@@ -137,5 +137,9 @@ public:
     static uint32_t get_running_checksum();
 
 };
+
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+extern "C" int load_encrypted_script(lua_State *L, char *filename);
+#endif
 
 #endif  // AP_SCRIPTING_ENABLED
