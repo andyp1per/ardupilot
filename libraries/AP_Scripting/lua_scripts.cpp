@@ -257,10 +257,11 @@ int load_encrypted_script(lua_State *L, char *filename) {
     lua_scripts::create_nonce(nonce, filename);
 #endif
     if (!lua_scripts::decrypt_script(buffer, mac, nonce, filesize)) {
+        free(buffer);
         return LUA_ERRFILE;
     }
 
-    error = luaL_loadbuffer(L, buffer, filesize, buffer);
+    error = luaL_loadbuffer(L, buffer, filesize, filename);
 
     free(buffer);
     return error;
