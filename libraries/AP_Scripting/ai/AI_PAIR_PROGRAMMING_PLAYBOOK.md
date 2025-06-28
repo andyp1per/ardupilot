@@ -29,6 +29,11 @@ For a Lua script to be used, the drone's flight controller must be configured to
 
 This section details the most common functions and libraries available in the ArduPilot Lua API.
 
+For a definitive list of all available function signatures, the `docs.lua` file is the absolute source of truth.
+
+For a task-oriented guide on how to use these functions to accomplish common drone behaviors (e.g., controlling movement, reading sensors, managing missions), please refer to the **AI_VEHICLE_CONTROL_PLAYBOOK.md**. The `AI_VEHICLE_CONTROL_PLAYBOOK.md` organizes the API by function rather than by library.
+
+
 ### 3.1. Vehicle Control
 
 * **vehicle:get\_location()**: Returns a Location object with the current position of the drone.  
@@ -345,12 +350,13 @@ The following constraints apply to all Lua code generation:
 
 ### 5.4. Default Applet Behavior
 
-* **RC Switch Activation:** By default, all applets must be activatable via an RC switch using a hardcoded Auxiliary Function.  
-  1. The script should use a constant to define which scripting aux function to listen to (e.g., local SCRIPTING\_AUX\_FUNC \= 300).  
-  2. Use rc:get\_aux\_cached(SCRIPTING\_AUX\_FUNC) to read the switch position (0=low, 1=middle, 2=high).  
-  3. The documentation (.md file) must instruct the user to set their desired RCx\_OPTION to this number (e.g., "Set RC9\_OPTION to 300"). This removes a parameter from the script and simplifies user setup.
+  1. **Activation:** By default, all applets **must** be activatable via an RC switch.
+  2. **RC Function Constant:** The Auxiliary Function number for the switch **must** be defined as a local constant in the script (e.g., `local SCRIPTING_AUX_FUNC = 300`). It **must not** be a user-configurable script parameter (e.g., `FIG8_LAND_SWITCH`). This simplifies user setup.
+  3. Use rc:get\_aux\_cached(SCRIPTING\_AUX\_FUNC) to read the switch position (0=low, 1=middle, 2=high).  
+  4. The documentation (.md file) must instruct the user to set their desired RCx\_OPTION to this number (e.g., "Set RC9\_OPTION to 300"). This removes a parameter from the script and simplifies user setup.
+  5. **User Prompt Precedence:** If the user's prompt explicitly requests an activation method that differs from this default (e.g., "take off automatically on arm"), the user's request shall take precedence. However, the generated `.md` documentation **must** include a section explicitly noting this deviation from the standard applet pattern and explaining the custom activation logic.
 
-**Example 3-Position Switch Logic:**
+**Example 3-Position Switch Logic (for `.lua` file):**
 
 \-- Define a constant for the auxiliary function  
 local SCRIPTING\_AUX\_FUNC \= 300 \-- Corresponds to "Scripting1"
@@ -638,3 +644,24 @@ When committing changes to the ArduPilot repository, all commits must follow the
 
   * **Example for an autotest change:**  
     Tools: Add autotest for the terrain brake applet  
+
+
+## 10. Final Deliverable Checklist
+
+Before concluding a script generation task, the following checklist **must** be completed. All three components are required for a complete Applet deliverable.
+
+1.  **[ ] Lua Script File (`.lua`):**
+    * Does the script include a descriptive header comment?
+    * Does it include all mandatory precondition `assert()` checks (Rule 5.3)?
+    * Does it provide GCS feedback for significant state changes?
+    * Is it free of `luacheck` errors and warnings?
+
+2.  **[ ] Markdown Documentation File (`.md`):**
+    * Has a complete `.md` file been generated?
+    * Does it clearly explain the script's purpose?
+    * Does it document all script-specific parameters (`*_ENABLE`, `*_RADIUS`, etc.)?
+    * Does it provide clear setup instructions, including the required `RCx_OPTION` for the activation switch?
+
+3.  **[ ] SITL Autotest Offer:**
+    * Have you explicitly offered to generate a SITL autotest to verify the script's functionality?
+    * Are you prepared to add the test as a new method to the appropriate vehicle test suite (e.g., `arducopter.py`) as per the playbook rules?
