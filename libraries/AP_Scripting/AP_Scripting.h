@@ -93,7 +93,13 @@ public:
         SCRIPTS = 1 << 1,
     };
     uint16_t get_disabled_dir() { return uint16_t(_dir_disable.get());}
-
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+    enum EncryptOptions {
+        None = 0,
+        EncryptOnLoad = 1<<0
+    };
+    bool has_encrypt_option(EncryptOptions opts) { return (uint8_t(_encrypt_options.get()) & opts) != 0;}
+#endif
     // the number of and storage for i2c devices
     uint8_t num_i2c_devices;
     AP_HAL::I2CDevice *_i2c_dev[SCRIPTING_MAX_NUM_I2C_DEVICE];
@@ -192,7 +198,9 @@ private:
     AP_Int16 _dir_disable;
     AP_Int32 _required_loaded_checksum;
     AP_Int32 _required_running_checksum;
-
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+    AP_Int8 _encrypt_options;
+#endif
     AP_Enum<ThreadPriority> _thd_priority;
 
     bool option_is_set(DebugOption option) const {

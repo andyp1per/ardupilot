@@ -759,7 +759,9 @@ void lua_scripts::run(void) {
     bool loaded = false;
     if ((dir_disable & uint16_t(AP_Scripting::SCR_DIR::SCRIPTS)) == 0) {
 #if AP_SCRIPTING_ENCRYPTION_ENABLED
-        encrypt_all_scripts_in_dir(SCRIPTING_DIRECTORY);
+        if (AP_Scripting::get_singleton()->has_encrypt_option(AP_Scripting::EncryptOptions::EncryptOnLoad)) {
+            encrypt_all_scripts_in_dir(SCRIPTING_DIRECTORY);
+        }
 #endif
         load_all_scripts_in_dir(L, SCRIPTING_DIRECTORY);
         loaded = true;
