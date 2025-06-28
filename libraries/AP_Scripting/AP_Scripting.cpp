@@ -162,6 +162,14 @@ const AP_Param::GroupInfo AP_Scripting::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("THD_PRIORITY", 14, AP_Scripting, _thd_priority, uint8_t(ThreadPriority::NORMAL)),
 
+#if AP_SCRIPTING_ENCRYPTION_ENABLED
+    // @Param: LD_ENCRYPT
+    // @DisplayName: Encrypt scripts on loading
+    // @Description: Encrypt un-encrypted scripts on loading.
+    // @User: Advanced
+    AP_GROUPINFO("LD_ENCRYPT", 19, AP_Scripting, _encrypt_options, 0),
+#endif
+
 #if AP_SCRIPTING_SERIALDEVICE_ENABLED
     // @Param: SDEV_EN
     // @DisplayName: Scripting serial device enable
