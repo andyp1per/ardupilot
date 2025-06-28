@@ -72,6 +72,35 @@ These functions provide more granular control by allowing you to specify positio
 | **vehicle:set\_target\_posvel\_NED(...)** | Sets a target position and a target velocity. Use this to command the vehicle to arrive at a point with a specific speed and direction. |
 | **vehicle:set\_target\_posvelaccel\_NED(...)** | Sets a target position, velocity, and acceleration. This provides the most complete control over the trajectory for advanced applications. |
 
+#### **Controlling Yaw**
+
+When using position or angle control methods, you can specify how the vehicle's yaw (heading) should behave.
+
+| Control Type | Description |
+| :---- | :---- |
+| **Set Point Yaw** | Command a specific compass heading (e.g., 90 for East). The yaw\_relative flag determines if this is an absolute heading or relative to the vehicle's current direction. |
+| **Rate-Controlled Yaw** | Command a specific rate of turn in degrees per second. The vehicle will continue to turn at this rate until a new command is issued. |
+
+#### **Braking, Landing, and Other Actions**
+
+These are fundamental actions for managing the flight lifecycle.
+
+| Function/Method | Description |
+| :---- | :---- |
+| **Brake / Hold Position** | To stop the vehicle and hold its current position, send a zero-velocity command: vehicle:set\_target\_velocity\_NED(Vector3f()). |
+| **Land** | The standard procedure to land is to command a mode change to the LAND flight mode using vehicle:set\_mode(). The vehicle will then perform an autonomous landing at its current location. |
+| vehicle:start\_takeoff(altitude) | Initiates an autonomous takeoff to a specified altitude. |
+
+#### **Querying the Current Target**
+
+These functions allow your script to be aware of the vehicle's current navigation objective.
+
+| Function/Method | Description |
+| :---- | :---- |
+| vehicle:get\_target\_location() | Gets the geographic location the vehicle is currently flying towards. |
+| vehicle:get\_wp\_distance\_m() | Gets the distance in meters to the current waypoint target. |
+| vehicle:get\_wp\_bearing\_deg() | Gets the bearing in degrees to the current waypoint target. |
+
 #### **Advanced Control & Tuning**
 
 The behavior of Guided mode can be modified with the GUID\_OPTIONS parameter. This is a bitmask, so you can combine options by adding their values together.
