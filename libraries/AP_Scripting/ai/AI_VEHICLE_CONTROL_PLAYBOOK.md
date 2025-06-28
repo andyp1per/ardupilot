@@ -70,7 +70,7 @@ These functions provide more granular control by allowing you to specify positio
 | :---- | :---- |
 | **vehicle:set\_target\_velaccel\_NED(...)** | Sets a target velocity and a feed-forward acceleration. Use this to command a smooth change in velocity. |
 | **vehicle:set\_target\_posvel\_NED(...)** | Sets a target position and a target velocity. Use this to command the vehicle to arrive at a point with a specific speed and direction. |
-| **vehicle:set\_target\_posvelaccel\_NED(...)** | Sets a target position, velocity, and acceleration. This provides the most complete control over the trajectory for advanced applications. |
+| **vehicle:set\_target\_posvelaccel\_NED(...)** | Sets a target position, velocity, and acceleration. This provides the most complete control over the trajectory for advanced applications. The postion, velocity and acceleration define the instantaneous state of the target trajectory. This is interpolated forward in time until the next update is provided.The position controller will adjust it's own target trajectory to match.
 
 #### **Controlling Yaw**
 
