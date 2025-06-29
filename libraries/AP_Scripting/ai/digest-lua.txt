@@ -941,27 +941,31 @@ The following constraints apply to all Lua code generation:
   * **One-Shot Scripts:** Can execute logic sequentially and terminate without an update() loop.  
   * **Test Scripts:** Typically run a series of assert() checks and may optionally enter a simple loop to report a "tests passed" message.  
 * **Error Handling:** A protected\_wrapper using pcall() is mandatory for all applets. It is also required for any example or test script where a runtime error is possible (e.g., interacting with hardware, complex calculations). For very simple, infallible example scripts (like hello\_world.lua), the wrapper can be omitted for clarity.  
-  **Example protected\_wrapper:**  
-  function protected\_wrapper()  
-    local success, err \= pcall(update)  
-    if not success then  
-       gcs:send\_text(MAV\_SEVERITY.ERROR, "Internal Error: " .. err)  
-       \-- Reschedule with a longer delay after an error  
-       return protected\_wrapper, 1000  
-    end  
-    \-- Reschedule with the normal update interval  
-    return protected\_wrapper, 100  
+  **Example protected\_wrapper:**
+```lua
+  function protected_wrapper()
+    local success, err = pcall(update)
+    if not success then
+       gcs:send_text(MAV\_SEVERITY.ERROR, "Internal Error: " .. err)
+       -- Reschedule with a longer delay after an error
+       return protected_wrapper, 1000
+    end
+    -- Reschedule with the normal update interval
+    return protected_wrapper, 100
   end
+```
 
 ### 5.3. Initial Condition Checks
 
 * **Use assert():** Scripts should use the assert() function at the beginning to validate essential preconditions. This ensures the script fails early and clearly if the environment is not correctly configured.  
   **Example assert() check:**  
-  \-- Check that a required parameter is set  
-  local my\_param \= assert(param:get('MYAPL\_ENABLE'), 'MYAPL\_ENABLE not set')
+```lua
+  -- Check that a required parameter is set
+  local my_param = assert(param:get('MYAPL_ENABLE'), 'MYAPL_ENABLE not set')
 
-  \-- Check that the vehicle is the correct type  
-  assert(vehicle:get\_frame\_class() \== 1, 'Script requires a Quad frame')
+  -- Check that the vehicle is the correct type
+  assert(vehicle:get_frame_class() == 1, 'Script requires a Quad frame')
+```
 
 ### 5.4. Default Applet Behavior
 
@@ -973,22 +977,47 @@ The following constraints apply to all Lua code generation:
 
 **Example 3-Position Switch Logic (for `.lua` file):**
 
-\-- Define a constant for the auxiliary function  
-local SCRIPTING\_AUX\_FUNC \= 300 \-- Corresponds to "Scripting1"
+```lua
+-- Define a constant for the auxiliary function
+local SCRIPTING_AUX_FUNC = 300 -- Corresponds to "Scripting1"
 
-\-- In the script's main logic  
-function update()  
-    \-- Directly use the hardcoded aux function number  
-    local switch\_pos \= rc:get\_aux\_cached(SCRIPTING\_AUX\_FUNC)  
-    if switch\_pos \== 0 then  
-        \-- Handle LOW position  
-    elseif switch\_pos \== 1 then  
-        \-- Handle MIDDLE position  
-    elseif switch\_pos \== 2 then  
-        \-- Handle HIGH position  
-    end  
-    return update, 200 \-- reschedule  
+-- In the script's main logic
+function update()
+    -- Directly use the hardcoded aux function number
+    local switch\_pos = rc:get_aux_cached(SCRIPTING_AUX_FUNC)
+    if switch_pos == 0 then
+        -- Handle LOW position
+    elseif switch_pos == 1 then
+        -- Handle MIDDLE position
+    elseif switch_pos == 2 then
+        -- Handle HIGH position
+    end
+    return update, 200 -- reschedule
 end
+```
+
+### **5.4.1 Applet Configuration Mandate**
+
+**CRITICAL DIRECTIVE: ALL APPLET SCRIPTS MUST EXPOSE USER-CONFIGURABLE VALUES AS SCRIPT PARAMETERS.** Any value that a user might reasonably want to tune (e.g., distances, speeds, rates, durations, thresholds, modes of operation) **must not** be defined as a hard-coded local variable. Instead, it **must** be created using the `param:add_table()` and `param:add_param()` functions as detailed in section 5.7. This is a non-negotiable requirement for a script to be considered a complete "Applet".
+
+**Violation Example (Incorrect):**
+
+```lua
+-- A local variable is used for a key configuration value.
+local RADIUS = 20
+```
+**Compliance Example (Correct):**
+
+```lua
+-- The radius is exposed as a proper, user-configurable parameter.
+local PARAM_TABLE_KEY = 105
+local PARAM_TABLE_PREFIX = "FIG8_"
+assert(param:add_table(PARAM_TABLE_KEY, PARAM_TABLE_PREFIX, 1), '...')
+
+local FIG8_RADIUS = assert(param:add_param(PARAM_TABLE_KEY, 1, 'RADIUS', 20), '...')
+```
+
+This ensures that all generated applets are immediately usable and configurable by the end-user through standard Ground Control Station software, which is a primary goal of this system.
 
 ### 5.5. Deliverable Format and Autotest Generation
 
@@ -1053,22 +1082,24 @@ def do\_lua\_mynewapplet\_test(self):
 * **Header Comments (Applets Only):** Every applet script must start with a comment block that briefly describes its purpose and functionality. The style should be concise and consistent with other applets in the ArduPilot repository. This is not required for examples or tests.  
 * **State Change Feedback:** Applets must provide brief, clear feedback via gcs:send\_text(severity, text) when significant state changes occur (e.g., activation, mode change, action completed). These messages are the primary mechanism for verification in autotests.  
 * **Use Enums for Constants:** Avoid using hardcoded integers ("magic numbers") for values like modes, states, or options. Instead, define a local table at the start of the script to act as an enumeration.  
-  **Example Enum for gcs:send\_text:**  
-  \-- Enum for MAV\_SEVERITY levels. Using this is mandatory  
-  \-- for gcs:send\_text() instead of hardcoded numbers.  
-  local MAV\_SEVERITY \= {  
-      EMERGENCY \= 0,  
-      ALERT \= 1,  
-      CRITICAL \= 2,  
-      ERROR \= 3,  
-      WARNING \= 4,  
-      NOTICE \= 5,  
-      INFO \= 6,  
-      DEBUG \= 7  
+  **Example Enum for gcs:send\_text:**
+```lua
+  -- Enum for MAV_SEVERITY levels. Using this is mandatory
+  -- for gcs:send_text() instead of hardcoded numbers.
+  local MAV_SEVERITY = {
+      EMERGENCY = 0,
+      ALERT = 1,
+      CRITICAL = 2,
+      ERROR = 3,
+      WARNING = 4,
+      NOTICE = 5,
+      INFO = 6,
+      DEBUG = 7
   }
 
-  \-- Usage:  
-  gcs:send\_text(MAV\_SEVERITY.INFO, "Script initialized")
+  -- Usage:
+  gcs:send_text(MAV_SEVERITY.INFO, "Script initialized")
+```
 
 * **luacheck Compliance:** All generated Lua code must be free of errors and warnings when analyzed with the luacheck tool, using the standard ArduPilot configuration.
 
@@ -1084,25 +1115,27 @@ def do\_lua\_mynewapplet\_test(self):
   * The total length of this full name **must not exceed 16 characters**.  
   * The full name must be used when getting/setting the parameter in Lua and in autotests.  
 * **Unique Table Key:** The table\_key must be an integer between 1 and 200 and must be unique across all existing scripts in the ArduPilot repository. Do not reuse any of the following keys: 7, 8, 9, 10, 11, 12, 14, 15, 16, 31, 36, 37, 39, 40, 41, 42, 43, 44, 45, 48, 49, 70, 71, 72, 73, 75, 76, 78, 79, 80, 81, 82, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 102, 104, 106, 109, 110, 111, 117, 136, 138, 139, 193\.  
-  **Correct Parameter Creation Example:**  
-  \-- This local table is for script organization only.  
-  local parameter\_definitions \= {  
-      { name \= "ENABLE", default \= 0 },  
-      { name \= "VALUE", default \= 12.3 }  
-  }  
-  local PARAM\_TABLE\_KEY \= 101  
-  local PARAM\_TABLE\_PREFIX \= "MYAPL" \-- Note: NO trailing underscore
+  **Correct Parameter Creation Example:**
+```lua
+  -- This local table is for script organization only.  
+  local parameter_definitions = {
+      { name = "ENABLE", default = 0 },
+      { name = "VALUE", default = 12.3 }
+  }
+  local PARAM_TABLE_KEY = 101
+  local PARAM_TABLE_PREFIX = "MYAPL" -- Note: NO trailing underscore
 
-  \-- Step 1: Declare the table with its key, prefix, and the number of parameters.  
-  assert(param:add\_table(PARAM\_TABLE\_KEY, PARAM\_TABLE\_PREFIX, \#parameter\_definitions), "Could not add param table")
+  -- Step 1: Declare the table with its key, prefix, and the number of parameters.  
+  assert(param:add_table(PARAM_TABLE_KEY, PARAM_TABLE_PREFIX, \#parameter_definitions), "Could not add param table")
 
-  \-- Step 2: Add each parameter individually using the correct signature.  
-  for i, p\_def in ipairs(parameter\_definitions) do  
-      assert(param:add\_param(PARAM\_TABLE\_KEY, i, p\_def.name, p\_def.default), "Could not add param "..p\_def.name)  
+  -- Step 2: Add each parameter individually using the correct signature.  
+  for i, p_def in ipairs(parameter_definitions) do  
+      assert(param:add_param(PARAM_TABLE_KEY, i, p_def.name, p_def.default), "Could not add param "..p_def.name)  
   end
 
-  \-- Usage in code: use the full, concatenated name.  
-  local my\_val \= param:get('MYAPL\_VALUE')
+  -- Usage in code: use the full, concatenated name.  
+  local my_val \= param:get('MYAPL_VALUE')
+```
 
 ### 5.8. Surgical Modification
 
@@ -1150,61 +1183,67 @@ Here are some common drone behaviors with their corresponding text prompts and e
 ### 8.1. Simple Box Mission
 
 * **Prompt:** "Create a Lua script that makes the drone fly in a 15-meter box pattern when the pilot flips RC channel 8 to high."  
-* **Expected Lua Script:**  
-  local BOX\_SIZE \= 15 \-- meters  
-  local original\_location \= nil
+* **Expected Lua Script:**
+```lua
+  local BOX_SIZE = 15 -- meters
+  local original_location = nil
 
-  function update()  
-    if rc:get\_channel(8):get\_pwm() \> 1800 then  
-      if original\_location \== nil then  
-        original\_location \= vehicle:get\_location()  
-        local target \= original\_location  
-        target:offset(BOX\_SIZE, 0\)  
-        vehicle:set\_target\_location(target)  
-      end  
-    else  
-      original\_location \= nil  
-    end  
-    return update, 100  
+  function update()
+    if rc:get_channel(8):get_pwm() > 1800 then
+      if original_location == nil then
+        original_location = vehicle:get_location()
+        local target = original_location
+        target:offset(BOX_SIZE, 0)
+        vehicle:set_target_location(target)
+      end
+    else
+      original_location = nil  
+    end
+    return update, 100
   end
 
   return update()
+```
 
 ### 8.2. Battery Failsafe
 
 * **Prompt:** "Create a Lua script that triggers a Return-to-Launch (RTL) when the battery voltage drops below 14.8 volts."  
 * **Expected Lua Script:**  
-  local LOW\_VOLTAGE \= 14.8
+```lua
+  local LOW_VOLTAGE = 14.8
 
-  function update()  
-    if battery:voltage(0) \< LOW\_VOLTAGE then  
-      vehicle:set\_mode("RTL")  
-    end  
-    return update, 1000  
+  function update()
+    if battery:voltage(0) < LOW_VOLTAGE then
+      vehicle:set_mode("RTL")
+    end
+    return update, 1000
   end
 
   return update()
+```
 
 ### 8.3. Landing Gear Control
 
 * **Prompt:** "Create a Lua script that deploys the landing gear (servo on output 9\) when the drone's altitude is below 10 meters and retracts it above 10 meters."  
-* **Expected Lua Script:**  
-  local LANDING\_GEAR\_ALTITUDE \= 10 \-- meters  
-  local SERVO\_OUTPUT \= 9  
-  local DEPLOYED\_PWM \= 1900  
-  local RETRACTED\_PWM \= 1100
+* **Expected Lua Script:**
+```lua
+  local LANDING_GEAR_ALTITUDE = 10 -- meters
+  local SERVO_OUTPUT = 9
+  local DEPLOYED_PWM = 1900
+  local RETRACTED_PWM = 1100
 
-  function update()  
-    local current\_alt \= vehicle:get\_location():alt()  
-    if current\_alt \< LANDING\_GEAR\_ALTITUDE then  
-      servo:set\_output(SERVO\_OUTPUT, DEPLOYED\_PWM)  
-    else  
-      servo:set\_output(SERVO\_OUTPUT, RETRACTED\_PWM)  
-    end  
-    return update, 500  
+  function update()
+    local current_alt = vehicle:get_location():alt()
+    if current_alt < LANDING_GEAR_ALTITUDE then
+      servo:set_output(SERVO_OUTPUT, DEPLOYED_PWM)
+    else
+      servo:set_output(SERVO_OUTPUT, RETRACTED_PWM)
+    end
+    return update, 500
   end
 
   return update()
+```
 
 ## 9\. Working with Aider and a Local ArduPilot Codebase
 
@@ -1358,7 +1397,7 @@ These functions provide more granular control by allowing you to specify positio
 | :---- | :---- |
 | **vehicle:set\_target\_velaccel\_NED(...)** | Sets a target velocity and a feed-forward acceleration. Use this to command a smooth change in velocity. |
 | **vehicle:set\_target\_posvel\_NED(...)** | Sets a target position and a target velocity. Use this to command the vehicle to arrive at a point with a specific speed and direction. |
-| **vehicle:set\_target\_posvelaccel\_NED(...)** | Sets a target position, velocity, and acceleration. This provides the most complete control over the trajectory for advanced applications. |
+| **vehicle:set\_target\_posvelaccel\_NED(...)** | Sets a target position, velocity, and acceleration. This provides the most complete control over the trajectory for advanced applications. The postion, velocity and acceleration define the instantaneous state of the target trajectory. This is interpolated forward in time until the next update is provided.The position controller will adjust it's own target trajectory to match.
 
 #### **Controlling Yaw**
 
