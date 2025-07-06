@@ -41,6 +41,10 @@ Mode *Copter::mode_from_mode_num(const Mode::Number mode)
             break;
 #endif
 
+#if MODE_RATE_ACRO_ENABLED
+        case Mode::Number::RATE_ACRO:
+            return &mode_rate_acro;
+#endif
         case Mode::Number::STABILIZE:
             ret = &mode_stabilize;
             break;
@@ -384,12 +388,12 @@ bool Copter::set_mode(Mode::Number mode, ModeReason reason)
 #endif
 
     // set rate shaping time constants
-#if MODE_ACRO_ENABLED || MODE_SPORT_ENABLED
+#if MODE_ACRO_ENABLED || MODE_SPORT_ENABLED || MODE_RATE_ACRO_ENABLED
     attitude_control->set_roll_pitch_rate_tc(g2.command_model_acro_rp.get_rate_tc());
 #endif
     attitude_control->set_yaw_rate_tc(g2.command_model_pilot.get_rate_tc());
-#if MODE_ACRO_ENABLED || MODE_DRIFT_ENABLED
-    if (mode== Mode::Number::ACRO || mode== Mode::Number::DRIFT) {
+#if MODE_ACRO_ENABLED || MODE_DRIFT_ENABLED || MODE_RATE_ACRO_ENABLED
+    if (mode == Mode::Number::ACRO || mode == Mode::Number::RATE_ACRO || mode== Mode::Number::DRIFT) {
         attitude_control->set_yaw_rate_tc(g2.command_model_acro_y.get_rate_tc());
     }
 #endif

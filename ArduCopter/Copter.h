@@ -198,6 +198,7 @@ public:
 
     friend class Mode;
     friend class ModeAcro;
+    friend class ModeRateAcro;
     friend class ModeAcro_Heli;
     friend class ModeAltHold;
     friend class ModeAuto;
@@ -1034,6 +1035,9 @@ private:
 #else
     ModeAcro mode_acro;
 #endif
+#endif
+#if MODE_RATE_ACRO_ENABLED
+    ModeRateAcro mode_rate_acro;
 #endif
     ModeAltHold mode_althold;
 #if MODE_AUTO_ENABLED
