@@ -264,6 +264,7 @@ public:
                                   // saved for 4.7-dev feature in-flight AHRS autotrim
                                   //saved for 4.7-dev feature Fixed Wing AUTOLAND Mode
         SYSTEMID =           184,  // system ID as an aux switch
+        RATE_ACRO =          185,  // rate acro mode
 
         // inputs from 200 will eventually used to replace RCMAP
         ROLL =               201, // roll input
