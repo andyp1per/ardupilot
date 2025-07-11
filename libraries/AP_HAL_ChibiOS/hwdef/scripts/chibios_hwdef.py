@@ -968,6 +968,11 @@ class ChibiOSHWDef(hwdef.HWDef):
         elif 'HAL_USE_HW_RNG' not in defines.keys():
             f.write("#define HAL_USE_HW_RNG FALSE\n")
 
+        if self.mcu_series.startswith("STM32H5"):
+            self.build_flags.append('USE_ARMV8=yes')
+        else:
+            self.build_flags.append('USE_ARMV8=no')
+
         if self.get_config('PROCESS_STACK', required=False):
             self.env_vars['PROCESS_STACK'] = self.get_config('PROCESS_STACK')
         else:

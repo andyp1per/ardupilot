@@ -9,6 +9,8 @@
 #ifndef IWDG_BASE
 #if defined(STM32H7)
 #define IWDG_BASE             0x58004800
+#elif defined(STM32H5)
+#define IWDG_BASE             0x58004800
 #elif defined(STM32F7) || defined(STM32F4)
 #define IWDG_BASE             0x40003000
 #elif defined(STM32F1) || defined(STM32F3)
