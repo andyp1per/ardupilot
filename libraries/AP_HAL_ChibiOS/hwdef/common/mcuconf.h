@@ -59,6 +59,8 @@
 #include "stm32h7_A3_mcuconf.h"
 #elif defined(STM32H7)
 #include "stm32h7_mcuconf.h"
+#elif defined(STM32H573xx)
+#include "stm32h5_mcuconf.h"
 #elif defined(STM32G4)
 #include "stm32g4_mcuconf.h"
 #elif defined(STM32L4PLUS)
