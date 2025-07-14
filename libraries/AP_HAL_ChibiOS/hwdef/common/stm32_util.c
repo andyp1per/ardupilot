@@ -17,7 +17,11 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#if defined(STM32H5)
+#include <stm32_gpdma.h>
+#else
 #include <stm32_dma.h>
+#endif
 #include <hrt.h>
 
 static int64_t utc_time_offset;
