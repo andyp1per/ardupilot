@@ -2522,6 +2522,9 @@ Please run: Tools/scripts/build_bootloaders.py %s
         if self.get_config('DMA_NOMAP', required=False) is not None:
             dma_unassigned, ordered_timers = [], []
         elif self.mcu_series.startswith("STM32H5"):
+            if not self.is_bootloader_fw():
+                f.write('#define STM32_DMA_REQUIRED TRUE\n')
+
             # For H5, we use the GPDMA map instead of the DMAMUX resolver
             # The resolver will need the new GPDMA_Map from the MCU definition file
             lib = self.get_mcu_lib(self.mcu_type)
