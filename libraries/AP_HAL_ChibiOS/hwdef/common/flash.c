@@ -1,20 +1,20 @@
 /************************************************************************************
- *   Copyright (C) 2011 Uros Platise. All rights reserved.
- *   Author: Uros Platise <uros.platise@isotel.eu>
+ * Copyright (C) 2011 Uros Platise. All rights reserved.
+ * Author: Uros Platise <uros.platise@isotel.eu>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  *
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
+ * notice, this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
+ * notice, this list of conditions and the following disclaimer in
+ * the documentation and/or other materials provided with the
+ * distribution.
  * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
+ * used to endorse or promote products derived from this software
+ * without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -44,8 +44,7 @@
  *
  * You should have received a copy of the GNU General Public License along
  * with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
- * Modified for use in AP_HAL by Andrew Tridgell and Siddharth Bharat Purohit
+ * * Modified for use in AP_HAL by Andrew Tridgell and Siddharth Bharat Purohit
  */
 
 #include "flash.h"
@@ -59,7 +58,7 @@
 // #pragma GCC optimize("O0")
 
 /*
-  this driver has been tested with STM32F427 and STM32F412
+  this driver has been tested with STM32F427, STM32F412, STM32H7 and STM32H5
  */
 
 #ifndef HAL_NO_FLASH_SUPPORT
@@ -131,9 +130,9 @@ static const uint32_t flash_memmap[STM32_FLASH_NPAGES] = { KB(32), KB(32), KB(32
 #define STM32_FLASH_FIXED_PAGE_SIZE 128
 #define STM32_FLASH_NBANKS (BOARD_FLASH_SIZE/1024)
 #elif defined(STM32H5)
-#define STM32_FLASH_NPAGES  (BOARD_FLASH_SIZE / 128)
-#define STM32_FLASH_FIXED_PAGE_SIZE 128
-#define STM32_FLASH_NBANKS (BOARD_FLASH_SIZE/1024)
+#define STM32_FLASH_NPAGES (BOARD_FLASH_SIZE / 8)
+#define STM32_FLASH_FIXED_PAGE_SIZE 8
+#define STM32_FLASH_NBANKS 2
 #elif defined(STM32F100_MCUCONF) || defined(STM32F103_MCUCONF)
 #define STM32_FLASH_NPAGES BOARD_FLASH_SIZE
 #define STM32_FLASH_FIXED_PAGE_SIZE 1
@@ -235,6 +234,10 @@ static void stm32_flash_wait_idle(void)
             ) {
         // nop
     }
+#elif defined(STM32H5)
+    while (FLASH->NSSR & (FLASH_SR_BSY | FLASH_SR_WBNE | FLASH_SR_DBNE)) {
+        // nop
+    }
 #else
 	while (FLASH->SR & FLASH_SR_BSY) {
         // nop
@@ -249,6 +252,9 @@ static void stm32_flash_clear_errors(void)
 #if STM32_FLASH_NBANKS > 1
     FLASH->CCR2 = ~0;
 #endif
+#elif defined(STM32H5)
+    FLASH->NSCCR = ~0;
+    FLASH->SECCCR = ~0;
 #elif defined (STM32L4PLUS)
     FLASH->SR = 0x0000C3FBU;
 #else
@@ -276,6 +282,17 @@ static void stm32_flash_unlock(void)
         FLASH->KEYR2 = FLASH_KEY2;
     }
 #endif
+#elif defined(STM32H5)
+    if (FLASH->NSCR & FLASH_CR_LOCK) {
+        /* Unlock sequence for non-secure registers */
+        FLASH->NSKEYR = FLASH_KEY1;
+        FLASH->NSKEYR = FLASH_KEY2;
+    }
+    if (FLASH->SECCR & FLASH_CR_LOCK) {
+        /* Unlock sequence for secure registers */
+        FLASH->SECKEYR = FLASH_KEY1;
+        FLASH->SECKEYR = FLASH_KEY2;
+    }
 #else
     if (FLASH->CR & FLASH_CR_LOCK) {
         /* Unlock sequence */
@@ -309,6 +326,10 @@ void stm32_flash_lock(void)
 #if STM32_FLASH_NBANKS > 1
     FLASH->CR2 |= FLASH_CR_LOCK;
 #endif
+#elif defined(STM32H5)
+    stm32_flash_wait_idle();
+    FLASH->NSCR |= FLASH_CR_LOCK;
+    FLASH->SECCR |= FLASH_CR_LOCK;
 #else
     stm32_flash_wait_idle();
     FLASH->CR |= FLASH_CR_LOCK;
@@ -459,11 +480,9 @@ static uint32_t last_erase_ms;
 #if defined(STM32H7)
 
 /*
-    Corrupt flash to trigger ECC fault.
-    If double_bit is false, generate a single-bit error (correctable).
-    If double_bit is true, generate a double-bit error (uncorrectable).
+    corrupt a flash to trigger ECC fault
 */
-void stm32_flash_corrupt(uint32_t addr, bool double_bit)
+void stm32_flash_corrupt(uint32_t addr)
 {
     stm32_flash_unlock();
 
@@ -482,12 +501,11 @@ void stm32_flash_corrupt(uint32_t addr, bool double_bit)
     *CCR = ~0;
     *CR |= FLASH_CR_PG;
 
-    const uint32_t pattern1 = double_bit? 0xAAAAAAAA : 0xAAAA5555;
-    const uint32_t pattern2 = double_bit? 0xAAAAAAA9 : 0x5555AAAA;
-    for (uint32_t i = 0; i < 2; i++) {
-        while (*SR & (FLASH_SR_BSY | FLASH_SR_QW)) ;
-        putreg32(pattern1, addr);
+    for (uint32_t i=0; i<2; i++) {
+        while (*SR & (FLASH_SR_BSY|FLASH_SR_QW)) ;
+        putreg32(0xAAAA5555, addr);
         if (*SR & FLASH_SR_INCERR) {
+            // clear the error
             *SR &= ~FLASH_SR_INCERR;
         }
         addr += 4;
@@ -496,10 +514,11 @@ void stm32_flash_corrupt(uint32_t addr, bool double_bit)
     *CR |= FLASH_CR_FW;  // force write
     stm32_flash_wait_idle();
 
-    for (uint32_t i = 0; i < 2; i++) {
-        while (*SR & (FLASH_SR_BSY | FLASH_SR_QW)) ;
-        putreg32(pattern2, addr);  // overwrite previous location
+    for (uint32_t i=0; i<2; i++) {
+        while (*SR & (FLASH_SR_BSY|FLASH_SR_QW)) ;
+        putreg32(0x5555AAAA, addr);
         if (*SR & FLASH_SR_INCERR) {
+            // clear the error
             *SR &= ~FLASH_SR_INCERR;
         }
         addr += 4;
@@ -515,7 +534,7 @@ void stm32_flash_corrupt(uint32_t addr, bool double_bit)
 
     stm32_flash_lock();
 }
-#endif // STM32H7
+#endif
 
 /*
   erase a page
@@ -572,17 +591,37 @@ bool stm32_flash_erasepage(uint32_t page)
         while (FLASH->SR2 & FLASH_SR_QW) ;
     }
 #endif
+#elif defined(STM32H5)
+    const uint32_t page_in_bank = page % STM32_FLASH_FIXED_PAGE_PER_BANK;
+    const uint32_t bank = page / STM32_FLASH_FIXED_PAGE_PER_BANK;
+
+    // We'll use the non-secure control register.
+    // Clear previous settings for safety
+    FLASH->NSCR &= ~(FLASH_CR_SNB_Msk | FLASH_CR_BER | FLASH_CR_MER);
+
+    // Set bank selection
+    if (bank == 0) { // Bank 1
+        FLASH->NSCR &= ~FLASH_CR_BKSEL;
+    } else { // Bank 2
+        FLASH->NSCR |= FLASH_CR_BKSEL;
+    }
+
+    // Set sector number and sector erase request
+    FLASH->NSCR |= (page_in_bank << FLASH_CR_SNB_Pos) | FLASH_CR_SER;
+
+    // Start the erase
+    FLASH->NSCR |= FLASH_CR_START;
 #elif defined(STM32F1) || defined(STM32F3)
     FLASH->CR = FLASH_CR_PER;
     FLASH->AR = stm32_flash_getpageaddr(page);
-    FLASH->CR |= FLASH_CR_STRT;
+    FLASH->CR |= FLASH_CR_START;
 #elif defined(STM32F4) || defined(STM32F7)
     // the snb mask is not contiguous, calculate the mask for the page
     uint8_t snb = (((page % 12) << 3) | ((page / 12) << 7));
 
     // use 32 bit operations
     FLASH->CR = FLASH_CR_PSIZE_1 | snb | FLASH_CR_SER;
-    FLASH->CR |= FLASH_CR_STRT;
+    FLASH->CR |= FLASH_CR_START;
 #elif defined(STM32G4)
     FLASH->CR = FLASH_CR_PER;
 #ifdef FLASH_CR_BKER_Pos
@@ -731,6 +770,79 @@ failed:
 }
 
 #endif // STM32H7
+
+#if defined(STM32H5)
+static bool stm32_flash_write_h5(uint32_t addr, const void *buf, uint32_t count)
+{
+    const uint32_t *b = (const uint32_t *)buf;
+
+    /* STM32H5 requires 128-bit (16-byte) aligned access */
+    if ((count & 15) || (addr & 15)) {
+        return false;
+    }
+
+    if ((addr + count) > STM32_FLASH_BASE + STM32_FLASH_SIZE) {
+        return false;
+    }
+
+#if STM32_FLASH_DISABLE_ISR
+    syssts_t sts = chSysGetStatusAndLockX();
+#endif
+
+    stm32_flash_unlock();
+
+    // Program in 128-bit (16-byte) steps
+    while (count >= 16) {
+        // Skip if data already matches to avoid unnecessary writes
+        if (memcmp((const void*)addr, b, 16) == 0) {
+            count -= 16;
+            addr += 16;
+            b += 4;
+            continue;
+        }
+
+        stm32_flash_wait_idle();
+
+        FLASH->NSCR |= FLASH_CR_PG;
+
+        // Write 4 * 32-bit words to fill the 128-bit buffer
+        putreg32(b[0], addr + 0);
+        putreg32(b[1], addr + 4);
+        putreg32(b[2], addr + 8);
+        putreg32(b[3], addr + 12);
+
+        // Writing 128 bits automatically triggers the program operation.
+        // Wait for the busy flag to clear.
+        stm32_flash_wait_idle();
+
+        // The PG bit is not automatically cleared, so we do it manually.
+        FLASH->NSCR &= ~FLASH_CR_PG;
+
+        // Verify the written data
+        if (memcmp((const void*)addr, b, 16) != 0) {
+            goto failed;
+        }
+
+        count -= 16;
+        b += 4;
+        addr += 16;
+    }
+
+    stm32_flash_lock();
+#if STM32_FLASH_DISABLE_ISR
+    chSysRestoreStatusX(sts);
+#endif
+    return true;
+
+failed:
+    stm32_flash_lock();
+#if STM32_FLASH_DISABLE_ISR
+    chSysRestoreStatusX(sts);
+#endif
+    return false;
+}
+#endif // STM32H5
+
 
 #if defined(STM32F4) || defined(STM32F7)
 static bool stm32_flash_write_f4f7(uint32_t addr, const void *buf, uint32_t count)
@@ -981,6 +1093,8 @@ bool stm32_flash_write(uint32_t addr, const void *buf, uint32_t count)
     return stm32_flash_write_f4f7(addr, buf, count);
 #elif defined(STM32H7)
     return stm32_flash_write_h7(addr, buf, count);
+#elif defined(STM32H5)
+    return stm32_flash_write_h5(addr, buf, count);
 #elif defined(STM32G4) || defined(STM32L4) || defined(STM32L4PLUS) 
     return stm32_flash_write_g4(addr, buf, count);
 #else
@@ -1180,4 +1294,3 @@ bool stm32_flash_recent_erase(void)
 #endif
 
 #endif // HAL_NO_FLASH_SUPPORT
-
