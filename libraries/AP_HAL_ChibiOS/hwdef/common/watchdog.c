@@ -37,7 +37,7 @@
 /*
   defines for working out if the reset was from the watchdog
  */
-#if defined(STM32H7)
+#if defined(STM32H7) || defined(STM32H5)
 #define WDG_RESET_STATUS (*(__IO uint32_t *)(RCC_BASE + 0xD0))
 #define WDG_RESET_CLEAR (1U<<16)
 #define WDG_RESET_IS_IWDG (1U<<26)
@@ -81,9 +81,9 @@ static bool watchdog_enabled;
 void stm32_watchdog_init(void)
 {
     // setup the watchdog timeout
-    // t = 4 * 2^PR * (RLR+1) / 32KHz
+    // t = 4 * 2^PR * (RLR+1) / 32KHz LSI clock
     IWDGD.KR = 0x5555;
-    IWDGD.PR = 3; // changing this would change the definition of STM32_WDG_TIMEOUT_MS
+    IWDGD.PR = 3; // divider /32
     IWDGD.RLR = STM32_WDG_TIMEOUT_MS - 1;
     IWDGD.KR = 0xCCCC;
     watchdog_enabled = true;
