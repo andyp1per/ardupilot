@@ -571,6 +571,68 @@ def write_dma_header(f, peripheral_list, mcu_type, dma_exclude=[],
                 key, key, dma_name(key), key, dma_name(key)))
     return unassigned, ordered_timers
 
+# New function to be added
+
+def write_gpdma_header(f, periph_list, mcu_type, gpdma_map, dma_exclude, dma_priority, dma_noshare, quiet):
+    '''Write a DMA header file for STM32H5 GPDMA.'''
+
+    # The GPDMA has 2 instances, but the request lines are shared. [cite: 762]
+    # For simplicity, we can treat it as one pool of requests that can be
+    # mapped to any of the 8 channels in GPDMA1. (GPDMA2 is often for low-power domain)
+
+    # In GPDMA, we don't resolve streams/channels like in DMAMUX.
+    # We just need to define the REQSEL value for each peripheral.
+
+    f.write('// STM32H5 GPDMA Request Map\n')
+
+    # Keep track of assigned requests to warn about duplicates if necessary
+    assigned_requests = {}
+
+    for p_name in sorted(periph_list):
+        if p_name in dma_exclude:
+            continue
+
+        # The peripheral name in periph_list is like 'SPI1_RX'.
+        # The key in our GPDMA_Map is 'SPI1_RX_DMA'. We need to match them.
+        dma_key = p_name.replace('_', '_DMA_') if '_DMA_' not in p_name else p_name
+        dma_key = dma_key.replace('DMA_DMA', 'DMA') # Fix potential double DMA
+
+        # Another approach is to standardize keys in the MCU file. Let's assume keys
+        # in gpdma_map are like 'SPI1_RX_DMA'.
+        map_key = p_name + '_DMA' # e.g., 'SPI1_RX' -> 'SPI1_RX_DMA'
+        map_key = map_key.upper() # Standardize to upper case for matching
+
+        req_id = None
+        for k, v in gpdma_map.items():
+            # Match peripheral names like 'SPI1_RX' to map keys like 'spi1_rx_dma'
+            if k.upper().startswith(p_name.upper()):
+                 req_id = v
+                 break
+
+        if req_id is not None:
+            # We found the request ID for this peripheral.
+            # The GPDMA config is more complex than just a DMA stream.
+            # The key define is the request selection ID for the GPDMA_CxTR2 register.
+            # Example: #define STM32_GPDMA_REQ_SPI1_RX 6
+            f.write(f'#define STM32_GPDMA_REQ_{p_name.upper()} {req_id}\n')
+
+            if p_name in assigned_requests:
+                # This doesn't represent a conflict in GPDMA as multiple channels
+                # can be configured for the same request, but it's good to note.
+                if not quiet:
+                    print(f'Note: GPDMA request {req_id} ({p_name}) is used multiple times.')
+            assigned_requests[p_name] = req_id
+
+        elif not quiet:
+            print(f"Note: No GPDMA mapping found for {p_name}")
+
+    f.write('\n// End of GPDMA Request Map\n')
+
+    # Return empty lists as DMA streams are not assigned this way for GPDMA
+    # The concept of "unassigned" DMA is less relevant here.
+    # The application code will be responsible for picking a free GPDMA channel (0-7)
+    # and configuring it with the appropriate REQSEL value from this header.
+    return [], []
 
 if __name__ == '__main__':
     import optparse

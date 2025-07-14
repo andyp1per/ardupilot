@@ -2521,7 +2521,27 @@ Please run: Tools/scripts/build_bootloaders.py %s
 
         if self.get_config('DMA_NOMAP', required=False) is not None:
             dma_unassigned, ordered_timers = [], []
+        elif self.mcu_series.startswith("STM32H5"):
+            # For H5, we use the GPDMA map instead of the DMAMUX resolver
+            # The resolver will need the new GPDMA_Map from the MCU definition file
+            lib = self.get_mcu_lib(self.mcu_type)
+            gpdma_map = getattr(lib, 'GPDMA_Map', None)
+            if gpdma_map is None:
+                self.error("Missing GPDMA_Map for MCU %s" % self.mcu_type)
+
+            # Call a new or modified DMA resolver function for GPDMA
+            dma_unassigned, ordered_timers = dma_resolver.write_gpdma_header(
+                f,
+                self.periph_list,
+                self.mcu_type,
+                gpdma_map,  # Pass the new map
+                dma_exclude=self.get_dma_exclude(self.periph_list),
+                dma_priority=self.get_config('DMA_PRIORITY', default='TIM* SPI*', spaces=True),
+                dma_noshare=self.dma_noshare,
+                quiet=self.quiet,
+            )
         else:
+            # Existing logic for H7 and other MCUs
             dma_unassigned, ordered_timers = dma_resolver.write_dma_header(
                 f,
                 self.periph_list,
