@@ -15,7 +15,7 @@
 */
 
 /*
-  this header is modelled on the one for the Nucleo-144 H573 board from ChibiOS
+  this header is modelled on the one for the Nucleo-144 H743 and H573 boards from ChibiOS
  */
 #pragma once
 
@@ -76,94 +76,333 @@
 
 /*
  * Clock settings.
+ *
+ * The STM32H5 series maximum SYSCLK frequency is 250 MHz.
+ * The following settings are calculated to achieve this frequency.
  */
-#define STM32_HSI_ENABLED                   TRUE
-#define STM32_HSIDIV_VALUE                  2
-#define STM32_HSI48_ENABLED                 FALSE
-#define STM32_CSI_ENABLED                   FALSE
-#define STM32_HSE_ENABLED                   TRUE
 #define STM32_LSI_ENABLED                   FALSE
 #define STM32_LSE_ENABLED                   TRUE
-#define STM32_SW                            STM32_SW_PLL1P
+#define STM32_CSI_ENABLED                   FALSE
+#define STM32_HSI48_ENABLED                 FALSE
+
+/*
+ * PLL settings based on the HSE clock value.
+ */
+#if !defined(STM32_HSECLK)
+#error "STM32_HSECLK not defined"
+#endif
+
+#if (STM32_HSECLK == 0)
+/*
+ * No external crystal. HSI (64MHz) is used as PLL source.
+ * HSICLK = 64MHz / 2 = 32MHz
+ * SYSCLK = (32MHz / 4) * 125 / 4 = 250 MHz
+ */
+#define STM32_HSE_ENABLED                   FALSE
+#define STM32_HSI_ENABLED                   TRUE
+#define STM32_HSIDIV_VALUE                  2
+#define STM32_PLL1SRC                       STM32_PLL1SRC_HSI
+#define STM32_PLL1M_VALUE                   4
+#define STM32_PLL1N_VALUE                   125
+#define STM32_PLL1P_VALUE                   4
+
+#elif (STM32_HSECLK == 8000000)
+/*
+ * 8MHz crystal.
+ * SYSCLK = (8MHz / 2) * 125 / 2 = 250 MHz
+ */
+#define STM32_HSE_ENABLED                   TRUE
+#define STM32_HSI_ENABLED                   FALSE
+#define STM32_PLL1SRC                       STM32_PLL1SRC_HSE
+#define STM32_PLL1M_VALUE                   2
+#define STM32_PLL1N_VALUE                   125
+#define STM32_PLL1P_VALUE                   2
+
+#elif (STM32_HSECLK == 16000000)
+/*
+ * 16MHz crystal.
+ * SYSCLK = (16MHz / 4) * 125 / 2 = 250 MHz
+ */
+#define STM32_HSE_ENABLED                   TRUE
+#define STM32_HSI_ENABLED                   FALSE
 #define STM32_PLL1SRC                       STM32_PLL1SRC_HSE
 #define STM32_PLL1M_VALUE                   4
-#define STM32_PLL1N_VALUE                   250
+#define STM32_PLL1N_VALUE                   125
 #define STM32_PLL1P_VALUE                   2
+
+#elif (STM32_HSECLK == 24000000)
+/*
+ * 24MHz crystal.
+ */
+#define STM32_HSE_ENABLED                   TRUE
+#define STM32_HSI_ENABLED                   FALSE
+#define STM32_PLL1SRC                       STM32_PLL1SRC_HSE
+#ifdef HAL_CUSTOM_MCU_CLOCKRATE
+#if (HAL_CUSTOM_MCU_CLOCKRATE == 200000000)
+/* SYSCLK = (24MHz / 6) * 100 / 2 = 200 MHz */
+#define STM32_PLL1M_VALUE                   6
+#define STM32_PLL1N_VALUE                   100
+#define STM32_PLL1P_VALUE                   2
+#else
+#error "Unsupported custom clock rate"
+#endif
+#else
+/* SYSCLK = (24MHz / 6) * 125 / 2 = 250 MHz */
+#define STM32_PLL1M_VALUE                   6
+#define STM32_PLL1N_VALUE                   125
+#define STM32_PLL1P_VALUE                   2
+#endif
+
+#elif (STM32_HSECLK == 25000000)
+/*
+ * 25MHz crystal.
+ * SYSCLK = (25MHz / 5) * 100 / 2 = 250 MHz
+ */
+#define STM32_HSE_ENABLED                   TRUE
+#define STM32_HSI_ENABLED                   FALSE
+#define STM32_PLL1SRC                       STM32_PLL1SRC_HSE
+#define STM32_PLL1M_VALUE                   5
+#define STM32_PLL1N_VALUE                   100
+#define STM32_PLL1P_VALUE                   2
+
+#elif (STM32_HSECLK == 48000000)
+/*
+ * 48MHz crystal.
+ * SYSCLK = (48MHz / 12) * 125 / 2 = 250 MHz
+ */
+#define STM32_HSE_ENABLED                   TRUE
+#define STM32_HSI_ENABLED                   FALSE
+#define STM32_PLL1SRC                       STM32_PLL1SRC_HSE
+#define STM32_PLL1M_VALUE                   12
+#define STM32_PLL1N_VALUE                   125
+#define STM32_PLL1P_VALUE                   2
+
+#else
+#error "Unsupported STM32_HSECLK value"
+#endif
+
+/*
+ * Default PLL1 Q and R values.
+ * Can be overridden in board.h.
+ */
+#ifndef STM32_PLL1Q_VALUE
 #define STM32_PLL1Q_VALUE                   4
+#endif
+#ifndef STM32_PLL1R_VALUE
 #define STM32_PLL1R_VALUE                   2
+#endif
+
+/*
+ * Default PLL2 settings.
+ * Can be overridden in board.h.
+ */
+#ifndef STM32_PLL2SRC
 #define STM32_PLL2SRC                       STM32_PLL2SRC_HSE
+#endif
+#ifndef STM32_PLL2M_VALUE
 #define STM32_PLL2M_VALUE                   4
+#endif
+#ifndef STM32_PLL2N_VALUE
 #define STM32_PLL2N_VALUE                   200
+#endif
+#ifndef STM32_PLL2P_VALUE
 #define STM32_PLL2P_VALUE                   2
+#endif
+#ifndef STM32_PLL2Q_VALUE
 #define STM32_PLL2Q_VALUE                   2
+#endif
+#ifndef STM32_PLL2R_VALUE
 #define STM32_PLL2R_VALUE                   2
+#endif
+
+/*
+ * Default PLL3 settings.
+ * Can be overridden in board.h.
+ */
+#ifndef STM32_PLL3SRC
 #define STM32_PLL3SRC                       STM32_PLL3SRC_HSE
+#endif
+#ifndef STM32_PLL3M_VALUE
 #define STM32_PLL3M_VALUE                   4
+#endif
+#ifndef STM32_PLL3N_VALUE
 #define STM32_PLL3N_VALUE                   240
+#endif
+#ifndef STM32_PLL3P_VALUE
 #define STM32_PLL3P_VALUE                   2
+#endif
+#ifndef STM32_PLL3Q_VALUE
 #define STM32_PLL3Q_VALUE                   10
+#endif
+#ifndef STM32_PLL3R_VALUE
 #define STM32_PLL3R_VALUE                   2
+#endif
+
+/*
+ * Core clocks settings
+ */
+#define STM32_SW                            STM32_SW_PLL1P
 #define STM32_HPRE                          STM32_HPRE_DIV1
 #define STM32_PPRE1                         STM32_PPRE1_DIV1
 #define STM32_PPRE2                         STM32_PPRE2_DIV1
 #define STM32_PPRE3                         STM32_PPRE3_DIV1
 #define STM32_STOPWUCK                      STM32_STOPWUCK_HSI
 #define STM32_STOPKERWUCK                   STM32_STOPKERWUCK_HSI
+#define STM32_RTCSEL                        STM32_RTCSEL_LSE
+#ifndef STM32_RTCPRE_VALUE
 #define STM32_RTCPRE_VALUE                  STM32_RTCPRE_NOCLOCK
-#define STM32_MCO1SEL                       STM32_MCO1SEL_HSI
+#endif
+#ifndef STM32_MCO1SEL
+#define STM32_MCO1SEL                       STM32_MCO1SEL_HSE
+#endif
+#ifndef STM32_MCO1PRE_VALUE
 #define STM32_MCO1PRE_VALUE                 STM32_MCO1PRE_NOCLOCK
+#endif
+#ifndef STM32_MCO2SEL
 #define STM32_MCO2SEL                       STM32_MCO2SEL_SYSCLK
+#endif
+#ifndef STM32_MCO2PRE_VALUE
 #define STM32_MCO2PRE_VALUE                 STM32_MCO2PRE_NOCLOCK
+#endif
+#ifndef STM32_LSCOSEL
 #define STM32_LSCOSEL                       STM32_LSCOSEL_NOCLOCK
+#endif
 
 /*
  * Peripherals clock sources.
  */
+#ifndef STM32_USART1SEL
 #define STM32_USART1SEL                     STM32_USART1SEL_PCLK2
+#endif
+#ifndef STM32_USART2SEL
 #define STM32_USART2SEL                     STM32_USART2SEL_PCLK1
+#endif
+#ifndef STM32_USART3SEL
 #define STM32_USART3SEL                     STM32_USART3SEL_PCLK1
+#endif
+#ifndef STM32_UART4SEL
 #define STM32_UART4SEL                      STM32_UART4SEL_PCLK1
+#endif
+#ifndef STM32_UART5SEL
 #define STM32_UART5SEL                      STM32_UART5SEL_PCLK1
+#endif
+#ifndef STM32_USART6SEL
 #define STM32_USART6SEL                     STM32_USART6SEL_PCLK1
+#endif
+#ifndef STM32_UART7SEL
 #define STM32_UART7SEL                      STM32_UART7SEL_PCLK1
+#endif
+#ifndef STM32_UART8SEL
 #define STM32_UART8SEL                      STM32_UART8SEL_PCLK1
+#endif
+#ifndef STM32_UART9SEL
 #define STM32_UART9SEL                      STM32_UART9SEL_PCLK1
+#endif
+#ifndef STM32_USART10SEL
 #define STM32_USART10SEL                    STM32_USART10SEL_PCLK1
+#endif
+#ifndef STM32_USART11SEL
 #define STM32_USART11SEL                    STM32_USART11SEL_PCLK1
+#endif
+#ifndef STM32_UART12SEL
 #define STM32_UART12SEL                     STM32_UART12SEL_PCLK1
+#endif
+#ifndef STM32_LPUART1SEL
 #define STM32_LPUART1SEL                    STM32_LPUART1SEL_PCLK3
+#endif
+#ifndef STM32_TIMICSEL
 #define STM32_TIMICSEL                      STM32_TIMICSEL_NOCLK
+#endif
+#ifndef STM32_LPTIM1SEL
 #define STM32_LPTIM1SEL                     STM32_LPTIM1SEL_PCLK3
+#endif
+#ifndef STM32_LPTIM2SEL
 #define STM32_LPTIM2SEL                     STM32_LPTIM2SEL_PCLK1
+#endif
+#ifndef STM32_LPTIM3SEL
 #define STM32_LPTIM3SEL                     STM32_LPTIM3SEL_PCLK3
+#endif
+#ifndef STM32_LPTIM4SEL
 #define STM32_LPTIM4SEL                     STM32_LPTIM4SEL_PCLK3
+#endif
+#ifndef STM32_LPTIM5SEL
 #define STM32_LPTIM5SEL                     STM32_LPTIM5SEL_PCLK3
+#endif
+#ifndef STM32_LPTIM6SEL
 #define STM32_LPTIM6SEL                     STM32_LPTIM6SEL_PCLK3
+#endif
+#ifndef STM32_SPI1SEL
 #define STM32_SPI1SEL                       STM32_SPI1SEL_PLL1Q
+#endif
+#ifndef STM32_SPI2SEL
 #define STM32_SPI2SEL                       STM32_SPI2SEL_PLL1Q
+#endif
+#ifndef STM32_SPI3SEL
 #define STM32_SPI3SEL                       STM32_SPI3SEL_PLL1Q
+#endif
+#ifndef STM32_SPI4SEL
 #define STM32_SPI4SEL                       STM32_SPI4SEL_PCLK2
+#endif
+#ifndef STM32_SPI5SEL
 #define STM32_SPI5SEL                       STM32_SPI5SEL_PCLK3
+#endif
+#ifndef STM32_SPI6SEL
 #define STM32_SPI6SEL                       STM32_SPI6SEL_PCLK2
+#endif
+#ifndef STM32_OSPISEL
 #define STM32_OSPISEL                       STM32_OSPISEL_HCLK4
+#endif
+#ifndef STM32_SYSTICKSEL
 #define STM32_SYSTICKSEL                    STM32_SYSTICKSEL_HCLKDIV8
+#endif
+#ifndef STM32_USBSEL
 #define STM32_USBSEL                        STM32_USBSEL_NOCLOCK
+#endif
+#ifndef STM32_SDMMC1SEL
 #define STM32_SDMMC1SEL                     STM32_SDMMC1SEL_PLL1Q
+#endif
+#ifndef STM32_SDMMC2SEL
 #define STM32_SDMMC2SEL                     STM32_SDMMC2SEL_PLL1Q
+#endif
+#ifndef STM32_I2C1SEL
 #define STM32_I2C1SEL                       STM32_I2C1SEL_PCLK1
+#endif
+#ifndef STM32_I2C2SEL
 #define STM32_I2C2SEL                       STM32_I2C2SEL_PCLK1
+#endif
+#ifndef STM32_I2C3SEL
 #define STM32_I2C3SEL                       STM32_I2C3SEL_PCLK3
+#endif
+#ifndef STM32_I2C4SEL
 #define STM32_I2C4SEL                       STM32_I2C4SEL_PCLK3
+#endif
+#ifndef STM32_I3C1SEL
 #define STM32_I3C1SEL                       STM32_I3C1SEL_PCLK1
+#endif
+#ifndef STM32_ADCDACSEL
 #define STM32_ADCDACSEL                     STM32_ADCDACSEL_HCLK
+#endif
+#ifndef STM32_DACSEL
 #define STM32_DACSEL                        STM32_DACSEL_IGNORE
+#endif
+#ifndef STM32_RNGSEL
 #define STM32_RNGSEL                        STM32_RNGSEL_IGNORE
+#endif
+#ifndef STM32_CECSEL
 #define STM32_CECSEL                        STM32_CECSEL_IGNORE
+#endif
+#ifndef STM32_FDCANSEL
 #define STM32_FDCANSEL                      STM32_FDCANSEL_IGNORE
+#endif
+#ifndef STM32_SAI1SEL
 #define STM32_SAI1SEL                       STM32_SAI1SEL_PLL1Q
+#endif
+#ifndef STM32_SAI2SEL
 #define STM32_SAI2SEL                       STM32_SAI2SEL_PLL1Q
+#endif
+#ifndef STM32_CKPERSEL
 #define STM32_CKPERSEL                      STM32_CKPERSEL_HSI
-#define STM32_RTCSEL                        STM32_RTCSEL_LSE
+#endif
 
 /*
  * IRQ system settings.
@@ -204,7 +443,6 @@
 #define STM32_IRQ_TIM7_PRIORITY             7
 #define STM32_IRQ_TIM8_BRK_PRIORITY         7
 #define STM32_IRQ_TIM8_UP_PRIORITY          7
-#define STM32_IRQ_TIM8_CC_PRIORITY          7
 #define STM32_IRQ_TIM8_CC_PRIORITY          7
 #define STM32_IRQ_TIM12_PRIORITY            7
 #define STM32_IRQ_TIM13_PRIORITY            7
@@ -372,7 +610,9 @@
 #define STM32_SERIAL_USE_UART4              FALSE
 #define STM32_SERIAL_USE_UART5              FALSE
 #define STM32_SERIAL_USE_USART6             FALSE
-//#define STM32_SERIAL_USE_UART7              FALSE
+#ifndef STM32_SERIAL_USE_UART7
+#define STM32_SERIAL_USE_UART7              FALSE
+#endif
 #define STM32_SERIAL_USE_UART8              FALSE
 #define STM32_SERIAL_USE_UART9              FALSE
 #define STM32_SERIAL_USE_USART10            FALSE
@@ -444,10 +684,6 @@
 #define STM32_TRNG_USE_RNG1                 FALSE
 
 /*
- * UART driver system settings.
- */
-
-/*
  * USB driver system settings.
  */
 #define STM32_USB_USE_USB1                  TRUE
@@ -459,8 +695,3 @@
  * WDG driver system settings.
  */
 #define STM32_WDG_USE_IWDG                  FALSE
-
-/*
- * WSPI driver system settings.
- */
-
