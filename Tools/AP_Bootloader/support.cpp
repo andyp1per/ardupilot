@@ -18,6 +18,7 @@
 #include "mcu_h7.h"
 #include "mcu_g4.h"
 #include "mcu_l4.h"
+#include "mcu_h5.h"
 
 // optional uprintf() code for debug
 // #define BOOTLOADER_DEBUG SD1
