@@ -190,8 +190,13 @@ private:
     uint32_t _rts_threshold;
     HAL_Semaphore _write_mutex;
 #ifndef HAL_UART_NODMA
+#if defined(STM32_DMA3_PRESENT)
+    const stm32_dma3_channel_t* rxdma;
+    const stm32_dma3_channel_t* txdma;
+#else
     const stm32_dma_stream_t* rxdma;
     const stm32_dma_stream_t* txdma;
+#endif
 #endif
     HAL_Semaphore tx_sem;
     HAL_Semaphore rx_sem;
@@ -244,9 +249,14 @@ private:
 
 #ifndef HAL_UART_NODMA
     static void rx_irq_cb(void* sd);
-#endif
+#if defined(STM32_DMA3_PRESENT)
+    static void rxbuff_full_irq(void* self, uint32_t csr);
+    static void tx_complete(void* self, uint32_t csr);
+#else
     static void rxbuff_full_irq(void* self, uint32_t flags);
     static void tx_complete(void* self, uint32_t flags);
+#endif
+#endif
 
 #ifndef HAL_UART_NODMA
     void dma_tx_allocate(Shared_DMA *ctx);
@@ -274,6 +284,24 @@ private:
     static void uart_rx_thread(void* arg);
     static void uart_thread_trampoline(void* p);
 
+#ifndef HAL_UART_NODMA
+    // Platform-agnostic DMA abstraction
+    void dma_rxdma_alloc();
+    void dma_txdma_alloc();
+    void dma_txdma_dealloc();
+    void dma_rxdma_enable();
+    void dma_txdma_start(uint16_t n);
+    void dma_rxdma_irq_handler();
+#if defined(STM32_DMA3_PRESENT)
+    void dma_txdma_irq_handler(uint32_t csr);
+#else
+    void dma_txdma_irq_handler(uint32_t flags);
+#endif
+    void dma_rxdma_disable_on_idle();
+    void dma_txdma_disable();
+    uint16_t dma_txdma_get_remaining();
+#endif
+
 protected:
     void _begin(uint32_t b, uint16_t rxS, uint16_t txS) override;
     void _end() override;
@@ -300,3 +328,4 @@ protected:
 
 // access to usb init for stdio.cpp
 void usb_initialise(void);
+
