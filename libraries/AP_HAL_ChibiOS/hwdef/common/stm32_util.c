@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 #if defined(STM32H5)
-#include <stm32_gpdma.h>
+#include <stm32_dma3.h>
 #else
 #include <stm32_dma.h>
 #endif

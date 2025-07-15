@@ -72,7 +72,11 @@ bool check_limit_flash_1M(void);
 // one-time programmable area
 #if defined(FLASH_OTP_BASE)
 #define OTP_BASE FLASH_OTP_BASE
+#if defined(FLASH_OTP_SIZE)
+#define OTP_SIZE FLASH_OTP_SIZE
+#else
 #define OTP_SIZE (FLASH_OTP_END-FLASH_OTP_BASE)
+#endif
 #elif defined(STM32F4)
 #define OTP_BASE 0x1fff7800
 #define OTP_SIZE 512
