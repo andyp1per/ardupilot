@@ -311,7 +311,7 @@ jump_to_app()
     led_set(LED_OFF);
 
     // resetting the clocks is needed for loading NuttX
-#if defined(STM32H7)
+#if defined(STM32H7) || defined(STM32H5)
     rccDisableAPB1L(~0);
     rccDisableAPB1H(~0);
 #elif defined(STM32G4)
@@ -328,7 +328,7 @@ jump_to_app()
 #endif
     rccDisableAPB2(~0);
 #if HAL_USE_SERIAL_USB == TRUE
-#if !STM32_OTG2_IS_OTG1
+#if !STM32_OTG2_IS_OTG1 && !defined(STM32H5)
     rccResetOTG_FS();
 #endif
 #if defined(rccResetOTG_HS)
@@ -616,7 +616,7 @@ bootloader(unsigned timeout)
         // erase failure:	INSYNC/FAILURE
         //
         case PROTO_CHIP_ERASE:
-#if defined(STM32F7) || defined(STM32H7)
+#if defined(STM32F7) || defined(STM32H7) || defined(STM32H5)
         case PROTO_CHIP_FULL_ERASE:
 #endif
 
@@ -643,7 +643,7 @@ bootloader(unsigned timeout)
 
             // erase all sectors
             for (uint16_t i = 0; flash_func_sector_size(i) != 0; i++) {
-#if defined(STM32F7) || defined(STM32H7)
+#if defined(STM32F7) || defined(STM32H7) || defined(STM32H5)
                 if (!flash_func_erase_sector(i, c == PROTO_CHIP_FULL_ERASE)) {
 #else
                 if (!flash_func_erase_sector(i)) {
