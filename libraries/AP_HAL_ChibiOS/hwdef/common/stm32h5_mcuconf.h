@@ -640,12 +640,24 @@
 /*
  * SPI driver system settings.
  */
+#ifndef STM32_SPI_USE_SPI1
 #define STM32_SPI_USE_SPI1                  FALSE
+#endif
+#ifndef STM32_SPI_USE_SPI2
 #define STM32_SPI_USE_SPI2                  FALSE
+#endif
+#ifndef STM32_SPI_USE_SPI3
 #define STM32_SPI_USE_SPI3                  FALSE
+#endif
+#ifndef STM32_SPI_USE_SPI4
 #define STM32_SPI_USE_SPI4                  FALSE
+#endif
+#ifndef STM32_SPI_USE_SPI5
 #define STM32_SPI_USE_SPI5                  FALSE
+#endif
+#ifndef STM32_SPI_USE_SPI6
 #define STM32_SPI_USE_SPI6                  FALSE
+#endif
 #define STM32_SPI_SPI1_RX_DMA3_CHANNEL      STM32_DMA3_MASK_FIFO2
 #define STM32_SPI_SPI1_TX_DMA3_CHANNEL      STM32_DMA3_MASK_FIFO2
 #define STM32_SPI_SPI2_RX_DMA3_CHANNEL      STM32_DMA3_MASK_FIFO2
