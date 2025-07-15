@@ -404,6 +404,8 @@
 #define STM32_CKPERSEL                      STM32_CKPERSEL_HSI
 #endif
 
+#define STM32_DMA_ADVANCED          FALSE
+#define SHARED_DMA_MASK             0
 /*
  * IRQ system settings.
  */
@@ -468,9 +470,11 @@
 /*
  * ADC driver system settings.
  */
-#define STM32_ADC_USE_ADC1                  FALSE
-#define STM32_ADC_USE_ADC2                  FALSE
+#define STM32_ADC_USE_ADC1                  TRUE
+#define STM32_ADC_USE_ADC2                  TRUE
+#ifndef STM32_ADC_DUAL_MODE
 #define STM32_ADC_DUAL_MODE                 FALSE
+#endif
 #define STM32_ADC_COMPACT_SAMPLES           FALSE
 #define STM32_ADC_ADC1_DMA3_CHANNEL         STM32_DMA3_MASK_FIFO2
 #define STM32_ADC_ADC2_DMA3_CHANNEL         STM32_DMA3_MASK_FIFO2
