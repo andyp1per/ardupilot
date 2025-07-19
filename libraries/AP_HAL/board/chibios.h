@@ -187,3 +187,7 @@
 #define AP_FATFS_MIN_IO_SIZE 4096
 #endif
 #endif
+
+#ifdef STM32H5
+#define HAL_GYROFFT_ENABLED 0  // no CMSIS library for M33
+#endif
