@@ -29,11 +29,9 @@ mcu = {
     # flags of 4 means memory can be used for SDMMC DMA
     # flags of 8 means memory can be used for ethernet
     'RAM_MAP' : [
-        (0x24000000, 1024, 4), # AXI SRAM.
-        (0x30000000,  128, 8), # SRAM1, SRAM2
-        (0x20000000,  128, 2), # DTCM, tightly coupled, no DMA, fast
-        (0x00000400,   63, 2), # ITCM (first 1k removed, to keep address 0 unused)
-        (0x38000000,   32, 1), # SDR SRAM
+        (0x20000000, 256, 1),  # /* SRAM1 NS */
+        (0x20040000, 64, 1),   # /* SRAM2 NS */
+        (0x20050000, 320, 1),  # /* SRAM3 NS */
     ],
 
     'EXPECTED_CLOCK' : 250000000,

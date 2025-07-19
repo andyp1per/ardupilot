@@ -317,6 +317,11 @@ def write_dma_header(f, peripheral_list, mcu_type, dma_exclude=[],
 
     try:
         lib = importlib.import_module(mcu_type)
+        if hasattr(lib, "GPDMA_Map"):
+            # This is an STM32H5 or similar with GPDMA, delegate to the new function
+            gpdma_map = lib.GPDMA_Map
+            return write_gpdma_header(f, peripheral_list, mcu_type, gpdma_map, dma_exclude, dma_priority, dma_noshare, quiet)
+
         if hasattr(lib, "DMA_Map"):
             dma_map = lib.DMA_Map
         else:
@@ -578,7 +583,7 @@ def write_gpdma_header(f, periph_list, mcu_type, gpdma_map, dma_exclude, dma_pri
 
     f.write('// STM32H5 GPDMA Configuration\n\n')
 
-    # GPDMA on H5 has 8 channels in the main domain (GPDMA1)
+    # GPDMA on H5 has 8 channels in the main domain (GPDMA1) that we can use.
     available_channels = list(range(8))
     gpdma_assignments = {}
 
@@ -586,7 +591,8 @@ def write_gpdma_header(f, periph_list, mcu_type, gpdma_map, dma_exclude, dma_pri
     priority_list = dma_priority.split()
     sorted_periphs = sorted(periph_list, key=lambda x: get_list_index(x, priority_list))
 
-    # First, generate the request ID defines for all peripherals
+    # First, generate the request ID defines for all peripherals. This maps a peripheral
+    # to its GPDMA request number (REQSEL).
     f.write('// GPDMA Request Mappings (REQSEL)\n')
     req_map = {}
     for p_name in sorted(periph_list):
@@ -604,7 +610,8 @@ def write_gpdma_header(f, periph_list, mcu_type, gpdma_map, dma_exclude, dma_pri
             print(f"Note: No GPDMA mapping found for {p_name}")
     f.write('\n')
 
-    # Now, assign GPDMA channels (0-7) to peripherals
+    # Now, assign available GPDMA channels (0-7) to peripherals that need DMA.
+    # The assignment is done sequentially based on the peripheral priority list.
     for p_name in sorted_periphs:
         if p_name in dma_exclude or p_name not in req_map:
             continue
@@ -614,11 +621,12 @@ def write_gpdma_header(f, periph_list, mcu_type, gpdma_map, dma_exclude, dma_pri
                 print(f"Warning: Ran out of GPDMA channels. Cannot assign DMA to {p_name}")
             continue
 
-        # Simple sequential assignment.
+        # Simple sequential assignment from the list of available channels.
         assigned_channel = available_channels.pop(0)
         gpdma_assignments[p_name] = {'channel': assigned_channel, 'req_id': req_map[p_name]}
 
-    # Now generate UARTDriver.cpp DMA config lines
+    # Now generate the UARTDriver.cpp DMA config lines in the format:
+    # (enabled, channel_id, request_id_define)
     f.write("\n// Generated GPDMA UART configuration lines\n")
     for u in range(1, 9):
         # Construct key for USART or UART
