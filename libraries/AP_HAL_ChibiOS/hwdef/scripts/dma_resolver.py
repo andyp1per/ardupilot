@@ -411,27 +411,29 @@ def write_dma_header(f, peripheral_list, mcu_type, dma_exclude=[],
         for streamchan in dma_map[periph]:
             stream = (streamchan[0], streamchan[1])
             share_ok = True
-            for periph2 in stream_assign[stream]:
+            for periph2 in stream_assign.get(stream, []):
                 if not can_share(periph, noshare_list) or not can_share(periph2, noshare_list) or periph2 in forbidden_map[periph]:
                     share_ok = False
             if share_ok:
                 share_possibility.append(stream)
         if share_possibility:
             # sort the possible sharings so minimise impact on high priority streams
-            share_possibility = sorted(share_possibility, key=lambda x: get_sharing_priority(stream_assign[x], priority_list))
+            share_possibility = sorted(share_possibility, key=lambda x: get_sharing_priority(stream_assign.get(x, []), priority_list))
             # and take the one with the least impact (lowest value for highest priority stream share)
             stream = share_possibility[-1]
             if debug:
                 print("Sharing %s on %s with %s" % (periph, stream,
-                                                    stream_assign[stream]))
+                                                    stream_assign.get(stream, [])))
             curr_dict[periph] = stream
+            if stream not in stream_assign:
+                stream_assign[stream] = []
             stream_assign[stream].append(periph)
             unassigned_new.remove(periph)
     unassigned = unassigned_new
 
     for key in sorted(curr_dict.keys()):
         stream = curr_dict[key]
-        if len(stream_assign[stream]) > 1:
+        if len(stream_assign.get(stream, [])) > 1:
             if not check_sharing(stream_assign[stream]):
                 sys.exit(1)
     
@@ -467,7 +469,7 @@ def write_dma_header(f, peripheral_list, mcu_type, dma_exclude=[],
     for key in sorted(curr_dict.keys()):
         stream = curr_dict[key]
         shared = ''
-        if len(stream_assign[stream]) > 1:
+        if len(stream_assign.get(stream, [])) > 1:
             shared = ' // shared %s' % ','.join(stream_assign[stream])
             if stream[0] in [1,2]:
                 shared_set.add("(1U<<STM32_DMA_STREAM_ID(%u,%u))" % (stream[0],stream[1]))
@@ -571,68 +573,90 @@ def write_dma_header(f, peripheral_list, mcu_type, dma_exclude=[],
                 key, key, dma_name(key), key, dma_name(key)))
     return unassigned, ordered_timers
 
-# New function to be added
-
 def write_gpdma_header(f, periph_list, mcu_type, gpdma_map, dma_exclude, dma_priority, dma_noshare, quiet):
     '''Write a DMA header file for STM32H5 GPDMA.'''
 
-    # The GPDMA has 2 instances, but the request lines are shared. [cite: 762]
-    # For simplicity, we can treat it as one pool of requests that can be
-    # mapped to any of the 8 channels in GPDMA1. (GPDMA2 is often for low-power domain)
+    f.write('// STM32H5 GPDMA Configuration\n\n')
 
-    # In GPDMA, we don't resolve streams/channels like in DMAMUX.
-    # We just need to define the REQSEL value for each peripheral.
+    # GPDMA on H5 has 8 channels in the main domain (GPDMA1)
+    available_channels = list(range(8))
+    gpdma_assignments = {}
 
-    f.write('// STM32H5 GPDMA Request Map\n')
+    # Sort peripherals by priority to assign channels to more critical peripherals first
+    priority_list = dma_priority.split()
+    sorted_periphs = sorted(periph_list, key=lambda x: get_list_index(x, priority_list))
 
-    # Keep track of assigned requests to warn about duplicates if necessary
-    assigned_requests = {}
-
+    # First, generate the request ID defines for all peripherals
+    f.write('// GPDMA Request Mappings (REQSEL)\n')
+    req_map = {}
     for p_name in sorted(periph_list):
         if p_name in dma_exclude:
             continue
-
-        # The peripheral name in periph_list is like 'SPI1_RX'.
-        # The key in our GPDMA_Map is 'SPI1_RX_DMA'. We need to match them.
-        dma_key = p_name.replace('_', '_DMA_') if '_DMA_' not in p_name else p_name
-        dma_key = dma_key.replace('DMA_DMA', 'DMA') # Fix potential double DMA
-
-        # Another approach is to standardize keys in the MCU file. Let's assume keys
-        # in gpdma_map are like 'SPI1_RX_DMA'.
-        map_key = p_name + '_DMA' # e.g., 'SPI1_RX' -> 'SPI1_RX_DMA'
-        map_key = map_key.upper() # Standardize to upper case for matching
-
         req_id = None
         for k, v in gpdma_map.items():
-            # Match peripheral names like 'SPI1_RX' to map keys like 'spi1_rx_dma'
             if k.upper().startswith(p_name.upper()):
                  req_id = v
                  break
-
         if req_id is not None:
-            # We found the request ID for this peripheral.
-            # The GPDMA config is more complex than just a DMA stream.
-            # The key define is the request selection ID for the GPDMA_CxTR2 register.
-            # Example: #define STM32_GPDMA_REQ_SPI1_RX 6
+            req_map[p_name] = req_id
             f.write(f'#define STM32_GPDMA_REQ_{p_name.upper()} {req_id}\n')
-
-            if p_name in assigned_requests:
-                # This doesn't represent a conflict in GPDMA as multiple channels
-                # can be configured for the same request, but it's good to note.
-                if not quiet:
-                    print(f'Note: GPDMA request {req_id} ({p_name}) is used multiple times.')
-            assigned_requests[p_name] = req_id
-
         elif not quiet:
             print(f"Note: No GPDMA mapping found for {p_name}")
+    f.write('\n')
 
-    f.write('\n// End of GPDMA Request Map\n')
+    # Now, assign GPDMA channels (0-7) to peripherals
+    for p_name in sorted_periphs:
+        if p_name in dma_exclude or p_name not in req_map:
+            continue
+        
+        if len(available_channels) == 0:
+            if not quiet:
+                print(f"Warning: Ran out of GPDMA channels. Cannot assign DMA to {p_name}")
+            continue
 
-    # Return empty lists as DMA streams are not assigned this way for GPDMA
-    # The concept of "unassigned" DMA is less relevant here.
-    # The application code will be responsible for picking a free GPDMA channel (0-7)
-    # and configuring it with the appropriate REQSEL value from this header.
-    return [], []
+        # Simple sequential assignment.
+        assigned_channel = available_channels.pop(0)
+        gpdma_assignments[p_name] = {'channel': assigned_channel, 'req_id': req_map[p_name]}
+
+    # Now generate UARTDriver.cpp DMA config lines
+    f.write("\n// Generated GPDMA UART configuration lines\n")
+    for u in range(1, 9):
+        # Construct key for USART or UART
+        key = None
+        if f'USART{u}_TX' in periph_list or f'USART{u}_RX' in periph_list:
+            key = f'USART{u}'
+        elif f'UART{u}_TX' in periph_list or f'UART{u}_RX' in periph_list:
+            key = f'UART{u}'
+        if key is None:
+            continue
+
+        # RX Config
+        rx_key = f'{key}_RX'
+        f.write(f"#define STM32_{key}_RX_DMA_CONFIG ")
+        if rx_key in gpdma_assignments:
+            channel = gpdma_assignments[rx_key]['channel']
+            req_define = f'STM32_GPDMA_REQ_{rx_key.upper()}'
+            f.write(f"true, {channel}, {req_define}\n")
+        else:
+            f.write("false, 0, 0\n")
+
+        # TX Config
+        tx_key = f'{key}_TX'
+        f.write(f"#define STM32_{key}_TX_DMA_CONFIG ")
+        if tx_key in gpdma_assignments:
+            channel = gpdma_assignments[tx_key]['channel']
+            req_define = f'STM32_GPDMA_REQ_{tx_key.upper()}'
+            f.write(f"true, {channel}, {req_define}\n")
+        else:
+            f.write("false, 0, 0\n")
+            
+    unassigned = [p for p in periph_list if p not in gpdma_assignments and p not in dma_exclude]
+    if unassigned and not quiet:
+        f.write(f"\n// Note: The following peripherals could not be assigned a GPDMA channel: {unassigned}\n\n")
+
+    f.write('\n// End of GPDMA Configuration\n')
+    return unassigned, []
+
 
 if __name__ == '__main__':
     import optparse
@@ -664,4 +688,3 @@ if __name__ == '__main__':
 
     f = open("dma.h", "w")
     write_dma_header(f, plist, mcu_type)
-
