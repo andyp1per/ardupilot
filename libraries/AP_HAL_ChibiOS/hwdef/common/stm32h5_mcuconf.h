@@ -209,10 +209,10 @@
 #define STM32_PLL2P_VALUE                   2
 #endif
 #ifndef STM32_PLL2Q_VALUE
-#define STM32_PLL2Q_VALUE                   2
+#define STM32_PLL2Q_VALUE                   5
 #endif
 #ifndef STM32_PLL2R_VALUE
-#define STM32_PLL2R_VALUE                   2
+#define STM32_PLL2R_VALUE                   5
 #endif
 
 /*
@@ -232,7 +232,7 @@
 #define STM32_PLL3P_VALUE                   2
 #endif
 #ifndef STM32_PLL3Q_VALUE
-#define STM32_PLL3Q_VALUE                   10
+#define STM32_PLL3Q_VALUE                   5
 #endif
 #ifndef STM32_PLL3R_VALUE
 #define STM32_PLL3R_VALUE                   2
@@ -272,31 +272,31 @@
  * Peripherals clock sources.
  */
 #ifndef STM32_USART1SEL
-#define STM32_USART1SEL                     STM32_USART1SEL_PCLK2
+#define STM32_USART1SEL                     STM32_USART1SEL_PLL2Q
 #endif
 #ifndef STM32_USART2SEL
-#define STM32_USART2SEL                     STM32_USART2SEL_PCLK1
+#define STM32_USART2SEL                     STM32_USART2SEL_PLL2Q
 #endif
 #ifndef STM32_USART3SEL
-#define STM32_USART3SEL                     STM32_USART3SEL_PCLK1
+#define STM32_USART3SEL                     STM32_USART3SEL_PLL2Q
 #endif
 #ifndef STM32_UART4SEL
-#define STM32_UART4SEL                      STM32_UART4SEL_PCLK1
+#define STM32_UART4SEL                      STM32_UART4SEL_PLL2Q
 #endif
 #ifndef STM32_UART5SEL
-#define STM32_UART5SEL                      STM32_UART5SEL_PCLK1
+#define STM32_UART5SEL                      STM32_UART5SEL_PLL2Q
 #endif
 #ifndef STM32_USART6SEL
-#define STM32_USART6SEL                     STM32_USART6SEL_PCLK1
+#define STM32_USART6SEL                     STM32_USART6SEL_PLL2Q
 #endif
 #ifndef STM32_UART7SEL
-#define STM32_UART7SEL                      STM32_UART7SEL_PCLK1
+#define STM32_UART7SEL                      STM32_UART7SEL_PLL2Q
 #endif
 #ifndef STM32_UART8SEL
-#define STM32_UART8SEL                      STM32_UART8SEL_PCLK1
+#define STM32_UART8SEL                      STM32_UART8SEL_PLL2Q
 #endif
 #ifndef STM32_UART9SEL
-#define STM32_UART9SEL                      STM32_UART9SEL_PCLK1
+#define STM32_UART9SEL                      STM32_UART9SEL_PLL2Q
 #endif
 #ifndef STM32_USART10SEL
 #define STM32_USART10SEL                    STM32_USART10SEL_PCLK1
@@ -359,7 +359,7 @@
 #define STM32_USBSEL                        STM32_USBSEL_NOCLOCK
 #endif
 #ifndef STM32_SDMMC1SEL
-#define STM32_SDMMC1SEL                     STM32_SDMMC1SEL_PLL1Q
+#define STM32_SDMMC1SEL                     STM32_SDMMC1SEL_PLL2R
 #endif
 #ifndef STM32_SDMMC2SEL
 #define STM32_SDMMC2SEL                     STM32_SDMMC2SEL_PLL1Q
@@ -392,7 +392,7 @@
 #define STM32_CECSEL                        STM32_CECSEL_IGNORE
 #endif
 #ifndef STM32_FDCANSEL
-#define STM32_FDCANSEL                      STM32_FDCANSEL_IGNORE
+#define STM32_FDCANSEL                      STM32_FDCANSEL_PLL2Q
 #endif
 #ifndef STM32_SAI1SEL
 #define STM32_SAI1SEL                       STM32_SAI1SEL_PLL1Q
