@@ -39,8 +39,8 @@ mcu = {
 	'EXPECTED_CLOCKS' : [
         ('STM32_SYS_CK',	280000000),
         ('STM32_QSPICLK', 	280000000),
-        ('STM32_SDMMC1CLK', 160000000),
-        ('STM32_SPI45CLK',   80000000),
+        ('STM32_SDMMC1CLK',  80000000),
+        ('STM32_SPI45CLK',  100000000),
         ('STM32_FDCANCLK',   80000000),
 	],
     
