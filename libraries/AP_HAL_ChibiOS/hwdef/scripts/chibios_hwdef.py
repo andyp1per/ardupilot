@@ -1392,6 +1392,9 @@ MEMORY
 
 INCLUDE common.ld
 ''' % (flash_base, flash_length, ram0_start, ram0_len))
+            if self.get_gpdma_map() is not None:
+                f.write('''INCLUDE gpdma.ld''')
+
         elif int_flash_primary:
             self.env_vars['HAS_EXTERNAL_FLASH_SECTIONS'] = 1
             f.write('''/* generated ldscript.ld */
@@ -2466,6 +2469,10 @@ Please run: Tools/scripts/build_bootloaders.py %s
                     dma_exclude.add(periph)
         return list(dma_exclude)
 
+    def get_gpdma_map(self):
+        lib = self.get_mcu_lib(self.mcu_type)
+        return getattr(lib, 'GPDMA_Map', None)
+
     def write_alt_config(self, f):
         '''write out alternate config settings'''
         if len(self.altmap.keys()) == 0:
@@ -2560,8 +2567,7 @@ Please run: Tools/scripts/build_bootloaders.py %s
 
             # For H5, we use the GPDMA map instead of the DMAMUX resolver
             # The resolver will need the new GPDMA_Map from the MCU definition file
-            lib = self.get_mcu_lib(self.mcu_type)
-            gpdma_map = getattr(lib, 'GPDMA_Map', None)
+            gpdma_map = self.get_gpdma_map()
             if gpdma_map is None:
                 self.error("Missing GPDMA_Map for MCU %s" % self.mcu_type)
 
