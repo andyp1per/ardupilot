@@ -37,19 +37,19 @@ mcu = {
     'EXPECTED_CLOCK' : 250000000,
 
 	'EXPECTED_CLOCKS' : [
-        ('STM32_SYS_CK',	280000000),
-        ('STM32_QSPICLK', 	280000000),
+        ('STM32_SYS_CK',	250000000),
+        ('STM32_QSPICLK', 	250000000),
         ('STM32_SDMMC1CLK',  80000000),
         ('STM32_SPI45CLK',  100000000),
         ('STM32_FDCANCLK',   80000000),
 	],
     
-    # this MCU has M7 instructions and hardware double precision
+    # this MCU has M33 instructions and hardware double precision
     'CORTEX'    : 'cortex-m33',
-    'CPU_FLAGS' : '-mcpu=cortex-m33 -mfpu=fpv5-d16 -mfloat-abi=hard',
+    'CPU_FLAGS' : '-mcpu=cortex-m33 -mfpu=fpv5-sp-d16 -mfloat-abi=hard',
 
     'DEFINES' : {
-        'HAL_HAVE_HARDWARE_DOUBLE' : '1',
+        'HAL_HAVE_HARDWARE_DOUBLE' : '0',
         'STM32H5' : '1',
         'AP_FASTBOOT_ENABLED' : '0',
     }
