@@ -79,6 +79,8 @@ void string_substitute(const char *str, char *str2)
                 continue;
             }
             if (strncmp(str, serial, strlen(serial)) == 0) {
+#if !defined(STM32H5)
+                icache_deinit();
                 const char *hex = "0123456789ABCDEF";
                 const uint8_t *cpu_id = (const uint8_t *)UDID_START;
                 uint8_t i;
@@ -86,6 +88,8 @@ void string_substitute(const char *str, char *str2)
                     *p++ = hex[(cpu_id[i]>>4)&0xF];
                     *p++ = hex[cpu_id[i]&0xF];
                 }
+                icache_init();
+#endif
                 str += 8;
                 continue;
             }
