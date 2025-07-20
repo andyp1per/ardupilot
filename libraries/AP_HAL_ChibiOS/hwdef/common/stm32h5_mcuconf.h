@@ -232,7 +232,7 @@
 #define STM32_PLL3P_VALUE                   2
 #endif
 #ifndef STM32_PLL3Q_VALUE
-#define STM32_PLL3Q_VALUE                   5
+#define STM32_PLL3Q_VALUE                   10
 #endif
 #ifndef STM32_PLL3R_VALUE
 #define STM32_PLL3R_VALUE                   2
@@ -356,7 +356,7 @@
 #define STM32_SYSTICKSEL                    STM32_SYSTICKSEL_HCLKDIV8
 #endif
 #ifndef STM32_USBSEL
-#define STM32_USBSEL                        STM32_USBSEL_NOCLOCK
+#define STM32_USBSEL                        STM32_USBSEL_PLL3Q
 #endif
 #ifndef STM32_SDMMC1SEL
 #define STM32_SDMMC1SEL                     STM32_SDMMC1SEL_PLL2R
