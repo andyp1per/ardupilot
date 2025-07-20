@@ -195,6 +195,7 @@ bool Vicon::get_free_msg_buf_index(uint8_t &index)
     return false;
 }
 
+#pragma GCC diagnostic error "-Wframe-larger-than=2000"
 void Vicon::update_vicon_position_estimate(const Location &loc,
                                            const Vector3d &position,
                                            const Vector3f &velocity,
