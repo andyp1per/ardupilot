@@ -27,9 +27,8 @@ mcu_des_t mcu_descriptions[] = {
  */
 const mcu_rev_t silicon_revs[] = {
     // Revision codes for STM32H5 series
-    { 0x1000, 'V' },
-    { 0x1001, 'B' },
-    { 0x1002, 'Z' },
+    { 0x1000, 'Y' },
+    { 0x1001, 'Z' },
     // Add other revisions as they become available
 };
 
