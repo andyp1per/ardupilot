@@ -15,13 +15,12 @@ APJ_BOARD_ID AP_HW_DURANDAL
 # the nucleo seems to have trouble with flashing the last sector?
 FLASH_SIZE_KB 1920
 
-# bootloader is installed at zero offset
+# bootloader starts at zero offset
 FLASH_RESERVE_START_KB 0
 
 # the location where the bootloader will put the firmware
-# the H743 has 128k sectors
-FLASH_BOOTLOADER_LOAD_KB 128
-
+# the H5xx has 8k sectors
+FLASH_BOOTLOADER_LOAD_KB 32
 
 # order of UARTs (and USB)
 SERIAL_ORDER OTG1
