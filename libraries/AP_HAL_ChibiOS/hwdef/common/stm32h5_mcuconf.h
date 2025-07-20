@@ -692,8 +692,9 @@
  * ST driver system settings.
  */
 #define STM32_ST_IRQ_PRIORITY               8
-#define STM32_ST_USE_TIMER                  2
-
+#ifndef STM32_ST_USE_TIMER
+#define STM32_ST_USE_TIMER                  5
+#endif
 /*
  * TRNG driver system settings.
  */
@@ -711,3 +712,8 @@
  * WDG driver system settings.
  */
 #define STM32_WDG_USE_IWDG                  FALSE
+
+// limit SDMMC clock to 50MHz by default
+#ifndef STM32_SDC_MAX_CLOCK
+#define STM32_SDC_MAX_CLOCK                 50000000
+#endif
