@@ -8,7 +8,7 @@
 // These values are typically found in the DBGMCU_IDCODE register.
 // It's recommended to verify these against the latest ST Microelectronics reference manuals.
 #define STM32_UNKNOWN 0
-#define STM32_H56x    0x471  // STM32H56x/57x lines
+#define STM32_H56x    0x484  // STM32H56x/57x lines
 #define STM32_H503    0x472  // STM32H503 line
 
 /**
@@ -29,6 +29,7 @@ const mcu_rev_t silicon_revs[] = {
     // Revision codes for STM32H5 series
     { 0x1000, 'V' },
     { 0x1001, 'B' },
+    { 0x1002, 'Z' },
     // Add other revisions as they become available
 };
 
