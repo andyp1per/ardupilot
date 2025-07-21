@@ -36,6 +36,9 @@ REGION_ALIAS("BSS_RAM", ram0);
 /* RAM region to be used for the default heap.*/
 REGION_ALIAS("HEAP_RAM", ram0);
 
+/* RAM region to be used for DMA3 link structures.*/
+REGION_ALIAS("DMA3_RAM", ram0);
+
 __ram0_start__          = ORIGIN(ram0);
 __ram0_size__           = LENGTH(ram0);
 __ram0_end__            = __ram0_start__ + __ram0_size__;
@@ -184,6 +187,17 @@ SECTIONS
         . = ALIGN(4);
         __ram0_free__ = .;
     } > ram0
+
+    /* Special section for GPDMA links, it must not exceed 64kB in size.*/
+    .dma3 (NOLOAD) : ALIGN(16)
+    {
+        __dma3_base__ = .;
+        *(.dma3)
+        *(.dma3.*)
+        *(.bss.__dma3_*)
+        . = ALIGN(4);
+        __dma3_end__ = .;
+    } > DMA3_RAM
 
     /* The default heap uses the (statically) unused part of a RAM section.*/
     .heap (NOLOAD) :
