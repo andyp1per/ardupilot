@@ -279,6 +279,22 @@ void __late_init(void) {
   halInit();
   chSysInit();
 
+  /* Copy the MCU UID. Copy in word chunks to avoid any flash exceptions.*/
+#if defined(STM32_HAS_ICACHE)
+#if STM32_HAS_ICACHE
+  icache_deinit();
+#endif
+#endif
+  uint32_t *uid = (uint32_t *)UDID_START;
+  for (int i = 0; i < STM32_UID_SIZE; i++) {
+    DEV_UDID[i] = uid[i];
+  }
+#if defined(STM32_HAS_ICACHE)
+#if STM32_HAS_ICACHE
+  icache_init();
+#endif
+#endif
+
   /*
    * Initialize RNG
    */

@@ -33,6 +33,7 @@
 #include <string.h>
 
 #include "usbcfg.h"
+#include "stm32_util.h"
 
 #if defined(HAL_USB_PRODUCT_ID)
 /*
@@ -79,17 +80,13 @@ void string_substitute(const char *str, char *str2)
                 continue;
             }
             if (strncmp(str, serial, strlen(serial)) == 0) {
-#if !defined(STM32H5)
-                icache_deinit();
                 const char *hex = "0123456789ABCDEF";
-                const uint8_t *cpu_id = (const uint8_t *)UDID_START;
+                const uint8_t *cpu_id = (const uint8_t *)DEV_UDID;
                 uint8_t i;
                 for (i=0; i<12; i++) {
                     *p++ = hex[(cpu_id[i]>>4)&0xF];
                     *p++ = hex[cpu_id[i]&0xF];
                 }
-                icache_init();
-#endif
                 str += 8;
                 continue;
             }

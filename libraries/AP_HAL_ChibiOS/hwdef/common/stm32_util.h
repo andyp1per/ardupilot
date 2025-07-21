@@ -197,6 +197,12 @@ extern stkline_t __main_thread_stack_end__;
 
 void stm32_disable_cm4_core(void);
 
+#ifndef STM32_UID_SIZE
+#define STM32_UID_SIZE 3
+#endif
+// copy of device UID to avoid icache errors on startup
+extern uint32_t DEV_UDID[STM32_UID_SIZE];
+
 #ifdef __cplusplus
 }
 #endif
