@@ -42,6 +42,7 @@ mcu = {
         ('STM32_SDMMC1CLK',  80000000),
         ('STM32_SPI45CLK',  100000000),
         ('STM32_FDCANCLK',   80000000),
+        ('STM32_USBCLK',     48000000),
 	],
     
     # this MCU has M33 instructions and hardware double precision
