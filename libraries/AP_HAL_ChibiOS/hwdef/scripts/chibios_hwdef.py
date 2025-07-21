@@ -1372,9 +1372,6 @@ MEMORY
 
 INCLUDE common.ld
 ''' % (flash_base, flash_length, ram0_start, ram0_len))
-            if self.get_gpdma_map() is not None:
-                f.write('''INCLUDE gpdma.ld''')
-
         elif int_flash_primary:
             self.env_vars['HAS_EXTERNAL_FLASH_SECTIONS'] = 1
             f.write('''/* generated ldscript.ld */
