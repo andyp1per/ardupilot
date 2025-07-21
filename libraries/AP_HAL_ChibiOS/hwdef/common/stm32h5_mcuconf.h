@@ -256,13 +256,13 @@
 #define STM32_MCO1SEL                       STM32_MCO1SEL_HSE
 #endif
 #ifndef STM32_MCO1PRE_VALUE
-#define STM32_MCO1PRE_VALUE                 STM32_MCO1PRE_NOCLOCK
+#define STM32_MCO1PRE_VALUE                 4
 #endif
 #ifndef STM32_MCO2SEL
 #define STM32_MCO2SEL                       STM32_MCO2SEL_SYSCLK
 #endif
 #ifndef STM32_MCO2PRE_VALUE
-#define STM32_MCO2PRE_VALUE                 STM32_MCO2PRE_NOCLOCK
+#define STM32_MCO2PRE_VALUE                 4
 #endif
 #ifndef STM32_LSCOSEL
 #define STM32_LSCOSEL                       STM32_LSCOSEL_NOCLOCK
