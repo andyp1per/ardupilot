@@ -25,6 +25,8 @@
 #include <hrt.h>
 
 static int64_t utc_time_offset;
+// copy of device UID to avoid icache errors on startup
+uint32_t DEV_UDID[STM32_UID_SIZE];
 
 /*
   setup the timer capture digital filter for a channel
