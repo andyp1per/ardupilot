@@ -83,7 +83,7 @@
 #define STM32_LSI_ENABLED                   FALSE
 #define STM32_LSE_ENABLED                   TRUE
 #define STM32_CSI_ENABLED                   FALSE
-#define STM32_HSI48_ENABLED                 FALSE
+#define STM32_HSI48_ENABLED                 TRUE
 
 /*
  * PLL settings based on the HSE clock value.
