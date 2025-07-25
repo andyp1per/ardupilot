@@ -13948,6 +13948,49 @@ RTL_ALT 111
         # Test done
         self.land_and_disarm()
 
+    def ScriptingFlipOnASwitch(self):
+        '''Tests the flip_on_switch.lua script'''
+        self.start_subtest("Test FlipOnSwitch functionality")
+
+        # Stage 1: Set SCR_ENABLE and reboot
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+        })
+
+
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
+        self.install_applet_script_context("flip_on_a_switch.lua")
+
+        self.reboot_sitl()
+
+        # Stage 2: Set script parameters and reboot again
+        self.set_parameters({
+            "FLIP_ENABLE": 1,
+            "FLIP_AXIS": 1,  # Roll
+            "FLIP_RATE": 720,
+            "FLIP_DURATION": 1.5,
+            "RC9_OPTION": 300,  # Scripting1
+        })
+        self.reboot_sitl()
+
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.change_mode("LOITER")
+        self.user_takeoff(alt_min=20)
+
+        self.context_collect('STATUSTEXT')
+
+        # Trigger the flip
+        self.set_rc(9, 2000)
+        self.wait_statustext("Flip: Starting continuous flip", check_context=True, timeout=10)
+        self.wait_statustext("Flip complete", check_context=True, timeout=10)
+
+        # Lower the switch to stop flipping
+        self.set_rc(9, 1000)
+        self.wait_statustext("Flip: Stopping continuous flip", check_context=True, timeout=5)
+
+        self.disarm_vehicle()
+
     def RTLYaw(self):
         '''test that vehicle yaws to original heading on RTL'''
         # 0 is WP_YAW_BEHAVIOR_NONE
@@ -14644,6 +14687,7 @@ return update, 1000
             self.ScriptingFlipMode,
             self.ScriptingFlyVelocity,
             self.EK3_EXT_NAV_vel_without_vert,
+            self.ScriptingFlipOnASwitch,
             self.CompassLearnCopyFromEKF,
             self.AHRSAutoTrim,
             self.Ch6TuningLoitMaxXYSpeed,
