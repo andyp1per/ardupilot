@@ -13972,12 +13972,10 @@ RTL_ALT 111
             "FLIP_DURATION": 1.5,
             "RC9_OPTION": 300,  # Scripting1
         })
-        self.reboot_sitl()
-
         self.wait_ready_to_arm()
         self.arm_vehicle()
-        self.change_mode("LOITER")
-        self.user_takeoff(alt_min=20)
+        # Takeoff in Loiter mode
+        self.takeoff(10, mode="LOITER")
 
         self.context_collect('STATUSTEXT')
 
