@@ -31,23 +31,18 @@ local PARAM_TABLE_KEY = 107
 local PARAM_TABLE_PREFIX = "FLIP_"
 assert(param:add_table(PARAM_TABLE_KEY, PARAM_TABLE_PREFIX, 5), 'flip_on_switch: could not add param table')
 
-local parameter_definitions = {
-  { name = "ENABLE", default = 1 },
-  { name = "AXIS", default = vehicle_control.axis.ROLL },
-  { name = "RATE", default = 720 },
-  { name = "DURATION", default = 1.0 },
-  { name = "THROTTLE", default = 0.5 }
-}
-
-for i, p_def in ipairs(parameter_definitions) do
-    assert(param:add_param(PARAM_TABLE_KEY, i, p_def.name, p_def.default), "Could not add param "..p_def.name)
+-- add a parameter and bind it to a variable
+function bind_add_param(name, idx, default_value)
+    assert(param:add_param(PARAM_TABLE_KEY, idx, name, default_value), string.format('could not add param %s', name))
+    return Parameter(PARAM_TABLE_PREFIX .. name)
 end
 
-local FLIP_ENABLE = assert(param:get('FLIP_ENABLE'), 'FLIP_ENABLE not set')
-local FLIP_AXIS = assert(param:get('FLIP_AXIS'), 'FLIP_AXIS not set')
-local FLIP_RATE = assert(param:get('FLIP_RATE'), 'FLIP_RATE not set')
-local FLIP_DURATION = assert(param:get('FLIP_DURATION'), 'FLIP_DURATION not set')
-local FLIP_THROTTLE = assert(param:get('FLIP_THROTTLE'), 'FLIP_THROTTLE not set')
+local FLIP_ENABLE = bind_add_param('ENABLE', 1, 1)
+local FLIP_AXIS = bind_add_param('AXIS', 2, vehicle_control.axis.ROLL)
+local FLIP_RATE = bind_add_param('RATE', 3, 720)
+local FLIP_DURATION = bind_add_param('DURATION', 4, 1.0)
+local FLIP_THROTTLE = bind_add_param('THROTTLE', 5, 0.5)
+
 
 -- RC Function Constant
 local SCRIPTING_AUX_FUNC = 300 -- Corresponds to "Scripting1"
@@ -55,13 +50,14 @@ local SCRIPTING_AUX_FUNC = 300 -- Corresponds to "Scripting1"
 -- State variables
 local flip_state = nil
 local flip_active = false
+local original_mode = nil
 
 -- Precondition checks
--- assert(vehicle:get_frame_class() == 1 or vehicle:get_frame_class() == 2, 'Script requires a Copter frame')
+assert(FWVersion:type() == 2, 'Script requires a Copter frame')
 
 -- Main update function
 function update()
-    if FLIP_ENABLE == 0 then
+    if FLIP_ENABLE:get() == 0 then
         return update, 1000
     end
 
@@ -69,18 +65,44 @@ function update()
 
     if switch_pos == 2 then -- High position
         if not flip_active then
-            -- Start a new flip if not already active
+            -- Pre-flight checks
+            if not arming:is_armed() or not vehicle:get_likely_flying() then
+                gcs:send_text(MAV_SEVERITY.WARNING, "Flip: Vehicle must be armed and flying")
+                return update, 500
+            end
+
+            original_mode = vehicle:get_mode()
+            if not (original_mode == vehicle_control.mode.LOITER or original_mode == vehicle_control.mode.GUIDED) then
+                gcs:send_text(MAV_SEVERITY.WARNING, "Flip: Must be in Loiter or Guided mode to start")
+                original_mode = nil
+                return update, 500
+            end
+
+            -- Set to Guided mode for flip execution
+            if original_mode ~= vehicle_control.mode.GUIDED then
+                if not vehicle:set_mode(vehicle_control.mode.GUIDED) then
+                    gcs:send_text(MAV_SEVERITY.WARNING, "Flip: Failed to set Guided mode")
+                    original_mode = nil
+                    return update, 500
+                end
+            end
+
+            -- Start a new flip
             gcs:send_text(MAV_SEVERITY.INFO, "Flip: Starting continuous flip")
             flip_active = true
             flip_state = vehicle_control.maneuver.flip_start(
-                FLIP_AXIS,
-                FLIP_RATE,
-                FLIP_THROTTLE,
-                FLIP_DURATION
+                FLIP_AXIS:get(),
+                FLIP_RATE:get(),
+                FLIP_THROTTLE:get(),
+                FLIP_DURATION:get()
             )
             if flip_state == nil then
                 gcs:send_text(MAV_SEVERITY.WARNING, "Flip: Failed to start flip")
                 flip_active = false
+                if original_mode then
+                    vehicle:set_mode(original_mode)
+                    original_mode = nil
+                end
             end
         elseif flip_state then
             -- Update existing flip
@@ -88,10 +110,10 @@ function update()
             if status == vehicle_control.SUCCESS then
                 -- Flip finished, start another one immediately
                 flip_state = vehicle_control.maneuver.flip_start(
-                    FLIP_AXIS,
-                    FLIP_RATE,
-                    FLIP_THROTTLE,
-                    FLIP_DURATION
+                    FLIP_AXIS:get(),
+                    FLIP_RATE:get(),
+                    FLIP_THROTTLE:get(),
+                    FLIP_DURATION:get()
                 )
                 if flip_state == nil then
                     gcs:send_text(MAV_SEVERITY.WARNING, "Flip: Failed to restart flip")
@@ -104,8 +126,13 @@ function update()
             gcs:send_text(MAV_SEVERITY.INFO, "Flip: Stopping continuous flip")
             flip_active = false
             flip_state = nil
-            -- Restore attitude by setting target rates to zero
-            vehicle:set_target_rate_and_throttle(0, 0, 0, vehicle:get_throttle_mid())
+            -- Restore attitude by setting target rates to zero and providing a neutral hover throttle
+            vehicle:set_target_rate_and_throttle(0, 0, 0, 0.5)
+            -- Restore original flight mode
+            if original_mode and vehicle:get_mode() ~= original_mode then
+                vehicle:set_mode(original_mode)
+            end
+            original_mode = nil
         end
     end
 

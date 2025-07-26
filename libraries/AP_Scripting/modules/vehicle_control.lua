@@ -28,6 +28,18 @@ vehicle_control.mode = {
   RTL = 6,
 }
 
+-- Enum for MAV_SEVERITY levels, as required by the playbook
+vehicle_control.MAV_SEVERITY = {
+  EMERGENCY = 0,
+  ALERT = 1,
+  CRITICAL = 2,
+  ERROR = 3,
+  WARNING = 4,
+  NOTICE = 5,
+  INFO = 6,
+  DEBUG = 7,
+}
+
 --================================================================
 -- Pattern Control
 --================================================================
@@ -59,11 +71,13 @@ function vehicle_control.pattern.start(radius_m)
 
   -- Calculate pattern geometry
   local start_location = current_loc:copy()
-  local heading_rad = ahrs:get_yaw()
+  local heading_rad = ahrs:get_yaw_rad()
+
   local center_1 = start_location:copy()
-  center_1:offset_bearing(heading_rad + math.pi/2, radius_m)
+  center_1:offset_bearing(math.deg(heading_rad) + 90, radius_m)
+
   local center_2 = start_location:copy()
-  center_2:offset_bearing(heading_rad - math.pi/2, radius_m)
+  center_2:offset_bearing(math.deg(heading_rad) - 90, radius_m)
 
   return {
     start_location = start_location,
@@ -89,7 +103,7 @@ function vehicle_control.pattern.fly_arc_start(center_loc, start_bearing_deg, en
   local duration_s = arc_length / speed_ms
 
   return {
-    start_time = millis(),
+    start_time = millis():tofloat(),
     duration_s = duration_s,
     center_loc = center_loc,
     start_bearing_deg = start_bearing_deg,
@@ -104,7 +118,7 @@ end
   @return RUNNING or SUCCESS.
 ]]
 function vehicle_control.pattern.fly_arc_update(state)
-  local elapsed_time = (millis() - state.start_time) / 1000.0
+  local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
   if elapsed_time >= state.duration_s then
     return vehicle_control.SUCCESS
   end
@@ -112,7 +126,7 @@ function vehicle_control.pattern.fly_arc_update(state)
   local progress = elapsed_time / state.duration_s
   local current_bearing_deg = state.start_bearing_deg + (state.total_angle_deg * progress)
   local target_loc = state.center_loc:copy()
-  target_loc:offset_bearing(math.rad(current_bearing_deg), state.radius_m)
+  target_loc:offset_bearing(current_bearing_deg, state.radius_m)
 
   vehicle:set_target_location(target_loc)
   return vehicle_control.RUNNING
@@ -145,15 +159,26 @@ vehicle_control.maneuver.stage = {
 function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain)
   -- 1. Save State & Prepare
   if not vehicle:get_mode() == vehicle_control.mode.GUIDED then
-    gcs:send_text(gcs.MAV_SEVERITY_WARNING, "Flip requires Guided mode")
+    gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Flip requires Guided mode")
     return nil, "Flip requires Guided mode"
+  end
+
+  -- Check for required parameters
+  if type(rate_degs) ~= "number" or rate_degs == 0 then
+    gcs:send_text(vehicle_control.MAV_SEVERITY.ERROR, "Flip requires a non-zero number for rate_degs")
+    return nil, "Invalid rate_degs"
+  end
+
+  -- Default throttle_level to hover if not provided
+  if throttle_level == nil then
+    throttle_level = 0.5
   end
 
   num_flips = num_flips or 1
   local total_angle_deg = 360 * num_flips
   local t_flip = flip_duration_s or (total_angle_deg / math.abs(rate_degs))
   if t_flip <= 0 then
-    gcs:send_text(gcs.MAV_SEVERITY_WARNING, "Flip duration must be positive")
+    gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Flip duration must be positive")
     return nil, "Flip duration must be positive"
   end
 
@@ -161,20 +186,31 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   local climb_rate_ms = 0.5 * 9.81 * t_flip
 
   -- 3. Initiate Climb
-  local initial_state = { attitude = ahrs:get_attitude(), velocity = ahrs:get_velocity_NED() }
-  local vel_ned = vector3.new(initial_state.velocity.x, initial_state.velocity.y, -climb_rate_ms)
+  local initial_attitude_euler = Vector3f()
+  initial_attitude_euler:x(ahrs:get_roll_rad())
+  initial_attitude_euler:y(ahrs:get_pitch_rad())
+  initial_attitude_euler:z(ahrs:get_yaw_rad())
+
+  local initial_velocity_ned = ahrs:get_velocity_NED()
+  local initial_state = { attitude = initial_attitude_euler, velocity = initial_velocity_ned }
+  
+  local vel_ned = Vector3f()
+  vel_ned:x(initial_state.velocity:x())
+  vel_ned:y(initial_state.velocity:y())
+  vel_ned:z(-climb_rate_ms)
+  
   if not vehicle:set_target_velocity_NED(vel_ned) then
-    gcs:send_text(gcs.MAV_SEVERITY_WARNING, "Failed to set target velocity for climb")
+    gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Failed to set target velocity for climb")
     return nil, "Failed to set climb velocity"
   end
 
   -- 4. Prepare for Flip
   local throttle_cmd = (throttle_level == vehicle_control.THROTTLE_CUT) and 0.1 or throttle_level
-  local initial_angle = (axis == vehicle_control.axis.ROLL) and math.deg(initial_state.attitude.roll) or math.deg(initial_state.attitude.pitch)
+  local initial_angle = (axis == vehicle_control.axis.ROLL) and math.deg(initial_state.attitude:x()) or math.deg(initial_state.attitude:y())
 
   return {
     stage = vehicle_control.maneuver.stage.CLIMBING,
-    climb_start_time = millis(),
+    climb_start_time = millis():tofloat(),
     initial_state = initial_state,
     t_flip = t_flip,
     total_angle_deg = total_angle_deg,
@@ -195,30 +231,30 @@ end
 function vehicle_control.maneuver.flip_update(state)
   if state.stage == vehicle_control.maneuver.stage.CLIMBING then
     -- Wait a short time to ensure the vehicle has started climbing
-    if millis() - state.climb_start_time > 200 then
+    if (millis():tofloat()) - state.climb_start_time > 200 then
       state.stage = vehicle_control.maneuver.stage.FLIPPING
-      state.start_time = millis() -- Reset start time for the flip itself
+      state.start_time = millis():tofloat() -- Reset start time for the flip itself
       
       -- Set initial rate command now that climb has started
-      local roll_rate_rads, pitch_rate_rads = 0, 0
+      local roll_rate_dps, pitch_rate_dps = 0, 0
       if state.axis == vehicle_control.axis.ROLL then
-        roll_rate_rads = math.rad(state.rate_degs)
+        roll_rate_dps = state.rate_degs
       else -- pitch
-        pitch_rate_rads = math.rad(state.rate_degs)
+        pitch_rate_dps = state.rate_degs
       end
-      vehicle:set_target_rate_and_throttle(roll_rate_rads, pitch_rate_rads, 0, state.throttle_cmd)
+      vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, 0, state.throttle_cmd)
     end
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.FLIPPING then
-    local elapsed_time = (millis() - state.start_time) / 1000.0
+    local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
     if elapsed_time >= state.t_flip then
       state.stage = vehicle_control.maneuver.stage.RESTORING
       return vehicle_control.RUNNING
     end
 
     -- Unwrap angle to track total rotation
-    local current_angle = (state.axis == vehicle_control.axis.ROLL) and math.deg(ahrs:get_roll()) or math.deg(ahrs:get_pitch())
+    local current_angle = (state.axis == vehicle_control.axis.ROLL) and math.deg(ahrs:get_roll_rad()) or math.deg(ahrs:get_pitch_rad())
     local delta_angle = current_angle - state.last_angle
     if delta_angle > 180 then
       delta_angle = delta_angle - 360
@@ -234,24 +270,32 @@ function vehicle_control.maneuver.flip_update(state)
     local new_rate_degs = state.rate_degs + state.Kp * error
 
     -- Set target rates
-    local roll_rate_rads, pitch_rate_rads = 0, 0
+    local roll_rate_dps, pitch_rate_dps = 0, 0
     if state.axis == vehicle_control.axis.ROLL then
-      roll_rate_rads = math.rad(new_rate_degs)
+      roll_rate_dps = new_rate_degs
     else -- pitch
-      pitch_rate_rads = math.rad(new_rate_degs)
+      pitch_rate_dps = new_rate_degs
     end
-    vehicle:set_target_rate_and_throttle(roll_rate_rads, pitch_rate_rads, 0, state.throttle_cmd)
+    vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, 0, state.throttle_cmd)
 
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING then
-    -- Cancel rotation rates
-    vehicle:set_target_rate_and_throttle(0, 0, 0, vehicle:get_throttle_mid())
-    -- Restore attitude and horizontal velocity
-    vehicle:set_target_attitude(state.initial_state.attitude)
-    local restore_vel = vector3.new(state.initial_state.velocity.x, state.initial_state.velocity.y, 0)
+    -- Restore attitude first to level out and set yaw.
+    local roll_deg = math.deg(state.initial_state.attitude:x())
+    local pitch_deg = math.deg(state.initial_state.attitude:y())
+    local yaw_deg = math.deg(state.initial_state.attitude:z())
+    vehicle:set_target_angle_and_climbrate(roll_deg, pitch_deg, yaw_deg, 0, false, 0)
+    
+    -- Then immediately command the horizontal velocity. The autopilot will
+    -- hold the new yaw while achieving the target velocity.
+    local restore_vel = Vector3f()
+    restore_vel:x(state.initial_state.velocity:x())
+    restore_vel:y(state.initial_state.velocity:y())
+    restore_vel:z(0)
     vehicle:set_target_velocity_NED(restore_vel)
-    gcs:send_text(gcs.MAV_SEVERITY_INFO, "Flip complete")
+    
+    gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete")
     state.stage = vehicle_control.maneuver.stage.DONE
     return vehicle_control.SUCCESS
   end
