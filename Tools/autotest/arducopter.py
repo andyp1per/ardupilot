@@ -12382,6 +12382,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.MAV_CMD_NAV_VTOL_LAND,
              self.clear_roi,
              self.ReadOnlyDefaults,
+             self.FigureOfEight,
         ])
         return ret
 
@@ -13990,6 +13991,38 @@ RTL_ALT 111
         self.wait_statustext("Flip: Stopping continuous flip", check_context=True, timeout=5)
 
         self.disarm_vehicle()
+
+    def FigureOfEight(self):
+        '''Test Figure of Eight Lua script'''
+        self.start_subtest("Test Figure of Eight Lua script")
+
+        # Set up parameters for the test
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "RC7_OPTION": 300,  # Scripting1
+        })
+        self.install_applet_script_context('figure-eight.lua')
+        self.reboot_sitl()
+
+        # Takeoff in Loiter mode
+        self.takeoff(10, mode="LOITER")
+
+        # Activate the script
+        self.progress("Activating Figure of Eight script")
+        self.context_collect('STATUSTEXT')
+        self.set_rc(7, 2000)  # High position for the switch
+        self.wait_statustext("Figure Eight: Starting", check_context=True, timeout=10)
+        self.progress("Script activated successfully")
+
+        # Deactivate the script
+        self.progress("Deactivating Figure of Eight script")
+        self.set_rc(7, 1000)  # Low position for the switch
+        self.wait_statustext("Figure Eight: Deactivated by switch", check_context=True, timeout=10)
+        self.progress("Script deactivated successfully")
+
+        # Land and disarm
+        self.do_RTL()
+        self.progress("Figure of Eight test complete")
 
     def RTLYaw(self):
         '''test that vehicle yaws to original heading on RTL'''
