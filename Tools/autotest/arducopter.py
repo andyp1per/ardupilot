@@ -13987,8 +13987,8 @@ RTL_ALT 111
         # Lower the switch to stop flipping
         self.set_rc(9, 1000)
         self.wait_statustext("Flip: Stopping continuous flip", check_context=True, timeout=5)
-
-        self.disarm_vehicle()
+        # Land and disarm
+        self.do_RTL()
 
     def FigureOfEight(self):
         '''Test Figure of Eight Lua script'''
