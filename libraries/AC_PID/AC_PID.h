@@ -148,9 +148,9 @@ public:
 
 protected:
 
-    //  update_i - update the integral
-    //  if the limit flag is set the integral is only allowed to shrink
-    void update_i(float dt, bool limit);
+    // Updates the integrator based on current error and dt.
+    // If `limit` is true, the integrator is only allowed to shrink to avoid wind-up.
+    void update_i(float dt, bool limit, float i_scale = 1.0f);
 
     // parameters
     AP_Float _kp;
