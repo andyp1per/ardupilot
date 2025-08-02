@@ -466,7 +466,7 @@ public:
 protected:
 
     const char *name() const override { return "ACRR"; }
-    const char *name4() const override { return "RATEACRO"; }
+    const char *name4() const override { return "RATE_ACRO"; }
 };
 #endif
 
