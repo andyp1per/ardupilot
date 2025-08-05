@@ -10,6 +10,7 @@
 #include "AP_Logger_MAVLink.h"
 
 #include <AP_InternalError/AP_InternalError.h>
+#include <AP_InertialSensor/AP_InertialSensor_rate_config.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_Rally/AP_Rally.h>
@@ -1436,7 +1437,6 @@ void AP_Logger::io_thread(void)
 
     while (true) {
         uint32_t now = AP_HAL::micros();
-
         uint32_t delay = 250U; // always have some delay
         if (now - last_run_us < 1000) {
             delay = MAX(1000 - (now - last_run_us), delay);
