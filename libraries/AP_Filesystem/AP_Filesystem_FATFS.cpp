@@ -32,7 +32,7 @@ static bool remount_needed;
 
 // don't write more than 4k at a time to prevent needing too much
 // DMAable memory
-#define MAX_IO_SIZE 4096
+#define MAX_IO_SIZE 32768
 
 // use a semaphore to ensure that only one filesystem operation is
 // happening at a time. A recursive semaphore is used to cope with the
