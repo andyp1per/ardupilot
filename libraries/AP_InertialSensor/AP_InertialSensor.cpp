@@ -1051,6 +1051,8 @@ AP_InertialSensor::init(uint16_t loop_rate)
             num_filters += __builtin_popcount(notch.params.harmonics())
                 * notch.num_dynamic_notches * notch.params.num_composite_notches()
                 * (all_sensors?sensors_used:1);
+            num_filters += notch.num_dynamic_notches * notch.params.num_subsample_notches()
+                * (all_sensors?sensors_used:1);
         }
     }
 
@@ -1065,9 +1067,11 @@ AP_InertialSensor::init(uint16_t loop_rate)
             for (auto &notch : harmonic_notches) {
                 if (notch.params.enabled() || fft_enabled) {
                     notch.filter[i].allocate_filters(notch.num_dynamic_notches,
-                                                     notch.params.harmonics(), notch.params.num_composite_notches());
+                                                     notch.params.harmonics(),
+                                                     notch.params.num_composite_notches(),
+                                                     notch.params.num_subsample_notches());
                     // initialise default settings, these will be subsequently changed in AP_InertialSensor_Backend::update_gyro()
-                    notch.filter[i].init(_gyro_raw_sample_rates[i], notch.params);
+                    notch.filter[i].init(_gyro_raw_sample_rates[i], notch.params, notch.params.num_subsample_notches() > 0 ? _loop_rate : 0);
                 }
             }
         }
