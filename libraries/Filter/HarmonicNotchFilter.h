@@ -32,11 +32,11 @@ class HarmonicNotchFilter {
 public:
     ~HarmonicNotchFilter();
     // allocate a bank of notch filters for this harmonic notch filter
-    void allocate_filters(uint8_t num_notches, uint32_t harmonics, uint8_t composite_notches);
+    void allocate_filters(uint8_t num_notches, uint32_t harmonics, uint8_t composite_notches, uint8_t subsample_notches);
     // expand filter bank with new filters
     void expand_filter_count(uint16_t total_notches);
     // initialize the underlying filters using the provided filter parameters
-    void init(float sample_freq_hz, HarmonicNotchFilterParams &params);
+    void init(float sample_freq_hz, HarmonicNotchFilterParams &params, float subsample_freq_hz = 0.0f);
     // update the underlying filters' center frequencies using center_freq_hz as the fundamental
     void update(float center_freq_hz);
     // update all of the underlying center frequencies individually
@@ -64,6 +64,8 @@ private:
     NotchFilter<T>*  _filters;
     // sample frequency for each filter
     float _sample_freq_hz;
+    // subsample frequency for each filter
+    float _subsample_freq_hz;
     // base double notch bandwidth for each filter
     float _notch_spread;
     // attenuation for each filter
@@ -115,6 +117,7 @@ public:
         EnableOnAllIMUs = 1<<3,
         TripleNotch = 1<<4,
         TreatLowAsMin = 1<<5,
+        SubsampleNotch = 1<<6,
     };
 
     HarmonicNotchFilterParams(void);
@@ -164,6 +167,11 @@ public:
     // return the number of composite notches given the options
     uint8_t num_composite_notches(void) const {
         return hasOption(Options::DoubleNotch) ? 2 : hasOption(Options::TripleNotch) ? 3: 1;
+    }
+
+    // return the number of subsample notches given the options
+    uint8_t num_subsample_notches(void) const {
+        return hasOption(Options::SubsampleNotch) ? 2 : 0;
     }
 
 private:
