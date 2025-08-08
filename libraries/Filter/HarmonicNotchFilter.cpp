@@ -125,7 +125,7 @@ const AP_Param::GroupInfo HarmonicNotchFilterParams::var_info[] = {
     // @Param: OPTS
     // @DisplayName: Harmonic Notch Filter options
     // @Description: Harmonic Notch Filter options. Triple and double-notches can provide deeper attenuation across a wider bandwidth with reduced latency than single notches and are suitable for larger aircraft. Multi-Source attaches a harmonic notch to each detected noise frequency instead of simply being multiples of the base frequency, in the case of FFT it will attach notches to each of three detected noise peaks, in the case of ESC it will attach notches to each of four motor RPM values. Loop rate update changes the notch center frequency at the scheduler loop rate rather than at the default of 200Hz. If both double and triple notches are specified only double notches will take effect.
-    // @Bitmask: 0:Double notch,1:Multi-Source,2:Update at loop rate,3:EnableOnAllIMUs,4:Triple notch, 5:Use min freq on RPM source failure, 6:Subsample-notches
+    // @Bitmask: 0:Double notch,1:Multi-Source,2:Update at loop rate,3:EnableOnAllIMUs,4:Triple notch,5:Use min freq on RPM source failure,6:Subsample-notches
     // @User: Advanced
     // @RebootRequired: True
     AP_GROUPINFO("OPTS", 8, HarmonicNotchFilterParams, _options, 0),
@@ -384,12 +384,12 @@ void HarmonicNotchFilter<T>::update(uint8_t num_centers, const float center_freq
     if (!is_zero(_subsample_freq_hz)) {
         const uint8_t first_harmonic = __builtin_ctz(_harmonics);
 
-        // update all of the filters using the new center frequencies and existing A & Q
+        // add in the sub-sample echo notches
         for (uint16_t i = 0; i < num_centers && _num_enabled_filters < _num_filters; i++) {
-            const float notch_center = constrain_float(center_freq_hz[i], 0.0f, nyquist_limit);
-            // add in the sub-sample echo notches
-            set_center_frequency(_num_enabled_filters++, _subsample_freq_hz - notch_center, 1.0, first_harmonic + 1);
-            set_center_frequency(_num_enabled_filters++, _subsample_freq_hz + notch_center, 1.0, first_harmonic + 1);
+            const float notch_lower_center = constrain_float(_subsample_freq_hz - center_freq_hz[i], 0.0f, nyquist_limit);
+            set_center_frequency(_num_enabled_filters++, notch_lower_center, 1.0, first_harmonic + 1);
+            const float notch_upper_center = constrain_float(_subsample_freq_hz + center_freq_hz[i], 0.0f, nyquist_limit);
+            set_center_frequency(_num_enabled_filters++, notch_upper_center, 1.0, first_harmonic + 1);
         }
     }
 }
