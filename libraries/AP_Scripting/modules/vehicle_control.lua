@@ -71,7 +71,7 @@ function vehicle_control.pattern.start(radius_m)
 
   -- Calculate pattern geometry
   local start_location = current_loc:copy()
-  local heading_rad = ahrs:get_yaw_rad()
+  local heading_rad = ahrs:get_yaw()
 
   local center_1 = start_location:copy()
   center_1:offset_bearing(math.deg(heading_rad) + 90, radius_m)
@@ -187,9 +187,9 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
 
   -- 3. Initiate Climb
   local initial_attitude_euler = Vector3f()
-  initial_attitude_euler:x(ahrs:get_roll_rad())
-  initial_attitude_euler:y(ahrs:get_pitch_rad())
-  initial_attitude_euler:z(ahrs:get_yaw_rad())
+  initial_attitude_euler:x(ahrs:get_roll())
+  initial_attitude_euler:y(ahrs:get_pitch())
+  initial_attitude_euler:z(ahrs:get_yaw())
 
   local initial_velocity_ned = ahrs:get_velocity_NED()
   local initial_state = { attitude = initial_attitude_euler, velocity = initial_velocity_ned }
@@ -199,7 +199,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   vel_ned:y(initial_state.velocity:y())
   vel_ned:z(-climb_rate_ms)
   
-  if not vehicle:set_target_velocity_NED(vel_ned) then
+  if not vehicle:set_target_velocity_NED(vel_ned, false) then
     gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Failed to set target velocity for climb")
     return nil, "Failed to set climb velocity"
   end
@@ -254,7 +254,7 @@ function vehicle_control.maneuver.flip_update(state)
     end
 
     -- Unwrap angle to track total rotation
-    local current_angle = (state.axis == vehicle_control.axis.ROLL) and math.deg(ahrs:get_roll_rad()) or math.deg(ahrs:get_pitch_rad())
+    local current_angle = (state.axis == vehicle_control.axis.ROLL) and math.deg(ahrs:get_roll()) or math.deg(ahrs:get_pitch())
     local delta_angle = current_angle - state.last_angle
     if delta_angle > 180 then
       delta_angle = delta_angle - 360
@@ -293,7 +293,7 @@ function vehicle_control.maneuver.flip_update(state)
     restore_vel:x(state.initial_state.velocity:x())
     restore_vel:y(state.initial_state.velocity:y())
     restore_vel:z(0)
-    vehicle:set_target_velocity_NED(restore_vel)
+    vehicle:set_target_velocity_NED(restore_vel, false)
     
     gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete")
     state.stage = vehicle_control.maneuver.stage.DONE
