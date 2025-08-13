@@ -143,7 +143,8 @@ vehicle_control.maneuver.stage = {
   CLIMBING = 1,
   FLIPPING = 2,
   RESTORING = 3,
-  DONE = 4,
+  BALLISTIC_FALL = 4,
+  DONE = 5,
 }
 
 --[[
@@ -192,7 +193,8 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   initial_attitude_euler:z(ahrs:get_yaw_rad())
 
   local initial_velocity_ned = ahrs:get_velocity_NED()
-  local initial_state = { attitude = initial_attitude_euler, velocity = initial_velocity_ned }
+  local initial_location = ahrs:get_location()
+  local initial_state = { attitude = initial_attitude_euler, velocity = initial_velocity_ned, location = initial_location }
   
   local vel_ned = Vector3f()
   vel_ned:x(initial_state.velocity:x())
@@ -281,23 +283,47 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING then
-    -- Restore attitude first to level out and set yaw.
-    local roll_deg = math.deg(state.initial_state.attitude:x())
-    local pitch_deg = math.deg(state.initial_state.attitude:y())
+    -- Restore horizontal velocity and original yaw.
+    local restore_vel = Vector3f()
+    restore_vel:x(state.initial_state.velocity:x())
+    restore_vel:y(state.initial_state.velocity:y())
+    restore_vel:z(0) -- Let gravity handle descent
+
+    local zero_accel = Vector3f()
+    zero_accel:x(0)
+    zero_accel:y(0)
+    zero_accel:z(0)
+
     local yaw_deg = math.deg(state.initial_state.attitude:z())
-    vehicle:set_target_angle_and_climbrate(roll_deg, pitch_deg, yaw_deg, 0, false, 0)
+    vehicle:set_target_velaccel_NED(restore_vel, zero_accel, true, yaw_deg, false, 0, false)
     
-    -- Then immediately command the horizontal velocity. The autopilot will
-    -- hold the new yaw while achieving the target velocity.
+    state.stage = vehicle_control.maneuver.stage.BALLISTIC_FALL
+    return vehicle_control.RUNNING
+
+  elseif state.stage == vehicle_control.maneuver.stage.BALLISTIC_FALL then
+    local current_loc = ahrs:get_location()
+    -- Wait until the vehicle has fallen back to its starting altitude
+    if current_loc and current_loc:alt() <= state.initial_state.location:alt() then
+        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete")
+        state.stage = vehicle_control.maneuver.stage.DONE
+        -- Restore original velocity vector to ensure correct vertical speed after maneuver
+        local final_vel = Vector3f()
+        final_vel:x(state.initial_state.velocity:x())
+        final_vel:y(state.initial_state.velocity:y())
+        final_vel:z(state.initial_state.velocity:z())
+        vehicle:set_target_velocity_NED(final_vel)
+        return vehicle_control.SUCCESS
+    end
+    -- Continue commanding horizontal velocity and yaw to prevent drift
     local restore_vel = Vector3f()
     restore_vel:x(state.initial_state.velocity:x())
     restore_vel:y(state.initial_state.velocity:y())
     restore_vel:z(0)
-    vehicle:set_target_velocity_NED(restore_vel)
-    
-    gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete")
-    state.stage = vehicle_control.maneuver.stage.DONE
-    return vehicle_control.SUCCESS
+    local zero_accel = Vector3f()
+    zero_accel:x(0) zero_accel:y(0) zero_accel:z(0)
+    local yaw_deg = math.deg(state.initial_state.attitude:z())
+    vehicle:set_target_velaccel_NED(restore_vel, zero_accel, true, yaw_deg, false, 0, false)
+    return vehicle_control.RUNNING
   end
 
   return vehicle_control.SUCCESS
