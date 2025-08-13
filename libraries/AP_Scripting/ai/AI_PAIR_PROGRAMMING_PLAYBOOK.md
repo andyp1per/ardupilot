@@ -570,23 +570,66 @@ Here are some common drone behaviors with their corresponding text prompts and e
 * **Prompt:** "Create a Lua script that makes the drone fly in a 15-meter box pattern when the pilot flips RC channel 8 to high."  
 * **Expected Lua Script:**
 ```lua
+  -- This script demonstrates a simple state machine to fly a box pattern.
+  
   local BOX_SIZE = 15 -- meters
-  local original_location = nil
-
+  local state = {
+      active = false,
+      stage = 0,
+      start_location = nil
+  }
+  
+  -- Define waypoint offsets from the start location (North, East)
+  local waypoints = {
+      {BOX_SIZE, 0},
+      {BOX_SIZE, BOX_SIZE},
+      {0, BOX_SIZE},
+      {0, 0}
+  }
+  
   function update()
-    if rc:get_channel(8):get_pwm() > 1800 then
-      if original_location == nil then
-        original_location = vehicle:get_location()
-        local target = original_location
-        target:offset(BOX_SIZE, 0)
-        vehicle:set_target_location(target)
+      -- Use rc:get_pwm() which is the correct function
+      if rc:get_pwm(8) > 1800 then
+          if not state.active then
+              -- Start the pattern
+              state.active = true
+              state.stage = 1
+              state.start_location = ahrs:get_location()
+              if state.start_location then
+                  local target = state.start_location:copy()
+                  target:offset(waypoints[state.stage][1], waypoints[state.stage][2])
+                  vehicle:set_target_location(target)
+              end
+          end
+      else
+          -- Reset the pattern if the switch is low
+          state.active = false
+          state.stage = 0
+          state.start_location = nil
       end
-    else
-      original_location = nil  
-    end
-    return update, 100
+  
+      if state.active and state.start_location then
+          local current_pos = ahrs:get_location()
+          if current_pos then
+              local target = state.start_location:copy()
+              target:offset(waypoints[state.stage][1], waypoints[state.stage][2])
+              if current_pos:get_distance(target) < 2 then -- 2 meter arrival radius
+                  state.stage = state.stage + 1
+                  if state.stage > #waypoints then
+                      -- Pattern complete, reset
+                      state.active = false
+                      state.stage = 0
+                  else
+                      local next_target = state.start_location:copy()
+                      next_target:offset(waypoints[state.stage][1], waypoints[state.stage][2])
+                      vehicle:set_target_location(next_target)
+                  end
+              end
+          end
+      end
+      return update, 200
   end
-
+  
   return update()
 ```
 
@@ -596,14 +639,22 @@ Here are some common drone behaviors with their corresponding text prompts and e
 * **Expected Lua Script:**  
 ```lua
   local LOW_VOLTAGE = 14.8
-
+  local RTL_MODE = 6 -- Mode number for RTL in Copter
+  
   function update()
-    if battery:voltage(0) < LOW_VOLTAGE then
-      vehicle:set_mode("RTL")
-    end
-    return update, 1000
+      -- Use instance 1 (1-indexed) and check if it's healthy
+      if battery:healthy(1) then
+          if battery:voltage(1) < LOW_VOLTAGE then
+              -- Use the correct integer mode number for set_mode()
+              if vehicle:get_mode() ~= RTL_MODE then
+                  vehicle:set_mode(RTL_MODE)
+                  gcs:send_text(6, "Battery low, initiating RTL")
+              end
+          end
+      end
+      return update, 1000
   end
-
+  
   return update()
 ```
 
@@ -612,21 +663,36 @@ Here are some common drone behaviors with their corresponding text prompts and e
 * **Prompt:** "Create a Lua script that deploys the landing gear (servo on output 9\) when the drone's altitude is below 10 meters and retracts it above 10 meters."  
 * **Expected Lua Script:**
 ```lua
-  local LANDING_GEAR_ALTITUDE = 10 -- meters
-  local SERVO_OUTPUT = 9
+  local LANDING_GEAR_ALTITUDE_M = 10 -- meters
+  local SERVO_OUTPUT_CHAN = 8 -- 0-indexed channel for SERVO9
   local DEPLOYED_PWM = 1900
   local RETRACTED_PWM = 1100
-
+  
+  local gear_deployed = false
+  
   function update()
-    local current_alt = vehicle:get_location():alt()
-    if current_alt < LANDING_GEAR_ALTITUDE then
-      servo:set_output(SERVO_OUTPUT, DEPLOYED_PWM)
-    else
-      servo:set_output(SERVO_OUTPUT, RETRACTED_PWM)
-    end
-    return update, 500
+      local loc = ahrs:get_location()
+      if loc and loc:relative_alt() then
+          -- get_location():alt() is in CM and is AMSL.
+          -- We must get relative altitude and convert it to meters.
+          local current_alt_m = loc:alt() / 100.0
+  
+          if current_alt_m < LANDING_GEAR_ALTITUDE_M then
+              if not gear_deployed then
+                  -- Use SRV_Channels object and set_output_pwm_chan (0-indexed)
+                  SRV_Channels:set_output_pwm_chan(SERVO_OUTPUT_CHAN, DEPLOYED_PWM)
+                  gear_deployed = true
+              end
+          else
+              if gear_deployed then
+                  SRV_Channels:set_output_pwm_chan(SERVO_OUTPUT_CHAN, RETRACTED_PWM)
+                  gear_deployed = false
+              end
+          end
+      end
+      return update, 500
   end
-
+  
   return update()
 ```
 
