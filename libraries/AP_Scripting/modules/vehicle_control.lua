@@ -142,9 +142,8 @@ vehicle_control.maneuver = {}
 vehicle_control.maneuver.stage = {
   WAITING_BALLISTIC_ENTRY = 1,
   FLIPPING = 2,
-  RESTORING = 3,
-  WAITING_ARRIVAL = 4,
-  DONE = 5,
+  BALLISTIC_FALL = 3,
+  DONE = 4,
 }
 
 --[[
@@ -172,7 +171,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
 
   -- Default throttle_level to hover if not provided
   if throttle_level == nil then
-    throttle_level = 0.0
+    throttle_level = 0.5
   end
 
   num_flips = num_flips or 1
@@ -242,6 +241,7 @@ function vehicle_control.maneuver.flip_update(state)
     local t_to_apex = vz / 9.81
     local h_gain = vz * t_to_apex - 0.5 * 9.81 * t_to_apex^2
     local h_apex = alt_diff + h_gain
+    if h_apex < 0 then h_apex = 0 end -- prevent sqrt of negative number
     local t_fall = math.sqrt(2 * h_apex / 9.81)
     local t_hang = t_to_apex + t_fall
 
@@ -263,7 +263,7 @@ function vehicle_control.maneuver.flip_update(state)
   elseif state.stage == vehicle_control.maneuver.stage.FLIPPING then
     local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
     if elapsed_time >= state.t_flip then
-      state.stage = vehicle_control.maneuver.stage.RESTORING
+      state.stage = vehicle_control.maneuver.stage.BALLISTIC_FALL
       return vehicle_control.RUNNING
     end
 
@@ -294,22 +294,29 @@ function vehicle_control.maneuver.flip_update(state)
 
     return vehicle_control.RUNNING
 
-  elseif state.stage == vehicle_control.maneuver.stage.RESTORING then
-    -- Command vehicle to return to the starting position and heading
-    vehicle:set_target_location(state.initial_state.location)
-    local yaw_deg = math.deg(state.initial_state.attitude:z())
-    vehicle:set_target_angle_and_climbrate(0, 0, yaw_deg, 0, false, 0)
+  elseif state.stage == vehicle_control.maneuver.stage.BALLISTIC_FALL then
+    local current_loc = ahrs:get_location()
     
-    state.stage = vehicle_control.maneuver.stage.WAITING_ARRIVAL
-    return vehicle_control.RUNNING
-
-  elseif state.stage == vehicle_control.maneuver.stage.WAITING_ARRIVAL then
-    -- Wait until the vehicle has returned to the start point
-    if vehicle_control.utils.has_arrived(state.initial_state.location, 1.0) then -- 1 meter tolerance
-        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete")
+    -- Restore horizontal velocity and original yaw to prevent drift while falling.
+    local restore_vel = Vector3f()
+    restore_vel:x(state.initial_state.velocity:x())
+    restore_vel:y(state.initial_state.velocity:y())
+    restore_vel:z(0) -- Let gravity handle descent
+    
+    local zero_accel = Vector3f()
+    zero_accel:x(0) zero_accel:y(0) zero_accel:z(0)
+    
+    local yaw_deg = math.deg(state.initial_state.attitude:z())
+    vehicle:set_target_velaccel_NED(restore_vel, zero_accel, true, yaw_deg, false, 0, false)
+    
+    -- Check if we have returned to the starting altitude
+    if current_loc and current_loc:alt() <= state.initial_state.location:alt() then
+        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete, resuming trajectory.")
         state.stage = vehicle_control.maneuver.stage.DONE
-        -- Restore original full velocity vector to smoothly exit the maneuver
+        
+        -- Restore the original FULL 3D velocity vector to smoothly exit the maneuver
         vehicle:set_target_velocity_NED(state.initial_state.velocity)
+        
         return vehicle_control.SUCCESS
     end
     return vehicle_control.RUNNING
