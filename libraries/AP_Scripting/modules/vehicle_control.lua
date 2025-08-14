@@ -154,9 +154,10 @@ vehicle_control.maneuver.stage = {
   @param flip_duration_s (optional) The desired total duration of the maneuver.
   @param num_flips (optional) The number of flips to perform (default 1).
   @param slew_gain (optional) The proportional gain for rate slewing (default 0.5).
+  @param climb_multiplier (optional) A factor to scale the initial climb rate to counteract drag (default 1.5).
   @return A state table for the perform_flip_update function, or nil and an error message.
 ]]
-function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain)
+function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain, climb_multiplier)
   -- 1. Save State & Prepare
   if not vehicle:get_mode() == vehicle_control.mode.GUIDED then
     gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Flip requires Guided mode")
@@ -169,12 +170,13 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
     return nil, "Invalid rate_degs"
   end
 
-  -- Default throttle_level to hover if not provided
+  -- Default throttle_level to zero if not provided
   if throttle_level == nil then
-    throttle_level = 0.5
+    throttle_level = 0.0
   end
 
   num_flips = num_flips or 1
+  climb_multiplier = climb_multiplier or 1.5
   local total_angle_deg = 360 * num_flips
   local t_flip = flip_duration_s or (total_angle_deg / math.abs(rate_degs))
   if t_flip <= 0 then
@@ -189,7 +191,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   local vel_ned = Vector3f()
   vel_ned:x(initial_velocity_ned:x())
   vel_ned:y(initial_velocity_ned:y())
-  vel_ned:z(-climb_rate_ms * 1.5) -- Command a slightly higher climb rate to get to the entry point faster
+  vel_ned:z(-climb_rate_ms * climb_multiplier)
   
   if not vehicle:set_target_velocity_NED(vel_ned) then
     gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Failed to set target velocity for climb")
