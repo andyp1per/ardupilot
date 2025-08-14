@@ -140,10 +140,11 @@ vehicle_control.maneuver = {}
 
 -- Enum for flip maneuver stages
 vehicle_control.maneuver.stage = {
-  WAITING_BALLISTIC_ENTRY = 1,
-  FLIPPING = 2,
-  RESTORING = 3,
-  DONE = 4,
+  ACHIEVING_CLIMB = 1,
+  WAITING_BALLISTIC_ENTRY = 2,
+  FLIPPING = 3,
+  RESTORING = 4,
+  DONE = 5,
 }
 
 --[[
@@ -211,7 +212,8 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   local initial_angle = (axis == vehicle_control.axis.ROLL) and math.deg(initial_state.attitude:x()) or math.deg(initial_state.attitude:y())
 
   return {
-    stage = vehicle_control.maneuver.stage.WAITING_BALLISTIC_ENTRY,
+    stage = vehicle_control.maneuver.stage.ACHIEVING_CLIMB,
+    commanded_climb_rate = climb_rate_ms * climb_multiplier,
     initial_state = initial_state,
     t_flip = t_flip,
     total_angle_deg = total_angle_deg,
@@ -230,7 +232,17 @@ end
   @return RUNNING or SUCCESS.
 ]]
 function vehicle_control.maneuver.flip_update(state)
-  if state.stage == vehicle_control.maneuver.stage.WAITING_BALLISTIC_ENTRY then
+  if state.stage == vehicle_control.maneuver.stage.ACHIEVING_CLIMB then
+    local current_vel_ned = ahrs:get_velocity_NED()
+    if not current_vel_ned then return vehicle_control.RUNNING end
+    
+    -- Check if the actual climb rate is close to the commanded rate
+    if math.abs(current_vel_ned:z() - (-state.commanded_climb_rate)) < 0.5 then -- 0.5 m/s tolerance
+      state.stage = vehicle_control.maneuver.stage.WAITING_BALLISTIC_ENTRY
+    end
+    return vehicle_control.RUNNING
+
+  elseif state.stage == vehicle_control.maneuver.stage.WAITING_BALLISTIC_ENTRY then
     local current_vel_ned = ahrs:get_velocity_NED()
     local current_loc = ahrs:get_location()
     if not (current_vel_ned and current_loc) then return vehicle_control.RUNNING end
