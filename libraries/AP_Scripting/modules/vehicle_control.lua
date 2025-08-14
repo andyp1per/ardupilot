@@ -142,7 +142,7 @@ vehicle_control.maneuver = {}
 vehicle_control.maneuver.stage = {
   WAITING_BALLISTIC_ENTRY = 1,
   FLIPPING = 2,
-  BALLISTIC_FALL = 3,
+  RESTORING = 3,
   DONE = 4,
 }
 
@@ -263,7 +263,7 @@ function vehicle_control.maneuver.flip_update(state)
   elseif state.stage == vehicle_control.maneuver.stage.FLIPPING then
     local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
     if elapsed_time >= state.t_flip then
-      state.stage = vehicle_control.maneuver.stage.BALLISTIC_FALL
+      state.stage = vehicle_control.maneuver.stage.RESTORING
       return vehicle_control.RUNNING
     end
 
@@ -294,32 +294,15 @@ function vehicle_control.maneuver.flip_update(state)
 
     return vehicle_control.RUNNING
 
-  elseif state.stage == vehicle_control.maneuver.stage.BALLISTIC_FALL then
-    local current_loc = ahrs:get_location()
+  elseif state.stage == vehicle_control.maneuver.stage.RESTORING then
+    -- Restore the original FULL 3D velocity vector. The autopilot's controller
+    -- will handle the attitude and throttle to achieve this trajectory,
+    -- correcting for any accumulated position or altitude errors.
+    vehicle:set_target_velocity_NED(state.initial_state.velocity)
     
-    -- Restore horizontal velocity and original yaw to prevent drift while falling.
-    local restore_vel = Vector3f()
-    restore_vel:x(state.initial_state.velocity:x())
-    restore_vel:y(state.initial_state.velocity:y())
-    restore_vel:z(0) -- Let gravity handle descent
-    
-    local zero_accel = Vector3f()
-    zero_accel:x(0) zero_accel:y(0) zero_accel:z(0)
-    
-    local yaw_deg = math.deg(state.initial_state.attitude:z())
-    vehicle:set_target_velaccel_NED(restore_vel, zero_accel, true, yaw_deg, false, 0, false)
-    
-    -- Check if we have returned to the starting altitude
-    if current_loc and current_loc:alt() <= state.initial_state.location:alt() then
-        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete, resuming trajectory.")
-        state.stage = vehicle_control.maneuver.stage.DONE
-        
-        -- Restore the original FULL 3D velocity vector to smoothly exit the maneuver
-        vehicle:set_target_velocity_NED(state.initial_state.velocity)
-        
-        return vehicle_control.SUCCESS
-    end
-    return vehicle_control.RUNNING
+    gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete, resuming trajectory.")
+    state.stage = vehicle_control.maneuver.stage.DONE
+    return vehicle_control.SUCCESS
   end
 
   return vehicle_control.SUCCESS
