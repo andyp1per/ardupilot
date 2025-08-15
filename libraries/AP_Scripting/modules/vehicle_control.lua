@@ -322,6 +322,20 @@ function vehicle_control.maneuver.flip_update(state)
     if not current_pos_ned or not current_vel_ned then
       return vehicle_control.RUNNING -- Wait for valid data
     end
+    
+    -- Debugging output at 200ms intervals
+    state.last_debug_ms = state.last_debug_ms or 0
+    local now_ms = millis():tofloat()
+    if (now_ms - state.last_debug_ms) > 200 then
+        state.last_debug_ms = now_ms
+        local target_p_str = string.format("TargP:%.1f,%.1f,%.1f", state.target_pos_ned:x(), state.target_pos_ned:y(), state.target_pos_ned:z())
+        local curr_p_str = string.format("CurrP:%.1f,%.1f,%.1f", current_pos_ned:x(), current_pos_ned:y(), current_pos_ned:z())
+        gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, target_p_str .. " " .. curr_p_str)
+        
+        local target_v_str = string.format("TargV:%.1f,%.1f,%.1f", state.initial_state.velocity:x(), state.initial_state.velocity:y(), state.initial_state.velocity:z())
+        local curr_v_str = string.format("CurrV:%.1f,%.1f,%.1f", current_vel_ned:x(), current_vel_ned:y(), current_vel_ned:z())
+        gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, target_v_str .. " " .. curr_v_str)
+    end
 
     -- Define tolerances for arrival
     local pos_tolerance_m = 1.0  -- 1 meter position tolerance
