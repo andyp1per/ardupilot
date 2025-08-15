@@ -304,18 +304,12 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING then
-    -- Calculate the ideal target position vector where the vehicle should be after the maneuver.
-    local displacement = state.initial_state.velocity:copy():scale(state.t_flip)
-    state.target_pos_ned = state.initial_state.pos_ned + displacement
-    
     gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete, restoring trajectory.")
+    state.restore_start_time = millis():tofloat()
     state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
     return vehicle_control.RUNNING
     
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING_WAIT then
-    -- Continuously command the vehicle to the target position and velocity
-    vehicle:set_target_posvel_NED(state.target_pos_ned, state.initial_state.velocity)
-
     local current_pos_ned = ahrs:get_relative_position_NED_origin()
     local current_vel_ned = ahrs:get_velocity_NED()
 
@@ -323,12 +317,25 @@ function vehicle_control.maneuver.flip_update(state)
       return vehicle_control.RUNNING -- Wait for valid data
     end
     
+    local elapsed_restore_time_s = (millis():tofloat() - state.restore_start_time) / 1000.0
+    
+    -- Calculate the ideal absolute target position vector, projecting it forward in time
+    local total_elapsed_time_s = state.t_flip + elapsed_restore_time_s
+    local displacement = state.initial_state.velocity:copy():scale(total_elapsed_time_s)
+    local target_pos_ned_absolute = state.initial_state.pos_ned + displacement
+    
+    -- Calculate the target position relative to the vehicle's current position
+    local target_pos_ned_relative = target_pos_ned_absolute - current_pos_ned
+
+    -- Continuously command the vehicle to the moving target position and velocity
+    vehicle:set_target_posvel_NED(target_pos_ned_relative, state.initial_state.velocity)
+    
     -- Debugging output at 200ms intervals
     state.last_debug_ms = state.last_debug_ms or 0
     local now_ms = millis():tofloat()
     if (now_ms - state.last_debug_ms) > 200 then
         state.last_debug_ms = now_ms
-        local target_p_str = string.format("TargP:%.1f,%.1f,%.1f", state.target_pos_ned:x(), state.target_pos_ned:y(), state.target_pos_ned:z())
+        local target_p_str = string.format("TargP:%.1f,%.1f,%.1f", target_pos_ned_absolute:x(), target_pos_ned_absolute:y(), target_pos_ned_absolute:z())
         local curr_p_str = string.format("CurrP:%.1f,%.1f,%.1f", current_pos_ned:x(), current_pos_ned:y(), current_pos_ned:z())
         gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, target_p_str .. " " .. curr_p_str)
         
@@ -341,8 +348,8 @@ function vehicle_control.maneuver.flip_update(state)
     local pos_tolerance_m = 1.0  -- 1 meter position tolerance
     local vel_tolerance_ms = 0.5 -- 0.5 m/s velocity tolerance
 
-    -- Calculate the difference between current and target states
-    local pos_error_vec = state.target_pos_ned - current_pos_ned
+    -- Calculate the difference between current and absolute target states for arrival check
+    local pos_error_vec = target_pos_ned_absolute - current_pos_ned
     local vel_error_vec = state.initial_state.velocity - current_vel_ned
 
     -- Check if we are within tolerances
