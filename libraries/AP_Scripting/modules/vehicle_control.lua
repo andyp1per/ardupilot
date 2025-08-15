@@ -307,15 +307,15 @@ function vehicle_control.maneuver.flip_update(state)
     -- Calculate the ideal target position vector where the vehicle should be after the maneuver.
     local displacement = state.initial_state.velocity:copy():scale(state.t_flip)
     state.target_pos_ned = state.initial_state.pos_ned + displacement
-
-    -- Restore the trajectory by commanding the vehicle to a target position and velocity.
-    vehicle:set_target_posvel_NED(state.target_pos_ned, state.initial_state.velocity)
     
     gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete, restoring trajectory.")
     state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
     return vehicle_control.RUNNING
     
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING_WAIT then
+    -- Continuously command the vehicle to the target position and velocity
+    vehicle:set_target_posvel_NED(state.target_pos_ned, state.initial_state.velocity)
+
     local current_pos_ned = ahrs:get_relative_position_NED_origin()
     local current_vel_ned = ahrs:get_velocity_NED()
 
