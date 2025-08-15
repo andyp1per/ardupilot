@@ -257,6 +257,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
     last_angle = initial_angle,
     accumulated_angle = 0,
     Kp = slew_gain or 0.5,
+    num_flips = num_flips,
   }
 end
 
@@ -284,6 +285,9 @@ function vehicle_control.maneuver.flip_update(state)
     local t_hang = t_to_apex + t_fall
 
     if t_hang >= state.t_flip then
+      local flip_msg = string.format("Flipping %.2f times over %.2f seconds", state.num_flips, state.t_flip)
+      gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, flip_msg)
+
       state.stage = vehicle_control.maneuver.stage.FLIPPING
       state.start_time = millis():tofloat()
       
