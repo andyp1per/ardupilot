@@ -143,7 +143,8 @@ vehicle_control.maneuver.stage = {
   WAITING_BALLISTIC_ENTRY = 1,
   FLIPPING = 2,
   RESTORING = 3,
-  DONE = 4,
+  RESTORING_WAIT = 4,
+  DONE = 5,
 }
 
 --[[
@@ -305,16 +306,39 @@ function vehicle_control.maneuver.flip_update(state)
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING then
     -- Calculate the ideal target position vector where the vehicle should be after the maneuver.
     local displacement = state.initial_state.velocity:copy():scale(state.t_flip)
-    local target_pos = state.initial_state.pos_ned + displacement
+    state.target_pos_ned = state.initial_state.pos_ned + displacement
 
     -- Restore the trajectory by commanding the vehicle to a target position and velocity.
-    -- This gives the autopilot a complete trajectory goal, allowing it to correct
-    -- for accumulated errors while smoothly resuming the original flight path.
-    vehicle:set_target_posvel_NED(target_pos, state.initial_state.velocity)
+    vehicle:set_target_posvel_NED(state.target_pos_ned, state.initial_state.velocity)
     
-    gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete, resuming trajectory.")
-    state.stage = vehicle_control.maneuver.stage.DONE
-    return vehicle_control.SUCCESS
+    gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete, restoring trajectory.")
+    state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
+    return vehicle_control.RUNNING
+    
+  elseif state.stage == vehicle_control.maneuver.stage.RESTORING_WAIT then
+    local current_pos_ned = ahrs:get_relative_position_NED_origin()
+    local current_vel_ned = ahrs:get_velocity_NED()
+
+    if not current_pos_ned or not current_vel_ned then
+      return vehicle_control.RUNNING -- Wait for valid data
+    end
+
+    -- Define tolerances for arrival
+    local pos_tolerance_m = 1.0  -- 1 meter position tolerance
+    local vel_tolerance_ms = 0.5 -- 0.5 m/s velocity tolerance
+
+    -- Calculate the difference between current and target states
+    local pos_error_vec = state.target_pos_ned - current_pos_ned
+    local vel_error_vec = state.initial_state.velocity - current_vel_ned
+
+    -- Check if we are within tolerances
+    if pos_error_vec:length() < pos_tolerance_m and vel_error_vec:length() < vel_tolerance_ms then
+      gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Trajectory restored.")
+      state.stage = vehicle_control.maneuver.stage.DONE
+      return vehicle_control.SUCCESS
+    end
+
+    return vehicle_control.RUNNING
   end
 
   return vehicle_control.SUCCESS
