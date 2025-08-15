@@ -149,64 +149,93 @@ vehicle_control.maneuver.stage = {
 
 --[[
   Starts a flip maneuver.
+  Calculates the third parameter (rate, duration, or number of flips) based on the two provided.
   @param axis The axis of rotation (vehicle_control.axis.ROLL or vehicle_control.axis.PITCH).
-  @param rate_degs The initial rotation rate in degrees/second.
+  @param rate_degs (optional) The initial rotation rate in degrees/second.
   @param throttle_level The throttle level (0-1), or vehicle_control.THROTTLE_CUT to cut throttle.
   @param flip_duration_s (optional) The desired total duration of the maneuver.
-  @param num_flips (optional) The number of flips to perform (default 1).
+  @param num_flips (optional) The number of flips to perform.
   @param slew_gain (optional) The proportional gain for rate slewing (default 0.5).
   @param climb_multiplier (optional) A factor to scale the initial climb rate to counteract drag (default 1.5).
   @return A state table for the perform_flip_update function, or nil and an error message.
 ]]
 function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain, climb_multiplier)
-  -- 1. Save State & Prepare
-  if not vehicle:get_mode() == vehicle_control.mode.GUIDED then
+  -- 1. Pre-flight Checks
+  if not (vehicle:get_mode() == vehicle_control.mode.GUIDED) then
     gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Flip requires Guided mode")
     return nil, "Flip requires Guided mode"
   end
 
-  -- Check for required parameters
-  if type(rate_degs) ~= "number" or rate_degs == 0 then
-    gcs:send_text(vehicle_control.MAV_SEVERITY.ERROR, "Flip requires a non-zero number for rate_degs")
-    return nil, "Invalid rate_degs"
+  -- 2. Calculate Flip Parameters
+  local total_angle_deg
+
+  -- Count how many parameters were provided
+  local params_provided = 0
+  if rate_degs then params_provided = params_provided + 1 end
+  if flip_duration_s then params_provided = params_provided + 1 end
+  if num_flips then params_provided = params_provided + 1 end
+
+  if params_provided == 0 then
+    return nil, "Provide at least one of: rate, duration, or num_flips"
   end
 
-  -- Default throttle_level to zero if not provided
-  if throttle_level == nil then
-    throttle_level = 0.0
+  -- If only one parameter is provided, default the others to create a pair
+  if params_provided == 1 then
+    if rate_degs then
+        num_flips = 1
+    elseif flip_duration_s then
+        num_flips = 1
+    elseif num_flips then
+        flip_duration_s = 1
+    end
   end
 
-  num_flips = num_flips or 1
-  climb_multiplier = climb_multiplier or 1.5
-  local total_angle_deg = 360 * num_flips
-  local t_flip = flip_duration_s or (total_angle_deg / math.abs(rate_degs))
-  if t_flip <= 0 then
-    gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Flip duration must be positive")
-    return nil, "Flip duration must be positive"
+  -- At this point, we are guaranteed to have at least two parameters.
+  -- Calculate the third parameter based on the other two.
+  -- The logic prioritizes num_flips and flip_duration_s if all three were provided initially.
+  if num_flips and flip_duration_s then
+      -- rate is missing or will be overridden
+      total_angle_deg = 360 * num_flips
+      rate_degs = total_angle_deg / flip_duration_s
+  elseif num_flips and rate_degs then
+      -- duration is missing
+      total_angle_deg = 360 * num_flips
+      flip_duration_s = math.abs(total_angle_deg / rate_degs)
+  elseif flip_duration_s and rate_degs then
+      -- num_flips is missing
+      total_angle_deg = math.abs(rate_degs) * flip_duration_s
+      num_flips = total_angle_deg / 360
   end
 
-  -- 2. Calculate required climb rate and initiate climb
-  local climb_rate_ms = 0.5 * 9.81 * t_flip
+  -- Validate calculated parameters
+  if rate_degs == 0 or flip_duration_s <= 0 then
+      return nil, "Invalid flip parameters calculated (rate cannot be zero, duration must be positive)"
+  end
+
+  local t_flip = flip_duration_s
+
+  -- 3. Initiate Climb
+  -- The initial velocity required to reach an apex at time t_flip is v = g * t_flip.
+  local climb_rate_ms = 9.81 * t_flip
   local initial_velocity_ned = ahrs:get_velocity_NED()
   
   local vel_ned = Vector3f()
   vel_ned:x(initial_velocity_ned:x())
   vel_ned:y(initial_velocity_ned:y())
-  vel_ned:z(-climb_rate_ms * climb_multiplier)
+  vel_ned:z(-climb_rate_ms * (climb_multiplier or 1.5))
   
   if not vehicle:set_target_velocity_NED(vel_ned) then
     gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Failed to set target velocity for climb")
     return nil, "Failed to set climb velocity"
   end
 
-  -- 3. Prepare for Flip
+  -- 4. Prepare for Flip
   local initial_attitude_euler = Vector3f()
   initial_attitude_euler:x(ahrs:get_roll_rad())
   initial_attitude_euler:y(ahrs:get_pitch_rad())
   initial_attitude_euler:z(ahrs:get_yaw_rad())
   
   local initial_location = ahrs:get_location()
-  -- Get the initial position relative to the EKF origin, required for posvel_NED command
   local initial_pos_ned = ahrs:get_relative_position_NED_origin()
   if not initial_pos_ned then
     gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Could not get EKF origin position")
@@ -214,7 +243,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   end
   local initial_state = { attitude = initial_attitude_euler, velocity = initial_velocity_ned, location = initial_location, pos_ned = initial_pos_ned }
 
-  local throttle_cmd = (throttle_level == vehicle_control.THROTTLE_CUT) and 0.0 or throttle_level
+  local throttle_cmd = (throttle_level == vehicle_control.THROTTLE_CUT) and 0.0 or (throttle_level or 0.0)
   local initial_angle = (axis == vehicle_control.axis.ROLL) and math.deg(initial_state.attitude:x()) or math.deg(initial_state.attitude:y())
 
   return {
@@ -270,12 +299,6 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.FLIPPING then
-    local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
-    if elapsed_time >= state.t_flip then
-      state.stage = vehicle_control.maneuver.stage.RESTORING
-      return vehicle_control.RUNNING
-    end
-
     -- Unwrap angle to track total rotation
     local current_angle = (state.axis == vehicle_control.axis.ROLL) and math.deg(ahrs:get_roll_rad()) or math.deg(ahrs:get_pitch_rad())
     local delta_angle = current_angle - state.last_angle
@@ -287,7 +310,14 @@ function vehicle_control.maneuver.flip_update(state)
     state.accumulated_angle = state.accumulated_angle + delta_angle
     state.last_angle = current_angle
 
+    -- Check if the total rotation has been completed
+    if math.abs(state.accumulated_angle) >= state.total_angle_deg then
+        state.stage = vehicle_control.maneuver.stage.RESTORING
+        return vehicle_control.RUNNING
+    end
+
     -- Slew rate to match desired duration
+    local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
     local expected_angle = (elapsed_time / state.t_flip) * state.total_angle_deg * (state.rate_degs > 0 and 1 or -1)
     local error = expected_angle - state.accumulated_angle
     local new_rate_degs = state.rate_degs + state.Kp * error
@@ -324,11 +354,8 @@ function vehicle_control.maneuver.flip_update(state)
     local displacement = state.initial_state.velocity:copy():scale(total_elapsed_time_s)
     local target_pos_ned_absolute = state.initial_state.pos_ned + displacement
     
-    -- Calculate the target position relative to the vehicle's current position
-    local target_pos_ned_relative = target_pos_ned_absolute - current_pos_ned
-
-    -- Continuously command the vehicle to the moving target position and velocity
-    vehicle:set_target_posvel_NED(target_pos_ned_relative, state.initial_state.velocity)
+    -- Continuously command the vehicle to the moving absolute target position and velocity
+    vehicle:set_target_posvel_NED(target_pos_ned_absolute, state.initial_state.velocity)
     
     -- Debugging output at 200ms intervals
     state.last_debug_ms = state.last_debug_ms or 0
