@@ -205,7 +205,13 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   initial_attitude_euler:z(ahrs:get_yaw_rad())
   
   local initial_location = ahrs:get_location()
-  local initial_state = { attitude = initial_attitude_euler, velocity = initial_velocity_ned, location = initial_location }
+  -- Get the initial position relative to the EKF origin, required for posvel_NED command
+  local initial_pos_ned = ahrs:get_relative_position_NED_origin()
+  if not initial_pos_ned then
+    gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Could not get EKF origin position")
+    return nil, "Could not get EKF origin position"
+  end
+  local initial_state = { attitude = initial_attitude_euler, velocity = initial_velocity_ned, location = initial_location, pos_ned = initial_pos_ned }
 
   local throttle_cmd = (throttle_level == vehicle_control.THROTTLE_CUT) and 0.0 or throttle_level
   local initial_angle = (axis == vehicle_control.axis.ROLL) and math.deg(initial_state.attitude:x()) or math.deg(initial_state.attitude:y())
@@ -247,7 +253,7 @@ function vehicle_control.maneuver.flip_update(state)
     local t_fall = math.sqrt(2 * h_apex / 9.81)
     local t_hang = t_to_apex + t_fall
 
-    if t_hang <= state.t_flip then
+    if t_hang >= state.t_flip then
       state.stage = vehicle_control.maneuver.stage.FLIPPING
       state.start_time = millis():tofloat()
       
@@ -297,10 +303,14 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING then
-    -- Restore the original FULL 3D velocity vector. The autopilot's controller
-    -- will handle the attitude and throttle to achieve this trajectory,
-    -- correcting for any accumulated position or altitude errors.
-    vehicle:set_target_velocity_NED(state.initial_state.velocity)
+    -- Calculate the ideal target position vector where the vehicle should be after the maneuver.
+    local displacement = state.initial_state.velocity:copy():scale(state.t_flip)
+    local target_pos = state.initial_state.pos_ned + displacement
+
+    -- Restore the trajectory by commanding the vehicle to a target position and velocity.
+    -- This gives the autopilot a complete trajectory goal, allowing it to correct
+    -- for accumulated errors while smoothly resuming the original flight path.
+    vehicle:set_target_posvel_NED(target_pos, state.initial_state.velocity)
     
     gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete, resuming trajectory.")
     state.stage = vehicle_control.maneuver.stage.DONE
