@@ -369,6 +369,21 @@ function vehicle_control.maneuver.flip_update(state)
     -- Continuously command the vehicle to the moving absolute target position and velocity
     vehicle:set_target_posvel_NED(target_pos_ned_absolute, state.initial_state.velocity)
     
+    -- Debugging output at 200ms intervals
+    state.last_debug_ms = state.last_debug_ms or 0
+    local now_ms = millis():tofloat()
+    if (now_ms - state.last_debug_ms) > 200 then
+        state.last_debug_ms = now_ms
+        -- Convert NED 'Down' to 'Up' for clarity in logging by multiplying by -1
+        local target_p_up = -target_pos_ned_absolute:z()
+        local curr_p_up = -current_pos_ned:z()
+        local target_v_up = -state.initial_state.velocity:z()
+        local curr_v_up = -current_vel_ned:z()
+        
+        local debug_msg = string.format("P Up T:%.1f C:%.1f | V Up T:%.1f C:%.1f", target_p_up, curr_p_up, target_v_up, curr_v_up)
+        gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, debug_msg)
+    end
+
     -- Define separate tolerances for arrival check
     local pos_tolerance_m = 1.0
     local horizontal_vel_tolerance_ms = 0.5
