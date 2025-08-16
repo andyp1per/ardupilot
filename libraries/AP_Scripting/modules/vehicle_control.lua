@@ -169,42 +169,50 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   -- 2. Calculate Flip Parameters
   local total_angle_deg
 
-  -- Count how many parameters were provided
-  local params_provided = 0
-  if rate_degs then params_provided = params_provided + 1 end
-  if flip_duration_s then params_provided = params_provided + 1 end
-  if num_flips then params_provided = params_provided + 1 end
+  -- Determine which parameters were provided by the user
+  local user_has_flips = (num_flips ~= nil and num_flips > 0)
+  local user_has_duration = (flip_duration_s ~= nil and flip_duration_s > 0)
+  local user_has_rate = (rate_degs ~= nil and rate_degs ~= 0)
 
-  if params_provided == 0 then
-    return nil, "Provide at least one of: rate, duration, or num_flips"
+  if not user_has_flips and not user_has_duration and not user_has_rate then
+      return nil, "Provide at least one of: rate, duration, or num_flips"
   end
 
-  -- If only one parameter is provided, default the others to create a pair
-  if params_provided == 1 then
-    if rate_degs then
-        num_flips = 1
-    elseif flip_duration_s then
-        num_flips = 1
-    elseif num_flips then
-        flip_duration_s = 1
-    end
-  end
-
-  -- At this point, we are guaranteed to have at least two parameters.
-  -- Calculate the third parameter based on the other two.
-  -- The logic prioritizes num_flips and flip_duration_s if all three were provided initially.
-  if num_flips and flip_duration_s then
-      -- rate is missing or will be overridden
+  -- Logic to ensure a whole number of flips
+  if user_has_flips then
+      -- User specified the number of flips, this is the priority.
       total_angle_deg = 360 * num_flips
-      rate_degs = total_angle_deg / flip_duration_s
-  elseif num_flips and rate_degs then
-      -- duration is missing
+      if user_has_duration then
+          -- Calculate rate
+          rate_degs = total_angle_deg / flip_duration_s
+      elseif user_has_rate then
+          -- Calculate duration
+          flip_duration_s = math.abs(total_angle_deg / rate_degs)
+      else
+          -- Neither duration nor rate specified, default duration to 1s per flip
+          flip_duration_s = num_flips * 1.0
+          rate_degs = total_angle_deg / flip_duration_s
+      end
+  elseif user_has_duration and user_has_rate then
+      -- User specified duration and rate, num_flips must be calculated and rounded.
+      -- We prioritize the duration and adjust the rate to complete a whole number of flips.
+      local theoretical_flips = (math.abs(rate_degs) * flip_duration_s) / 360
+      num_flips = math.floor(theoretical_flips + 0.5) -- round to nearest whole number
+      if num_flips == 0 then num_flips = 1 end -- ensure at least one flip
+      
       total_angle_deg = 360 * num_flips
-      flip_duration_s = math.abs(total_angle_deg / rate_degs)
-  elseif flip_duration_s and rate_degs then
-      -- num_flips is missing
-      total_angle_deg = math.abs(rate_degs) * flip_duration_s
-      num_flips = total_angle_deg / 360
+      -- Recalculate rate to match the whole number of flips within the specified duration
+      rate_degs = (total_angle_deg / flip_duration_s) * (rate_degs > 0 and 1 or -1)
+  else
+      -- This case handles if only duration or only rate is provided.
+      -- We default to 1 flip.
+      num_flips = 1
+      total_angle_deg = 360
+      if user_has_duration then
+          rate_degs = total_angle_deg / flip_duration_s
+      elseif user_has_rate then
+          flip_duration_s = math.abs(total_angle_deg / rate_degs)
+      end
   end
 
   -- Validate calculated parameters
