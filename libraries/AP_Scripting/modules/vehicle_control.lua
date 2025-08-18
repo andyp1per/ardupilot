@@ -142,10 +142,8 @@ vehicle_control.maneuver = {}
 vehicle_control.maneuver.stage = {
   PREPARE_AND_CLIMB = 1,
   FLIPPING = 2,
-  LEVEL_VEHICLE = 3,
-  ARREST_DESCENT = 4,
-  RESTORING_WAIT = 5,
-  DONE = 6,
+  RESTORING_WAIT = 3,
+  DONE = 4,
 }
 
 --[[
@@ -304,33 +302,15 @@ function vehicle_control.maneuver.flip_update(state)
     vehicle:set_target_velocity_NED(state.target_climb_vel_ned)
 
     local current_vel_ned = ahrs:get_velocity_NED()
-    local current_loc = ahrs:get_location()
-    if not (current_vel_ned and current_loc) then return vehicle_control.RUNNING end
+    if not current_vel_ned then return vehicle_control.RUNNING end
 
     local vz = -current_vel_ned:z() -- current upward velocity
 
     -- Approximate the effect of downward thrust while inverted by creating an "effective gravity"
     local effective_gravity = 9.81 * (1 + state.throttle_cmd)
 
-    -- Calculate the total hang time from the current position and velocity using the effective gravity
-    -- h is the current altitude relative to the maneuver's start altitude
-    local h = (current_loc:alt() - state.initial_state.location:alt()) / 100.0
-
-    -- Time to reach the apex from the current point
-    local t_to_apex = vz / effective_gravity
-
-    -- Additional altitude that will be gained to reach the apex
-    local h_gain = (vz^2) / (2 * effective_gravity)
-
-    -- The total altitude at the apex, relative to the start of the maneuver
-    local h_apex = h + h_gain
-    if h_apex < 0 then h_apex = 0 end
-
-    -- Time to fall from the apex back down to the starting altitude
-    local t_fall = math.sqrt(2 * h_apex / effective_gravity)
-
-    -- Total hang time is the time to go up plus the time to fall down
-    local t_hang = t_to_apex + t_fall
+    -- The time to go to the apex and return to the current altitude is 2 * v / g
+    local t_hang = 2 * vz / effective_gravity
     
     -- Debugging output at 200ms intervals
     state.last_debug_ms = state.last_debug_ms or 0
@@ -338,6 +318,7 @@ function vehicle_control.maneuver.flip_update(state)
     if (now_ms - state.last_debug_ms) > 200 then
         state.last_debug_ms = now_ms
         local target_climb_rate = -state.target_climb_vel_ned:z()
+        local h = (ahrs:get_location():alt() - state.initial_state.location:alt()) / 100.0
         local debug_msg = string.format("VUp T:%.1f C:%.1f | Hng T:%.2f E:%.2f | Alt A:%.1f", target_climb_rate, vz, state.t_flip, t_hang, h)
         gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, debug_msg)
     end
@@ -369,7 +350,9 @@ function vehicle_control.maneuver.flip_update(state)
 
     -- Check if the total rotation has been completed
     if math.abs(state.accumulated_angle) >= state.total_angle_deg then
-        state.stage = vehicle_control.maneuver.stage.LEVEL_VEHICLE
+        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete, restoring trajectory.")
+        state.restore_start_time = millis():tofloat()
+        state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
         return vehicle_control.RUNNING
     end
 
@@ -387,56 +370,6 @@ function vehicle_control.maneuver.flip_update(state)
       pitch_rate_dps = new_rate_degs
     end
     vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, 0, state.throttle_cmd)
-    return vehicle_control.RUNNING
-
-  elseif state.stage == vehicle_control.maneuver.stage.LEVEL_VEHICLE then
-    -- First, command the vehicle to its original attitude while maintaining the original climb rate and yaw.
-    local initial_roll_deg = math.deg(state.initial_state.attitude:x())
-    local initial_pitch_deg = math.deg(state.initial_state.attitude:y())
-    local initial_yaw_deg = math.deg(state.initial_state.attitude:z())
-    local initial_climb_rate_ms = -state.initial_state.velocity:z()
-    vehicle:set_target_angle_and_climbrate(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, initial_climb_rate_ms, false, 0)
-
-    -- Check if the vehicle is close to its original attitude
-    local roll_err_rad = ahrs:get_roll_rad() - state.initial_state.attitude:x()
-    local pitch_err_rad = ahrs:get_pitch_rad() - state.initial_state.attitude:y()
-    local attitude_tolerance_rad = math.rad(5) -- 5 degree tolerance
-
-    if math.abs(roll_err_rad) < attitude_tolerance_rad and math.abs(pitch_err_rad) < attitude_tolerance_rad then
-        -- Attitude is restored, now check if we are descending faster than we started.
-        local current_vel_ned = ahrs:get_velocity_NED()
-        if current_vel_ned and current_vel_ned:z() > state.initial_state.velocity:z() then
-            -- We are descending too fast, so we need to arrest the descent with max throttle.
-            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Attitude restored, arresting descent.")
-            state.stage = vehicle_control.maneuver.stage.ARREST_DESCENT
-        else
-            -- We are stable, proceed to restore trajectory.
-            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Attitude restored, restoring trajectory.")
-            state.restore_start_time = millis():tofloat()
-            state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
-        end
-    end
-    return vehicle_control.RUNNING
-
-  elseif state.stage == vehicle_control.maneuver.stage.ARREST_DESCENT then
-    -- Command zero rotation rates to hold attitude, but apply full throttle to arrest descent
-    vehicle:set_target_rate_and_throttle(0, 0, 0, 1.0)
-
-    -- Wait until our vertical velocity is at least as good as it was at the start
-    local current_vel_ned = ahrs:get_velocity_NED()
-    if current_vel_ned and current_vel_ned:z() <= state.initial_state.velocity:z() then
-        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Descent arrested, restoring trajectory.")
-        -- Immediately start the trajectory restoration to prevent overshoot
-        state.restore_start_time = millis():tofloat()
-        state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
-        
-        -- Issue the first posvel command immediately to override the full throttle command
-        local elapsed_restore_time_s = 0
-        local total_elapsed_time_s = state.t_flip + elapsed_restore_time_s
-        local displacement = state.initial_state.velocity:copy():scale(total_elapsed_time_s)
-        local target_pos_ned_absolute = state.initial_state.pos_ned + displacement
-        vehicle:set_target_posvel_NED(target_pos_ned_absolute, state.initial_state.velocity)
-    end
     return vehicle_control.RUNNING
     
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING_WAIT then
