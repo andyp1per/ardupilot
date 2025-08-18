@@ -140,11 +140,12 @@ vehicle_control.maneuver = {}
 
 -- Enum for flip maneuver stages
 vehicle_control.maneuver.stage = {
-  WAITING_BALLISTIC_ENTRY = 1,
-  FLIPPING = 2,
-  RESTORING = 3,
-  RESTORING_WAIT = 4,
-  DONE = 5,
+  CLIMBING = 1,
+  WAITING_BALLISTIC_ENTRY = 2,
+  FLIPPING = 3,
+  RESTORING = 4,
+  RESTORING_WAIT = 5,
+  DONE = 6,
 }
 
 --[[
@@ -222,21 +223,16 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
 
   local t_flip = flip_duration_s
 
-  -- 3. Initiate Climb
+  -- 3. Prepare for Climb
   -- The initial velocity required to reach an apex at time t_flip is v = g * t_flip.
   local climb_rate_ms = 9.81 * t_flip
   local initial_velocity_ned = ahrs:get_velocity_NED()
   
-  local vel_ned = Vector3f()
-  vel_ned:x(initial_velocity_ned:x())
-  vel_ned:y(initial_velocity_ned:y())
-  vel_ned:z(-climb_rate_ms * (climb_multiplier or 1.5))
+  local target_climb_vel_ned = Vector3f()
+  target_climb_vel_ned:x(initial_velocity_ned:x())
+  target_climb_vel_ned:y(initial_velocity_ned:y())
+  target_climb_vel_ned:z(-climb_rate_ms * (climb_multiplier or 1.5))
   
-  if not vehicle:set_target_velocity_NED(vel_ned) then
-    gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Failed to set target velocity for climb")
-    return nil, "Failed to set climb velocity"
-  end
-
   -- 4. Prepare for Flip
   local initial_attitude_euler = Vector3f()
   initial_attitude_euler:x(ahrs:get_roll_rad())
@@ -255,8 +251,9 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   local initial_angle = (axis == vehicle_control.axis.ROLL) and math.deg(initial_state.attitude:x()) or math.deg(initial_state.attitude:y())
 
   return {
-    stage = vehicle_control.maneuver.stage.WAITING_BALLISTIC_ENTRY,
+    stage = vehicle_control.maneuver.stage.CLIMBING,
     initial_state = initial_state,
+    target_climb_vel_ned = target_climb_vel_ned,
     t_flip = t_flip,
     total_angle_deg = total_angle_deg,
     rate_degs = rate_degs,
@@ -275,7 +272,28 @@ end
   @return RUNNING or SUCCESS.
 ]]
 function vehicle_control.maneuver.flip_update(state)
-  if state.stage == vehicle_control.maneuver.stage.WAITING_BALLISTIC_ENTRY then
+  if state.stage == vehicle_control.maneuver.stage.CLIMBING then
+    -- Continuously command the target climb velocity
+    vehicle:set_target_velocity_NED(state.target_climb_vel_ned)
+
+    local current_vel_ned = ahrs:get_velocity_NED()
+    if not current_vel_ned then return vehicle_control.RUNNING end
+
+    -- Check if we have reached the desired climb rate (e.g., within 95%)
+    local target_climb_rate = -state.target_climb_vel_ned:z()
+    local current_climb_rate = -current_vel_ned:z()
+
+    if current_climb_rate >= (target_climb_rate * 0.95) then
+      -- Capture the state at the moment we enter the ballistic phase
+      state.ballistic_entry_state = {
+        location = ahrs:get_location(),
+        velocity = current_vel_ned,
+      }
+      state.stage = vehicle_control.maneuver.stage.WAITING_BALLISTIC_ENTRY
+    end
+    return vehicle_control.RUNNING
+
+  elseif state.stage == vehicle_control.maneuver.stage.WAITING_BALLISTIC_ENTRY then
     local current_vel_ned = ahrs:get_velocity_NED()
     local current_loc = ahrs:get_location()
     if not (current_vel_ned and current_loc) then return vehicle_control.RUNNING end
@@ -283,7 +301,8 @@ function vehicle_control.maneuver.flip_update(state)
     local vz = -current_vel_ned:z() -- upward velocity is positive
     if vz <= 0 then return vehicle_control.RUNNING end -- only proceed if we are climbing
 
-    local alt_diff = (current_loc:alt() - state.initial_state.location:alt()) / 100.0
+    -- Calculate hang time based on the state captured at the end of the CLIMBING phase
+    local alt_diff = (current_loc:alt() - state.ballistic_entry_state.location:alt()) / 100.0
     
     local t_to_apex = vz / 9.81
     local h_gain = vz * t_to_apex - 0.5 * 9.81 * t_to_apex^2
@@ -387,7 +406,6 @@ function vehicle_control.maneuver.flip_update(state)
     -- Define separate tolerances for arrival check
     local pos_tolerance_m = 1.0
     local horizontal_vel_tolerance_ms = 0.5
-    local vertical_vel_tolerance_ms = 0.2
 
     -- Check position error
     local pos_error_vec = target_pos_ned_absolute - current_pos_ned
@@ -399,9 +417,12 @@ function vehicle_control.maneuver.flip_update(state)
     local horizontal_vel_error_sq = vel_error_x^2 + vel_error_y^2
     local horizontal_vel_ok = horizontal_vel_error_sq < (horizontal_vel_tolerance_ms^2)
 
-    -- Check vertical velocity error (one-sided check for safety)
-    -- This ensures we are not descending faster than the target vertical velocity + tolerance
-    local vertical_vel_ok = current_vel_ned:z() <= (state.initial_state.velocity:z() + vertical_vel_tolerance_ms)
+    -- Check vertical velocity error. The error is calculated as current_z - target_z.
+    -- A positive error means descending faster or climbing slower than the target.
+    local vel_error_z = current_vel_ned:z() - state.initial_state.velocity:z()
+    -- This check ensures the vehicle is never descending faster than the target (vel_error_z <= 0).
+    -- It allows a generous tolerance for "safe" errors (climbing faster/descending slower).
+    local vertical_vel_ok = (vel_error_z <= 0) and (vel_error_z > -0.5)
 
     -- Check if all conditions are met
     if pos_ok and horizontal_vel_ok and vertical_vel_ok then
