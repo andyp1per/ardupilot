@@ -144,9 +144,8 @@ vehicle_control.maneuver.stage = {
   FLIPPING = 2,
   LEVEL_VEHICLE = 3,
   ARREST_DESCENT = 4,
-  RESTORING = 5,
-  RESTORING_WAIT = 6,
-  DONE = 7,
+  RESTORING_WAIT = 5,
+  DONE = 6,
 }
 
 --[[
@@ -413,7 +412,8 @@ function vehicle_control.maneuver.flip_update(state)
         else
             -- We are stable, proceed to restore trajectory.
             gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Attitude restored, restoring trajectory.")
-            state.stage = vehicle_control.maneuver.stage.RESTORING
+            state.restore_start_time = millis():tofloat()
+            state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
         end
     end
     return vehicle_control.RUNNING
@@ -426,14 +426,17 @@ function vehicle_control.maneuver.flip_update(state)
     local current_vel_ned = ahrs:get_velocity_NED()
     if current_vel_ned and current_vel_ned:z() <= state.initial_state.velocity:z() then
         gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Descent arrested, restoring trajectory.")
-        state.stage = vehicle_control.maneuver.stage.RESTORING
+        -- Immediately start the trajectory restoration to prevent overshoot
+        state.restore_start_time = millis():tofloat()
+        state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
+        
+        -- Issue the first posvel command immediately to override the full throttle command
+        local elapsed_restore_time_s = 0
+        local total_elapsed_time_s = state.t_flip + elapsed_restore_time_s
+        local displacement = state.initial_state.velocity:copy():scale(total_elapsed_time_s)
+        local target_pos_ned_absolute = state.initial_state.pos_ned + displacement
+        vehicle:set_target_posvel_NED(target_pos_ned_absolute, state.initial_state.velocity)
     end
-    return vehicle_control.RUNNING
-
-  elseif state.stage == vehicle_control.maneuver.stage.RESTORING then
-    -- This stage simply records the start time of the final recovery phase
-    state.restore_start_time = millis():tofloat()
-    state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
     return vehicle_control.RUNNING
     
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING_WAIT then
