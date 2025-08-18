@@ -281,22 +281,25 @@ function vehicle_control.maneuver.flip_update(state)
 
     local vz = -current_vel_ned:z() -- current upward velocity
 
-    -- Calculate the total hang time from the current position and velocity
+    -- Approximate the effect of downward thrust while inverted by creating an "effective gravity"
+    local effective_gravity = 9.81 * (1 + state.throttle_cmd)
+
+    -- Calculate the total hang time from the current position and velocity using the effective gravity
     -- h is the current altitude relative to the maneuver's start altitude
     local h = (current_loc:alt() - state.initial_state.location:alt()) / 100.0
 
     -- Time to reach the apex from the current point
-    local t_to_apex = vz / 9.81
+    local t_to_apex = vz / effective_gravity
 
     -- Additional altitude that will be gained to reach the apex
-    local h_gain = (vz^2) / (2 * 9.81)
+    local h_gain = (vz^2) / (2 * effective_gravity)
 
     -- The total altitude at the apex, relative to the start of the maneuver
     local h_apex = h + h_gain
     if h_apex < 0 then h_apex = 0 end
 
     -- Time to fall from the apex back down to the starting altitude
-    local t_fall = math.sqrt(2 * h_apex / 9.81)
+    local t_fall = math.sqrt(2 * h_apex / effective_gravity)
 
     -- Total hang time is the time to go up plus the time to fall down
     local t_hang = t_to_apex + t_fall
