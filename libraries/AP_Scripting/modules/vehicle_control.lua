@@ -310,7 +310,7 @@ function vehicle_control.maneuver.flip_update(state)
     if (now_ms - state.last_debug_ms) > 200 then
         state.last_debug_ms = now_ms
         local target_climb_rate = -state.target_climb_vel_ned:z()
-        local debug_msg = string.format("VUp T:%.1f C:%.1f | Hng T:%.2f E:%.2f", target_climb_rate, vz, state.t_flip, t_hang)
+        local debug_msg = string.format("VUp T:%.1f C:%.1f | Hng T:%.2f E:%.2f | Alt A:%.1f", target_climb_rate, vz, state.t_flip, t_hang, h)
         gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, debug_msg)
     end
 
