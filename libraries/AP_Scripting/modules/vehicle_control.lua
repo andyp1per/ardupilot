@@ -331,6 +331,16 @@ function vehicle_control.maneuver.flip_update(state)
 
     -- Total hang time is the time to go up plus the time to fall down
     local t_hang = t_to_apex + t_fall
+    
+    -- Debugging output at 200ms intervals
+    state.last_debug_ms = state.last_debug_ms or 0
+    local now_ms = millis():tofloat()
+    if (now_ms - state.last_debug_ms) > 200 then
+        state.last_debug_ms = now_ms
+        local target_climb_rate = -state.target_climb_vel_ned:z()
+        local debug_msg = string.format("VUp T:%.1f C:%.1f | Hng T:%.2f E:%.2f | Alt A:%.1f", target_climb_rate, vz, state.t_flip, t_hang, h)
+        gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, debug_msg)
+    end
 
     if t_hang >= state.t_flip then
       local flip_msg = string.format("Flipping %.2f times over %.2f seconds", state.num_flips, state.t_flip)
@@ -413,6 +423,21 @@ function vehicle_control.maneuver.flip_update(state)
     -- Continuously command the vehicle to the moving absolute target position and velocity
     vehicle:set_target_posvel_NED(target_pos_ned_absolute, state.initial_state.velocity)
     
+    -- Debugging output at 200ms intervals
+    state.last_debug_ms = state.last_debug_ms or 0
+    local now_ms = millis():tofloat()
+    if (now_ms - state.last_debug_ms) > 200 then
+        state.last_debug_ms = now_ms
+        -- Convert NED 'Down' to 'Up' for clarity in logging by multiplying by -1
+        local target_p_up = -target_pos_ned_absolute:z()
+        local curr_p_up = -current_pos_ned:z()
+        local target_v_up = -state.initial_state.velocity:z()
+        local curr_v_up = -current_vel_ned:z()
+        
+        local debug_msg = string.format("P Up T:%.1f C:%.1f | V Up T:%.1f C:%.1f", target_p_up, curr_p_up, target_v_up, curr_v_up)
+        gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, debug_msg)
+    end
+
     -- Define separate tolerances for arrival check
     local pos_tolerance_m = 1.0
     local horizontal_vel_tolerance_ms = 0.5
