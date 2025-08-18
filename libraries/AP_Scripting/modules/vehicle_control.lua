@@ -142,10 +142,11 @@ vehicle_control.maneuver = {}
 vehicle_control.maneuver.stage = {
   PREPARE_AND_CLIMB = 1,
   FLIPPING = 2,
-  ARREST_DESCENT = 3,
-  RESTORING = 4,
-  RESTORING_WAIT = 5,
-  DONE = 6,
+  LEVEL_VEHICLE = 3,
+  ARREST_DESCENT = 4,
+  RESTORING = 5,
+  RESTORING_WAIT = 6,
+  DONE = 7,
 }
 
 --[[
@@ -369,7 +370,7 @@ function vehicle_control.maneuver.flip_update(state)
 
     -- Check if the total rotation has been completed
     if math.abs(state.accumulated_angle) >= state.total_angle_deg then
-        state.stage = vehicle_control.maneuver.stage.ARREST_DESCENT
+        state.stage = vehicle_control.maneuver.stage.LEVEL_VEHICLE
         return vehicle_control.RUNNING
     end
 
@@ -387,6 +388,32 @@ function vehicle_control.maneuver.flip_update(state)
       pitch_rate_dps = new_rate_degs
     end
     vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, 0, state.throttle_cmd)
+    return vehicle_control.RUNNING
+
+  elseif state.stage == vehicle_control.maneuver.stage.LEVEL_VEHICLE then
+    -- First, command the vehicle to level out while maintaining the original climb rate and yaw.
+    local initial_climb_rate_ms = -state.initial_state.velocity:z()
+    local initial_yaw_deg = math.deg(state.initial_state.attitude:z())
+    vehicle:set_target_angle_and_climbrate(0, 0, initial_yaw_deg, initial_climb_rate_ms, false, 0)
+
+    -- Check if the vehicle is close to level
+    local roll_rad = ahrs:get_roll_rad()
+    local pitch_rad = ahrs:get_pitch_rad()
+    local level_tolerance_rad = math.rad(5) -- 5 degree tolerance
+
+    if math.abs(roll_rad) < level_tolerance_rad and math.abs(pitch_rad) < level_tolerance_rad then
+        -- Vehicle is level, now check if we are descending.
+        local current_vel_ned = ahrs:get_velocity_NED()
+        if current_vel_ned and -current_vel_ned:z() < 0 then
+            -- We are descending, so we need to arrest the descent with max throttle.
+            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Leveled, arresting descent.")
+            state.stage = vehicle_control.maneuver.stage.ARREST_DESCENT
+        else
+            -- We are level and not descending, proceed to restore trajectory.
+            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Leveled, restoring trajectory.")
+            state.stage = vehicle_control.maneuver.stage.RESTORING
+        end
+    end
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.ARREST_DESCENT then
