@@ -374,7 +374,7 @@ function vehicle_control.maneuver.flip_update(state)
 
     -- Check if the timer has expired (backup)
     local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
-    if elapsed_time >= state.t_accel then
+    if not brake_finished and elapsed_time >= state.t_accel then
         gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Brake complete (timer expired), restoring trajectory.")
         brake_finished = true
     end
@@ -383,12 +383,8 @@ function vehicle_control.maneuver.flip_update(state)
         state.restore_start_time = millis():tofloat()
         state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
         
-        -- Issue the first posvel command immediately to override the high throttle command
-        local elapsed_restore_time_s = 0
-        local total_elapsed_time_s = state.t_flip + elapsed_restore_time_s
-        local displacement = state.initial_state.velocity:copy():scale(total_elapsed_time_s)
-        local target_pos_ned_absolute = state.initial_state.pos_ned + displacement
-        vehicle:set_target_posvel_NED(target_pos_ned_absolute, state.initial_state.velocity)
+        -- Immediately command zero throttle to arrest the climb before handing off to the position controller.
+        vehicle:set_target_rate_and_throttle(0, 0, 0, 0)
     end
     return vehicle_control.RUNNING
     
