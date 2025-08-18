@@ -140,10 +140,12 @@ vehicle_control.maneuver = {}
 
 -- Enum for flip maneuver stages
 vehicle_control.maneuver.stage = {
-  PREPARE_AND_CLIMB = 1,
+  MANUAL_CLIMB = 1,
   FLIPPING = 2,
-  RESTORING_WAIT = 3,
-  DONE = 4,
+  LEVEL_VEHICLE = 3,
+  MANUAL_BRAKE = 4,
+  RESTORING_WAIT = 5,
+  DONE = 6,
 }
 
 --[[
@@ -155,14 +157,17 @@ vehicle_control.maneuver.stage = {
   @param flip_duration_s (optional) The desired total duration of the maneuver.
   @param num_flips (optional) The number of flips to perform.
   @param slew_gain (optional) The proportional gain for rate slewing (default 0.5).
-  @param climb_multiplier (optional) A factor to scale the initial climb rate to counteract drag (default 1.5).
   @return A state table for the perform_flip_update function, or nil and an error message.
 ]]
-function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain, climb_multiplier)
+function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain)
   -- 1. Pre-flight Checks
   if not (vehicle:get_mode() == vehicle_control.mode.GUIDED) then
     gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Flip requires Guided mode")
     return nil, "Flip requires Guided mode"
+  end
+  local hover_throttle = param:get('MOT_THST_HOVER')
+  if not hover_throttle or hover_throttle <= 0 or hover_throttle >= 1 then
+      return nil, "MOT_THST_HOVER must be set correctly"
   end
 
   -- 2. Calculate Flip Parameters
@@ -179,32 +184,22 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
 
   -- Logic to ensure a whole number of flips
   if user_has_flips then
-      -- User specified the number of flips, this is the priority.
       total_angle_deg = 360 * num_flips
       if user_has_duration then
-          -- Calculate rate
           rate_degs = total_angle_deg / flip_duration_s
       elseif user_has_rate then
-          -- Calculate duration
           flip_duration_s = math.abs(total_angle_deg / rate_degs)
       else
-          -- Neither duration nor rate specified, default duration to 1s per flip
           flip_duration_s = num_flips * 1.0
           rate_degs = total_angle_deg / flip_duration_s
       end
   elseif user_has_duration and user_has_rate then
-      -- User specified duration and rate, num_flips must be calculated and rounded.
-      -- We prioritize the duration and adjust the rate to complete a whole number of flips.
       local theoretical_flips = (math.abs(rate_degs) * flip_duration_s) / 360
-      num_flips = math.floor(theoretical_flips + 0.5) -- round to nearest whole number
-      if num_flips == 0 then num_flips = 1 end -- ensure at least one flip
-      
+      num_flips = math.floor(theoretical_flips + 0.5)
+      if num_flips == 0 then num_flips = 1 end
       total_angle_deg = 360 * num_flips
-      -- Recalculate rate to match the whole number of flips within the specified duration
       rate_degs = (total_angle_deg / flip_duration_s) * (rate_degs > 0 and 1 or -1)
   else
-      -- This case handles if only duration or only rate is provided.
-      -- We default to 1 flip.
       num_flips = 1
       total_angle_deg = 360
       if user_has_duration then
@@ -214,50 +209,24 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
       end
   end
 
-  -- Validate calculated parameters
   if rate_degs == 0 or flip_duration_s <= 0 then
       return nil, "Invalid flip parameters calculated"
   end
 
   local t_flip = flip_duration_s
 
-  -- 3. Dynamic Hang Time for Safety
-  if not ahrs:home_is_set() then
-      return nil, "Home not set, cannot calculate altitude for safety"
-  end
-  local height_above_home = -ahrs:get_relative_position_D_home()
-  if height_above_home == nil then
-      return nil, "Could not get relative altitude for safety calculation"
-  end
+  -- 3. Calculate Manual Climb Parameters
+  local effective_gravity = 9.81 * (1 + (throttle_level or 0.0))
+  local required_vz = 0.5 * effective_gravity * t_flip
   
-  -- Define altitude thresholds for adding extra hang time
-  local low_alt_ref_m = 10
-  local high_alt_ref_m = 50
-  local low_alt_extra_time_s = 0.5
-  local extra_time = 0
+  -- Estimate acceleration from throttle. 2*hover_throttle gives ~1g of acceleration.
+  local climb_accel = 9.81 
+  local climb_throttle = 2 * hover_throttle
   
-  -- Scale the extra time based on current altitude
-  if height_above_home <= low_alt_ref_m then
-      extra_time = low_alt_extra_time_s
-  elseif height_above_home < high_alt_ref_m then
-      local scale = (height_above_home - low_alt_ref_m) / (high_alt_ref_m - low_alt_ref_m)
-      extra_time = low_alt_extra_time_s * (1 - scale)
-  end
+  -- Time needed to accelerate to the required vertical velocity
+  local t_accel = required_vz / climb_accel
 
-  -- Add the safety margin to the flip time for the climb calculation
-  local t_flip_for_climb = t_flip + extra_time
-
-  -- 4. Prepare for Climb
-  -- The initial velocity required for a total ballistic flight time of t_flip is v = 0.5 * g * t_flip
-  local climb_rate_ms = 0.5 * 9.81 * t_flip_for_climb
-  local initial_velocity_ned = ahrs:get_velocity_NED()
-  
-  local target_climb_vel_ned = Vector3f()
-  target_climb_vel_ned:x(initial_velocity_ned:x())
-  target_climb_vel_ned:y(initial_velocity_ned:y())
-  target_climb_vel_ned:z(-climb_rate_ms * (climb_multiplier or 1.5))
-  
-  -- 5. Prepare for Flip
+  -- 4. Prepare for Flip
   local initial_attitude_euler = Vector3f()
   initial_attitude_euler:x(ahrs:get_roll_rad())
   initial_attitude_euler:y(ahrs:get_pitch_rad())
@@ -269,15 +238,16 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
     gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Could not get EKF origin position")
     return nil, "Could not get EKF origin position"
   end
-  local initial_state = { attitude = initial_attitude_euler, velocity = initial_velocity_ned, location = initial_location, pos_ned = initial_pos_ned }
+  local initial_state = { attitude = initial_attitude_euler, velocity = ahrs:get_velocity_NED(), location = initial_location, pos_ned = initial_pos_ned }
 
   local throttle_cmd = (throttle_level == vehicle_control.THROTTLE_CUT) and 0.0 or (throttle_level or 0.0)
   local initial_angle = (axis == vehicle_control.axis.ROLL) and math.deg(initial_state.attitude:x()) or math.deg(initial_state.attitude:y())
 
   return {
-    stage = vehicle_control.maneuver.stage.PREPARE_AND_CLIMB,
+    stage = vehicle_control.maneuver.stage.MANUAL_CLIMB,
     initial_state = initial_state,
-    target_climb_vel_ned = target_climb_vel_ned,
+    t_accel = t_accel,
+    climb_throttle = climb_throttle,
     t_flip = t_flip,
     total_angle_deg = total_angle_deg,
     rate_degs = rate_degs,
@@ -296,34 +266,28 @@ end
   @return RUNNING or SUCCESS.
 ]]
 function vehicle_control.maneuver.flip_update(state)
-  if state.stage == vehicle_control.maneuver.stage.PREPARE_AND_CLIMB then
-    -- Continuously command the target climb velocity while checking if we have enough
-    -- energy to complete the flip based on the predicted hang time.
-    vehicle:set_target_velocity_NED(state.target_climb_vel_ned)
-
-    local current_vel_ned = ahrs:get_velocity_NED()
-    if not current_vel_ned then return vehicle_control.RUNNING end
-
-    local vz = -current_vel_ned:z() -- current upward velocity
-
-    -- Approximate the effect of downward thrust while inverted by creating an "effective gravity"
-    local effective_gravity = 9.81 * (1 + state.throttle_cmd)
-
-    -- The time to go to the apex and return to the current altitude is 2 * v / g
-    local t_hang = 2 * vz / effective_gravity
+  if state.stage == vehicle_control.maneuver.stage.MANUAL_CLIMB then
+    -- Apply a strong upward thrust for a calculated duration to gain the required hang time.
+    if not state.start_time then
+        state.start_time = millis():tofloat()
+    end
     
+    -- Command level attitude with high throttle
+    vehicle:set_target_rate_and_throttle(0, 0, 0, state.climb_throttle)
+
     -- Debugging output at 200ms intervals
     state.last_debug_ms = state.last_debug_ms or 0
     local now_ms = millis():tofloat()
     if (now_ms - state.last_debug_ms) > 200 then
         state.last_debug_ms = now_ms
-        local target_climb_rate = -state.target_climb_vel_ned:z()
-        local h = (ahrs:get_location():alt() - state.initial_state.location:alt()) / 100.0
-        local debug_msg = string.format("VUp T:%.1f C:%.1f | Hng T:%.2f E:%.2f | Alt A:%.1f", target_climb_rate, vz, state.t_flip, t_hang, h)
+        local elapsed_time = (now_ms - state.start_time) / 1000.0
+        local vz = -ahrs:get_velocity_NED():z()
+        local debug_msg = string.format("Climb T:%.2f/%.2f s | VUp:%.1f m/s", elapsed_time, state.t_accel, vz)
         gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, debug_msg)
     end
 
-    if t_hang >= state.t_flip then
+    local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
+    if elapsed_time >= state.t_accel then
       local flip_msg = string.format("Flipping %.2f times over %.2f seconds", state.num_flips, state.t_flip)
       gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, flip_msg)
       state.stage = vehicle_control.maneuver.stage.FLIPPING
@@ -350,9 +314,7 @@ function vehicle_control.maneuver.flip_update(state)
 
     -- Check if the total rotation has been completed
     if math.abs(state.accumulated_angle) >= state.total_angle_deg then
-        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip complete, restoring trajectory.")
-        state.restore_start_time = millis():tofloat()
-        state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
+        state.stage = vehicle_control.maneuver.stage.LEVEL_VEHICLE
         return vehicle_control.RUNNING
     end
 
@@ -370,6 +332,42 @@ function vehicle_control.maneuver.flip_update(state)
       pitch_rate_dps = new_rate_degs
     end
     vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, 0, state.throttle_cmd)
+    return vehicle_control.RUNNING
+
+  elseif state.stage == vehicle_control.maneuver.stage.LEVEL_VEHICLE then
+    -- Command the vehicle to level out
+    vehicle:set_target_angle_and_climbrate(0, 0, math.deg(state.initial_state.attitude:z()), 0, false, 0)
+
+    local roll_rad = ahrs:get_roll_rad()
+    local pitch_rad = ahrs:get_pitch_rad()
+    if math.abs(roll_rad) < math.rad(5) and math.abs(pitch_rad) < math.rad(5) then
+        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Leveled, applying brake.")
+        state.stage = vehicle_control.maneuver.stage.MANUAL_BRAKE
+        state.start_time = millis():tofloat()
+    end
+    return vehicle_control.RUNNING
+
+  elseif state.stage == vehicle_control.maneuver.stage.MANUAL_BRAKE then
+    -- Apply the same strong upward thrust for the same duration to symmetrically cancel the initial climb.
+    vehicle:set_target_rate_and_throttle(0, 0, 0, state.climb_throttle)
+
+    -- Debugging output at 200ms intervals
+    state.last_debug_ms = state.last_debug_ms or 0
+    local now_ms = millis():tofloat()
+    if (now_ms - state.last_debug_ms) > 200 then
+        state.last_debug_ms = now_ms
+        local elapsed_time = (now_ms - state.start_time) / 1000.0
+        local vz = -ahrs:get_velocity_NED():z()
+        local debug_msg = string.format("Brake T:%.2f/%.2f s | VUp:%.1f m/s", elapsed_time, state.t_accel, vz)
+        gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, debug_msg)
+    end
+
+    local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
+    if elapsed_time >= state.t_accel then
+        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Brake complete, restoring trajectory.")
+        state.restore_start_time = millis():tofloat()
+        state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
+    end
     return vehicle_control.RUNNING
     
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING_WAIT then
