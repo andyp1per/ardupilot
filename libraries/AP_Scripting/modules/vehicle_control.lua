@@ -391,26 +391,28 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.LEVEL_VEHICLE then
-    -- First, command the vehicle to level out while maintaining the original climb rate and yaw.
-    local initial_climb_rate_ms = -state.initial_state.velocity:z()
+    -- First, command the vehicle to its original attitude while maintaining the original climb rate and yaw.
+    local initial_roll_deg = math.deg(state.initial_state.attitude:x())
+    local initial_pitch_deg = math.deg(state.initial_state.attitude:y())
     local initial_yaw_deg = math.deg(state.initial_state.attitude:z())
-    vehicle:set_target_angle_and_climbrate(0, 0, initial_yaw_deg, initial_climb_rate_ms, false, 0)
+    local initial_climb_rate_ms = -state.initial_state.velocity:z()
+    vehicle:set_target_angle_and_climbrate(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, initial_climb_rate_ms, false, 0)
 
-    -- Check if the vehicle is close to level
-    local roll_rad = ahrs:get_roll_rad()
-    local pitch_rad = ahrs:get_pitch_rad()
-    local level_tolerance_rad = math.rad(5) -- 5 degree tolerance
+    -- Check if the vehicle is close to its original attitude
+    local roll_err_rad = ahrs:get_roll_rad() - state.initial_state.attitude:x()
+    local pitch_err_rad = ahrs:get_pitch_rad() - state.initial_state.attitude:y()
+    local attitude_tolerance_rad = math.rad(5) -- 5 degree tolerance
 
-    if math.abs(roll_rad) < level_tolerance_rad and math.abs(pitch_rad) < level_tolerance_rad then
-        -- Vehicle is level, now check if we are descending.
+    if math.abs(roll_err_rad) < attitude_tolerance_rad and math.abs(pitch_err_rad) < attitude_tolerance_rad then
+        -- Attitude is restored, now check if we are descending faster than we started.
         local current_vel_ned = ahrs:get_velocity_NED()
-        if current_vel_ned and -current_vel_ned:z() < 0 then
-            -- We are descending, so we need to arrest the descent with max throttle.
-            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Leveled, arresting descent.")
+        if current_vel_ned and current_vel_ned:z() > state.initial_state.velocity:z() then
+            -- We are descending too fast, so we need to arrest the descent with max throttle.
+            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Attitude restored, arresting descent.")
             state.stage = vehicle_control.maneuver.stage.ARREST_DESCENT
         else
-            -- We are level and not descending, proceed to restore trajectory.
-            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Leveled, restoring trajectory.")
+            -- We are stable, proceed to restore trajectory.
+            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Attitude restored, restoring trajectory.")
             state.stage = vehicle_control.maneuver.stage.RESTORING
         end
     end
@@ -420,8 +422,9 @@ function vehicle_control.maneuver.flip_update(state)
     -- Command zero rotation rates to hold attitude, but apply full throttle to arrest descent
     vehicle:set_target_rate_and_throttle(0, 0, 0, 1.0)
 
+    -- Wait until our vertical velocity is at least as good as it was at the start
     local current_vel_ned = ahrs:get_velocity_NED()
-    if current_vel_ned and -current_vel_ned:z() > 0 then -- Wait until we are climbing
+    if current_vel_ned and current_vel_ned:z() <= state.initial_state.velocity:z() then
         gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Descent arrested, restoring trajectory.")
         state.stage = vehicle_control.maneuver.stage.RESTORING
     end
