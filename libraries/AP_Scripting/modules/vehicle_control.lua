@@ -353,12 +353,11 @@ function vehicle_control.maneuver.flip_update(state)
 
     -- Check if we have already recovered our initial vertical velocity
     local current_vel_ned = ahrs:get_velocity_NED()
+    local brake_finished = false
     if current_vel_ned then
         if -current_vel_ned:z() >= -state.initial_state.velocity:z() then
             gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Brake complete (velocity met), restoring trajectory.")
-            state.restore_start_time = millis():tofloat()
-            state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
-            return vehicle_control.RUNNING -- Exit this update loop
+            brake_finished = true
         end
     end
 
@@ -377,8 +376,19 @@ function vehicle_control.maneuver.flip_update(state)
     local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
     if elapsed_time >= state.t_accel then
         gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Brake complete (timer expired), restoring trajectory.")
+        brake_finished = true
+    end
+    
+    if brake_finished then
         state.restore_start_time = millis():tofloat()
         state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
+        
+        -- Issue the first posvel command immediately to override the high throttle command
+        local elapsed_restore_time_s = 0
+        local total_elapsed_time_s = state.t_flip + elapsed_restore_time_s
+        local displacement = state.initial_state.velocity:copy():scale(total_elapsed_time_s)
+        local target_pos_ned_absolute = state.initial_state.pos_ned + displacement
+        vehicle:set_target_posvel_NED(target_pos_ned_absolute, state.initial_state.velocity)
     end
     return vehicle_control.RUNNING
     
