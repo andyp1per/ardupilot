@@ -13956,8 +13956,14 @@ RTL_ALT 111
         # Stage 1: Set SCR_ENABLE and reboot
         self.set_parameters({
             "SCR_ENABLE": 1,
+            "WPNAV_ACCEL": 2000,
+            "WPNAV_ACCEL_Z": 1000,
+            "WPNAV_JERK": 40,
+            "WPNAV_SPEED": 3000,
+            "WPNAV_SPEED_DN": 1000,
+            "WPNAV_SPEED_UP": 1000,
+            "PSC_JERK_Z": 5,
         })
-
 
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
         self.install_applet_script_context("flip_on_a_switch.lua")
@@ -13969,20 +13975,20 @@ RTL_ALT 111
             "FLIP_ENABLE": 1,
             "FLIP_AXIS": 1,  # Roll
             "FLIP_RATE": 720,
-            "FLIP_DURATION": 1.5,
+            "FLIP_DURATION": 1.0,
             "RC9_OPTION": 300,  # Scripting1
         })
         self.wait_ready_to_arm()
         self.arm_vehicle()
         # Takeoff in Loiter mode
-        self.takeoff(10, mode="LOITER")
+        self.takeoff(75, mode="LOITER")
 
         self.context_collect('STATUSTEXT')
 
         # Trigger the flip
         self.set_rc(9, 2000)
         self.wait_statustext("Flip: Starting continuous flip", check_context=True, timeout=10)
-        self.wait_statustext("Flip complete", check_context=True, timeout=10)
+        self.wait_statustext("Trajectory restored", check_context=True, timeout=100)
 
         # Lower the switch to stop flipping
         self.set_rc(9, 1000)
