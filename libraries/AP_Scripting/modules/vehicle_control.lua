@@ -338,7 +338,7 @@ function vehicle_control.maneuver.flip_update(state)
   elseif state.stage == vehicle_control.maneuver.stage.LEVEL_VEHICLE then
     -- Command the vehicle to its original attitude using the new combined angle and rate controller
     local initial_yaw_deg = math.deg(state.initial_state.attitude:z())
-    vehicle:set_target_angle_and_rate_and_throttle(0, 0, initial_yaw_deg, 0, 0, 0, state.throttle_cmd)
+    vehicle:set_target_angle_and_rate_and_throttle(0, 0, initial_yaw_deg, 0, 0, 0, state.hover_throttle)
 
     if state.level_achieved_time then
         -- We are already level, now we are waiting for a short delay to allow acceleration to dissipate
