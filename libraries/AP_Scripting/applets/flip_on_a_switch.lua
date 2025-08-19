@@ -93,7 +93,7 @@ function update()
             flip_state = vehicle_control.maneuver.flip_start(
                 FLIP_AXIS:get(),
                 FLIP_RATE:get(),
-                FLIP_THROTTLE:get(),
+                nil,
                 FLIP_DURATION:get()
             )
             if flip_state == nil then
@@ -112,7 +112,7 @@ function update()
                 flip_state = vehicle_control.maneuver.flip_start(
                     FLIP_AXIS:get(),
                     FLIP_RATE:get(),
-                    FLIP_THROTTLE:get(),
+                    nil,
                     FLIP_DURATION:get()
                 )
                 if flip_state == nil then
@@ -120,6 +120,7 @@ function update()
                     flip_active = false
                 end
             end
+            return update, 10
         end
     else -- Low or Middle position
         if flip_active then
