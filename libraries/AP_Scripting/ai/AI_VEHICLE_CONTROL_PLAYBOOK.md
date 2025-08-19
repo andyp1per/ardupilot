@@ -60,6 +60,17 @@ There are three main types of movement control, each with different levels of ab
 | :---- | :---- |
 | **vehicle:set\_target\_rate\_and\_throttle(...)** | Sets target roll, pitch, and yaw rates in degrees/second, along with a collective throttle value. |
 
+
+#### **Combined Angle and Rate Control (Advanced)**
+
+This is the most direct method for controlling the vehicle's attitude, combining both a target angle and a target rate. This is useful for advanced aerobatics where you need to command the vehicle to hold a specific orientation while also rotating at a specific rate.
+
+* **Primary Object:** vehicle
+| Function/Method | Description |
+| :---- | :---- |
+| **vehicle:set\_target\_angle\_and\_rate\_and\_throttle(...)** | Sets a target roll, pitch, and yaw angle, along with target roll, pitch, and yaw rates, and a collective throttle value. This provides the most direct control over the vehicle's attitude and is useful for complex aerobatics where both a target orientation and a specific rate of rotation are required simultaneously. |
+
+
 #### **Combined Control (Advanced)**
 
 These functions provide more granular control by allowing you to specify position, velocity, and acceleration targets simultaneously. This is useful for creating complex, smooth trajectories.
