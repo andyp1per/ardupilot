@@ -257,6 +257,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
     accumulated_angle = 0,
     Kp = slew_gain or 0.5,
     num_flips = num_flips,
+    hover_throttle = hover_throttle,
   }
 end
 
@@ -335,15 +336,26 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.LEVEL_VEHICLE then
-    -- Command the vehicle to level out
-    vehicle:set_target_angle_and_climbrate(0, 0, math.deg(state.initial_state.attitude:z()), 0, false, 0)
+    -- Command the vehicle to its original attitude using the new combined angle and rate controller
+    local initial_yaw_deg = math.deg(state.initial_state.attitude:z())
+    vehicle:set_target_angle_and_rate_and_throttle(0, 0, initial_yaw_deg, 0, 0, 0, state.throttle_cmd)
 
-    local roll_rad = ahrs:get_roll_rad()
-    local pitch_rad = ahrs:get_pitch_rad()
-    if math.abs(roll_rad) < math.rad(5) and math.abs(pitch_rad) < math.rad(5) then
-        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Leveled, applying brake.")
-        state.stage = vehicle_control.maneuver.stage.MANUAL_BRAKE
-        state.start_time = millis():tofloat()
+    if state.level_achieved_time then
+        -- We are already level, now we are waiting for a short delay to allow acceleration to dissipate
+        local elapsed_delay = (millis():tofloat() - state.level_achieved_time)
+        if elapsed_delay > 100 then -- 100ms delay
+            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Leveled, applying brake.")
+            state.stage = vehicle_control.maneuver.stage.MANUAL_BRAKE
+            state.start_time = millis():tofloat()
+        end
+    else
+        -- We are not yet level, check the attitude
+        local roll_rad = ahrs:get_roll_rad()
+        local pitch_rad = ahrs:get_pitch_rad()
+        if math.abs(roll_rad) < math.rad(5) and math.abs(pitch_rad) < math.rad(5) then
+            -- We just became level, record the time to start the delay
+            state.level_achieved_time = millis():tofloat()
+        end
     end
     return vehicle_control.RUNNING
 
