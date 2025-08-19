@@ -13981,7 +13981,7 @@ RTL_ALT 111
         self.wait_ready_to_arm()
         self.arm_vehicle()
         # Takeoff in Loiter mode
-        self.takeoff(75, mode="LOITER")
+        self.takeoff(30, mode="LOITER")
 
         self.context_collect('STATUSTEXT')
 
