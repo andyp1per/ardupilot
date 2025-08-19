@@ -3895,6 +3895,47 @@ function fence:get_breach_time() end
 ---| 8 # Minimum altitude
 function fence:get_breaches() end
 
+-- Returns minimum safe altitude (i.e. alt_min + margin)
+---@return number 
+function fence:get_safe_alt_min() end
+
+-- Returns maximum safe altitude (i.e. alt_max - margin)
+---@return number 
+function fence:get_safe_alt_max() end
+
+-- Returns configured fences
+---@return integer fence_type bitmask
+---| 1 # Maximim altitude
+---| 2 # Circle
+---| 4 # Polygon
+---| 8 # Minimum altitude
+function fence:present() end
+
+-- Returns enabled fences
+---@return integer fence_type bitmask
+---| 1 # Maximim altitude
+---| 2 # Circle
+---| 4 # Polygon
+---| 8 # Minimum altitude
+function fence:get_enabled_fences() end
+
+-- Returns the type bitmask of any fence whose margins have been crossed
+---@return integer fence_type bitmask
+---| 1 # Maximim altitude
+---| 2 # Circle
+---| 4 # Polygon
+---| 8 # Minimum altitude
+function fence:get_margin_breaches() end
+
+-- Returns the distance in meters to the nearest fence given by the type bitmask
+---@param fence_type integer
+---| 1 # Maximim altitude
+---| 2 # Circle
+---| 4 # Polygon
+---| 8 # Minimum altitude
+---@return number -- distance
+function fence:get_breach_distance(fence_type) end
+
 -- desc
 ---@class (exact) stat_t_ud
 local stat_t_ud = {}
