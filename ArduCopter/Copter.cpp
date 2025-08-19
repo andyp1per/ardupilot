@@ -365,7 +365,7 @@ bool Copter::set_target_velocity_NED(const Vector3f& target_vel_ned_ms, bool ali
             yaw_rads = atan2f(target_vel_ned_ms.y, target_vel_ned_ms.x);
         }
     }
-    
+
     const Vector3f vel_neu_ms{target_vel_ned_ms.x, target_vel_ned_ms.y, -target_vel_ned_ms.z};
     mode_guided.set_vel_accel_NEU_m(vel_neu_ms, Vector3f(), align_yaw_to_target, yaw_rads);
     return true;
@@ -422,6 +422,20 @@ bool Copter::set_target_rate_and_throttle(float roll_rate_dps, float pitch_rate_
     return true;
 }
 
+// set target roll pitch and yaw angles and roll pitch and yaw rates with throttle (for use by scripting)
+bool Copter::set_target_angle_and_rate_and_throttle(float roll_deg, float pitch_deg, float yaw_deg, float roll_rate_dps, float pitch_rate_dps, float yaw_rate_dps, float throttle)
+{
+    Quaternion q;
+    q.from_euler(radians(roll_deg),radians(pitch_deg),radians(yaw_deg));
+
+    // Convert from degrees per second to radians per second
+    Vector3f ang_vel_body { roll_rate_dps, pitch_rate_dps, yaw_rate_dps };
+    ang_vel_body *= DEG_TO_RAD;
+
+    mode_guided.set_angle(q, ang_vel_body, throttle, true);
+    return true;
+}
+
 // Register a custom mode with given number and names
 AP_Vehicle::custom_mode_state* Copter::register_custom_mode(const uint8_t num, const char* full_name, const char* short_name)
 {
@@ -470,15 +484,6 @@ AP_Vehicle::custom_mode_state* Copter::register_custom_mode(const uint8_t num, c
 
     // No free slots
     return nullptr;
-}
-
-bool Copter::set_target_angle_and_thrust(float roll_deg, float pitch_deg, float yaw_deg, float thrust, bool use_yaw_rate, float yaw_rate_degs)
-{
-    Quaternion q;
-    q.from_euler(radians(roll_deg),radians(pitch_deg),radians(yaw_deg));
-
-    mode_guided.set_angle(q, Vector3f{}, thrust, true);
-    return true;
 }
 #endif // MODE_GUIDED_ENABLED
 

@@ -688,10 +688,10 @@ private:
     bool set_target_velaccel_NED(const Vector3f& target_vel, const Vector3f& target_accel, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool relative_yaw) override;
     bool set_target_angle_and_climbrate(float roll_deg, float pitch_deg, float yaw_deg, float climb_rate_ms, bool use_yaw_rate, float yaw_rate_degs) override;
     bool set_target_rate_and_throttle(float roll_rate_dps, float pitch_rate_dps, float yaw_rate_dps, float throttle) override;
+    bool set_target_angle_and_rate_and_throttle(float roll_deg, float pitch_deg, float yaw_deg, float roll_rate_dps, float pitch_rate_dps, float yaw_rate_dps, float throttle) override;
 
     // Register a custom mode with given number and names
     AP_Vehicle::custom_mode_state* register_custom_mode(const uint8_t number, const char* full_name, const char* short_name) override;
-    bool set_target_angle_and_thrust(float roll_deg, float pitch_deg, float yaw_deg, float thrust, bool use_yaw_rate, float yaw_rate_degs) override;
 #endif
 #if MODE_CIRCLE_ENABLED
     bool get_circle_radius(float &radius_m) override;
