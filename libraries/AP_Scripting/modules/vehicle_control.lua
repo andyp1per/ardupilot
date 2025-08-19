@@ -157,17 +157,26 @@ vehicle_control.maneuver.stage = {
   @param flip_duration_s (optional) The desired total duration of the maneuver.
   @param num_flips (optional) The number of flips to perform.
   @param slew_gain (optional) The proportional gain for rate slewing (default 0.5).
+  @param true_hover_throttle (optional) The true hover throttle of the vehicle (0-1). Defaults to MOT_THST_HOVER parameter.
   @return A state table for the perform_flip_update function, or nil and an error message.
 ]]
-function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain)
+function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain, true_hover_throttle)
   -- 1. Pre-flight Checks
   if not (vehicle:get_mode() == vehicle_control.mode.GUIDED) then
     gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Flip requires Guided mode")
     return nil, "Flip requires Guided mode"
   end
-  local hover_throttle = param:get('MOT_THST_HOVER')
+  
+  -- Use provided true hover throttle, or fall back to the parameter
+  local hover_throttle
+  if true_hover_throttle ~= nil and true_hover_throttle > 0 and true_hover_throttle < 1 then
+    hover_throttle = true_hover_throttle
+  else
+    hover_throttle = param:get('MOT_THST_HOVER')
+  end
+
   if not hover_throttle or hover_throttle <= 0 or hover_throttle >= 1 then
-      return nil, "MOT_THST_HOVER must be set correctly"
+      return nil, "Valid hover throttle must be available"
   end
 
   -- 2. Calculate Flip Parameters
@@ -257,6 +266,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
     accumulated_angle = 0,
     Kp = slew_gain or 0.5,
     num_flips = num_flips,
+    hover_throttle = hover_throttle,
   }
 end
 
@@ -266,14 +276,21 @@ end
   @return RUNNING or SUCCESS.
 ]]
 function vehicle_control.maneuver.flip_update(state)
+  -- Get initial attitude in degrees for use in multiple stages
+  local initial_roll_deg = math.deg(state.initial_state.attitude:x())
+  local initial_pitch_deg = math.deg(state.initial_state.attitude:y())
+  local initial_yaw_deg = math.deg(state.initial_state.attitude:z())
+
   if state.stage == vehicle_control.maneuver.stage.MANUAL_CLIMB then
-    -- Apply a strong upward thrust for a calculated duration to gain the required hang time.
+    -- Stage 1: MANUAL_CLIMB
+    -- Apply a strong upward thrust for a calculated duration to gain the
+    -- required vertical velocity for the ballistic phase (the flip).
     if not state.start_time then
         state.start_time = millis():tofloat()
     end
     
-    -- Command level attitude with high throttle
-    vehicle:set_target_rate_and_throttle(0, 0, 0, state.climb_throttle)
+    -- Command initial attitude with high throttle
+    vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.climb_throttle)
 
     -- Debugging output at 200ms intervals
     state.last_debug_ms = state.last_debug_ms or 0
@@ -292,7 +309,12 @@ function vehicle_control.maneuver.flip_update(state)
       gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, flip_msg)
       state.stage = vehicle_control.maneuver.stage.FLIPPING
       state.start_time = millis():tofloat()
+      state.apex_location = ahrs:get_location() -- Record altitude at the start of the flip
       
+      -- Calculate the predicted drop from apex based on total flip time and effective gravity
+      local effective_gravity = 9.81 * (1 + state.throttle_cmd)
+      state.predicted_drop_m = 0.5 * effective_gravity * state.t_flip^2
+
       -- Start the flip with the specified throttle and rates
       local roll_rate_dps, pitch_rate_dps = 0, 0
       if state.axis == vehicle_control.axis.ROLL then
@@ -305,6 +327,11 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.FLIPPING then
+    -- Stage 2: FLIPPING
+    -- The vehicle is now in its ballistic phase. This stage commands the
+    -- desired rotation rate and monitors the accumulated angle. Once the
+    -- rotation is complete, it transitions immediately to the leveling stage.
+    
     -- Unwrap angle to track total rotation
     local current_angle = (state.axis == vehicle_control.axis.ROLL) and math.deg(ahrs:get_roll_rad()) or math.deg(ahrs:get_pitch_rad())
     local delta_angle = current_angle - state.last_angle
@@ -314,6 +341,10 @@ function vehicle_control.maneuver.flip_update(state)
 
     -- Check if the total rotation has been completed
     if math.abs(state.accumulated_angle) >= state.total_angle_deg then
+        -- The required rotation has been achieved. Immediately transition to the
+        -- LEVEL_VEHICLE stage on the next update loop. This ensures a clean
+        -- hand-off and prevents this stage from sending any further rate commands.
+        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip rotation complete, leveling.")
         state.stage = vehicle_control.maneuver.stage.LEVEL_VEHICLE
         return vehicle_control.RUNNING
     end
@@ -335,21 +366,55 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.LEVEL_VEHICLE then
-    -- Command the vehicle to level out
-    vehicle:set_target_angle_and_climbrate(0, 0, math.deg(state.initial_state.attitude:z()), 0, false, 0)
+    -- Stage 3: LEVEL_VEHICLE
+    -- After the flip, the vehicle is commanded to its original attitude. This stage
+    -- waits for the vehicle to both stabilize its attitude and fall to the
+    -- predicted altitude before applying the braking thrust. This ensures
+    -- thrust is not applied in the wrong direction and the maneuver remains symmetrical.
+    
+    -- Command the vehicle to its original attitude with the maneuver's throttle command
+    vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.throttle_cmd)
 
+    -- Check 1: Is the vehicle level (within tolerance of its original attitude)?
     local roll_rad = ahrs:get_roll_rad()
     local pitch_rad = ahrs:get_pitch_rad()
-    if math.abs(roll_rad) < math.rad(5) and math.abs(pitch_rad) < math.rad(5) then
-        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Leveled, applying brake.")
+    local is_level = math.abs(roll_rad - state.initial_state.attitude:x()) < math.rad(5) and math.abs(pitch_rad - state.initial_state.attitude:y()) < math.rad(5)
+
+    -- Check 2: Has the vehicle dropped to the predicted altitude?
+    local current_loc = ahrs:get_location()
+    local actual_drop_m = 0
+    if current_loc and state.apex_location then
+      actual_drop_m = (state.apex_location:alt() - current_loc:alt()) / 100.0
+    end
+    local has_dropped = actual_drop_m >= (state.predicted_drop_m * 0.8) -- 80% tolerance
+
+    -- Debugging output at 200ms intervals
+    state.last_debug_ms = state.last_debug_ms or 0
+    local now_ms = millis():tofloat()
+    if (now_ms - state.last_debug_ms) > 200 then
+        state.last_debug_ms = now_ms
+        local debug_msg = string.format("Leveling... Drop P:%.1f A:%.1f | Level:%s", state.predicted_drop_m, actual_drop_m, tostring(is_level))
+        gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, debug_msg)
+    end
+
+    -- If both conditions are met, proceed to the braking stage
+    if is_level and has_dropped then
+        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Leveled at altitude, applying brake.")
         state.stage = vehicle_control.maneuver.stage.MANUAL_BRAKE
         state.start_time = millis():tofloat()
     end
+    
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.MANUAL_BRAKE then
+    -- Stage 4: MANUAL_BRAKE
+    -- This stage applies the symmetrical braking thrust. It commands a high
+    -- throttle for the same duration as the initial climb. It exits early
+    -- if the vehicle's vertical velocity is already restored, or as a backup,
+    -- when the timer expires.
+    
     -- Apply the same strong upward thrust for the same duration to symmetrically cancel the initial climb.
-    vehicle:set_target_rate_and_throttle(0, 0, 0, state.climb_throttle)
+    vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.climb_throttle)
 
     -- Check if we have already recovered our initial vertical velocity
     local current_vel_ned = ahrs:get_velocity_NED()
@@ -389,6 +454,11 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
     
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING_WAIT then
+    -- Stage 5: RESTORING_WAIT
+    -- The vehicle is now stable and near its original flight path. This
+    -- final stage hands control back to the autopilot's position controller
+    -- to make the final small corrections to rejoin the trajectory perfectly.
+    
     local current_pos_ned = ahrs:get_relative_position_NED_origin()
     local current_vel_ned = ahrs:get_velocity_NED()
 
