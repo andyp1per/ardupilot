@@ -316,8 +316,7 @@ function vehicle_control.maneuver.flip_update(state)
     -- Stage 2: FLIPPING
     -- The vehicle is now in its ballistic phase. This stage commands the
     -- desired rotation rate and monitors the accumulated angle. Once the
-    -- rotation is complete, it commands a stable attitude and waits for
-    -- the vehicle to fall to the predicted altitude before recovering.
+    -- rotation is complete, it transitions immediately to the leveling stage.
     
     -- Unwrap angle to track total rotation
     local current_angle = (state.axis == vehicle_control.axis.ROLL) and math.deg(ahrs:get_roll_rad()) or math.deg(ahrs:get_pitch_rad())
@@ -328,30 +327,11 @@ function vehicle_control.maneuver.flip_update(state)
 
     -- Check if the total rotation has been completed
     if math.abs(state.accumulated_angle) >= state.total_angle_deg then
-        -- Rotation is complete. Now hold the original attitude with zero throttle
-        -- while we wait for the vehicle to fall to the correct altitude.
-        local initial_roll_deg = math.deg(state.initial_state.attitude:x())
-        local initial_pitch_deg = math.deg(state.initial_state.attitude:y())
-        local initial_yaw_deg = math.deg(state.initial_state.attitude:z())
-        vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, 0)
-
-        -- Actual drop from the apex
-        local current_loc = ahrs:get_location()
-        local actual_drop_m = (state.apex_location:alt() - current_loc:alt()) / 100.0
-
-        -- Debugging output
-        state.last_debug_ms = state.last_debug_ms or 0
-        local now_ms = millis():tofloat()
-        if (now_ms - state.last_debug_ms) > 200 then
-            state.last_debug_ms = now_ms
-            local debug_msg = string.format("Drop P:%.1f A:%.1f", state.predicted_drop_m, actual_drop_m)
-            gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, debug_msg)
-        end
-
-        -- Only level out if we have dropped a significant portion of the predicted amount
-        if actual_drop_m >= (state.predicted_drop_m * 0.8) then -- 80% tolerance
-            state.stage = vehicle_control.maneuver.stage.LEVEL_VEHICLE
-        end
+        -- The required rotation has been achieved. Immediately transition to the
+        -- LEVEL_VEHICLE stage on the next update loop. This ensures a clean
+        -- hand-off and prevents this stage from sending any further rate commands.
+        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip rotation complete, leveling.")
+        state.stage = vehicle_control.maneuver.stage.LEVEL_VEHICLE
         return vehicle_control.RUNNING
     end
 
@@ -373,31 +353,44 @@ function vehicle_control.maneuver.flip_update(state)
 
   elseif state.stage == vehicle_control.maneuver.stage.LEVEL_VEHICLE then
     -- Stage 3: LEVEL_VEHICLE
-    -- After the flip, the vehicle may be at a significant angle. This stage
-    -- commands a level attitude and waits for the vehicle to stabilize before
-    -- applying the braking thrust. This prevents applying thrust in the wrong direction.
+    -- After the flip, the vehicle is commanded to a level attitude. This stage
+    -- waits for the vehicle to both stabilize its attitude and fall to the
+    -- predicted altitude before applying the braking thrust. This ensures
+    -- thrust is not applied in the wrong direction and the maneuver remains symmetrical.
     
-    -- Command the vehicle to its original attitude using the new combined angle and rate controller
+    -- Command the vehicle to a level attitude with hover throttle to maintain some authority
     local initial_yaw_deg = math.deg(state.initial_state.attitude:z())
     vehicle:set_target_angle_and_rate_and_throttle(0, 0, initial_yaw_deg, 0, 0, 0, state.hover_throttle)
 
-    if state.level_achieved_time then
-        -- We are already level, now we are waiting for a short delay to allow acceleration to dissipate
-        local elapsed_delay = (millis():tofloat() - state.level_achieved_time)
-        if elapsed_delay > 100 then -- 100ms delay
-            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Leveled, applying brake.")
-            state.stage = vehicle_control.maneuver.stage.MANUAL_BRAKE
-            state.start_time = millis():tofloat()
-        end
-    else
-        -- We are not yet level, check the attitude
-        local roll_rad = ahrs:get_roll_rad()
-        local pitch_rad = ahrs:get_pitch_rad()
-        if math.abs(roll_rad) < math.rad(5) and math.abs(pitch_rad) < math.rad(5) then
-            -- We just became level, record the time to start the delay
-            state.level_achieved_time = millis():tofloat()
-        end
+    -- Check 1: Is the vehicle level?
+    local roll_rad = ahrs:get_roll_rad()
+    local pitch_rad = ahrs:get_pitch_rad()
+    local is_level = math.abs(roll_rad) < math.rad(5) and math.abs(pitch_rad) < math.rad(5)
+
+    -- Check 2: Has the vehicle dropped to the predicted altitude?
+    local current_loc = ahrs:get_location()
+    local actual_drop_m = 0
+    if current_loc and state.apex_location then
+      actual_drop_m = (state.apex_location:alt() - current_loc:alt()) / 100.0
     end
+    local has_dropped = actual_drop_m >= (state.predicted_drop_m * 0.8) -- 80% tolerance
+
+    -- Debugging output at 200ms intervals
+    state.last_debug_ms = state.last_debug_ms or 0
+    local now_ms = millis():tofloat()
+    if (now_ms - state.last_debug_ms) > 200 then
+        state.last_debug_ms = now_ms
+        local debug_msg = string.format("Leveling... Drop P:%.1f A:%.1f | Level:%s", state.predicted_drop_m, actual_drop_m, tostring(is_level))
+        gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, debug_msg)
+    end
+
+    -- If both conditions are met, proceed to the braking stage
+    if is_level and has_dropped then
+        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Leveled at altitude, applying brake.")
+        state.stage = vehicle_control.maneuver.stage.MANUAL_BRAKE
+        state.start_time = millis():tofloat()
+    end
+    
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.MANUAL_BRAKE then
