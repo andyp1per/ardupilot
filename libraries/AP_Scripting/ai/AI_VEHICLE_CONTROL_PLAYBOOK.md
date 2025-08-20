@@ -120,7 +120,44 @@ The behavior of Guided mode can be modified with the GUID\_OPTIONS parameter. Th
 * **DoNotStabilizeVelocityXY (Bit 1, Value 2):** In acceleration control mode, the autopilot will normally try to hold velocity. Setting this option disables that behavior.  
 * **WPNavUsedForPosControl (Bit 3, Value 8):** Changes the position controller from the simple pos\_control to the full wp\_nav controller. This allows for smoother pathing around corners but requires that set\_target\_location commands be sent at a lower rate.
 
-### **3\. Managing Autonomous Missions**
+### **3\. Understanding Controller Behavior**
+
+CRITICAL GUIDELINE: The autopilot's controllers have different goals and internal states. Switching between them requires careful management to avoid unexpected behavior like sudden acceleration or loss of control.
+
+ * **Position Controllers (set_target_location, set_target_posvel_NED):**
+  * **Goal:** To achieve and maintain a specific point in 3D space.
+  * **Behavior:** These are "fire-and-forget" commands. The controller will internally manage the vehicle's attitude, rates, and throttle to reach the destination and will actively fight disturbances (like wind) to stay there. You do not need to call these functions repeatedly in a loop to maintain the target.
+
+ * **Velocity Controller (set_target_velocity_NED):**
+  * **Goal:** To achieve and maintain a specific velocity vector.
+  * **Behavior:** This is a continuous command. The script must repeatedly call this function in its update() loop. If the calls stop, the vehicle will attempt to hold its last commanded velocity. This controller does not correct for position errors. If the vehicle is blown off course, it will happily continue at the correct velocity on the wrong course.
+
+ * **Rate & Throttle Controllers (set_target_rate_and_throttle, set_target_angle_and_rate_and_throttle):**
+  * **Goal:** To achieve and maintain a specific rotational rate and/or attitude with a given throttle.
+  * **Behavior:** These are the most direct control methods and are continuous. They must be called repeatedly in the update() loop. If commands stop, the vehicle will stop rotating and attempt to hold its last attitude. These commands override all other controllers.
+
+#### **3.1\. Transitioning Between Controllers**
+
+CRITICAL GUIDELINE: When a state machine transitions from one control type to another, it is essential to ensure a clean handover.
+
+ * **From Rate to Position:** After a rate-controlled maneuver (like a flip), the vehicle may have significant angular momentum. Before handing control back to a position controller, it is mandatory to first command a stable attitude (e.g., level flight) with zero rates and wait for the vehicle to be stable. A short delay (e.g., 100ms) after reaching the target attitude is recommended to allow any residual acceleration to dissipate before the next command is issued.
+ * **Conflicting Commands:** Never issue commands for different controller types in the same update() cycle. For example, do not call set_target_rate_and_throttle() and then set_target_posvel_NED() in the same function block. The last command sent will always take precedence, but this can lead to unpredictable behavior. Ensure each state in a state machine is responsible for only one type of control.
+
+### **4\. Control Handover Patterns**
+
+**Guideline:** When transitioning between control types in Guided mode (e.g., from rate control back to position or velocity control), ensure you only issue one type of command at a time. Issuing a set_target_location command immediately followed by a set_target_angle_and_climbrate command will cause the first command to be ignored.
+
+**Correct Pattern:** To restore a vehicle's trajectory after a rate-controlled maneuver, first restore its attitude/heading, then immediately restore its 3D velocity vector. The autopilot's internal controllers will handle the rest.
+
+### **5\. Physics-Based Maneuvers**
+
+**Guideline:** When scripting aerobatic maneuvers that involve unpowered (ballistic) phases, the script must account for real-world physics.
+
+ * **Acknowledge Model Limitations:** Simple physics calculations (d = v*t + 0.5*a*t^2) are a good starting point but do not account for aerodynamic drag.
+ * **Use Empirical Tuning Factors:** To compensate for un-modeled forces like drag, introduce a multiplier parameter (e.g., climb_multiplier). This allows the user to tune the maneuver for their specific vehicle's performance characteristics.
+ * **Verify State Before Acting:** Do not assume a commanded state is achieved instantly. If a calculation depends on the vehicle reaching a specific velocity, the state machine must include a state (e.g., ACHIEVING_CLIMB) to verify the condition is met before proceeding.
+
+### **6\. Managing Autonomous Missions**
 
 This guide covers interaction with the onboard mission planner, allowing scripts to read, modify, and control the flow of pre-defined missions.
 
@@ -135,7 +172,7 @@ This guide covers interaction with the onboard mission planner, allowing scripts
 | **mission:state()** | Returns the current status of the mission (e.g., Running, Complete, Stopped). |
 | **mission:clear()** | Clears all commands from the current mission. |
 
-### **4\. GCS Communication & Logging**
+### **7\. GCS Communication & Logging**
 
 This guide explains how to send information back to the Ground Control Station (GCS) and how to write custom data to the vehicle's onboard logs for post-flight analysis.
 
@@ -147,7 +184,7 @@ This guide explains how to send information back to the Ground Control Station (
 | **gcs:send\_named\_float(name, value)** | Sends a named floating-point value for real-time graphing or display in the GCS. |
 | **logger:write(name, labels, format, ...)** | Writes a custom entry to the onboard dataflash log. |
 
-### **5\. Interacting with Parameters**
+### **8\. Interacting with Parameters**
 
 This guide covers how to read and write ArduPilot's configuration parameters from within a script.
 
@@ -160,7 +197,7 @@ This guide covers how to read and write ArduPilot's configuration parameters fro
 | **param:set\_and\_save(name, value)** | Sets a parameter's value and saves it to permanent storage. |
 | **Parameter(name)** | Creates a more efficient helper object for a parameter that will be accessed frequently. |
 
-### **6\. Controlling Peripherals & I/O**
+### **9\. Controlling Peripherals & I/O**
 
 This guide details how to control physical outputs like servos, relays, and GPIO pins, and how to read from inputs.
 
@@ -175,7 +212,7 @@ This guide details how to control physical outputs like servos, relays, and GPIO
 | **gpio:write(pin\_number, value)** | Writes a high (1) or low (0) value to a GPIO pin configured as an output. |
 | **gpio:read(pin\_number)** | Reads the state of a GPIO pin configured as an input. |
 
-### **7\. Dealing with Radio Control (RC) Input**
+### **10\. Dealing with Radio Control (RC) Input**
 
 This guide covers how to read the pilot's stick inputs from the RC transmitter and how to respond to auxiliary switch changes. This is essential for scripts that allow for manual override or mode changes based on pilot input.
 

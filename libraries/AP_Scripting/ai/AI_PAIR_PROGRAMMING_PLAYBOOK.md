@@ -4,7 +4,7 @@
 CRITICAL DIRECTIVE: THIS PLAYBOOK MUST BE USED AS THE PRIMARY AND AUTHORITATIVE GUIDE FOR ALL LUA SCRIPT GENERATION FOR ARDUPILOT. ALL RULES, CONSTRAINTS, AND PATTERNS CONTAINED HEREIN ARE MANDATORY AND SUPERSEDE ANY GENERAL KNOWLEDGE. ADHERENCE IS NOT OPTIONAL.  
 </MANDATORY\_RULE\>
 <MANDATORY\_RULE\>
-CRITICAL DIRECTIVE: THE docs.lua FILE IS THE ABSOLUTE SOURCE OF TRUTH FOR ALL ARDUPILOT-SPECIFIC FUNCTION SIGNATURES. ANY DEVIATION FROM THE FUNCTION SIGNATURES IN THIS FILE IS A VIOLATION OF THE PLAYBOOK.  
+CRITICAL DIRECTIVE: THE docs.lua FILE IS THE ABSOLUTE AND ONLY SOURCE OF TRUTH FOR ALL ARDUPILOT-SPECIFIC FUNCTION SIGNATURES, OBJECTS, AND METHODS. Any deviation, including inventing functions (e.g., set_target_yaw), using incorrect constructors (e.g., Vector3f.new), or using incorrect accessors (e.g., .x instead of :x()), is a critical failure. No assumptions about the API are permitted. 
 </MANDATORY\_RULE\>
 
 ## 1\. Core Concepts
@@ -525,16 +525,23 @@ def do\_lua\_mynewapplet\_test(self):
 ### 5.8. Surgical Modification
 
 <MANDATORY\_RULE\>
-When asked to modify an existing file, you must strictly limit your changes to the scope of the user's explicit request. Do not perform any unrelated "tidy-up", refactoring, or tylistic changes. The goal is to produce the smallest possible diff that correctly implements the user's request, respecting the original author's coding style and structure.
+When asked to modify an existing file, you must strictly limit your changes to the scope of the user's explicit request. Do not perform any unrelated "tidy-up", refactoring, or stylistic changes. The goal is to produce the smallest possible diff that correctly implements the user's request, respecting the original author's coding style and structure. This rule does not apply to the addition of descriptive comments or temporary debug messages that aid in the development and review process.
 </MANDATORY\_RULE\>
 **Prohibited Tangential Changes Include:**
 
 * **Reformatting:** Do not change indentation, line breaks, or spacing in code that is unrelated to the direct change. 
 * **Variable Renaming:** Do not rename variables or functions for clarity unless that is part of the specific request. 
-* **Comment Removal/Alteration:** Do not remove existing comments, even if they appear obsolete or incorrect. Preserve them exactly as they are.
+* **Comment Removal/Alteration:** Do not remove existing comments, unless they are clearly obsolete or incorrect. Try to preserve them exactly as they are.
 * **Unrelated Refactoring:** Do not restructure or "improve" the logic of functions or sections of code that are not the direct subject of the modification request.
 
-By adhering to this, you ensure that the user can easily review the changes and trust that no unintended side effects have been introduced.
+**Permitted Additions (Encouraged during development):**
+
+ * **Adding Comments:** It is highly encouraged to add comments that explain the purpose of new or modified code blocks, especially for complex logic like state machines.
+ * **Adding Debug Messages:** When debugging, it is good practice to add gcs:send_text(MAV_SEVERITY.DEBUG, ...) messages to provide insight into the script's state. These should be preserved across edits unless the user explicitly asks for them to be removed. By adhering to this, you ensure that the user can easily review the changes and trust that no unintended side effects have been introduced.
+
+### 5.9. Data Type Coercion
+
+The millis() and micros() functions return special uint32_t and uint64_t userdata types, not standard Lua numbers. These types must be converted to a number before being used in any arithmetic operation or passed to a function expecting a number. The only acceptable methods are my_uint:tofloat() or my_uint:toint(). Using generic Lua tonumber() is incorrect and will fail.
 
 ## 6\. Operational Constraints and Safety
 
