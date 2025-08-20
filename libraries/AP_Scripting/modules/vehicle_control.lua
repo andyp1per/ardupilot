@@ -157,17 +157,26 @@ vehicle_control.maneuver.stage = {
   @param flip_duration_s (optional) The desired total duration of the maneuver.
   @param num_flips (optional) The number of flips to perform.
   @param slew_gain (optional) The proportional gain for rate slewing (default 0.5).
+  @param true_hover_throttle (optional) The true hover throttle of the vehicle (0-1). Defaults to MOT_THST_HOVER parameter.
   @return A state table for the perform_flip_update function, or nil and an error message.
 ]]
-function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain)
+function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain, true_hover_throttle)
   -- 1. Pre-flight Checks
   if not (vehicle:get_mode() == vehicle_control.mode.GUIDED) then
     gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Flip requires Guided mode")
     return nil, "Flip requires Guided mode"
   end
-  local hover_throttle = param:get('MOT_THST_HOVER')
+  
+  -- Use provided true hover throttle, or fall back to the parameter
+  local hover_throttle
+  if true_hover_throttle ~= nil and true_hover_throttle > 0 and true_hover_throttle < 1 then
+    hover_throttle = true_hover_throttle
+  else
+    hover_throttle = param:get('MOT_THST_HOVER')
+  end
+
   if not hover_throttle or hover_throttle <= 0 or hover_throttle >= 1 then
-      return nil, "MOT_THST_HOVER must be set correctly"
+      return nil, "Valid hover throttle must be available"
   end
 
   -- 2. Calculate Flip Parameters
