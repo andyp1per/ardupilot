@@ -29,7 +29,7 @@ local MAV_SEVERITY = {
 -- Parameters
 local PARAM_TABLE_KEY = 107
 local PARAM_TABLE_PREFIX = "FLIP_"
-assert(param:add_table(PARAM_TABLE_KEY, PARAM_TABLE_PREFIX, 5), 'flip_on_switch: could not add param table')
+assert(param:add_table(PARAM_TABLE_KEY, PARAM_TABLE_PREFIX, 6), 'flip_on_switch: could not add param table')
 
 -- add a parameter and bind it to a variable
 function bind_add_param(name, idx, default_value)
@@ -41,7 +41,8 @@ local FLIP_ENABLE = bind_add_param('ENABLE', 1, 1)
 local FLIP_AXIS = bind_add_param('AXIS', 2, vehicle_control.axis.ROLL)
 local FLIP_RATE = bind_add_param('RATE', 3, 720)
 local FLIP_DURATION = bind_add_param('DURATION', 4, 1.0)
-local FLIP_THROTTLE = bind_add_param('THROTTLE', 5, 0.5)
+local FLIP_THROTTLE = bind_add_param('THROTTLE', 5, 0.0)
+local FLIP_HOVER = bind_add_param('HOVER', 6, 0.125)
 
 
 -- RC Function Constant
@@ -93,8 +94,10 @@ function update()
             flip_state = vehicle_control.maneuver.flip_start(
                 FLIP_AXIS:get(),
                 FLIP_RATE:get(),
-                nil,
-                FLIP_DURATION:get()
+                FLIP_THROTTLE:get(),
+                FLIP_DURATION:get(),
+                nil, nil,
+                FLIP_HOVER:get()
             )
             if flip_state == nil then
                 gcs:send_text(MAV_SEVERITY.WARNING, "Flip: Failed to start flip")
@@ -112,8 +115,10 @@ function update()
                 flip_state = vehicle_control.maneuver.flip_start(
                     FLIP_AXIS:get(),
                     FLIP_RATE:get(),
-                    nil,
-                    FLIP_DURATION:get()
+                    FLIP_THROTTLE:get(),
+                    FLIP_DURATION:get(),
+                    nil, nil,
+                    FLIP_HOVER:get()
                 )
                 if flip_state == nil then
                     gcs:send_text(MAV_SEVERITY.WARNING, "Flip: Failed to restart flip")
