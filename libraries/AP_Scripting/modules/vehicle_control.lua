@@ -267,6 +267,11 @@ end
   @return RUNNING or SUCCESS.
 ]]
 function vehicle_control.maneuver.flip_update(state)
+  -- Get initial attitude in degrees for use in multiple stages
+  local initial_roll_deg = math.deg(state.initial_state.attitude:x())
+  local initial_pitch_deg = math.deg(state.initial_state.attitude:y())
+  local initial_yaw_deg = math.deg(state.initial_state.attitude:z())
+
   if state.stage == vehicle_control.maneuver.stage.MANUAL_CLIMB then
     -- Stage 1: MANUAL_CLIMB
     -- Apply a strong upward thrust for a calculated duration to gain the
@@ -275,8 +280,8 @@ function vehicle_control.maneuver.flip_update(state)
         state.start_time = millis():tofloat()
     end
     
-    -- Command level attitude with high throttle
-    vehicle:set_target_rate_and_throttle(0, 0, 0, state.climb_throttle)
+    -- Command initial attitude with high throttle
+    vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.climb_throttle)
 
     -- Debugging output at 200ms intervals
     state.last_debug_ms = state.last_debug_ms or 0
@@ -353,19 +358,18 @@ function vehicle_control.maneuver.flip_update(state)
 
   elseif state.stage == vehicle_control.maneuver.stage.LEVEL_VEHICLE then
     -- Stage 3: LEVEL_VEHICLE
-    -- After the flip, the vehicle is commanded to a level attitude. This stage
+    -- After the flip, the vehicle is commanded to its original attitude. This stage
     -- waits for the vehicle to both stabilize its attitude and fall to the
     -- predicted altitude before applying the braking thrust. This ensures
     -- thrust is not applied in the wrong direction and the maneuver remains symmetrical.
     
-    -- Command the vehicle to a level attitude with hover throttle to maintain some authority
-    local initial_yaw_deg = math.deg(state.initial_state.attitude:z())
-    vehicle:set_target_angle_and_rate_and_throttle(0, 0, initial_yaw_deg, 0, 0, 0, state.hover_throttle)
+    -- Command the vehicle to its original attitude with the maneuver's throttle command
+    vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.throttle_cmd)
 
-    -- Check 1: Is the vehicle level?
+    -- Check 1: Is the vehicle level (within tolerance of its original attitude)?
     local roll_rad = ahrs:get_roll_rad()
     local pitch_rad = ahrs:get_pitch_rad()
-    local is_level = math.abs(roll_rad) < math.rad(5) and math.abs(pitch_rad) < math.rad(5)
+    local is_level = math.abs(roll_rad - state.initial_state.attitude:x()) < math.rad(5) and math.abs(pitch_rad - state.initial_state.attitude:y()) < math.rad(5)
 
     -- Check 2: Has the vehicle dropped to the predicted altitude?
     local current_loc = ahrs:get_location()
@@ -401,7 +405,7 @@ function vehicle_control.maneuver.flip_update(state)
     -- when the timer expires.
     
     -- Apply the same strong upward thrust for the same duration to symmetrically cancel the initial climb.
-    vehicle:set_target_rate_and_throttle(0, 0, 0, state.climb_throttle)
+    vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.climb_throttle)
 
     -- Check if we have already recovered our initial vertical velocity
     local current_vel_ned = ahrs:get_velocity_NED()
