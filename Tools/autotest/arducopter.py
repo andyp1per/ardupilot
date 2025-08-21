@@ -9436,6 +9436,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "PSC_JERK_XY": 40,
             "RC7_OPTION": 300,      # Scripting
             "RTL_LOIT_TIME": 5000,  # Loiter for 5s
+            "AFNCE_ENABLE": 1,
         })
         self.change_mode("LOITER")
         self.set_rc(7, 2000)    # enable acro fencing
@@ -9446,9 +9447,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         home_loc = self.mav.location()
         radius = self.get_parameter("FENCE_RADIUS")
         margin = self.get_parameter("FENCE_MARGIN")
-        self.mavproxy.send("map circle %f %f %f green\n" % (home_loc.lat, home_loc.lng, radius-margin))
-        self.mavproxy.send("map circle %f %f %f red\n" % (home_loc.lat, home_loc.lng, radius))
-
+        if self.mavproxy is not None:
+            self.mavproxy.send("map circle %f %f %f green\n" % (home_loc.lat, home_loc.lng, radius-margin))
+            self.mavproxy.send("map circle %f %f %f red\n" % (home_loc.lat, home_loc.lng, radius))
         self.start_subtest("Check breach-fence behaviour")
         self.takeoff(20, mode="LOITER")
 
