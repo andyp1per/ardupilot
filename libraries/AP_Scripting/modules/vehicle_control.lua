@@ -71,7 +71,7 @@ function vehicle_control.pattern.start(radius_m)
 
   -- Calculate pattern geometry
   local start_location = current_loc:copy()
-  local heading_rad = ahrs:get_yaw_rad()
+  local heading_rad = ahrs:get_yaw()
 
   local center_1 = start_location:copy()
   center_1:offset_bearing(math.deg(heading_rad) + 90, radius_m)
@@ -237,9 +237,9 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
 
   -- 4. Prepare for Flip
   local initial_attitude_euler = Vector3f()
-  initial_attitude_euler:x(ahrs:get_roll_rad())
-  initial_attitude_euler:y(ahrs:get_pitch_rad())
-  initial_attitude_euler:z(ahrs:get_yaw_rad())
+  initial_attitude_euler:x(ahrs:get_roll())
+  initial_attitude_euler:y(ahrs:get_pitch())
+  initial_attitude_euler:z(ahrs:get_yaw())
   
   local initial_location = ahrs:get_location()
   local initial_pos_ned = ahrs:get_relative_position_NED_origin()
@@ -333,7 +333,7 @@ function vehicle_control.maneuver.flip_update(state)
     -- rotation is complete, it transitions immediately to the leveling stage.
     
     -- Unwrap angle to track total rotation
-    local current_angle = (state.axis == vehicle_control.axis.ROLL) and math.deg(ahrs:get_roll_rad()) or math.deg(ahrs:get_pitch_rad())
+    local current_angle = (state.axis == vehicle_control.axis.ROLL) and math.deg(ahrs:get_roll()) or math.deg(ahrs:get_pitch())
     local delta_angle = current_angle - state.last_angle
     if delta_angle > 180 then delta_angle = delta_angle - 360 elseif delta_angle < -180 then delta_angle = delta_angle + 360 end
     state.accumulated_angle = state.accumulated_angle + delta_angle
@@ -376,8 +376,8 @@ function vehicle_control.maneuver.flip_update(state)
     vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.throttle_cmd)
 
     -- Check 1: Is the vehicle level (within tolerance of its original attitude)?
-    local roll_rad = ahrs:get_roll_rad()
-    local pitch_rad = ahrs:get_pitch_rad()
+    local roll_rad = ahrs:get_roll()
+    local pitch_rad = ahrs:get_pitch()
     local is_level = math.abs(roll_rad - state.initial_state.attitude:x()) < math.rad(5) and math.abs(pitch_rad - state.initial_state.attitude:y()) < math.rad(5)
 
     -- Check 2: Has the vehicle dropped to the predicted altitude?
