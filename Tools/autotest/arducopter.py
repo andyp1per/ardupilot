@@ -12382,6 +12382,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.MAV_CMD_NAV_VTOL_LAND,
              self.clear_roi,
              self.ReadOnlyDefaults,
+             self.FigureOfEight,
         ])
         return ret
 
@@ -13948,6 +13949,86 @@ RTL_ALT 111
         # Test done
         self.land_and_disarm()
 
+    def ScriptingFlipOnASwitch(self):
+        '''Tests the flip_on_switch.lua script'''
+        self.start_subtest("Test FlipOnSwitch functionality")
+
+        # Stage 1: Set SCR_ENABLE and reboot
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "WPNAV_ACCEL": 2000,
+            "WPNAV_ACCEL_Z": 1000,
+            "WPNAV_JERK": 40,
+            "WPNAV_SPEED": 3000,
+            "WPNAV_SPEED_DN": 1000,
+            "WPNAV_SPEED_UP": 1000,
+            "PSC_JERK_Z": 40,
+            "PSC_JERK_XY": 40,
+        })
+
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
+        self.install_applet_script_context("flip_on_a_switch.lua")
+
+        self.reboot_sitl()
+
+        # Stage 2: Set script parameters and reboot again
+        self.set_parameters({
+            "FLIP_ENABLE": 1,
+            "FLIP_AXIS": 1,  # Roll
+            "FLIP_RATE": 720,
+            "FLIP_DURATION": 1.0,
+            "RC9_OPTION": 300,  # Scripting1
+        })
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        # Takeoff in Loiter mode
+        self.takeoff(75, mode="LOITER")
+
+        self.context_collect('STATUSTEXT')
+
+        # Trigger the flip
+        self.set_rc(9, 2000)
+        self.wait_statustext("Flip: Starting continuous flip", check_context=True, timeout=10)
+        self.wait_statustext("Trajectory restored", check_context=True, timeout=100)
+
+        # Lower the switch to stop flipping
+        self.set_rc(9, 1000)
+        self.wait_statustext("Flip: Stopping continuous flip", check_context=True, timeout=5)
+        # Land and disarm
+        self.do_RTL()
+
+    def FigureOfEight(self):
+        '''Test Figure of Eight Lua script'''
+        self.start_subtest("Test Figure of Eight Lua script")
+
+        # Set up parameters for the test
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "RC7_OPTION": 300,  # Scripting1
+        })
+        self.install_applet_script_context('figure-eight.lua')
+        self.reboot_sitl()
+
+        # Takeoff in Loiter mode
+        self.takeoff(10, mode="LOITER")
+
+        # Activate the script
+        self.progress("Activating Figure of Eight script")
+        self.context_collect('STATUSTEXT')
+        self.set_rc(7, 2000)  # High position for the switch
+        self.wait_statustext("Figure Eight: Starting", check_context=True, timeout=10)
+        self.progress("Script activated successfully")
+
+        # Deactivate the script
+        self.progress("Deactivating Figure of Eight script")
+        self.set_rc(7, 1000)  # Low position for the switch
+        self.wait_statustext("Figure Eight: Deactivated by switch", check_context=True, timeout=10)
+        self.progress("Script deactivated successfully")
+
+        # Land and disarm
+        self.do_RTL()
+        self.progress("Figure of Eight test complete")
+
     def RTLYaw(self):
         '''test that vehicle yaws to original heading on RTL'''
         # 0 is WP_YAW_BEHAVIOR_NONE
@@ -14644,6 +14725,7 @@ return update, 1000
             self.ScriptingFlipMode,
             self.ScriptingFlyVelocity,
             self.EK3_EXT_NAV_vel_without_vert,
+            self.ScriptingFlipOnASwitch,
             self.CompassLearnCopyFromEKF,
             self.AHRSAutoTrim,
             self.Ch6TuningLoitMaxXYSpeed,
