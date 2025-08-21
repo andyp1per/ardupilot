@@ -197,9 +197,10 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
       if user_has_duration then
           rate_degs = total_angle_deg / flip_duration_s
       elseif user_has_rate then
-          flip_duration_s = math.abs(total_angle_deg / rate_degs)
+          -- flip_duration_s will be calculated later based on acceleration
       else
-          flip_duration_s = num_flips * 1.0
+          -- Default duration if only num_flips is provided
+          flip_duration_s = num_flips * 1.0 
           rate_degs = total_angle_deg / flip_duration_s
       end
   elseif user_has_duration and user_has_rate then
@@ -214,17 +215,37 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
       if user_has_duration then
           rate_degs = total_angle_deg / flip_duration_s
       elseif user_has_rate then
-          flip_duration_s = math.abs(total_angle_deg / rate_degs)
+          -- flip_duration_s will be calculated later
       end
   end
 
-  if rate_degs == 0 or flip_duration_s <= 0 then
-      return nil, "Invalid flip parameters calculated"
+  if rate_degs == 0 then
+      return nil, "Invalid flip rate calculated"
   end
 
-  local t_flip = flip_duration_s
+  -- 3. Calculate True Flip Duration (t_flip) including acceleration
+  local accel_param_name = (axis == vehicle_control.axis.ROLL) and 'ATC_ACCEL_R_MAX' or 'ATC_ACCEL_P_MAX'
+  local accel_max_cdegs2 = param:get(accel_param_name)
+  if not accel_max_cdegs2 or accel_max_cdegs2 <= 0 then
+    return nil, "Could not get valid ATC_ACCEL_*_MAX parameter"
+  end
+  local accel_max_degs2 = accel_max_cdegs2 / 100.0
 
-  -- 3. Calculate Manual Climb Parameters
+  local time_to_reach_rate = math.abs(rate_degs) / accel_max_degs2
+  local angle_during_accel = 0.5 * accel_max_degs2 * time_to_reach_rate^2
+  
+  local t_flip
+  if 2 * angle_during_accel >= total_angle_deg then
+    -- Maneuver is purely acceleration and deceleration (bang-bang)
+    t_flip = 2 * math.sqrt(total_angle_deg / accel_max_degs2)
+  else
+    -- Trapezoidal profile (accel, const vel, decel)
+    local angle_at_const_vel = total_angle_deg - (2 * angle_during_accel)
+    local time_at_const_vel = angle_at_const_vel / math.abs(rate_degs)
+    t_flip = (2 * time_to_reach_rate) + time_at_const_vel
+  end
+
+  -- 4. Calculate Manual Climb Parameters using the new t_flip
   local effective_gravity = 9.81 * (1 + (throttle_level or 0.0))
   local required_vz = 0.5 * effective_gravity * t_flip
   
@@ -235,7 +256,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   -- Time needed to accelerate to the required vertical velocity
   local t_accel = required_vz / climb_accel
 
-  -- 4. Prepare for Flip
+  -- 5. Prepare for Flip
   local initial_attitude_euler = Vector3f()
   initial_attitude_euler:x(ahrs:get_roll())
   initial_attitude_euler:y(ahrs:get_pitch())
