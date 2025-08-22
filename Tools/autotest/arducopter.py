@@ -13964,6 +13964,7 @@ RTL_ALT 111
             "WPNAV_SPEED_UP": 1000,
             "PSC_JERK_Z": 40,
             "PSC_JERK_XY": 40,
+            "ATC_THR_MIX_MAX": 4,
         })
 
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
