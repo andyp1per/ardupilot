@@ -13977,7 +13977,10 @@ RTL_ALT 111
             "FLIP_ENABLE": 1,
             "FLIP_AXIS": 1,  # Roll
             "FLIP_RATE": 720,
-            "FLIP_DURATION": 1.0,
+            "FLIP_FLICK_TO": 0.5,
+            "FLIP_COMMIT_TO": 1.0,
+            "FLIP_THROTTLE": 0.0,
+            "FLIP_HOVER": 0.37,
             "RC9_OPTION": 300,  # Scripting1
         })
         self.wait_ready_to_arm()
@@ -13989,12 +13992,41 @@ RTL_ALT 111
 
         # Trigger the flip
         self.set_rc(9, 2000)
-        self.wait_statustext("Flip: Starting continuous flip", check_context=True, timeout=10)
+        #self.delay_sim_time(0.25)
+        self.set_rc(9, 1000)
+        #self.delay_sim_time(0.25)
+        self.set_rc(9, 2000)
+        self.wait_statustext(r"^Flip: Starting (\d+(?:\.\d+)?)s flip$", check_context=True, timeout=10, regex=True)
         self.wait_statustext("Trajectory restored", check_context=True, timeout=100)
 
         # Lower the switch to stop flipping
         self.set_rc(9, 1000)
-        self.wait_statustext("Flip: Stopping continuous flip", check_context=True, timeout=5)
+        self.wait_statustext("Flip: Canceled by user", check_context=True, timeout=5)
+        # Land and disarm
+        self.do_RTL()
+
+        self.start_subtest("Test FlipOnSwitch functionality with sprung switch")
+        self.set_parameter("FLIP_SPRING", 1)
+        # flip spring test
+        self.send_cmd_do_set_mode('LOITER')
+        self.set_rc(3, 1000)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        # Takeoff in Loiter mode
+        self.takeoff(30, mode="LOITER")
+
+        self.context_collect('STATUSTEXT')
+
+        # Trigger the flip
+        self.set_rc(9, 2000)
+        self.set_rc(9, 1000)
+        self.wait_statustext(r"^Flip: Starting (\d+(?:\.\d+)?)s flip$", check_context=True, timeout=10, regex=True)
+        self.wait_statustext("Trajectory restored", check_context=True, timeout=100)
+
+        # Flick the switch to stop flipping
+        self.set_rc(9, 2000)
+        self.set_rc(9, 1000)
+        self.wait_statustext("Flip: Canceled by user", check_context=True, timeout=5)
         # Land and disarm
         self.do_RTL()
 

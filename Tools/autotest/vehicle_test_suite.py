@@ -8772,7 +8772,10 @@ Also, ignores heartbeats not from our target system'''
         # well with getting the current simulation time (which requires
         # a new SYSTEM_TIME message), so we install a message hook
         # which checks all incoming messages.
-        self.progress("Waiting for text : %s" % text.lower())
+        if regex:
+            self.progress("Waiting for regex : %s" % text)
+        else:
+            self.progress("Waiting for text : %s" % text.lower())
         if check_context:
             statustext = self.statustext_in_collections(text, regex=regex)
             if statustext:
@@ -8792,6 +8795,7 @@ Also, ignores heartbeats not from our target system'''
             if regex:
                 self.re_match = re.match(text, m.text)
                 if self.re_match:
+                    self.progress("Received expected regex: %s" % m.text.lower())
                     statustext_found = True
                     statustext_full = m
             if text.lower() in m.text.lower():
