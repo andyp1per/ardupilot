@@ -332,9 +332,11 @@ function vehicle_control.maneuver.flip_update(state)
       state.start_time = millis():tofloat()
       state.apex_location = ahrs:get_location() -- Record altitude at the start of the flip
       
-      -- Calculate the predicted drop from apex based on total flip time and effective gravity
-      local effective_gravity = 9.81 * (1 + state.throttle_cmd)
-      state.predicted_drop_m = 0.5 * effective_gravity * state.t_flip^2
+      -- Calculate the predicted drop from apex based on the net downward acceleration during the flip.
+      -- This correctly models that throttle counteracts gravity. A throttle command equal to
+      -- hover_throttle should result in a net acceleration of zero.
+      local net_downward_accel_ms2 = 9.81 * (1 - (state.throttle_cmd / state.hover_throttle))
+      state.predicted_drop_m = 0.5 * net_downward_accel_ms2 * state.t_flip^2
 
       -- Start the flip with the specified throttle and rates
       local roll_rate_dps, pitch_rate_dps = 0, 0
