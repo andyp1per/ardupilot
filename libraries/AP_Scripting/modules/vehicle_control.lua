@@ -140,12 +140,13 @@ vehicle_control.maneuver = {}
 
 -- Enum for flip maneuver stages
 vehicle_control.maneuver.stage = {
-  MANUAL_CLIMB = 1,
-  FLIPPING = 2,
-  LEVEL_VEHICLE = 3,
-  MANUAL_BRAKE = 4,
-  RESTORING_WAIT = 5,
-  DONE = 6,
+  VERIFY_CLIMB = 1,
+  MANUAL_CLIMB = 2,
+  FLIPPING = 3,
+  LEVEL_VEHICLE = 4,
+  MANUAL_BRAKE = 5,
+  RESTORING_WAIT = 6,
+  DONE = 7,
 }
 
 --[[
@@ -274,7 +275,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   local initial_angle = (axis == vehicle_control.axis.ROLL) and math.deg(initial_state.attitude:x()) or math.deg(initial_state.attitude:y())
 
   return {
-    stage = vehicle_control.maneuver.stage.MANUAL_CLIMB,
+    stage = vehicle_control.maneuver.stage.VERIFY_CLIMB,
     initial_state = initial_state,
     t_accel = t_accel,
     climb_throttle = climb_throttle,
@@ -302,15 +303,58 @@ function vehicle_control.maneuver.flip_update(state)
   local initial_pitch_deg = math.deg(state.initial_state.attitude:y())
   local initial_yaw_deg = math.deg(state.initial_state.attitude:z())
 
-  if state.stage == vehicle_control.maneuver.stage.MANUAL_CLIMB then
-    -- Stage 1: MANUAL_CLIMB
+  if state.stage == vehicle_control.maneuver.stage.VERIFY_CLIMB then
+    -- Stage 1: VERIFY_CLIMB
+    -- Apply climb thrust for a short duration to measure actual acceleration,
+    -- then adjust the climb parameters to match reality before proceeding.
+    if not state.start_time then
+        state.start_time = millis():tofloat()
+        state.initial_vz = -ahrs:get_velocity_NED():z()
+    end
+    
+    -- Command initial attitude with high throttle
+    vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.climb_throttle)
+
+    local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
+    local verification_duration = 0.2 -- 200ms to measure acceleration
+
+    if elapsed_time >= verification_duration then
+        local final_vz = -ahrs:get_velocity_NED():z()
+        local measured_accel = (final_vz - state.initial_vz) / elapsed_time
+
+        -- Only correct if we have a sensible measured acceleration
+        if measured_accel > 1.0 then -- Must have at least 1m/s/s of positive acceleration
+            local expected_accel = 9.81 -- We expect ~1g of acceleration from 2*hover_throttle
+            local correction_factor = expected_accel / measured_accel
+
+            -- Apply correction factor to climb time and throttle.
+            -- A factor > 1 means we accelerated too slowly, so we need more time/throttle.
+            -- A factor < 1 means we accelerated too quickly, so we need less time/throttle.
+            state.t_accel = state.t_accel * correction_factor
+            state.climb_throttle = math.min(state.climb_throttle * correction_factor, 1.0) -- Clamp throttle at 1.0
+
+            local msg = string.format("Climb corrected by x%.2f. New T:%.2fs Thr:%.2f", correction_factor, state.t_accel, state.climb_throttle)
+            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, msg)
+        else
+            gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Climb verification failed, using original values.")
+        end
+
+        -- Transition to the main climb stage
+        state.stage = vehicle_control.maneuver.stage.MANUAL_CLIMB
+        state.start_time = nil -- Reset start time for the next stage
+        return vehicle_control.RUNNING
+    end
+    return vehicle_control.RUNNING
+
+  elseif state.stage == vehicle_control.maneuver.stage.MANUAL_CLIMB then
+    -- Stage 2: MANUAL_CLIMB
     -- Apply a strong upward thrust for a calculated duration to gain the
     -- required vertical velocity for the ballistic phase (the flip).
     if not state.start_time then
         state.start_time = millis():tofloat()
     end
     
-    -- Command initial attitude with high throttle
+    -- Command initial attitude with the (potentially corrected) high throttle
     vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.climb_throttle)
 
     -- Debugging output at 200ms intervals
@@ -350,7 +394,7 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.FLIPPING then
-    -- Stage 2: FLIPPING
+    -- Stage 3: FLIPPING
     -- The vehicle is now in its ballistic phase. This stage commands the
     -- desired rotation rate and monitors the accumulated angle. Once the
     -- rotation is complete, it transitions immediately to the leveling stage.
@@ -389,7 +433,7 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.LEVEL_VEHICLE then
-    -- Stage 3: LEVEL_VEHICLE
+    -- Stage 4: LEVEL_VEHICLE
     -- After the flip, the vehicle is commanded to its original attitude. This stage
     -- waits for the vehicle to both stabilize its attitude and fall to the
     -- predicted altitude before applying the braking thrust. This ensures
@@ -430,7 +474,7 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.MANUAL_BRAKE then
-    -- Stage 4: MANUAL_BRAKE
+    -- Stage 5: MANUAL_BRAKE
     -- This stage applies the symmetrical braking thrust. It commands a high
     -- throttle for the same duration as the initial climb. It exits early
     -- if the vehicle's vertical velocity is already restored, or as a backup,
@@ -477,7 +521,7 @@ function vehicle_control.maneuver.flip_update(state)
     return vehicle_control.RUNNING
     
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING_WAIT then
-    -- Stage 5: RESTORING_WAIT
+    -- Stage 6: RESTORING_WAIT
     -- The vehicle is now stable and near its original flight path. This
     -- final stage hands control back to the autopilot's position controller
     -- to make the final small corrections to rejoin the trajectory perfectly.
