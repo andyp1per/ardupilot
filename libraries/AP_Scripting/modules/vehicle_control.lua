@@ -574,9 +574,10 @@ function vehicle_control.maneuver.flip_update(state)
     -- Check vertical velocity error. The error is calculated as current_z - target_z.
     -- A positive error means descending faster or climbing slower than the target.
     local vel_error_z = current_vel_ned:z() - state.initial_state.velocity:z()
-    -- This check ensures the vehicle is never descending faster than the target (vel_error_z <= 0).
-    -- It allows a generous tolerance for "safe" errors (climbing faster/descending slower).
-    local vertical_vel_ok = (vel_error_z <= 0) and (vel_error_z > -0.5)
+    -- This check allows for a small amount of "wiggle room" in the vertical velocity.
+    -- It ensures the vehicle is not descending significantly faster than the target,
+    -- while still allowing for minor deviations.
+    local vertical_vel_ok = (vel_error_z < 0.1) and (vel_error_z > -0.5)
 
     -- Check if all conditions are met
     if pos_ok and horizontal_vel_ok and vertical_vel_ok then
