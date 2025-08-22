@@ -11,6 +11,7 @@ local vehicle_control = {}
 -- Define status constants for state machine management
 vehicle_control.RUNNING = 0
 vehicle_control.SUCCESS = 1
+vehicle_control.ABORTED = 2
 
 -- Define a constant for the special throttle-cut value to improve readability
 vehicle_control.THROTTLE_CUT = -1
@@ -182,6 +183,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
 
   -- 2. Calculate Flip Parameters
   local total_angle_deg
+  local throttle_cmd_val = (throttle_level == vehicle_control.THROTTLE_CUT) and 0.0 or (throttle_level or 0.0)
 
   -- Determine which parameters were provided by the user
   local user_has_flips = (num_flips ~= nil and num_flips > 0)
@@ -247,8 +249,8 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   end
 
   -- 4. Calculate Manual Climb Parameters using the new t_flip
-  local effective_gravity = 9.81 * (1 + (throttle_level or 0.0))
-  local required_vz = 0.5 * effective_gravity * t_flip
+  local net_downward_accel_during_flip = 9.81 * (1 - (throttle_cmd_val / hover_throttle))
+  local required_vz = 0.5 * net_downward_accel_during_flip * t_flip
   
   -- Estimate acceleration from throttle. 2*hover_throttle gives ~1g of acceleration.
   local climb_accel = 9.81 
@@ -277,7 +279,6 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   end
   local initial_state = { attitude = initial_attitude_euler, velocity = ahrs:get_velocity_NED(), location = initial_location, pos_ned = initial_pos_ned, throttle = initial_throttle }
 
-  local throttle_cmd = (throttle_level == vehicle_control.THROTTLE_CUT) and 0.0 or (throttle_level or 0.0)
   local initial_angle = (axis == vehicle_control.axis.ROLL) and math.deg(initial_state.attitude:x()) or math.deg(initial_state.attitude:y())
 
   return {
@@ -289,7 +290,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
     total_angle_deg = total_angle_deg,
     rate_degs = rate_degs,
     axis = axis,
-    throttle_cmd = throttle_cmd,
+    throttle_cmd = throttle_cmd_val,
     last_angle = initial_angle,
     accumulated_angle = 0,
     Kp = slew_gain or 0.5,
@@ -302,9 +303,10 @@ end
 --[[
   Updates the flip maneuver state machine.
   @param state The state table from flip_start.
-  @return RUNNING or SUCCESS.
+  @param reset_fn A function to call to safely abort the maneuver.
+  @return RUNNING, SUCCESS, or ABORTED.
 ]]
-function vehicle_control.maneuver.flip_update(state)
+function vehicle_control.maneuver.flip_update(state, reset_fn)
   -- Get initial attitude in degrees for use in multiple stages
   local initial_roll_deg = math.deg(state.initial_state.attitude:x())
   local initial_pitch_deg = math.deg(state.initial_state.attitude:y())
@@ -342,14 +344,17 @@ function vehicle_control.maneuver.flip_update(state)
 
             local msg = string.format("Climb corrected by x%.2f. New T:%.2fs Thr:%.2f", correction_factor, state.t_accel, state.climb_throttle)
             gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, msg)
+            
+            -- Transition to the main climb stage
+            state.stage = vehicle_control.maneuver.stage.MANUAL_CLIMB
+            state.start_time = nil -- Reset start time for the next stage
         else
-            gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Climb verification failed, using original values.")
+            gcs:send_text(vehicle_control.MAV_SEVERITY.CRITICAL, "Climb verification failed, ABORTING.")
+            if reset_fn then
+                reset_fn(true) -- Pass true to indicate an abort
+            end
+            return vehicle_control.ABORTED -- Terminate the maneuver
         end
-
-        -- Transition to the main climb stage
-        state.stage = vehicle_control.maneuver.stage.MANUAL_CLIMB
-        state.start_time = nil -- Reset start time for the next stage
-        return vehicle_control.RUNNING
     end
     return vehicle_control.RUNNING
 
