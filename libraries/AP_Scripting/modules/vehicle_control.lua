@@ -289,6 +289,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
     Kp = slew_gain or 0.5,
     num_flips = num_flips,
     hover_throttle = hover_throttle,
+    accel_max_degs2 = accel_max_degs2,
   }
 end
 
@@ -406,14 +407,26 @@ function vehicle_control.maneuver.flip_update(state)
     state.accumulated_angle = state.accumulated_angle + delta_angle
     state.last_angle = current_angle
 
-    -- Check if the total rotation has been completed
-    if math.abs(state.accumulated_angle) >= state.total_angle_deg then
-        -- The required rotation has been achieved. Immediately transition to the
-        -- LEVEL_VEHICLE stage on the next update loop. This ensures a clean
-        -- hand-off and prevents this stage from sending any further rate commands.
-        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip rotation complete, leveling.")
-        state.stage = vehicle_control.maneuver.stage.LEVEL_VEHICLE
-        return vehicle_control.RUNNING
+    -- Check if it's time to begin decelerating.
+    -- To prevent over-rotation, we must command the vehicle to level out *before*
+    -- it reaches the final angle. This calculation determines the angle required
+    -- for the vehicle to decelerate from its current rate to zero.
+    local current_gyro_rads = ahrs:get_gyro()
+    if current_gyro_rads then
+        local current_rate_rads = (state.axis == vehicle_control.axis.ROLL) and current_gyro_rads:x() or current_gyro_rads:y()
+        local current_rate_degs = math.deg(current_rate_rads)
+        
+        -- Calculate the angle needed to stop: decel_angle = current_rate^2 / (2 * max_accel)
+        local deceleration_angle_deg = (current_rate_degs^2) / (2 * state.accel_max_degs2)
+        local remaining_angle_deg = state.total_angle_deg - math.abs(state.accumulated_angle)
+
+        if remaining_angle_deg <= deceleration_angle_deg then
+            -- The remaining angle is less than or equal to our stopping distance.
+            -- Command the vehicle to level, which will trigger maximum deceleration.
+            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip rotation complete, decelerating.")
+            state.stage = vehicle_control.maneuver.stage.LEVEL_VEHICLE
+            return vehicle_control.RUNNING
+        end
     end
 
     -- Slew rate to match desired duration
