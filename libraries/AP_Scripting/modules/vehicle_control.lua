@@ -263,13 +263,19 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   initial_attitude_euler:y(ahrs:get_pitch())
   initial_attitude_euler:z(ahrs:get_yaw())
   
+  local initial_throttle = motors:get_throttle()
+  if not initial_throttle then
+    gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Could not get initial throttle")
+    return nil, "Could not get initial throttle"
+  end
+
   local initial_location = ahrs:get_location()
   local initial_pos_ned = ahrs:get_relative_position_NED_origin()
   if not initial_pos_ned then
     gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Could not get EKF origin position")
     return nil, "Could not get EKF origin position"
   end
-  local initial_state = { attitude = initial_attitude_euler, velocity = ahrs:get_velocity_NED(), location = initial_location, pos_ned = initial_pos_ned }
+  local initial_state = { attitude = initial_attitude_euler, velocity = ahrs:get_velocity_NED(), location = initial_location, pos_ned = initial_pos_ned, throttle = initial_throttle }
 
   local throttle_cmd = (throttle_level == vehicle_control.THROTTLE_CUT) and 0.0 or (throttle_level or 0.0)
   local initial_angle = (axis == vehicle_control.axis.ROLL) and math.deg(initial_state.attitude:x()) or math.deg(initial_state.attitude:y())
@@ -391,8 +397,7 @@ function vehicle_control.maneuver.flip_update(state)
   elseif state.stage == vehicle_control.maneuver.stage.FLIPPING then
     -- Stage 3: FLIPPING
     -- The vehicle is now in its ballistic phase. This stage commands the
-    -- desired rotation rate and monitors the accumulated angle. Once the
-    -- rotation is complete, it transitions immediately to the leveling stage.
+    -- desired rotation rate and monitors the accumulated angle.
     
     -- Unwrap angle to track total rotation
     local current_angle = (state.axis == vehicle_control.axis.ROLL) and math.deg(ahrs:get_roll()) or math.deg(ahrs:get_pitch())
@@ -401,26 +406,29 @@ function vehicle_control.maneuver.flip_update(state)
     state.accumulated_angle = state.accumulated_angle + delta_angle
     state.last_angle = current_angle
 
-    -- Check if it's time to begin decelerating.
-    -- To prevent over-rotation, we must command the vehicle to level out *before*
-    -- it reaches the final angle. This calculation determines the angle required
-    -- for the vehicle to decelerate from its current rate to zero.
-    local current_gyro_rads = ahrs:get_gyro()
-    if current_gyro_rads then
-        local current_rate_rads = (state.axis == vehicle_control.axis.ROLL) and current_gyro_rads:x() or current_gyro_rads:y()
-        local current_rate_degs = math.deg(current_rate_rads)
+    -- New logic: Start leveling when on the last flip and past the halfway point.
+    -- This gives the angle controller time to take over and smoothly stop the rotation.
+    local flips_completed = math.floor(math.abs(state.accumulated_angle) / 360)
+    
+    -- Check if we are on the final flip of the maneuver.
+    if flips_completed >= (state.num_flips - 1) then
+        -- We are on the last flip. Check if we are more than halfway through it.
+        local angle_into_current_flip = math.abs(state.accumulated_angle) - (flips_completed * 360)
         
-        -- Calculate the angle needed to stop: decel_angle = current_rate^2 / (2 * max_accel)
-        local deceleration_angle_deg = (current_rate_degs^2) / (2 * state.accel_max_degs2)
-        local remaining_angle_deg = state.total_angle_deg - math.abs(state.accumulated_angle)
-
-        if remaining_angle_deg <= deceleration_angle_deg then
-            -- The remaining angle is less than or equal to our stopping distance.
-            -- Command the vehicle to level, which will trigger maximum deceleration.
-            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip rotation complete, decelerating.")
+        if angle_into_current_flip >= 180 then
+            -- We are past the 180-degree mark of the final flip.
+            -- It's time to hand over to the angle controller to level the vehicle.
+            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Final flip >180 deg, handing to angle controller.")
             state.stage = vehicle_control.maneuver.stage.LEVEL_VEHICLE
             return vehicle_control.RUNNING
         end
+    end
+
+    -- The original check for total angle completion is kept as a failsafe.
+    if math.abs(state.accumulated_angle) >= state.total_angle_deg then
+        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip rotation complete (failsafe), leveling.")
+        state.stage = vehicle_control.maneuver.stage.LEVEL_VEHICLE
+        return vehicle_control.RUNNING
     end
 
     -- Slew rate to match desired duration
@@ -530,8 +538,8 @@ function vehicle_control.maneuver.flip_update(state)
         state.restore_start_time = millis():tofloat()
         state.stage = vehicle_control.maneuver.stage.RESTORING_WAIT
         
-        -- Immediately command zero throttle to arrest the climb before handing off to the position controller.
-        vehicle:set_target_rate_and_throttle(0, 0, 0, 0)
+        -- Command the vehicle's initial throttle to smoothly transition to the position controller.
+        vehicle:set_target_rate_and_throttle(0, 0, 0, state.initial_state.throttle)
     end
     return vehicle_control.RUNNING
     
