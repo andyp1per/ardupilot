@@ -13992,10 +13992,6 @@ RTL_ALT 111
 
         # Trigger the flip
         self.set_rc(9, 2000)
-        #self.delay_sim_time(0.25)
-        self.set_rc(9, 1000)
-        #self.delay_sim_time(0.25)
-        self.set_rc(9, 2000)
         self.wait_statustext(r"^Flip: Starting (\d+(?:\.\d+)?)s flip$", check_context=True, timeout=10, regex=True)
         self.wait_statustext("Trajectory restored", check_context=True, timeout=100)
 
@@ -14006,7 +14002,7 @@ RTL_ALT 111
         self.do_RTL()
 
         self.start_subtest("Test FlipOnSwitch functionality with sprung switch")
-        self.set_parameter("FLIP_SPRING", 1)
+        self.set_parameter("FLIP_CHAN", 9)
         # flip spring test
         self.send_cmd_do_set_mode('LOITER')
         self.set_rc(3, 1000)
