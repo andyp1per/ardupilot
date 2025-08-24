@@ -376,12 +376,6 @@ function vehicle_control.maneuver.flip_update(state)
       state.stage = vehicle_control.maneuver.stage.FLIPPING
       state.start_time = millis():tofloat()
       state.apex_location = ahrs:get_location() -- Record altitude at the start of the flip
-      
-      -- Calculate the predicted drop from apex based on the net downward acceleration during the flip.
-      -- This correctly models that throttle counteracts gravity. A throttle command equal to
-      -- hover_throttle should result in a net acceleration of zero.
-      local net_downward_accel_ms2 = 9.81 * (1 - (state.throttle_cmd / state.hover_throttle))
-      state.predicted_drop_m = 0.5 * net_downward_accel_ms2 * state.t_flip^2
 
       -- Start the flip with the specified throttle and rates
       local roll_rate_dps, pitch_rate_dps = 0, 0
@@ -448,9 +442,9 @@ function vehicle_control.maneuver.flip_update(state)
   elseif state.stage == vehicle_control.maneuver.stage.LEVEL_VEHICLE then
     -- Stage 4: LEVEL_VEHICLE
     -- After the flip, the vehicle is commanded to its original attitude. This stage
-    -- waits for the vehicle to both stabilize its attitude and fall to the
-    -- predicted altitude before applying the braking thrust. This ensures
-    -- thrust is not applied in the wrong direction and the maneuver remains symmetrical.
+    -- waits for the vehicle to stabilize its attitude and be at or below the apex
+    -- altitude before applying the braking thrust. This ensures thrust is not
+    -- applied in the wrong direction and the maneuver remains symmetrical.
     
     -- Command the vehicle to its original attitude with the maneuver's throttle command
     vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.throttle_cmd)
@@ -460,25 +454,33 @@ function vehicle_control.maneuver.flip_update(state)
     local pitch_rad = ahrs:get_pitch()
     local is_level = math.abs(roll_rad - state.initial_state.attitude:x()) < math.rad(5) and math.abs(pitch_rad - state.initial_state.attitude:y()) < math.rad(5)
 
-    -- Check 2: Has the vehicle dropped to the predicted altitude?
+    -- Check 2: Has the vehicle descended to at least the apex altitude?
     local current_loc = ahrs:get_location()
-    local actual_drop_m = 0
+    local has_descended = false
     if current_loc and state.apex_location then
-      actual_drop_m = (state.apex_location:alt() - current_loc:alt()) / 100.0
+        -- This check is true if the current altitude is less than or equal to the apex altitude.
+        if current_loc:alt() <= state.apex_location:alt() then
+            has_descended = true
+        end
+    else
+        -- If we can't get a location, we can't check, so we assume it's okay to proceed if level.
+        -- This is a fallback to prevent getting stuck if location data is briefly lost.
+        has_descended = true
     end
-    local has_dropped = actual_drop_m >= (state.predicted_drop_m * 0.8) -- 80% tolerance
 
     -- Debugging output at 200ms intervals
     state.last_debug_ms = state.last_debug_ms or 0
     local now_ms = millis():tofloat()
     if (now_ms - state.last_debug_ms) > 200 then
         state.last_debug_ms = now_ms
-        local debug_msg = string.format("Leveling... Drop P:%.1f A:%.1f | Level:%s", state.predicted_drop_m, actual_drop_m, tostring(is_level))
+        local apex_alt = state.apex_location and state.apex_location:alt()/100.0 or 0
+        local curr_alt = current_loc and current_loc:alt()/100.0 or 0
+        local debug_msg = string.format("Leveling... Apex:%.1f Curr:%.1f | Level:%s Descended:%s", apex_alt, curr_alt, tostring(is_level), tostring(has_descended))
         gcs:send_text(vehicle_control.MAV_SEVERITY.DEBUG, debug_msg)
     end
 
     -- If both conditions are met, proceed to the braking stage
-    if is_level and has_dropped then
+    if is_level and has_descended then
         gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Leveled at altitude, applying brake.")
         state.stage = vehicle_control.maneuver.stage.MANUAL_BRAKE
         state.start_time = millis():tofloat()
