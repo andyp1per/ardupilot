@@ -8,9 +8,7 @@
      - Hold switch high to set the duration of the flip.
      - Maneuver starts when the switch is left high and is canceled if low.
   2. Spring-loaded Mode (FLIP_SPRING = 1):
-     - Perform a flick or hold sequence (which ends with the switch low).
-     - The maneuver starts automatically after a short timeout.
-     - A subsequent flick cancels the active maneuver.
+     - A single flick (low-high-low) toggles the continuous flip maneuver on or off.
 ]]
 
 local vehicle_control = require('vehicle_control')
@@ -60,6 +58,7 @@ local SCRIPTING_AUX_FUNC = 300 -- Corresponds to "Scripting1"
 local flip_state = nil
 local flip_active = false
 local original_mode = nil
+local spring_mode_is_active = false -- New state for spring-loaded toggle
 
 -- State variables for interpreting switch input
 local switch_logic_state = {
@@ -87,6 +86,7 @@ function reset_all_states(is_abort)
     end
     flip_active = false
     flip_state = nil
+    spring_mode_is_active = false
     current_switch_state = switch_logic_state.IDLE
     flick_count = 0
     high_start_time = 0
@@ -159,98 +159,6 @@ function start_maneuver()
     end
 end
 
--- Handles switch logic for standard (non-spring-loaded) switches
-function update_standard_mode(switch_pos, now)
-    if current_switch_state == switch_logic_state.IDLE then
-        if switch_pos == 2 and last_switch_pos ~= 2 then -- Rising edge to HIGH
-            current_switch_state = switch_logic_state.TIMING_HIGH
-            flick_count = 1
-            gcs:send_text(MAV_SEVERITY.DEBUG, string.format("Switch Logic: -> TIMING_HIGH (Flick %d)", flick_count))
-            high_start_time = now
-        end
-    elseif current_switch_state == switch_logic_state.TIMING_HIGH then
-        local high_duration_s = (now - high_start_time) / 1000.0
-        if switch_pos ~= 2 then -- Falling edge from HIGH
-            current_switch_state = switch_logic_state.WAITING_FOR_COMMIT
-            gcs:send_text(MAV_SEVERITY.DEBUG, "Switch Logic: -> WAITING_FOR_COMMIT")
-            last_flick_time = now
-        elseif high_duration_s >= FLIP_FLICK_TO:get() then
-            gcs:send_text(MAV_SEVERITY.DEBUG, "Switch Logic: Hold detected -> COMMITTED")
-            determined_duration_s = high_duration_s
-            determined_num_flips = nil
-            flick_count = 0
-            current_switch_state = switch_logic_state.COMMITTED
-        end
-    elseif current_switch_state == switch_logic_state.WAITING_FOR_COMMIT then
-        if switch_pos == 2 and last_switch_pos ~= 2 then -- Another flick detected
-            flick_count = flick_count + 1
-            current_switch_state = switch_logic_state.TIMING_HIGH
-            gcs:send_text(MAV_SEVERITY.DEBUG, string.format("Switch Logic: -> TIMING_HIGH (Flick %d)", flick_count))
-            high_start_time = now
-        elseif (now - last_flick_time) / 1000.0 > FLIP_COMMIT_TO:get() then
-            gcs:send_text(MAV_SEVERITY.DEBUG, "Switch Logic: Commit timeout -> COMMITTED")
-            determined_num_flips = flick_count
-            determined_duration_s = nil
-            current_switch_state = switch_logic_state.COMMITTED
-        end
-    elseif current_switch_state == switch_logic_state.COMMITTED then
-        if switch_pos == 2 then
-            gcs:send_text(MAV_SEVERITY.DEBUG, "Switch Logic: Committed and high, starting maneuver")
-            start_maneuver()
-        else
-            gcs:send_text(MAV_SEVERITY.DEBUG, "Switch Logic: Committed but not high, resetting")
-            reset_all_states(false)
-        end
-    end
-end
-
--- Handles switch logic for spring-loaded switches
-function update_spring_mode(switch_pos, now)
-    local rising_edge = (switch_pos == 2 and last_switch_pos ~= 2)
-    local falling_edge = (switch_pos ~= 2 and last_switch_pos == 2)
-
-    -- If a flip is active, a new flick cancels it
-    if flip_active and falling_edge and (now - high_start_time)/1000.0 < FLIP_FLICK_TO:get() then
-        gcs:send_text(MAV_SEVERITY.INFO, "Flip: Canceled by subsequent flick")
-        reset_all_states(false)
-        return
-    end
-
-    if current_switch_state == switch_logic_state.IDLE then
-        if rising_edge then
-            current_switch_state = switch_logic_state.TIMING_HIGH
-            flick_count = 1
-            gcs:send_text(MAV_SEVERITY.DEBUG, string.format("Spring Logic: -> TIMING_HIGH (Flick %d)", flick_count))
-            high_start_time = now
-        end
-    elseif current_switch_state == switch_logic_state.TIMING_HIGH then
-        if falling_edge then
-            local high_duration_s = (now - high_start_time) / 1000.0
-            if high_duration_s >= FLIP_FLICK_TO:get() then
-                determined_duration_s = high_duration_s
-                determined_num_flips = nil
-                gcs:send_text(MAV_SEVERITY.DEBUG, "Spring Logic: Hold detected")
-            else
-                determined_num_flips = flick_count
-                determined_duration_s = nil
-                gcs:send_text(MAV_SEVERITY.DEBUG, "Spring Logic: Flick detected")
-            end
-            current_switch_state = switch_logic_state.WAITING_FOR_COMMIT
-            last_flick_time = now
-        end
-    elseif current_switch_state == switch_logic_state.WAITING_FOR_COMMIT then
-        if rising_edge then
-            flick_count = flick_count + 1
-            current_switch_state = switch_logic_state.TIMING_HIGH
-            gcs:send_text(MAV_SEVERITY.DEBUG, string.format("Spring Logic: -> TIMING_HIGH (Flick %d)", flick_count))
-            high_start_time = now
-        elseif (now - last_flick_time) / 1000.0 > FLIP_COMMIT_TO:get() then
-            gcs:send_text(MAV_SEVERITY.DEBUG, "Spring Logic: Commit timeout, starting maneuver")
-            start_maneuver()
-        end
-    end
-end
-
 -- Main update function
 function update()
     if FLIP_ENABLE:get() == 0 then
@@ -262,36 +170,96 @@ function update()
 
     -- Check for abort cooldown
     if now < abort_cooldown_end_time then
+        last_switch_pos = switch_pos
         return update, 200
     end
 
-    -- Global cancellation logic for standard mode
-    if FLIP_SPRING:get() == 0 and switch_pos == 0 and flip_active then
-        gcs:send_text(MAV_SEVERITY.INFO, "Flip: Canceled by user")
-        reset_all_states(false)
-        return update, 50
-    end
-
-    -- If a flip is active, update it
-    if flip_active and flip_state then
-        local status = vehicle_control.maneuver.flip_update(flip_state, reset_all_states)
-        if status == vehicle_control.SUCCESS then
-            if FLIP_SPRING:get() == 1 then
+    -- If a flip is active, check for cancellation first, then update
+    if flip_active then
+        local cancelled = false
+        if FLIP_SPRING:get() == 1 then
+            local falling_edge = (switch_pos ~= 2 and last_switch_pos == 2)
+            if falling_edge and (now - last_flick_time > 500) then -- 500ms debounce
+                gcs:send_text(MAV_SEVERITY.INFO, "Flip: Canceled by user")
                 reset_all_states(false)
-            else
+                cancelled = true
+            end
+        else -- Standard mode
+            if switch_pos == 0 then
+                gcs:send_text(MAV_SEVERITY.INFO, "Flip: Canceled by user")
+                reset_all_states(false)
+                cancelled = true
+            end
+        end
+
+        if not cancelled and flip_state then
+            local status = vehicle_control.maneuver.flip_update(flip_state, reset_all_states)
+            if status == vehicle_control.SUCCESS then
+                if (FLIP_SPRING:get() == 1 and spring_mode_is_active) or FLIP_SPRING:get() == 0 then
+                    start_maneuver()
+                else
+                    reset_all_states(false)
+                end
+            elseif status == vehicle_control.ABORTED then
+                spring_mode_is_active = false -- Turn off toggle on abort
+            end
+        end
+    else
+        -- If no flip is active, process switch inputs to start one
+        if FLIP_SPRING:get() == 1 then
+            local falling_edge = (switch_pos ~= 2 and last_switch_pos == 2)
+            if falling_edge and (now - last_flick_time > 500) then -- 500ms debounce
+                last_flick_time = now
+                spring_mode_is_active = true
+                gcs:send_text(MAV_SEVERITY.INFO, "Flip: Spring-loaded mode ON")
+                determined_num_flips = 1
+                determined_duration_s = nil
                 start_maneuver()
             end
-        elseif status == vehicle_control.ABORTED then
-            -- Maneuver was aborted
+        else
+            -- Standard mode logic
+            if current_switch_state == switch_logic_state.IDLE then
+                if switch_pos == 2 and last_switch_pos ~= 2 then
+                    current_switch_state = switch_logic_state.TIMING_HIGH
+                    flick_count = 1
+                    gcs:send_text(MAV_SEVERITY.DEBUG, string.format("Switch Logic: -> TIMING_HIGH (Flick %d)", flick_count))
+                    high_start_time = now
+                end
+            elseif current_switch_state == switch_logic_state.TIMING_HIGH then
+                local high_duration_s = (now - high_start_time) / 1000.0
+                if switch_pos ~= 2 then
+                    current_switch_state = switch_logic_state.WAITING_FOR_COMMIT
+                    gcs:send_text(MAV_SEVERITY.DEBUG, "Switch Logic: -> WAITING_FOR_COMMIT")
+                    last_flick_time = now
+                elseif high_duration_s >= FLIP_FLICK_TO:get() then
+                    gcs:send_text(MAV_SEVERITY.DEBUG, "Switch Logic: Hold detected -> COMMITTED")
+                    determined_duration_s = high_duration_s
+                    determined_num_flips = nil
+                    flick_count = 0
+                    current_switch_state = switch_logic_state.COMMITTED
+                end
+            elseif current_switch_state == switch_logic_state.WAITING_FOR_COMMIT then
+                if switch_pos == 2 and last_switch_pos ~= 2 then
+                    flick_count = flick_count + 1
+                    current_switch_state = switch_logic_state.TIMING_HIGH
+                    gcs:send_text(MAV_SEVERITY.DEBUG, string.format("Switch Logic: -> TIMING_HIGH (Flick %d)", flick_count))
+                    high_start_time = now
+                elseif (now - last_flick_time) / 1000.0 > FLIP_COMMIT_TO:get() then
+                    gcs:send_text(MAV_SEVERITY.DEBUG, "Switch Logic: Commit timeout -> COMMITTED")
+                    determined_num_flips = flick_count
+                    determined_duration_s = nil
+                    current_switch_state = switch_logic_state.COMMITTED
+                end
+            elseif current_switch_state == switch_logic_state.COMMITTED then
+                if switch_pos == 2 then
+                    gcs:send_text(MAV_SEVERITY.DEBUG, "Switch Logic: Committed and high, starting maneuver")
+                    start_maneuver()
+                else
+                    gcs:send_text(MAV_SEVERITY.DEBUG, "Switch Logic: Committed but not high, resetting")
+                    reset_all_states(false)
+                end
+            end
         end
-        return update, 10
-    end
-
-    -- Select logic based on spring-loaded parameter
-    if FLIP_SPRING:get() == 1 then
-        update_spring_mode(switch_pos, now)
-    else
-        update_standard_mode(switch_pos, now)
     end
 
     last_switch_pos = switch_pos
