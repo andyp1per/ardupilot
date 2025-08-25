@@ -10,7 +10,7 @@ local crsf_helper = require('crsf_helper')
 local MAV_SEVERITY = {INFO = 6, WARNING = 4}
 
 -- The percentage change for each step, can be changed via the menu
-local tuning_step_percent = 0.10 -- Default to 10%
+local tuning_step_percent -- This will be initialized later from the menu definition
 
 -- ####################
 -- # PARAMETER SETUP
@@ -68,7 +68,8 @@ populate_original_gains()
 -- It parses the string (e.g., "10%") and updates the tuning_step_percent variable.
 local function on_step_change(new_step_str)
     -- Remove the '%' character and convert the string to a number
-    local percent_num = tonumber(string.gsub(new_step_str, "%%", ""))
+    -- The extra parentheses ensure only the first return value of gsub is passed to tonumber
+    local percent_num = tonumber((string.gsub(new_step_str, "%%", "")))
     if percent_num then
         tuning_step_percent = percent_num / 100.0
         gcs:send_text(MAV_SEVERITY.INFO, "Tuning step set to: " .. new_step_str)
@@ -202,6 +203,14 @@ local menu_definition = {
 -- ####################
 -- # INITIALIZATION
 -- ####################
+
+-- Find the settings definition in the menu table to get the default value
+local settings_menu = menu_definition.items[4]
+local step_selection = settings_menu.items[1]
+local default_step_string = step_selection.options[step_selection.default]
+
+-- Initialize the tuning_step_percent with the default value from the menu
+on_step_change(default_step_string)
 
 -- Pass the menu definition to the helper library to build the menu and start the event loop.
 return crsf_helper.init(menu_definition)
