@@ -37,7 +37,7 @@ local FLIP_AXIS = bind_add_param('AXIS', 2, vehicle_control.axis.ROLL)
 local FLIP_RATE = bind_add_param('RATE', 3, 720)
 local FLIP_THROTTLE = bind_add_param('THROTTLE', 4, 0.0)
 local FLIP_HOVER = bind_add_param('HOVER', 5, 0.125)
-local FLIP_DURATION = bind_add_param('DURATION', 6, 1.0) -- For Simple Mode
+local FLIP_DURATION = bind_add_param('DURATION', 6, 1.0) -- For Simple Mode & default for Flick-to-Count
 local FLIP_CHAN = bind_add_param('CHAN', 7, 0) -- For Advanced Mode
 local FLIP_FLICK_TO = bind_add_param('FLICK_TO', 8, 0.5) -- For Advanced Mode
 local FLIP_COMMIT_TO = bind_add_param('COMMIT_TO', 9, 0.75) -- For Advanced Mode
@@ -162,7 +162,7 @@ end
 
 -- Handles advanced logic with custom debouncing
 function update_advanced_mode(channel_num)
-    local pwm = rc:get_pwm(channel_num)
+    local pwm = rc:get_pwm(channel_num) or 1500 -- Use neutral PWM as a safe default
     local now = millis():tofloat()
     
     -- Custom debouncer
@@ -207,7 +207,7 @@ function update_advanced_mode(channel_num)
                     determined_num_flips = nil
                 else
                     determined_num_flips = flick_count
-                    determined_duration_s = nil
+                    determined_duration_s = nil -- Let the library calculate duration
                 end
                 current_switch_state = switch_logic_state.WAITING_FOR_COMMIT
                 last_flick_time = now
@@ -243,7 +243,7 @@ function update()
         update_simple_mode()
     end
 
-    return update, 20 -- Run at 50Hz for responsiveness
+    return update, 10 -- Run at 100Hz for responsiveness
 end
 
 -- Protected wrapper for error handling
@@ -254,7 +254,7 @@ function protected_wrapper()
         reset_all_states(false)
         return protected_wrapper, 1000
     end
-    return protected_wrapper, 20
+    return protected_wrapper, 10
 end
 
 gcs:send_text(MAV_SEVERITY.INFO, "Flip on switch script loaded (Advanced)")
