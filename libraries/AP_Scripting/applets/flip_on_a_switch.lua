@@ -5,7 +5,7 @@
   It supports two modes via the FLIP_CHAN parameter:
   1. Simple Mode (FLIP_CHAN = 0):
      - Uses the RCx_OPTION switch (func 300).
-     - When the switch is high, performs continuous flips of a fixed duration.
+     - When the switch is high, performs continuous flips of a fixed number of rotations.
      - When the switch is low, the maneuver stops.
   2. Advanced Mode (FLIP_CHAN > 0):
      - Reads a raw RC channel directly to bypass the 200ms debounce.
@@ -37,7 +37,7 @@ local FLIP_AXIS = bind_add_param('AXIS', 2, vehicle_control.axis.ROLL)
 local FLIP_RATE = bind_add_param('RATE', 3, 720)
 local FLIP_THROTTLE = bind_add_param('THROTTLE', 4, 0.0)
 local FLIP_HOVER = bind_add_param('HOVER', 5, 0.125)
-local FLIP_DURATION = bind_add_param('DURATION', 6, 1.0) -- For Simple Mode & default for Flick-to-Count
+local FLIP_NUM = bind_add_param('NUM', 6, 1) -- For Simple Mode
 local FLIP_CHAN = bind_add_param('CHAN', 7, 0) -- For Advanced Mode
 local FLIP_FLICK_TO = bind_add_param('FLICK_TO', 8, 0.5) -- For Advanced Mode
 local FLIP_COMMIT_TO = bind_add_param('COMMIT_TO', 9, 0.75) -- For Advanced Mode
@@ -154,8 +154,8 @@ function update_simple_mode()
         end
     elseif switch_pos == 2 then
         gcs:send_text(MAV_SEVERITY.INFO, "Flip: Starting continuous flip")
-        determined_duration_s = FLIP_DURATION:get()
-        determined_num_flips = nil
+        determined_num_flips = FLIP_NUM:get()
+        determined_duration_s = nil
         start_maneuver()
     end
 end
