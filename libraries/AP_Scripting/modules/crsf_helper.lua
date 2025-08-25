@@ -1,11 +1,12 @@
 -- crsf_helper.lua
 -- A reusable helper library to simplify the creation of ArduPilot CRSF menus.
 -- This library abstracts away the complexity of binary packing/unpacking and event loop management.
+-- Version 1.3: Fixed SELECTION parameter option separator.
 
 local helper = {}
 
 -- MAVLink severity levels for GCS messages
-local MAV_SEVERITY = {INFO = 6, WARNING = 4}
+local MAV_SEVERITY = {INFO = 6, WARNING = 4, ERROR = 3}
 
 -- CRSF constants
 local CRSF_EVENT = {PARAMETER_READ = 1, PARAMETER_WRITE = 2}
@@ -18,9 +19,9 @@ local CRSF_PARAM_TYPE = {
 }
 local CRSF_COMMAND_STATUS = { READY = 0, START = 1 }
 
--- Internal storage for menu items and their callbacks
+-- Internal storage for menu items, callbacks, and object references
 local menu_items = {}
-local item_id_counter = 1
+local menu_objects = {} -- Keep references to menu objects to prevent garbage collection
 
 -- ####################
 -- # PACKING FUNCTIONS
@@ -29,15 +30,25 @@ local item_id_counter = 1
 -- These functions create the binary packed strings required by the low-level CRSF API.
 
 -- Creates a CRSF menu text selection item
-local function create_selection_entry(name, options_str, value_idx)
-    -- Note: min, max, default are not used by OpenTX/EdgeTX for selections, but are part of the spec.
-    -- Value is 0-indexed.
-    return string.pack(">BzzBBBBz", CRSF_PARAM_TYPE.TEXT_SELECTION, name, options_str, value_idx - 1, 0, 0, 0, "")
+local function create_selection_entry(name, options_table, default_idx)
+    -- BUGFIX: The CRSF spec requires options to be separated by a semicolon ';'.
+    local options_str = table.concat(options_table, ";")
+    local zero_based_idx = default_idx - 1
+    local min_val = 0
+    local max_val = #options_table - 1
+    return string.pack(">BzzBBBBz", CRSF_PARAM_TYPE.TEXT_SELECTION, name, options_str, zero_based_idx, min_val, max_val, zero_based_idx, "")
 end
 
 -- Creates a CRSF menu number item (as float)
 local function create_number_entry(name, value, min, max, default, dpoint, step, unit)
-    return string.pack(">BzllllBlz", CRSF_PARAM_TYPE.FLOAT, name, value, min, max, default, dpoint, step, unit)
+    -- Handle floating point values by converting them to fixed-point integers
+    local scale = 10^(dpoint or 0)
+    local packed_value = math.floor(value * scale + 0.5)
+    local packed_min = math.floor(min * scale + 0.5)
+    local packed_max = math.floor(max * scale + 0.5)
+    local packed_default = math.floor(default * scale + 0.5)
+    local packed_step = math.floor(step * scale + 0.5)
+    return string.pack(">BzllllBlz", CRSF_PARAM_TYPE.FLOAT, name, packed_value, packed_min, packed_max, packed_default, dpoint or 0, packed_step, unit or "")
 end
 
 -- Creates a CRSF menu info item
@@ -64,26 +75,21 @@ local function parse_menu(menu_definition, parent_menu_obj)
         local param_obj = nil
         local packed_data = nil
 
-        -- Assign a unique ID to this item for tracking
-        item_def.id = item_id_counter
-        menu_items[item_def.id] = item_def
-        item_id_counter = item_id_counter + 1
-
         if item_def.type == 'MENU' then
             param_obj = parent_menu_obj:add_menu(item_def.name)
             if param_obj then
+                table.insert(menu_objects, param_obj) -- Keep a reference to the menu object
                 parse_menu(item_def, param_obj) -- Recurse into sub-menu
             else
                 gcs:send_text(MAV_SEVERITY.WARNING, "CRSF: Failed to create menu: " .. item_def.name)
             end
 
         elseif item_def.type == 'SELECTION' then
-            local options_str = table.concat(item_def.options, "\n")
-            packed_data = create_selection_entry(item_def.name, options_str, item_def.default)
+            packed_data = create_selection_entry(item_def.name, item_def.options, item_def.default)
             param_obj = parent_menu_obj:add_parameter(packed_data)
 
         elseif item_def.type == 'NUMBER' then
-            packed_data = create_number_entry(item_def.name, item_def.default, item_def.min, item_def.max, item_def.default, item_def.dpoint or 0, item_def.step or 1, item_def.unit or "")
+            packed_data = create_number_entry(item_def.name, item_def.default, item_def.min, item_def.max, item_def.default, item_def.dpoint, item_def.step, item_def.unit)
             param_obj = parent_menu_obj:add_parameter(packed_data)
 
         elseif item_def.type == 'COMMAND' then
@@ -95,7 +101,7 @@ local function parse_menu(menu_definition, parent_menu_obj)
             param_obj = parent_menu_obj:add_parameter(packed_data)
         end
 
-        if param_obj and item_def.type ~= 'MENU' then
+        if param_obj then
             -- Store the CRSF-assigned ID back into our definition table for easy lookup
             menu_items[param_obj:id()] = item_def
         elseif not param_obj and item_def.type ~= 'MENU' then
@@ -125,8 +131,10 @@ local function event_loop()
             new_value = item_def.options[selected_index + 1] -- Convert to 1-indexed value for Lua
 
         elseif item_def.type == 'NUMBER' then
-            -- Unpack the float value from the payload
-            new_value = string.unpack(">l", payload)
+            -- Unpack the integer and scale it back to a float
+            local raw_value = string.unpack(">l", payload)
+            local scale = 10^(item_def.dpoint or 0)
+            new_value = raw_value / scale
 
         elseif item_def.type == 'COMMAND' then
             local command_action = string.unpack(">B", payload)
@@ -141,7 +149,7 @@ local function event_loop()
         if new_value ~= nil then
             local success, err = pcall(item_def.callback, new_value)
             if not success then
-                gcs:send_text(MAV_SEVERITY.WARNING, "CRSF Callback Err: " .. tostring(err))
+                gcs:send_text(MAV_SEVERITY.ERROR, "CRSF Callback Err: " .. tostring(err))
             end
         end
 
@@ -166,9 +174,10 @@ function helper.init(menu_definition)
     -- Create the top-level menu
     local top_menu_obj = crsf:add_menu(menu_definition.name)
     if not top_menu_obj then
-        gcs:send_text(MAV_SEVERITY.WARNING, "CRSF: Failed to create top-level menu.")
+        gcs:send_text(MAV_SEVERITY.ERROR, "CRSF: Failed to create top-level menu.")
         return
     end
+    table.insert(menu_objects, top_menu_obj) -- Keep a reference to the top-level menu object
 
     -- Parse the rest of the menu structure
     parse_menu(menu_definition, top_menu_obj)
