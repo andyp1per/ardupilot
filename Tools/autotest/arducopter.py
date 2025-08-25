@@ -12383,6 +12383,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.clear_roi,
              self.ReadOnlyDefaults,
              self.FigureOfEight,
+             self.test_gain_tuner_lua_load,
         ])
         return ret
 
@@ -14057,6 +14058,29 @@ RTL_ALT 111
         # Land and disarm
         self.do_RTL()
         self.progress("Figure of Eight test complete")
+
+    def test_gain_tuner_lua_load(self):
+        """Tests the gain_tuner.lua script loads correctly."""
+        self.start_subtest("Check gain_tuner.lua loads without errors")
+
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "crsf_helper.lua"), "crsf_helper.lua")
+        self.install_applet_script_context("gain_tuner.lua")
+
+        # First stage: Enable scripting and reboot
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+        })
+
+        self.context_collect('STATUSTEXT')
+        # The script requires no parameters, so a second reboot is not strictly
+        # necessary but is good practice for consistency with other tests.
+        self.reboot_sitl()
+
+        # The script should send a GCS message on successful initialization.
+        # We wait for this message to confirm it loaded correctly.
+        self.wait_statustext("CRSF Menu 'Gain Tuner' initialized.", check_context=True, timeout=30)
+
+        self.start_subtest("Completed")
 
     def RTLYaw(self):
         '''test that vehicle yaws to original heading on RTL'''
