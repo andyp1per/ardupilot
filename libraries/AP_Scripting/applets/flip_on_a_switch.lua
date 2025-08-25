@@ -101,14 +101,18 @@ function start_maneuver()
         return
     end
 
-    original_mode = vehicle:get_mode()
+    -- Capture the original mode only on the first run
+    if not original_mode then
+        original_mode = vehicle:get_mode()
+    end
+
     if not (original_mode == vehicle_control.mode.LOITER or original_mode == vehicle_control.mode.GUIDED) then
         gcs:send_text(MAV_SEVERITY.WARNING, "Flip: Must be in Loiter or Guided mode to start")
         reset_all_states(false)
         return
     end
 
-    if original_mode ~= vehicle_control.mode.GUIDED then
+    if vehicle:get_mode() ~= vehicle_control.mode.GUIDED then
         if not vehicle:set_mode(vehicle_control.mode.GUIDED) then
             gcs:send_text(MAV_SEVERITY.WARNING, "Flip: Failed to set Guided mode")
             reset_all_states(false)
