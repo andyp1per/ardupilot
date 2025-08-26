@@ -387,7 +387,6 @@ void FlightAxis::send_request_message(const struct sitl_input &input)
         scaled_servos[2] = constrain_float(col, 0, 1);
     }
 
-    const uint16_t channels = hal.scheduler->is_system_initialized()?4095:0;
     soap_request_start("ExchangeData", R"(<?xml version='1.0' encoding='UTF-8'?><soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/' xmlns:xsd='http://www.w3.org/2001/XMLSchema' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
 <soap:Body>
 <ExchangeData>
