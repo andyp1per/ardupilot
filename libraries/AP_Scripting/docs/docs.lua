@@ -3753,8 +3753,11 @@ function ahrs:wind_alignment(heading_deg) end
 ---@return number -- The headwind component in m/s (negative means tailwind).
 function ahrs:head_wind() end
 
--- Returns the latest altitude estimate above ground level (AGL). Requires a valid terrain or rangefinder source.
----@return number|nil -- Height above ground level in meters.
+-- Returns the latest altitude estimate above ground level (AGL).
+-- @warning This function will return nil unless a valid rangefinder or terrain data is available and healthy.
+-- For a more robust altitude reading not dependent on external sensors, prefer using `ahrs:get_relative_position_D_home()`
+-- (which provides altitude relative to the home position) or `ahrs:get_location()`.
+---@return number|nil -- Height above ground level in meters, or nil if unavailable.
 function ahrs:get_hagl() end
 
 -- Gets the current accelerometer readings.
