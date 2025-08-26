@@ -13993,7 +13993,7 @@ RTL_ALT 111
 
         # Trigger the flip
         self.set_rc(9, 2000)
-        self.wait_statustext(r"^Flip: Starting (\d+(?:\.\d+)?)s flip$", check_context=True, timeout=10, regex=True)
+        self.wait_statustext(r"^Flip: Starting (\d+(?:\.\d+)?)s? flips?$", check_context=True, timeout=10, regex=True)
         self.wait_statustext("Trajectory restored", check_context=True, timeout=100)
 
         # Lower the switch to stop flipping
@@ -14017,7 +14017,7 @@ RTL_ALT 111
         # Trigger the flip
         self.set_rc(9, 2000)
         self.set_rc(9, 1000)
-        self.wait_statustext(r"^Flip: Starting (\d+(?:\.\d+)?)s flip$", check_context=True, timeout=10, regex=True)
+        self.wait_statustext(r"^Flip: Starting (\d+(?:\.\d+)?)s? flips?$", check_context=True, timeout=10, regex=True)
         self.wait_statustext("Trajectory restored", check_context=True, timeout=100)
 
         # Flick the switch to stop flipping
