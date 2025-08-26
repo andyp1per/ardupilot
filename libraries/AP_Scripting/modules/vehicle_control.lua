@@ -291,7 +291,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   local initial_rel_alt_m = -ahrs:get_relative_position_D_home()
   if initial_rel_alt_m then
     local min_safe_hagl
-    if initial_rel_alt_m > 5.0 then
+    if initial_rel_alt_m > 10.0 then
         min_safe_hagl = 5.0
     else
         min_safe_hagl = initial_rel_alt_m / 2.0
