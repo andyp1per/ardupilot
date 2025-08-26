@@ -10907,6 +10907,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "AVOID_ENABLE": 0,
             "AFNCE_FAIL_ACT": 6,  # RTL
             "AFNCE_DEBUG": 2,
+            "AFNCE_ENABLE": 1,
             "PSC_JERK_XY": 40,
             "RC7_OPTION": 300,      # Scripting
             "RTL_LOIT_TIME": 5000,  # Loiter for 5s
