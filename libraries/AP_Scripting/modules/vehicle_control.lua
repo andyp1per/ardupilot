@@ -290,7 +290,13 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   -- Use altitude relative to home as a proxy for AGL. Down is positive, so negate it.
   local initial_rel_alt_m = -ahrs:get_relative_position_D_home()
   if initial_rel_alt_m then
-    local min_safe_hagl = 5.0 -- Hardcoded minimum clearance
+    local min_safe_hagl
+    if initial_rel_alt_m > 5.0 then
+        min_safe_hagl = 5.0
+    else
+        min_safe_hagl = initial_rel_alt_m / 2.0
+    end
+    
     if min_alt_margin >= (initial_rel_alt_m - min_safe_hagl) then
       local old_margin = min_alt_margin
       min_alt_margin = math.max(0, initial_rel_alt_m - min_safe_hagl)
@@ -347,7 +353,7 @@ local function _check_flip_safety(state, reset_fn)
   local start_alt_cm = state.initial_state.location:alt()
   local abort_alt_cm = start_alt_cm - (state.safety_min_alt_margin_m * 100)
   
-  -- 1. Horizontal drift check (active during ballistic and recovery phases)
+  -- 1. Horizontal drift check (always active after climb)
   local pos_error_vec = current_pos_ned - state.initial_state.pos_ned
   local horizontal_drift = pos_error_vec:xy():length()
   if horizontal_drift > state.safety_max_drift then
@@ -357,12 +363,14 @@ local function _check_flip_safety(state, reset_fn)
     return true
   end
 
-  -- 2. Altitude floor check (always active after climb)
-  if current_loc:alt() < abort_alt_cm then
-    local msg = string.format("Safety Abort: Alt %.1fm < floor %.1fm", current_loc:alt()/100.0, abort_alt_cm/100.0)
-    gcs:send_text(vehicle_control.MAV_SEVERITY.CRITICAL, msg)
-    if reset_fn then reset_fn(true) end
-    return true
+  -- 2. Altitude floor check (only active during ballistic/leveling phase)
+  if state.stage >= vehicle_control.maneuver.stage.FLIPPING and state.stage <= vehicle_control.maneuver.stage.WAIT_FOR_DESCENT then
+      if current_loc:alt() < abort_alt_cm then
+        local msg = string.format("Safety Abort: Alt %.1fm < floor %.1fm", current_loc:alt()/100.0, abort_alt_cm/100.0)
+        gcs:send_text(vehicle_control.MAV_SEVERITY.CRITICAL, msg)
+        if reset_fn then reset_fn(true) end
+        return true
+      end
   end
 
   return false -- No safety limits breached
