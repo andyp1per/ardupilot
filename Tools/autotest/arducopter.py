@@ -10903,12 +10903,14 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "FENCE_ALT_MAX": 100,
             "FENCE_RADIUS": 150,
             "FENCE_ACTION": 0,
+            "FENCE_ENABLE": 1,
             "ANGLE_MAX": 7500,
             "AVOID_ENABLE": 0,
             "AFNCE_FAIL_ACT": 6,  # RTL
             "AFNCE_DEBUG": 2,
             "AFNCE_ENABLE": 1,
             "PSC_JERK_XY": 40,
+            "PSC_JERK_Z": 40,
             "RC7_OPTION": 300,      # Scripting
             "RTL_LOIT_TIME": 5000,  # Loiter for 5s
         })
@@ -10921,8 +10923,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         home_loc = self.mav.location()
         radius = self.get_parameter("FENCE_RADIUS")
         margin = self.get_parameter("FENCE_MARGIN")
-        self.mavproxy.send("map circle %f %f %f green\n" % (home_loc.lat, home_loc.lng, radius-margin))
-        self.mavproxy.send("map circle %f %f %f red\n" % (home_loc.lat, home_loc.lng, radius))
+        if self.mavproxy is not None:
+            self.mavproxy.send("map circle %f %f %f green\n" % (home_loc.lat, home_loc.lng, radius-margin))
+            self.mavproxy.send("map circle %f %f %f red\n" % (home_loc.lat, home_loc.lng, radius))
 
         self.start_subtest("Check breach-fence behaviour")
         self.takeoff(20, mode="LOITER")
