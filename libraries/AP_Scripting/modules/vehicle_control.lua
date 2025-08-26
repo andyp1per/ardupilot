@@ -283,8 +283,8 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
 
   -- 6. Safety Parameter Setup
   local safety = safety_params or {}
-  local max_drift = safety.max_drift or 10.0 -- meters
   local min_alt_margin = safety.min_alt_margin or 5.0 -- meters
+  local max_drift = safety.max_drift or 10.0 -- meters
 
   -- Check that the altitude margin is safe relative to the ground
   -- Use altitude relative to home as a proxy for AGL. Down is positive, so negate it.
@@ -300,8 +300,11 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
     if min_alt_margin >= (initial_rel_alt_m - min_safe_hagl) then
       local old_margin = min_alt_margin
       min_alt_margin = math.max(0, initial_rel_alt_m - min_safe_hagl)
-      local msg = string.format("Alt margin %.1fm unsafe (Rel Alt %.1fm). Clamped to %.1fm", old_margin, initial_rel_alt_m, min_alt_margin)
-      gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, msg)
+      -- Only show the warning if the user explicitly provided an unsafe margin
+      if safety.min_alt_margin ~= nil then
+          local msg = string.format("Alt margin %.1fm unsafe (Rel Alt %.1fm). Clamped to %.1fm", old_margin, initial_rel_alt_m, min_alt_margin)
+          gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, msg)
+      end
     end
   elseif min_alt_margin > 0 then
     -- Could not get relative altitude, which is unusual. Warn the user.
