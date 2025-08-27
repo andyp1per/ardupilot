@@ -355,11 +355,21 @@ local function _check_flip_safety(state, reset_fn)
   local start_alt_cm = state.initial_state.location:alt()
   local abort_alt_cm = start_alt_cm - (state.safety_min_alt_margin_m * 100)
   
-  -- 1. Horizontal drift check (always active after climb)
-  local pos_error_vec = current_pos_ned - state.initial_state.pos_ned
-  local horizontal_drift = pos_error_vec:xy():length()
-  if horizontal_drift > state.safety_max_drift then
-    local msg = string.format("Safety Abort: Drift %.1fm > %.1fm", horizontal_drift, state.safety_max_drift)
+  -- 1. Horizontal drift check (crosstrack error)
+  local initial_vel_xy = state.initial_state.velocity:xy()
+  local drift
+  if initial_vel_xy:length() < 0.1 then
+      -- If stationary, use simple radial distance
+      drift = (current_pos_ned - state.initial_state.pos_ned):xy():length()
+  else
+      -- If moving, calculate crosstrack error
+      local displacement = (current_pos_ned - state.initial_state.pos_ned):xy()
+      local projected = initial_vel_xy:normalized() * (displacement:dot(initial_vel_xy:normalized()))
+      drift = (displacement - projected):length()
+  end
+
+  if drift > state.safety_max_drift then
+    local msg = string.format("Safety Abort: Drift %.1fm > %.1fm", drift, state.safety_max_drift)
     gcs:send_text(vehicle_control.MAV_SEVERITY.CRITICAL, msg)
     if reset_fn then reset_fn(true) end
     return true
