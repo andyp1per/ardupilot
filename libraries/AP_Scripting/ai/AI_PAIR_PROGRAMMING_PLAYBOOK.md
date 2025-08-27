@@ -311,6 +311,7 @@ The following constraints apply to all Lua code generation:
 
 * **Lua Version:** All generated code must be compatible with Lua 5.3.  
 * **API Source of Truth:** The docs.lua file is the **definitive source of truth** for all ArduPilot-specific function signatures. In cases of discrepancy between examples and this documentation, the docs.lua file takes precedence.  
+* **Do not assume functions exist** If a required mathematical helper function (like dot() or cross()) is missing from an API object, the required logic must be implemented manually in Lua. For vector manipulation prefer Vector3f to Vector2f since it has a much richer API.
 * **Allowed Functions:** Functions are limited to:  
   * Standard Lua 5.3 language features.  
   * Functions documented in the provided docs.lua file.  
