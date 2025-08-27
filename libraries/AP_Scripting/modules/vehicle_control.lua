@@ -558,44 +558,33 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
     
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING_WAIT then
     -- Stage 6: RESTORING_WAIT
-    -- The vehicle is now stable and near its original flight path. This
-    -- final stage hands control back to the autopilot's position controller.
+    -- The vehicle is now stable. This final stage commands the vehicle to
+    -- return to its projected flight path and recover its original velocity.
+    
+    -- This calculation is only done once when entering the stage
+    if not state.restore_target_pos then
+        -- Calculate the total time the vehicle was "off-track" (ballistic + braking)
+        local off_track_duration_s = state.t_flip + state.t_accel
+        -- Project the initial position forward by the off-track duration
+        local displacement = state.initial_state.velocity:copy():scale(off_track_duration_s)
+        state.restore_target_pos = state.initial_state.pos_ned + displacement
+    end
+
+    -- Command the vehicle to the projected position and to resume its initial velocity
+    vehicle:set_target_posvel_NED(state.restore_target_pos, state.initial_state.velocity)
+    
+    -- Check for arrival
     local current_pos_ned = ahrs:get_relative_position_NED_origin()
     local current_vel_ned = ahrs:get_velocity_NED()
 
     if not current_pos_ned or not current_vel_ned then
       return vehicle_control.RUNNING
     end
-    
-    -- Calculate the ideal absolute target position vector, projecting it forward in time
-    local elapsed_restore_time_s = (millis():tofloat() - state.restore_start_time) / 1000.0
-    local total_elapsed_time_s = state.t_flip + elapsed_restore_time_s
-    local displacement = state.initial_state.velocity:copy():scale(total_elapsed_time_s)
-    local target_pos_ned_absolute = state.initial_state.pos_ned + displacement
-    
-    -- Continuously command the vehicle to the moving absolute target position and velocity
-    vehicle:set_target_posvel_NED(target_pos_ned_absolute, state.initial_state.velocity)
-    
-    -- Define separate tolerances for arrival check
-    local pos_tolerance_m = 1.0
-    local horizontal_vel_tolerance_ms = 0.5
 
-    -- Check position error
-    local pos_error_vec = target_pos_ned_absolute - current_pos_ned
-    local pos_ok = pos_error_vec:length() < pos_tolerance_m
+    local pos_error = (state.restore_target_pos - current_pos_ned):length()
+    local vel_error = (state.initial_state.velocity - current_vel_ned):length()
 
-    -- Check horizontal velocity error
-    local vel_error_x = state.initial_state.velocity:x() - current_vel_ned:x()
-    local vel_error_y = state.initial_state.velocity:y() - current_vel_ned:y()
-    local horizontal_vel_error_sq = vel_error_x^2 + vel_error_y^2
-    local horizontal_vel_ok = horizontal_vel_error_sq < (horizontal_vel_tolerance_ms^2)
-
-    -- Check vertical velocity error
-    local vel_error_z = current_vel_ned:z() - state.initial_state.velocity:z()
-    local vertical_vel_ok = (vel_error_z < 0.1) and (vel_error_z > -0.5)
-
-    -- Check if all conditions are met
-    if pos_ok and horizontal_vel_ok and vertical_vel_ok then
+    if pos_error < 1.0 and vel_error < 0.5 then
       gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Trajectory restored.")
       state.stage = vehicle_control.maneuver.stage.DONE
       return vehicle_control.SUCCESS
