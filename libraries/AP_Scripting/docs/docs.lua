@@ -902,7 +902,9 @@ function Vector2f_ud:is_inf() end
 ---@return boolean
 function Vector2f_ud:is_nan() end
 
--- Normalizes the vector to a unit length (magnitude of 1). The vector is modified in-place.
+-- Normalizes the vector to a unit length (magnitude of 1).
+-- @warning This function modifies the vector in-place and returns no value.
+-- To preserve the original vector, create a copy first: `local norm_vec = my_vec:copy()`
 function Vector2f_ud:normalize() end
 
 -- Calculates the length (magnitude) of this vector: sqrt(x^2 + y^2).
