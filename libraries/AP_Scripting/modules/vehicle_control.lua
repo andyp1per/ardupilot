@@ -364,7 +364,9 @@ local function _check_flip_safety(state, reset_fn)
   else
       -- If moving, calculate crosstrack error
       local displacement = (current_pos_ned - state.initial_state.pos_ned):xy()
-      local projected = initial_vel_xy:normalized() * (displacement:dot(initial_vel_xy:normalized()))
+      local vel_dir = initial_vel_xy:copy()
+      vel_dir:normalize()
+      local projected = vel_dir * (displacement:dot(vel_dir))
       drift = (displacement - projected):length()
   end
 
