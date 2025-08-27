@@ -144,11 +144,10 @@ vehicle_control.maneuver.stage = {
   VERIFY_CLIMB = 1,
   MANUAL_CLIMB = 2,
   FLIPPING = 3,
-  STOPPING_ROTATION = 4,
-  WAIT_FOR_DESCENT = 5,
-  MANUAL_BRAKE = 6,
-  RESTORING_WAIT = 7,
-  DONE = 8,
+  WAIT_FOR_DESCENT = 4,
+  MANUAL_BRAKE = 5,
+  RESTORING_WAIT = 6,
+  DONE = 7,
 }
 
 --[[
@@ -255,11 +254,10 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   local required_vz = 0.5 * net_downward_accel_during_flip * t_flip
   
   -- Estimate acceleration from throttle. 2*hover_throttle gives ~1g of acceleration.
-  local climb_accel = 9.81 
   local climb_throttle = 2 * hover_throttle
   
   -- Time needed to accelerate to the required vertical velocity
-  local t_accel = required_vz / climb_accel
+  local t_accel = required_vz / 9.81
 
   -- 5. Prepare for Flip
   local initial_attitude_euler = Vector3f()
@@ -317,6 +315,7 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
     stage = vehicle_control.maneuver.stage.VERIFY_CLIMB,
     initial_state = initial_state,
     t_accel = t_accel,
+    required_vz = required_vz,
     climb_throttle = climb_throttle,
     t_flip = t_flip,
     total_angle_deg = total_angle_deg,
@@ -417,14 +416,10 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
 
         -- Only correct if we have a sensible measured acceleration
         if measured_accel > 1.0 then -- Must have at least 1m/s/s of positive acceleration
-            local expected_accel = 9.81 -- We expect ~1g of acceleration from 2*hover_throttle
-            local correction_factor = expected_accel / measured_accel
-
-            -- Apply correction factor to climb time and throttle.
-            state.t_accel = state.t_accel * correction_factor
-            state.climb_throttle = math.min(state.climb_throttle * correction_factor, 1.0) -- Clamp throttle at 1.0
-
-            local msg = string.format("Climb corrected by x%.2f. New T:%.2fs Thr:%.2f", correction_factor, state.t_accel, state.climb_throttle)
+            -- Recalculate the time to accelerate using the measured acceleration, but keep throttle high
+            state.t_accel = state.required_vz / measured_accel
+            
+            local msg = string.format("Climb time corrected to %.2fs", state.t_accel)
             gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, msg)
             
             -- Transition to the main climb stage
@@ -488,16 +483,16 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
     if flips_completed >= (state.num_flips - 1) then
         local angle_into_current_flip = math.abs(state.accumulated_angle) - (flips_completed * 360)
         if angle_into_current_flip >= 180 then
-            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip >180 deg, stopping rotation.")
-            state.stage = vehicle_control.maneuver.stage.STOPPING_ROTATION
+            gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip >180 deg, leveling.")
+            state.stage = vehicle_control.maneuver.stage.WAIT_FOR_DESCENT
             return vehicle_control.RUNNING
         end
     end
 
     -- The original check for total angle completion is kept as a failsafe.
     if math.abs(state.accumulated_angle) >= state.total_angle_deg then
-        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip rotation complete (failsafe), stopping.")
-        state.stage = vehicle_control.maneuver.stage.STOPPING_ROTATION
+        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Flip rotation complete (failsafe), leveling.")
+        state.stage = vehicle_control.maneuver.stage.WAIT_FOR_DESCENT
         return vehicle_control.RUNNING
     end
 
@@ -517,21 +512,8 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
     vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, 0, state.throttle_cmd)
     return vehicle_control.RUNNING
 
-  elseif state.stage == vehicle_control.maneuver.stage.STOPPING_ROTATION then
-    -- Stage 4: STOPPING_ROTATION
-    -- This stage commands zero rotation rate and waits for the vehicle's
-    -- actual rotation to slow down to a safe level before proceeding.
-    vehicle:set_target_rate_and_throttle(0, 0, 0, state.throttle_cmd)
-    
-    local current_gyro = ahrs:get_gyro()
-    if current_gyro and current_gyro:length() < math.rad(10) then -- 10 deg/s threshold
-        gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Rotation stopped, waiting for descent.")
-        state.stage = vehicle_control.maneuver.stage.WAIT_FOR_DESCENT
-    end
-    return vehicle_control.RUNNING
-
   elseif state.stage == vehicle_control.maneuver.stage.WAIT_FOR_DESCENT then
-    -- Stage 5: WAIT_FOR_DESCENT
+    -- Stage 4: WAIT_FOR_DESCENT
     -- The vehicle's rotation is now stable. This stage holds a level attitude and waits
     -- for the vehicle to descend back to its apex altitude before braking.
     vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.throttle_cmd)
@@ -545,7 +527,7 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
     return vehicle_control.RUNNING
 
   elseif state.stage == vehicle_control.maneuver.stage.MANUAL_BRAKE then
-    -- Stage 6: MANUAL_BRAKE
+    -- Stage 5: MANUAL_BRAKE
     -- This stage applies the symmetrical braking thrust. It commands a high
     -- throttle for the same duration as the initial climb. It exits early
     -- if the vehicle's vertical velocity is already restored, or as a backup,
@@ -575,7 +557,7 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
     return vehicle_control.RUNNING
     
   elseif state.stage == vehicle_control.maneuver.stage.RESTORING_WAIT then
-    -- Stage 7: RESTORING_WAIT
+    -- Stage 6: RESTORING_WAIT
     -- The vehicle is now stable and near its original flight path. This
     -- final stage hands control back to the autopilot's position controller.
     local current_pos_ned = ahrs:get_relative_position_NED_origin()
