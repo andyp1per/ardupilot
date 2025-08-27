@@ -61,7 +61,7 @@ local determined_num_flips = nil
 local determined_duration_s = nil
 
 -- State for custom debouncing
-local DEBOUNCE_MS = 50
+local DEBOUNCE_MS = 20
 local debounced_state = 0
 local last_potential_state_time = 0
 local potential_state = 0
