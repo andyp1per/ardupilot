@@ -390,9 +390,7 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
     return vehicle_control.ABORTED
   end
   
-  -- Get initial attitude in degrees for use in multiple stages
-  local initial_roll_deg = math.deg(state.initial_state.attitude:x())
-  local initial_pitch_deg = math.deg(state.initial_state.attitude:y())
+  -- Get initial yaw for use in attitude commands
   local initial_yaw_deg = math.deg(state.initial_state.attitude:z())
 
   if state.stage == vehicle_control.maneuver.stage.VERIFY_CLIMB then
@@ -404,8 +402,8 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
         state.initial_vz = -ahrs:get_velocity_NED():z()
     end
     
-    -- Command initial attitude with high throttle
-    vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.climb_throttle)
+    -- Command a level attitude with high throttle to get a clean vertical acceleration measurement
+    vehicle:set_target_angle_and_rate_and_throttle(0, 0, initial_yaw_deg, 0, 0, 0, state.climb_throttle)
 
     local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
     local verification_duration = 0.2 -- 200ms to measure acceleration
@@ -443,8 +441,8 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
         state.start_time = millis():tofloat()
     end
     
-    -- Command initial attitude with the (potentially corrected) high throttle
-    vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.climb_throttle)
+    -- Command a level attitude with high throttle
+    vehicle:set_target_angle_and_rate_and_throttle(0, 0, initial_yaw_deg, 0, 0, 0, state.climb_throttle)
 
     local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
     if elapsed_time >= state.t_accel then
@@ -461,7 +459,8 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
       else
           pitch_rate_dps = state.rate_degs
       end
-      vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, roll_rate_dps, pitch_rate_dps, 0, state.throttle_cmd)
+      -- Command a level attitude while initiating the roll/pitch rate
+      vehicle:set_target_angle_and_rate_and_throttle(0, 0, initial_yaw_deg, roll_rate_dps, pitch_rate_dps, 0, state.throttle_cmd)
     end
     return vehicle_control.RUNNING
 
@@ -516,7 +515,7 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
     -- Stage 4: WAIT_FOR_DESCENT
     -- The vehicle's rotation is now stable. This stage holds a level attitude and waits
     -- for the vehicle to descend back to its apex altitude before braking.
-    vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.throttle_cmd)
+    vehicle:set_target_angle_and_rate_and_throttle(0, 0, initial_yaw_deg, 0, 0, 0, state.throttle_cmd)
 
     local current_loc = ahrs:get_location()
     if current_loc and state.apex_location and (current_loc:alt() <= state.apex_location:alt()) then
@@ -532,7 +531,7 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
     -- throttle for the same duration as the initial climb. It exits early
     -- if the vehicle's vertical velocity is already restored, or as a backup,
     -- when the timer expires.
-    vehicle:set_target_angle_and_rate_and_throttle(initial_roll_deg, initial_pitch_deg, initial_yaw_deg, 0, 0, 0, state.climb_throttle)
+    vehicle:set_target_angle_and_rate_and_throttle(0, 0, initial_yaw_deg, 0, 0, 0, state.climb_throttle)
 
     -- Check if we have already recovered our initial vertical velocity
     local current_vel_ned = ahrs:get_velocity_NED()
@@ -584,7 +583,7 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
     local pos_error = (state.restore_target_pos - current_pos_ned):length()
     local vel_error = (state.initial_state.velocity - current_vel_ned):length()
 
-    if pos_error < 1.0 and vel_error < 0.5 then
+    if pos_error < 1.0 and vel_error < 0.2 then
       gcs:send_text(vehicle_control.MAV_SEVERITY.INFO, "Trajectory restored.")
       state.stage = vehicle_control.maneuver.stage.DONE
       return vehicle_control.SUCCESS
