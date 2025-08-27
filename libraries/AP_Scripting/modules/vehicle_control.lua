@@ -366,7 +366,9 @@ local function _check_flip_safety(state, reset_fn)
       local displacement = (current_pos_ned - state.initial_state.pos_ned):xy()
       local vel_dir = initial_vel_xy:copy()
       vel_dir:normalize()
-      local projected = vel_dir * (displacement:dot(vel_dir))
+      -- Manually calculate the dot product for Vector2f
+      local dot_product = displacement:x() * vel_dir:x() + displacement:y() * vel_dir:y()
+      local projected = vel_dir * dot_product
       drift = (displacement - projected):length()
   end
 
@@ -581,8 +583,9 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
         state.restore_target_pos = state.initial_state.pos_ned + displacement
     end
 
-    -- Command the vehicle to the projected position and to resume its initial velocity
-    vehicle:set_target_posvel_NED(state.restore_target_pos, state.initial_state.velocity)
+    -- Command the vehicle to the projected position and to resume its initial velocity and yaw
+    local zero_accel = Vector3f()
+    vehicle:set_target_posvelaccel_NED(state.restore_target_pos, state.initial_state.velocity, zero_accel, true, initial_yaw_deg, false, 0, false)
     
     -- Check for arrival
     local current_pos_ned = ahrs:get_relative_position_NED_origin()
