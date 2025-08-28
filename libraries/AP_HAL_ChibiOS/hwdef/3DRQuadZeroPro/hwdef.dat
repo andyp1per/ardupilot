@@ -5,7 +5,7 @@ MCU STM32H7xx STM32H743xx
 USB_VENDOR 0x26ac
 USB_PRODUCT 0x1167
 USB_STRING_MANUFACTURER "3DR"
-USB_STRING_PRODUCT "QZPro"
+USB_STRING_PRODUCT "QZPro-SE"
 
 # crystal frequency
 OSCILLATOR_HZ 24000000
@@ -17,9 +17,6 @@ define SMPS_EXT
 APJ_BOARD_ID 1167
 
 FLASH_SIZE_KB 2048
-
-# with 2M flash we can afford to optimize for speed
-env OPTIMIZE -Os
 
 # start on 2th sector (1st sector for bootloader)
 FLASH_RESERVE_START_KB 128
@@ -51,8 +48,6 @@ define HAL_I2C_INTERNAL_MASK 0
 # UART7 TELEM3
 # UART8 PLU
 
-# OTG1 and OTG2 are USB devices (1x physical USB connection enumerated as 2x logical ports)
-
 # order of UARTs (and USB) 
 SERIAL_ORDER OTG1 USART2 USART3 UART4 UART7 UART8
 
@@ -82,9 +77,6 @@ PE0 UART8_RX UART8
 PD14 UART8_CTS UART8
 PD15 UART8_RTS UART8
 
-# TODO: RSSI Analog Input
-# PXX RSSI_IN ADCX
-
 # Now the VDD sense pin. This is used to sense primary board voltage.
 PA4 VDD_5V_SENS ADC1 SCALE(2)
 
@@ -112,9 +104,6 @@ PB5 SPI6_MOSI SPI6
 # setup as OPENDRAIN.
 PA9 VBUS INPUT OPENDRAIN
 
-# This input pin is used to detect that power is valid on USB.
-#PC0 VBUS_VALID INPUT PULLDOWN
-
 # USB
 PA11 OTG_FS_DM OTG1
 PA12 OTG_FS_DP OTG1
@@ -122,18 +111,13 @@ PA12 OTG_FS_DP OTG1
 PA13 JTMS-SWDIO SWD
 PA14 JTCK-SWCLK SWD
 
-# PWM output for buzzer
-#PC7 TIM8_CH2 TIM8 GPIO(77) ALARM
-
-# First I2C bus.
+# I2C BUSES
 PB6 I2C1_SCL I2C1
 PB7 I2C1_SDA I2C1
 
-# Second I2C bus.
 PB10 I2C2_SCL I2C2
 PB11 I2C2_SDA I2C2
 
-# Third I2C bus.
 PB8 I2C4_SCL I2C4
 PB9 I2C4_SDA I2C4
 
@@ -153,12 +137,7 @@ PE3 BARO_CS CS
 PB0 BMI088_GYRO_CS CS 
 PC5 BMI088_ACCEL_CS CS
 
-# Now we start defining some PWM pins. We also map these pins to GPIO
-# values, so users can set BRD_PWM_COUNT to choose how many of the PWM
-# outputs on the primary MCU are setup as PWM and how many as
-# GPIOs. To match HAL_PX4 we number the GPIOs for the PWM outputs
-# starting at 50.
-
+# PWM channels
 PE9 TIM1_CH1 TIM1 PWM(1) GPIO(50) BIDIR
 PE11 TIM1_CH2 TIM1 PWM(2) GPIO(51)
 PE13 TIM1_CH3 TIM1 PWM(3) GPIO(52) BIDIR
@@ -186,7 +165,7 @@ SPIDEV iim42653    SPI2 DEVID3  IIM42653_CS       MODE3  6*MHZ  6*MHZ
 SPIDEV dps310      SPI4 DEVID4  BARO_CS           MODE3  5*MHZ  5*MHZ
 SPIDEV ramtron     SPI6 DEVID10 FRAM_CS           MODE3  8*MHZ  8*MHZ
 
-# Enable RAMTROM parameter storage.
+# Enable RAMTRON parameter storage.
 define HAL_STORAGE_SIZE 32768
 define HAL_WITH_RAMTRON 1
 
@@ -195,7 +174,6 @@ define HAL_OS_FATFS_IO 1
 
 # COMPASS
 define HAL_PROBE_EXTERNAL_I2C_COMPASSES
-COMPASS IST8308 I2C:0:0x08 true ROTATION_YAW_270
 COMPASS MMC3416 I2C:0:0x30 false ROTATION_NONE
 COMPASS RM3100  I2C:2:0x20 false ROTATION_YAW_180
 
@@ -208,7 +186,3 @@ define HAL_DEFAULT_INS_FAST_SAMPLE 7
 # BARO
 BARO DPS310 SPI:dps310
 
-# LED Notification
-#define AP_NOTIFY_LP5562_ENABLED
-
-# ++++++++++++ TODO: FINISH THIS +++++++++++++ 
