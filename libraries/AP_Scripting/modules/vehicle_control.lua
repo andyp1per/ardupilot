@@ -384,7 +384,15 @@ local function _check_flip_safety(state, reset_fn)
   -- 2. Altitude floor check (only active during ballistic/leveling phase)
   if state.stage >= vehicle_control.maneuver.stage.FLIPPING and state.stage <= vehicle_control.maneuver.stage.WAIT_FOR_DESCENT then
       if current_loc:alt() < abort_alt_cm then
-        local msg = string.format("Safety Abort: Alt %.1fm < floor %.1fm", current_loc:alt()/100.0, abort_alt_cm/100.0)
+        local msg
+        if ahrs:home_is_set() then
+            local home_alt_cm = ahrs:get_home():alt()
+            local current_alt_ahd = (current_loc:alt() - home_alt_cm) / 100.0
+            local floor_alt_ahd = (abort_alt_cm - home_alt_cm) / 100.0
+            msg = string.format("Safety Abort: Alt AHD %.1fm < floor %.1fm", current_alt_ahd, floor_alt_ahd)
+        else
+            msg = string.format("Safety Abort: Alt %.1fm < floor %.1fm", current_loc:alt()/100.0, abort_alt_cm/100.0)
+        end
         gcs:send_text(vehicle_control.MAV_SEVERITY.CRITICAL, msg)
         if reset_fn then reset_fn(true) end
         return true
@@ -511,18 +519,12 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
         return vehicle_control.RUNNING
     end
 
-    -- Slew rate to match desired duration
-    local elapsed_time = (millis():tofloat() - state.start_time) / 1000.0
-    local expected_angle = (elapsed_time / state.t_flip) * state.total_angle_deg * (state.rate_degs > 0 and 1 or -1)
-    local error = expected_angle - state.accumulated_angle
-    local new_rate_degs = state.rate_degs + state.Kp * error
-
-    -- Set target rates
+    -- Command the fixed target rate
     local roll_rate_dps, pitch_rate_dps = 0, 0
     if state.axis == vehicle_control.axis.ROLL then
-      roll_rate_dps = new_rate_degs
+      roll_rate_dps = state.rate_degs
     else
-      pitch_rate_dps = new_rate_degs
+      pitch_rate_dps = state.rate_degs
     end
     vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, 0, state.throttle_cmd)
     return vehicle_control.RUNNING
