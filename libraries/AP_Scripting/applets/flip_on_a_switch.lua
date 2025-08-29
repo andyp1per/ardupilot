@@ -32,16 +32,94 @@ function bind_add_param(name, idx, default_value)
     return Parameter(PARAM_TABLE_PREFIX .. name)
 end
 
+--[[
+  // @Param: FLIP_ENABLE
+  // @DisplayName: Enable Flip on Switch
+  // @Description: Enables or disables the flip on switch functionality.
+  // @User: Standard
+  // @Values: 0:Disabled,1:Enabled
+--]]
 local FLIP_ENABLE = bind_add_param('ENABLE', 1, 1)
+
+--[[
+  // @Param: FLIP_AXIS
+  // @DisplayName: Flip Axis
+  // @Description: The axis for the flip maneuver.
+  // @User: Standard
+  // @Values: 1:Roll,2:Pitch
+--]]
 local FLIP_AXIS = bind_add_param('AXIS', 2, vehicle_control.axis.ROLL)
+
+--[[
+  // @Param: FLIP_RATE
+  // @DisplayName: Flip Rate
+  // @Description: The target rotation rate for the flip maneuver.
+  // @User: Standard
+  // @Units: deg/s
+--]]
 local FLIP_RATE = bind_add_param('RATE', 3, 720)
+
+--[[
+  // @Param: FLIP_THROTTLE
+  // @DisplayName: Flip Throttle
+  // @Description: The throttle level to use during the flip's ballistic phase (0-1). A value of -1 will cut the throttle entirely.
+  // @User: Advanced
+  // @Range: -1 1
+--]]
 local FLIP_THROTTLE = bind_add_param('THROTTLE', 4, 0.0)
+
+--[[
+  // @Param: FLIP_HOVER
+  // @DisplayName: Hover Throttle
+  // @Description: The vehicle's true hover throttle (0-1). This is critical for the script's physics calculations.
+  // @User: Advanced
+  // @Range: 0 1
+--]]
 local FLIP_HOVER = bind_add_param('HOVER', 5, 0.125)
-local FLIP_NUM = bind_add_param('NUM', 6, 1) -- For Simple Mode
-local FLIP_CHAN = bind_add_param('CHAN', 7, 0) -- For Advanced Mode
-local FLIP_FLICK_TO = bind_add_param('FLICK_TO', 8, 0.5) -- For Advanced Mode
-local FLIP_COMMIT_TO = bind_add_param('COMMIT_TO', 9, 0.75) -- For Advanced Mode
-local FLIP_CLIMB_G = bind_add_param('CLIMB_G', 10, 1.0) -- Climb G-force
+
+--[[
+  // @Param: FLIP_NUM
+  // @DisplayName: Simple Mode Number of Flips
+  // @Description: (Simple Mode Only) The number of flips to perform in a continuous sequence when the switch is held high.
+  // @User: Standard
+--]]
+local FLIP_NUM = bind_add_param('NUM', 6, 1)
+
+--[[
+  // @Param: FLIP_CHAN
+  // @DisplayName: Flip Control Channel
+  // @Description: Selects the control mode. 0 for Simple Mode using the RCx_OPTION. >0 for Advanced Mode using the specified raw RC channel.
+  // @User: Standard
+  // @Range: 0 16
+--]]
+local FLIP_CHAN = bind_add_param('CHAN', 7, 0)
+
+--[[
+  // @Param: FLIP_FLICK_TO
+  // @DisplayName: Advanced Mode Flick Timeout
+  // @Description: (Advanced Mode Only) The time in seconds to differentiate a 'flick' from a 'hold'. A switch activation shorter than this is a flick.
+  // @User: Advanced
+  // @Units: s
+--]]
+local FLIP_FLICK_TO = bind_add_param('FLICK_TO', 8, 0.5)
+
+--[[
+  // @Param: FLIP_COMMIT_TO
+  // @DisplayName: Advanced Mode Commit Timeout
+  // @Description: (Advanced Mode Only) The timeout in seconds after the last switch input before the maneuver is committed and starts.
+  // @User: Advanced
+  // @Units: s
+--]]
+local FLIP_COMMIT_TO = bind_add_param('COMMIT_TO', 9, 0.75)
+
+--[[
+  // @Param: FLIP_CLIMB_G
+  // @DisplayName: Climb G-Force
+  // @Description: The desired G-force for the initial climb (e.g., 1.0 for 1g). Higher values result in a more aggressive climb.
+  // @User: Standard
+  // @Units: g
+--]]
+local FLIP_CLIMB_G = bind_add_param('CLIMB_G', 10, 1.0)
 
 -- RC Function Constant for Simple Mode
 local SCRIPTING_AUX_FUNC = 300

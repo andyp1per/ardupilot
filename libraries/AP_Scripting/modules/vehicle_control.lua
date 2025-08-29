@@ -154,15 +154,17 @@ vehicle_control.maneuver.stage = {
   Starts a flip maneuver.
   Calculates the third parameter (rate, duration, or number of flips) based on the two provided.
   @param axis The axis of rotation (vehicle_control.axis.ROLL or vehicle_control.axis.PITCH).
-  @param rate_degs (optional) The initial rotation rate in degrees/second.
-  @param throttle_level The throttle level (0-1), or vehicle_control.THROTTLE_CUT to cut throttle.
-  @param flip_duration_s (optional) The desired total duration of the maneuver.
-  @param num_flips (optional) The number of flips to perform.
-  @param slew_gain (optional) The proportional gain for rate slewing (default 0.5).
-  @param true_hover_throttle (optional) The true hover throttle of the vehicle (0-1). Defaults to MOT_THST_HOVER parameter.
-  @param safety_params (optional) A table of safety limits: {max_drift=meters, min_alt_margin=meters}.
-  @param climb_g (optional) The desired G-force for the initial climb (default 1.0).
-  @return A state table for the perform_flip_update function, or nil and an error message.
+  @param rate_degs (optional) The initial rotation rate in degrees/second. If nil, it will be calculated based on other parameters.
+  @param throttle_level The throttle level (0-1) to be applied during the ballistic flip phase. Use vehicle_control.THROTTLE_CUT to cut throttle entirely.
+  @param flip_duration_s (optional) The desired total duration of the maneuver. If nil, it's calculated from rate and number of flips.
+  @param num_flips (optional) The number of flips to perform. If nil, it's calculated from rate and duration.
+  @param slew_gain (optional) Legacy parameter, no longer used. Can be nil.
+  @param true_hover_throttle (optional) The true hover throttle of the vehicle (0-1). If nil, it falls back to the MOT_THST_HOVER parameter.
+  @param safety_params (optional) A table of safety limits:
+      - max_drift (meters, default 10.0): Max allowed perpendicular drift from the flight path.
+      - min_alt_margin (meters, default 5.0): Safety buffer below the starting altitude.
+  @param climb_g (optional) The desired G-force for the initial climb (default 1.0). For example, 2.0 would be a 2g climb.
+  @return A state table for the flip_update function, or nil and an error message if preconditions are not met.
 ]]
 function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain, true_hover_throttle, safety_params, climb_g)
   -- 1. Pre-flight Checks
