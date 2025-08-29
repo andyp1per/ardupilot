@@ -599,6 +599,14 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
       return vehicle_control.RUNNING
     end
 
+    -- Check for timeout
+    local elapsed_restore_time_ms = millis():tofloat() - state.restore_start_time
+    if elapsed_restore_time_ms > 5000 then
+        gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Restore timed out, completing maneuver.")
+        state.stage = vehicle_control.maneuver.stage.DONE
+        return vehicle_control.SUCCESS
+    end
+
     local pos_error = (state.restore_target_pos - current_pos_ned):length()
     local vel_error = (state.initial_state.velocity - current_vel_ned):length()
 
