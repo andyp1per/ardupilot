@@ -161,9 +161,10 @@ vehicle_control.maneuver.stage = {
   @param slew_gain (optional) The proportional gain for rate slewing (default 0.5).
   @param true_hover_throttle (optional) The true hover throttle of the vehicle (0-1). Defaults to MOT_THST_HOVER parameter.
   @param safety_params (optional) A table of safety limits: {max_drift=meters, min_alt_margin=meters}.
+  @param climb_g (optional) The desired G-force for the initial climb (default 1.0).
   @return A state table for the perform_flip_update function, or nil and an error message.
 ]]
-function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain, true_hover_throttle, safety_params)
+function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, flip_duration_s, num_flips, slew_gain, true_hover_throttle, safety_params, climb_g)
   -- 1. Pre-flight Checks
   if not (vehicle:get_mode() == vehicle_control.mode.GUIDED) then
     gcs:send_text(vehicle_control.MAV_SEVERITY.WARNING, "Flip requires Guided mode")
@@ -250,14 +251,14 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
   end
 
   -- 4. Calculate Manual Climb Parameters using the new t_flip
+  local climb_g_force = climb_g or 1.0
   local net_downward_accel_during_flip = 9.81 * (1 - (throttle_cmd_val / hover_throttle))
   local required_vz = 0.5 * net_downward_accel_during_flip * t_flip
   
-  -- Estimate acceleration from throttle. 2*hover_throttle gives ~1g of acceleration.
-  local climb_throttle = 2 * hover_throttle
-  
-  -- Time needed to accelerate to the required vertical velocity
-  local t_accel = required_vz / 9.81
+  -- Calculate climb throttle and duration based on desired G-force
+  local climb_accel_ms2 = climb_g_force * 9.81
+  local climb_throttle = math.min((climb_g_force + 1) * hover_throttle, 0.8)
+  local t_accel = required_vz / climb_accel_ms2
 
   -- 5. Prepare for Flip
   local initial_attitude_euler = Vector3f()
@@ -324,7 +325,6 @@ function vehicle_control.maneuver.flip_start(axis, rate_degs, throttle_level, fl
     throttle_cmd = throttle_cmd_val,
     last_angle = initial_angle,
     accumulated_angle = 0,
-    Kp = slew_gain or 0.5,
     num_flips = num_flips,
     hover_throttle = hover_throttle,
     accel_max_degs2 = accel_max_degs2,
@@ -356,22 +356,22 @@ local function _check_flip_safety(state, reset_fn)
   local abort_alt_cm = start_alt_cm - (state.safety_min_alt_margin_m * 100)
   
   -- 1. Horizontal drift check (crosstrack error)
-  local initial_vel_xy = state.initial_state.velocity:copy()
-  initial_vel_xy:z(0) -- Zero out Z for 2D calculation
+  local initial_vel_3d = state.initial_state.velocity:copy()
+  initial_vel_3d:z(0) -- Zero out Z for 3D calculation
   local drift
-  if initial_vel_xy:length() < 0.1 then
+  if initial_vel_3d:length() < 0.1 then
       -- If stationary, use simple radial distance
       drift = (current_pos_ned - state.initial_state.pos_ned):xy():length()
   else
       -- If moving, calculate crosstrack error
-      local displacement = current_pos_ned - state.initial_state.pos_ned
-      displacement:z(0) -- Zero out Z for 2D calculation
+      local displacement_3d = current_pos_ned - state.initial_state.pos_ned
+      displacement_3d:z(0) -- Zero out Z for 3D calculation
       
-      local vel_dir = initial_vel_xy:copy()
-      vel_dir:normalize()
+      local vel_dir_3d = initial_vel_3d:copy()
+      vel_dir_3d:normalize()
       
-      local projected = vel_dir:scale(displacement:dot(vel_dir))
-      drift = (displacement - projected):length()
+      local projected_3d = vel_dir_3d:scale(displacement_3d:dot(vel_dir_3d))
+      drift = (displacement_3d - projected_3d):length()
   end
 
   if drift > state.safety_max_drift then
@@ -531,8 +531,8 @@ function vehicle_control.maneuver.flip_update(state, reset_fn)
 
   elseif state.stage == vehicle_control.maneuver.stage.WAIT_FOR_DESCENT then
     -- Stage 4: WAIT_FOR_DESCENT
-    -- The vehicle's rotation is now stable. This stage holds a level attitude and waits
-    -- for the vehicle to descend back to its apex altitude before braking.
+    -- This stage holds a level attitude and waits for the vehicle to descend
+    -- back to its apex altitude before braking.
     vehicle:set_target_angle_and_rate_and_throttle(0, 0, initial_yaw_deg, 0, 0, 0, state.throttle_cmd)
 
     local current_loc = ahrs:get_location()
@@ -635,3 +635,4 @@ function vehicle_control.utils.has_arrived(target_location, tolerance_m)
 end
 
 return vehicle_control
+
