@@ -523,6 +523,34 @@ def do\_lua\_mynewapplet\_test(self):
   local my_val \= param:get('MYAPL_VALUE')
 ```
 
+### 5.7.1. Parameter Documentation
+
+<MANDATORY_RULE>
+CRITICAL DIRECTIVE: Every script parameter added via `param:add_param()` **must** be immediately preceded by a documentation block in the standard ArduPilot format. This is required for the parameter to be visible and editable in Ground Control Station software. The format is a multi-line comment block (`--[[ ... --]]`) containing specific `@` tags.
+</MANDATORY_RULE>
+
+**Correct Parameter Documentation Example:**
+```lua
+--[[
+  // @Param: MYAPL_ENABLE
+  // @DisplayName: My Applet Enable
+  // @Description: Enables or disables the main functionality of my applet.
+  // @User: Standard
+  // @Values: 0:Disabled,1:Enabled
+--]]
+local MYAPL_ENABLE = bind_add_param('ENABLE', 1, 0)
+
+--[[
+  // @Param: MYAPL_SPEED
+  // @DisplayName: My Applet Speed
+  // @Description: The target speed for the applet's maneuver.
+  // @User: Standard
+  // @Units: m/s
+  // @Range: 1 50
+--]]
+local MYAPL_SPEED = bind_add_param('SPEED', 2, 10)
+```
+
 ### 5.8. Surgical Modification
 
 <MANDATORY\_RULE\>
