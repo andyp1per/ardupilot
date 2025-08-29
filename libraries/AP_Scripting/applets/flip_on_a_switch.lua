@@ -25,7 +25,7 @@ local MAV_SEVERITY = {
 -- Parameters
 local PARAM_TABLE_KEY = 107
 local PARAM_TABLE_PREFIX = "FLIP_"
-assert(param:add_table(PARAM_TABLE_KEY, PARAM_TABLE_PREFIX, 9), 'flip_on_switch: could not add param table')
+assert(param:add_table(PARAM_TABLE_KEY, PARAM_TABLE_PREFIX, 10), 'flip_on_switch: could not add param table')
 
 function bind_add_param(name, idx, default_value)
     assert(param:add_param(PARAM_TABLE_KEY, idx, name, default_value), string.format('could not add param %s', name))
@@ -41,6 +41,7 @@ local FLIP_NUM = bind_add_param('NUM', 6, 1) -- For Simple Mode
 local FLIP_CHAN = bind_add_param('CHAN', 7, 0) -- For Advanced Mode
 local FLIP_FLICK_TO = bind_add_param('FLICK_TO', 8, 0.5) -- For Advanced Mode
 local FLIP_COMMIT_TO = bind_add_param('COMMIT_TO', 9, 0.75) -- For Advanced Mode
+local FLIP_CLIMB_G = bind_add_param('CLIMB_G', 10, 1.0) -- Climb G-force
 
 -- RC Function Constant for Simple Mode
 local SCRIPTING_AUX_FUNC = 300
@@ -132,7 +133,8 @@ function start_maneuver()
     flip_active = true
     flip_state = vehicle_control.maneuver.flip_start(
         FLIP_AXIS:get(), FLIP_RATE:get(), FLIP_THROTTLE:get(),
-        duration_s_arg, num_flips_arg, nil, FLIP_HOVER:get()
+        duration_s_arg, num_flips_arg, nil, FLIP_HOVER:get(),
+        nil, FLIP_CLIMB_G:get()
     )
     if flip_state == nil then
         gcs:send_text(MAV_SEVERITY.WARNING, "Flip: Failed to start flip")
