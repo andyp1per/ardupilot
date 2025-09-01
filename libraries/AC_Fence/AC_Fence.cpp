@@ -156,6 +156,14 @@ const AP_Param::GroupInfo AC_Fence::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("NTF_FREQ", 12, AC_Fence, _notify_freq, static_cast<float>(AC_FENCE_NOTIFY_DEFAULT)),
 
+    // @Param: MARGIN_XY
+    // @DisplayName: Fence Horizontal Margin
+    // @Description: Distance that autopilot's should maintain from the fence in the horizontal plane to avoid a breach. If set to 0 then FENCE_MARGIN is used.
+    // @Units: m
+    // @Range: 0 50
+    // @User: Standard
+    AP_GROUPINFO("MARGIN_XY", 13,  AC_Fence,   _margin_xy, 0),
+
     AP_GROUPEND
 };
 
@@ -420,7 +428,7 @@ bool AC_Fence::pre_arm_check_polygon(char *failure_msg, const uint8_t failure_ms
         return false;
     }
 
-    if (!_poly_loader.check_inclusion_circle_margin(_margin)) {
+    if (!_poly_loader.check_inclusion_circle_margin(get_horizontal_margin())) {
         hal.util->snprintf(failure_msg, failure_msg_len, "Polygon fence margin is less than inclusion circle radius");
         return false;
     }
@@ -435,7 +443,7 @@ bool AC_Fence::pre_arm_check_circle(char *failure_msg, const uint8_t failure_msg
         hal.util->snprintf(failure_msg, failure_msg_len, "Invalid Circle FENCE_RADIUS value");
         return false;
     }
-    if (_circle_radius < _margin) {
+    if (_circle_radius < get_horizontal_margin()) {
         hal.util->snprintf(failure_msg, failure_msg_len, "Circle FENCE_MARGIN is less than FENCE_RADIUS");
         return false;
     }
@@ -534,6 +542,11 @@ bool AC_Fence::pre_arm_check(char *failure_msg, const uint8_t failure_msg_len) c
         return false;
     }
 
+    if (_margin_xy < 0.0f) {
+        hal.util->snprintf(failure_msg, failure_msg_len, "Invalid FENCE_MARGIN_XY value");
+        return false;
+    }
+
     if (_alt_max < _alt_min) {
         hal.util->snprintf(failure_msg, failure_msg_len, "FENCE_ALT_MAX < FENCE_ALT_MIN");
         return false;
@@ -582,7 +595,7 @@ bool AC_Fence::check_fence_alt_max()
         }
         // old breach
         return false;
-    } else if (_curr_alt >= _alt_max - _margin) {
+    } else if (_curr_alt >= get_safe_alt_max()) {
         record_margin_breach(AC_FENCE_TYPE_ALT_MAX);
     } else {
         clear_margin_breach(AC_FENCE_TYPE_ALT_MAX);
@@ -635,7 +648,7 @@ bool AC_Fence::check_fence_alt_min()
         }
         // old breach
         return false;
-    } else if (_curr_alt <= _alt_min + _margin) {
+    } else if (_curr_alt <= get_safe_alt_min()) {
         record_margin_breach(AC_FENCE_TYPE_ALT_MIN);
     } else {
         clear_margin_breach(AC_FENCE_TYPE_ALT_MIN);
@@ -671,7 +684,7 @@ bool AC_Fence::auto_enable_fence_floor()
     const float _curr_alt = -alt; // translate Down to Up
 
     // check if we are over the altitude fence
-    if (!floor_enabled() && _curr_alt >= _alt_min + _margin) {
+    if (!floor_enabled() && _curr_alt >= get_safe_alt_min()) {
         enable(true, AC_FENCE_TYPE_ALT_MIN, false);
         GCS_SEND_TEXT(MAV_SEVERITY_NOTICE, "Min Alt fence enabled (auto enable)");
         return true;
@@ -702,7 +715,7 @@ bool AC_Fence::check_fence_polygon()
             return true;
         }
         return false;
-    } else if (_polygon_breach_distance < 0 && fabsf(_polygon_breach_distance) < _margin) {
+    } else if (_polygon_breach_distance < 0 && fabsf(_polygon_breach_distance) < get_horizontal_margin()) {
         record_margin_breach(AC_FENCE_TYPE_POLYGON);
     } else {
         clear_margin_breach(AC_FENCE_TYPE_POLYGON);
@@ -754,7 +767,7 @@ bool AC_Fence::check_fence_circle()
             return true;
         }
         return false;
-    } else if (_home_distance >= _circle_radius - _margin) {
+    } else if (_home_distance >= _circle_radius - get_horizontal_margin()) {
         record_margin_breach(AC_FENCE_TYPE_CIRCLE);
     } else {
         clear_margin_breach(AC_FENCE_TYPE_CIRCLE);
