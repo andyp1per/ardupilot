@@ -22,6 +22,8 @@ MAV_RESULT AC_DroneShowManager::handle_command_int_packet(const mavlink_command_
         //     contain the group index plus 1, zero meaning "all groups". MSB
         //     (sign bit) must be zero. We reserve the right to repurpose high
         //     bits in future versions and sacrifice higher group indices.
+        //     param7 of the command is remapped to param1 of the injected command,
+        //     while param7 in the injected command is always zero.
         if (is_zero(packet.param1)) {
             // Reload current show
             if (reload_or_clear_show(/* do_clear = */ 0)) {
@@ -69,10 +71,14 @@ MAV_RESULT AC_DroneShowManager::handle_command_int_packet(const mavlink_command_
                 // MSB is 1, ignore.
                 return MAV_RESULT_UNSUPPORTED;
             } else if (group_index_plus_one <= 0 || is_in_group(group_index_plus_one - 1)) {
+                // Broadcast to all groups (group_index_plus_one == 0) or
+                // targeted to our group
                 mavlink_command_int_t injected_packet = packet;
 
                 injected_packet.command = packet.y & UINT16_MAX;
+                injected_packet.param1 = packet.z;
                 injected_packet.y = 0;
+                injected_packet.z = 0;
 
                 return gcs().inject_command_int_packet(injected_packet);
             } else {
