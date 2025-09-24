@@ -63,9 +63,10 @@ Adherence to the official style guide is mandatory. The following is a summary o
   * \_deg for degrees  
   * \_rad for radians  
   * \_degs for degrees/second  
-  * \_rads for radians/second
+  * \_rads for radians/second  
+    Example:
 
-**Example:**uint16\_t get\_angle\_rad();  
+uint16\_t get\_angle\_rad();  
 float distance\_m;
 
 * **Parameters:**  
@@ -75,7 +76,7 @@ float distance\_m;
 
 ### **3.3. Comments**
 
-* **Parameter Documentation:** All parameters must have a documentation block for display in Ground Control Stations.  
+* **Parameter Documentation:** All user-facing parameters (AP\_Param) must have a documentation block for display in Ground Control Stations.  
   // @Param: RTL\_ALT  
   // @DisplayName: RTL Altitude  
   // @Description: The altitude the vehicle will return at.  
@@ -84,7 +85,10 @@ float distance\_m;
   // @Range: 200 8000  
   AP\_Int16 rtl\_alt;
 
-* **General Comments:** Use // for single-line comments and /\* ... \*/ for multi-line comments.
+* **Function Comments:** Every function declaration should be preceded by a comment explaining its purpose. For non-trivial functions, this comment should also describe each parameter and the function's return value.  
+* **General Comments:** Use // for single-line comments and /\* ... \*/ for multi-line comments.  
+* **Header Comments:** Every new .h and .cpp file should begin with a comment block that briefly describes its purpose and functionality. This helps other developers understand the scope of the file at a glance.  
+* **Descriptive Logic Comments:** It is mandatory to add comments that explain the purpose of new or modified code blocks, especially for complex logic like state machines, algorithms, or non-obvious calculations. Comments should explain the "why" behind the code, not just re-state what the code does.
 
 ### **3.4. C++ Best Practices**
 
@@ -142,6 +146,7 @@ Before concluding a C++ development task, the following checklist **must** be co
    * Are all new parameters properly documented for the GCS?  
    * Is the code free of dynamic memory allocation in critical sections?  
    * Are descriptive comments included for complex logic?  
+   * Are all functions and their parameters clearly commented?  
 2. **\[ \] SITL Autotest Offer:**  
    * Have you explicitly offered to generate a SITL autotest to verify the new functionality?  
    * Are you prepared to add the test as a new method to the appropriate vehicle test suite?
