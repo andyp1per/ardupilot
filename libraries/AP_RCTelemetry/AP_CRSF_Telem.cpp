@@ -198,30 +198,15 @@ bool AP_CRSF_Telem::process_rf_mode_changes()
     const AP_RCProtocol_CRSF::RFMode current_rf_mode = get_rf_mode();
     uint32_t now = AP_HAL::millis();
 
-    // the presence of a uart indicates that we are using CRSF for RC control
     AP_RCProtocol_CRSF* crsf = AP::crsf();
-    AP_HAL::UARTDriver* uart = nullptr;
-    if (crsf != nullptr) {
-        uart = crsf->get_UART();
-    }
-
-    if (uart == nullptr) {
+    if (crsf == nullptr) {
+        // not yet available
         return true;
     }
 
     if (!crsf->is_detected()) {
         return false;
     }
-    // not ready yet
-    if (!uart->is_initialized()) {
-        return false;
-    }
-#if !defined (STM32H7)
-    // warn the user if their setup is sub-optimal, H7 does not need DMA on serial port
-    if (_telem_bootstrap_msg_pending && !uart->is_dma_enabled()) {
-        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "%s: running on non-DMA serial port", get_protocol_string());
-    }
-#endif
     // note if option was set to show LQ in place of RSSI
     bool current_lq_as_rssi_active = rc().option_is_enabled(RC_Channels::Option::USE_CRSF_LQ_AS_RSSI);
     if(_telem_bootstrap_msg_pending || _noted_lq_as_rssi_active != current_lq_as_rssi_active){
@@ -430,7 +415,7 @@ bool AP_CRSF_Telem::is_packet_ready(uint8_t idx, bool queue_empty)
     case GENERAL_COMMAND:
         return _baud_rate_request.pending || _bind_request_pending;
     case VERSION_PING:
-        return _crsf_version.pending && AP::crsf()->is_detected(); // only send pings if protocol has been detected
+        return _crsf_version.pending && AP::crsf() && AP::crsf()->is_detected(); // only send pings if protocol has been detected
     case HEARTBEAT:
         return true; // always send heartbeat if enabled
     case DEVICE_PING:
@@ -737,13 +722,18 @@ void AP_CRSF_Telem::process_command_frame(CommandFrame* command)
     if (command->origin != 0 && command->origin != AP_RCProtocol_CRSF::CRSF_ADDRESS_CRSF_RECEIVER) {
         return;
     }
+    
+    AP_RCProtocol_CRSF* crsf = AP::crsf();
+    if (crsf == nullptr) {
+        return;
+    }
 
     switch (command->payload[0]) {
         case AP_RCProtocol_CRSF::CRSF_COMMAND_GENERAL_CRSF_SPEED_PROPOSAL: {
             uint32_t baud_rate = command->payload[2] << 24 | command->payload[3] << 16
                 | command->payload[4] << 8 | command->payload[5];
             _baud_rate_request.port_id = command->payload[1];
-            _baud_rate_request.valid = AP::crsf()->change_baud_rate(baud_rate);
+            _baud_rate_request.valid = crsf->change_baud_rate(baud_rate);
             _baud_rate_request.pending = true;
             debug("requested baud rate change %lu", baud_rate);
             break;
@@ -2000,7 +1990,7 @@ void AP_CRSF_Telem::get_multi_packet_passthrough_telem_data(uint8_t size)
   fetch CRSF frame data
   if is_tx_active is true then this will be a request for telemetry after receiving an RC frame
  */
-bool AP_CRSF_Telem::_get_telem_data(AP_RCProtocol_CRSF::Frame* data, bool is_tx_active)
+bool AP_CRSF_Telem::_get_telem_data(const AP_RCProtocol_CRSF* crsf_port, AP_RCProtocol_CRSF::Frame* data, bool is_tx_active)
 {
     memset(&_telem, 0, sizeof(TelemetryPayload));
     // update telemetry tasks if we either lost or regained the transmitter
@@ -2042,12 +2032,12 @@ bool AP_CRSF_Telem::process_frame(AP_RCProtocol_CRSF::FrameType frame_type, void
 /*
   fetch data for an external transport, such as CRSF
  */
-bool AP_CRSF_Telem::get_telem_data(AP_RCProtocol_CRSF::Frame* data, bool is_tx_active)
+bool AP_CRSF_Telem::get_telem_data(const AP_RCProtocol_CRSF* crsf_port, AP_RCProtocol_CRSF::Frame* data, bool is_tx_active)
 {
     if (!get_singleton()) {
         return false;
     }
-    return singleton->_get_telem_data(data, is_tx_active);
+    return singleton->_get_telem_data(crsf_port, data, is_tx_active);
 }
 
 AP_CRSF_Telem *AP_CRSF_Telem::get_singleton(void) {
@@ -2070,3 +2060,4 @@ namespace AP {
 };
 
 #endif  // HAL_CRSF_TELEM_ENABLED
+
