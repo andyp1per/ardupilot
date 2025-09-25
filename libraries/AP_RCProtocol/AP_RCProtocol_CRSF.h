@@ -27,6 +27,7 @@
 #include <AP_Math/AP_Math.h>
 #include <RC_Channel/RC_Channel.h>
 #include "SoftSerial.h"
+#include <AP_SerialManager/AP_SerialManager.h>
 #include <AP_OSD/AP_OSD_config.h>
 
 #define CRSF_MAX_CHANNELS   24U      // Maximum number of channels from crsf datastream
@@ -39,12 +40,26 @@
 #define CRSF_TX_TIMEOUT    500000U   // the period after which the transmitter is considered disconnected (matches copters failsafe)
 #define CRSF_RX_TIMEOUT    150000U   // the period after which the receiver is considered disconnected (>ping frequency)
 
+class AP_CRSF_Protocol;
+
 class AP_RCProtocol_CRSF : public AP_RCProtocol_Backend {
 public:
+    // a CRSF port can be used for RC IN, VTX control, or RC OUT
+    enum class PortMode : uint8_t {
+        PASSTHROUGH_RCIN,
+        DIRECT_VTX,
+        DIRECT_RCOUT,
+    };
+
+    // Constructor for RCIN "passthrough" mode (called by AP_RCProtocol)
     AP_RCProtocol_CRSF(AP_RCProtocol &_frontend);
+    // Constructor for "direct-attach" modes (called by manager)
+    AP_RCProtocol_CRSF(AP_RCProtocol &_frontend, PortMode mode, AP_HAL::UARTDriver* uart);
     virtual ~AP_RCProtocol_CRSF();
+    // entry point for bytes from high-level RCIN protocol discriminator
     void process_byte(uint8_t byte, uint32_t baudrate) override;
     void process_handshake(uint32_t baudrate) override;
+    // main update call, used for polling UART in direct-attach modes
     void update(void) override;
 #if HAL_CRSF_TELEM_ENABLED
     void start_bind(void) override;
@@ -74,10 +89,18 @@ public:
         return _last_tx_frame_time_us != 0 && AP_HAL::micros() - _last_tx_frame_time_us < CRSF_TX_TIMEOUT;
     }
 
-    // get singleton instance
-    static AP_RCProtocol_CRSF* get_singleton() {
-        return _singleton;
-    }
+#if AP_CRSF_OUT_ENABLED
+    // send RC channels out
+    bool send_rc_channels(const uint16_t* channels, uint8_t nchannels);
+#endif
+
+    // Manager functions
+    static void manager_init();
+    static void manager_update();
+    // get singleton instance for RCIN
+    static AP_RCProtocol_CRSF* get_rcin_singleton();
+    // get singleton instance for any direct attach port
+    static AP_RCProtocol_CRSF* get_direct_attach_singleton(AP_SerialManager::SerialProtocol protocol, uint8_t instance);
 
     enum FrameType {
         CRSF_FRAMETYPE_GPS = 0x02,
@@ -322,6 +345,14 @@ public:
     const char* get_protocol_string(ProtocolType protocol) const;
 
 private:
+    // private class to hold static state for the manager
+    class Manager_State {
+        friend class AP_RCProtocol_CRSF;
+        static AP_RCProtocol_CRSF* _instances[HAL_NUM_SERIAL_PORTS];
+        static AP_RCProtocol_CRSF* _rcin_singleton;
+        static bool _init_done;
+    };
+
     struct Frame _frame;
     uint8_t *_frame_bytes = (uint8_t*)&_frame;
     struct Frame _telemetry_frame;
@@ -329,22 +360,24 @@ private:
 
     const uint8_t MAX_CHANNELS = MIN((uint8_t)CRSF_MAX_CHANNELS, (uint8_t)MAX_RCIN_CHANNELS);
 
-    static AP_RCProtocol_CRSF* _singleton;
+    AP_CRSF_Protocol* _protocol_helper;
 
     void _process_byte(uint8_t byte);
     bool check_frame(uint32_t timestamp_us);
     void skip_to_next_frame(uint32_t timestamp_us);
     bool decode_crsf_packet();
-    bool process_telemetry(bool check_constraint = true);
+    bool process_telemetry(bool check_constraint = true) const;
     void process_link_stats_frame(const void* data);
     void process_link_stats_rx_frame(const void* data);
     void process_link_stats_tx_frame(const void* data);
-    // crsf v3 decoding
-    void decode_variable_bit_channels(const uint8_t* data, uint8_t frame_length, uint8_t nchannels, uint16_t *values);
 
-    void write_frame(Frame* frame);
+    void write_frame(Frame* frame) const;
     void start_uart();
-    AP_HAL::UARTDriver* get_current_UART() { return (_uart ? _uart : get_available_UART()); }
+    AP_HAL::UARTDriver* get_current_UART() const {
+        if (_uart) return _uart;
+        // Fallback for RCIN mode
+        return get_available_UART();
+    }
 
     uint16_t _channels[CRSF_MAX_CHANNELS];    /* buffer for extracted RC channel data as pulsewidth in microseconds */
 
@@ -353,9 +386,10 @@ private:
     uint32_t _last_uart_start_time_ms;
     uint32_t _last_rx_frame_time_us;
     uint32_t _start_frame_time_us;
-    bool telem_available;
+    mutable bool telem_available;
     uint32_t _new_baud_rate;
     bool _crsf_v3_active;
+    PortMode _mode;
 
     bool _use_lq_for_rssi;
     int16_t derive_scaled_lq_value(uint8_t uplink_lq);
@@ -368,7 +402,9 @@ private:
 };
 
 namespace AP {
+    // Note: this function is now a legacy accessor for the RCIN singleton instance
     AP_RCProtocol_CRSF* crsf();
 };
 
 #endif  // AP_RCPROTOCOL_CRSF_ENABLED
+
