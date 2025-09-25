@@ -1,0 +1,75 @@
+/*
+ * This file is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This file is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/*
+ * AP_CRSF_Out.h - High-level driver for CRSF RC Output
+ */
+#pragma once
+
+#include <AP_RCProtocol/AP_RCProtocol_config.h>
+
+#if AP_CRSF_OUT_ENABLED
+
+#include <AP_HAL/AP_HAL.h>
+#include <AP_Param/AP_Param.h>
+
+class AP_RCProtocol_CRSF;
+
+/*
+ * The AP_CRSF_Out class provides the high-level "application" logic for the
+ * CRSF RC Output feature. It is responsible for reading servo output values
+ * from the main SRV_Channels and telling its underlying CRSF protocol instance
+ * to send them at a user-configurable rate.
+ */
+class AP_CRSF_Out {
+public:
+    AP_CRSF_Out();
+
+    /* Do not allow copies */
+    CLASS_NO_COPY(AP_CRSF_Out);
+
+    // one-time initialisation
+    void init();
+    // periodic update, called from the main vehicle scheduler
+    void update();
+
+    static const struct AP_Param::GroupInfo var_info[];
+    static AP_CRSF_Out* get_singleton();
+
+private:
+    static AP_CRSF_Out* _singleton;
+
+    bool _initialised;
+    uint32_t _last_frame_us;
+    uint32_t _frame_interval_us;
+
+    // @Param: RATE
+    // @DisplayName: CRSF output rate
+    // @Description: This sets the CRSF output frame rate in Hz for RC Out.
+    // @Range: 25 250
+    // @User: Advanced
+    // @Units: Hz
+    AP_Int16 _rate_hz;
+
+    // pointer to the CRSF protocol engine instance for our assigned UART
+    AP_RCProtocol_CRSF* _crsf_port;
+};
+
+namespace AP {
+    AP_CRSF_Out* crsf_out();
+};
+
+#endif // AP_CRSF_OUT_ENABLED
+
