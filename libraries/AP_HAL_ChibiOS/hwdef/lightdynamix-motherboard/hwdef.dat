@@ -2,7 +2,9 @@
 
 include ../lightdynamix-pixel/hwdef.dat
 
-define CHIBIOS_SHORT_BOARD_NAME "LD-Motherboard"
+APJ_BOARD_ID AP_HW_Dynamix_PYRO
+
+define CHIBIOS_SHORT_BOARD_NAME "Pyro"
 
 undef IMU
 
