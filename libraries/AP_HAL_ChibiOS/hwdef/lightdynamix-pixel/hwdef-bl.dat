@@ -2,3 +2,4 @@
 
 include ../MatekH743-bdshot/hwdef-bl.dat
 
+APJ_BOARD_ID AP_HW_Dynamix_PIXEL

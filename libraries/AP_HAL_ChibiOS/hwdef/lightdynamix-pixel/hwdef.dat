@@ -2,4 +2,6 @@
 
 include ../MatekH743-bdshot/hwdef.dat
 
+APJ_BOARD_ID AP_HW_Dynamix_PIXEL
+
 define ADVANCED_FAILSAFE 1
