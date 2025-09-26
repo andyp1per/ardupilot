@@ -319,7 +319,8 @@
 #if defined(STM32H7) || CONFIG_HAL_BOARD == HAL_BOARD_SITL
 // Enough for a double-notch per motor on an octa using three IMUs and one harmonics
 // plus one static notch with one double-notch harmonics
-#define HAL_HNF_MAX_FILTERS 78
+// or a quintuple notch-per-motor with four harmonics and one static notch with two harmonics
+#define HAL_HNF_MAX_FILTERS 86
 #elif defined(STM32F7)
 // Enough for a notch per motor on an octa using three IMUs and one harmonics
 // plus one static notch with one harmonics
