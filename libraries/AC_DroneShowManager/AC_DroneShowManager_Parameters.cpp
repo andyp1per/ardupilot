@@ -279,8 +279,8 @@ const AP_Param::GroupInfo AC_DroneShowManager::var_info[] = {
 
     // @Param: PYRO_TYPE
     // @DisplayName: Pyrotechnic device type
-    // @Description: Specifies the type of the pyrotechnic device that is used to trigger pyrotechnic effects during the show
-    // @Values: 0:None, 1:Debug, 2:SingleServo, 3:MultipleServos
+    // @Description: Specifies the type of the pyrotechnic device that is used to trigger pyrotechnic effects during the show. For Cobra devices, set the protocol of the corresponding UART to "Volz servo out".
+    // @Values: 0:None, 1:Debug, 2:SingleServo, 3:MultipleServos, 4:Cobra
     // @User: Advanced
     AP_GROUPINFO("PYRO_TYPE", 34, AC_DroneShowManager, _params.pyro_spec.type, DroneShowPyroDeviceType_None),
 
@@ -292,7 +292,7 @@ const AP_Param::GroupInfo AC_DroneShowManager::var_info[] = {
 
     // @Param: PYRO_ITIME
     // @DisplayName: Ignition duration for pyrotechnic events
-    // @Description: Duration for which the pyrotechnic device is ignited, in milliseconds. Zero means forever.
+    // @Description: Duration for which the pyrotechnic device is ignited, in milliseconds. Zero means forever. May be ignored by the pyrotechnic device if it manages ignition time on its own.
     // @User: Advanced
     AP_GROUPINFO("PYRO_ITIME", 36, AC_DroneShowManager, _params.pyro_spec.ignition_duration_msec, 3000),
 
