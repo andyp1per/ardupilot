@@ -24,6 +24,7 @@
 #include "AP_RCProtocol.h"
 #include "AP_RCProtocol_CRSF.h"
 #include "AP_CRSF_Protocol.h"
+#include "AP_CRSF_Out.h"
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Math/AP_Math.h>
 #include <AP_Math/crc.h>
@@ -191,6 +192,7 @@ void AP_RCProtocol_CRSF::manager_init()
 #if AP_CRSF_OUT_ENABLED
         } else if (protocol == AP_SerialManager::SerialProtocol_CRSF_Output) {
             mode = PortMode::DIRECT_RCOUT;
+            AP::crsf_out()->init();
 #endif
         } else {
             continue;
@@ -215,6 +217,9 @@ void AP_RCProtocol_CRSF::manager_update()
     for (uint8_t i = 0; i < HAL_NUM_SERIAL_PORTS; i++) {
         if (Manager_State::_instances[i] != nullptr && Manager_State::_instances[i]->_mode != PortMode::PASSTHROUGH_RCIN) {
             Manager_State::_instances[i]->update();
+#if AP_CRSF_OUT_ENABLED
+            AP::crsf_out()->update();
+#endif
         }
     }
 }
