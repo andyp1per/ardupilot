@@ -25,6 +25,16 @@
 #include <SRV_Channel/SRV_Channel.h>
 #include <AP_RCProtocol/AP_RCProtocol_CRSF.h>
 
+//#define CRSF_RCOUT_DEBUG
+#ifdef CRSF_RCOUT_DEBUG
+# include <AP_HAL/AP_HAL.h>
+extern const AP_HAL::HAL& hal;
+static uint32_t last_update_debug_ms = 0;
+# define debug_rcout(fmt, args...) do { if (hal.console) { hal.console->printf("CRSF_OUT: " fmt "\n", ##args); } } while(0)
+#else
+# define debug_rcout(fmt, args...)
+#endif
+
 const AP_Param::GroupInfo AP_CRSF_Out::var_info[] = {
     AP_GROUPINFO("RATE",  1, AP_CRSF_Out, _rate_hz, 50),
     AP_GROUPEND
@@ -48,6 +58,7 @@ void AP_CRSF_Out::init()
     _crsf_port = AP_RCProtocol_CRSF::get_direct_attach_singleton(AP_SerialManager::SerialProtocol_CRSF_Output, 0);
 
     if (_crsf_port == nullptr) {
+        debug_rcout("Init failed: No CRSF_Output port found");
         // not configured on any port
         return;
     }
@@ -60,12 +71,20 @@ void AP_CRSF_Out::init()
     }
 
     _initialised = true;
+    debug_rcout("Initialised at %u Hz, interval %lu us", (unsigned)rate, (unsigned long)_frame_interval_us);
 }
 
 // Main update call, sends RC frames at the configured rate
 void AP_CRSF_Out::update()
 {
     if (!_initialised) {
+#ifdef CRSF_RCOUT_DEBUG
+        const uint32_t now_ms = AP_HAL::millis();
+        if (now_ms - last_update_debug_ms > 5000) { // print every 5s
+            last_update_debug_ms = now_ms;
+            debug_rcout("Update skipped: not initialised");
+        }
+#endif
         return;
     }
 
@@ -75,8 +94,8 @@ void AP_CRSF_Out::update()
     }
     _last_frame_us = now;
 
-    uint16_t channels[16] {};
-    const uint8_t nchan = MIN(NUM_SERVO_CHANNELS, (uint8_t)16);
+    uint16_t channels[CRSF_MAX_CHANNELS] {};
+    const uint8_t nchan = MIN(NUM_SERVO_CHANNELS, (uint8_t)CRSF_MAX_CHANNELS);
 
     for (uint8_t i = 0; i < nchan; ++i) {
         SRV_Channel *c = SRV_Channels::srv_channel(i);
@@ -85,6 +104,13 @@ void AP_CRSF_Out::update()
         }
     }
 
+#ifdef CRSF_RCOUT_DEBUG
+    const uint32_t now_ms = AP_HAL::millis();
+    if (now_ms - last_update_debug_ms > 1000) {
+        last_update_debug_ms = now_ms;
+        debug_rcout("Updating channels. CH1=%u CH2=%u CH3=%u", channels[0], channels[1], channels[2]);
+    }
+#endif
     _crsf_port->send_rc_channels(channels, nchan);
 }
 
