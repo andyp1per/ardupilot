@@ -350,7 +350,7 @@ private:
         friend class AP_RCProtocol_CRSF;
         static AP_RCProtocol_CRSF* _instances[HAL_NUM_SERIAL_PORTS];
         static AP_RCProtocol_CRSF* _rcin_singleton;
-        static bool _init_done;
+        static uint32_t _last_manager_check_ms;
     };
 
     struct Frame _frame;

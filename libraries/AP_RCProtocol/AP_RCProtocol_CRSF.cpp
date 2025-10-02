@@ -169,12 +169,12 @@ const uint16_t AP_RCProtocol_CRSF::RF_MODE_RATES[RFMode::RF_MODE_MAX_MODES] = {
 // Manager for CRSF instances
 AP_RCProtocol_CRSF* AP_RCProtocol_CRSF::Manager_State::_instances[HAL_NUM_SERIAL_PORTS];
 AP_RCProtocol_CRSF* AP_RCProtocol_CRSF::Manager_State::_rcin_singleton = nullptr;
-bool AP_RCProtocol_CRSF::Manager_State::_init_done;
+uint32_t AP_RCProtocol_CRSF::Manager_State::_last_manager_check_ms;
 
 // Manager init to find all configured CRSF ports
 void AP_RCProtocol_CRSF::manager_init()
 {
-    if (Manager_State::_init_done) {
+    if (AP_HAL::millis() - Manager_State::_last_manager_check_ms < 1000) {
         return;
     }
 
@@ -192,7 +192,6 @@ void AP_RCProtocol_CRSF::manager_init()
 #if AP_CRSF_OUT_ENABLED
         } else if (protocol == AP_SerialManager::SerialProtocol_CRSF_Output) {
             mode = PortMode::DIRECT_RCOUT;
-            AP::crsf_out()->init();
 #endif
         } else {
             continue;
@@ -202,10 +201,15 @@ void AP_RCProtocol_CRSF::manager_init()
             // prevent creating duplicate instances
             if (Manager_State::_instances[i] == nullptr) {
                 Manager_State::_instances[i] = new AP_RCProtocol_CRSF(AP::RC(), mode, uart);
+#if AP_CRSF_OUT_ENABLED
+                if (protocol == AP_SerialManager::SerialProtocol_CRSF_Output) {
+                    AP::crsf_out()->init();
+                }
+#endif
             }
         }
     }
-    Manager_State::_init_done = true;
+    Manager_State::_last_manager_check_ms = AP_HAL::millis();
 }
 
 // Manager update to poll all direct-attach ports
