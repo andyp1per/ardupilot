@@ -457,15 +457,6 @@ public:
     // at all. Returns false if the motors are running, the show file is corrupted or
     // there was an IO error.
     bool reload_show_from_storage() WARN_IF_UNUSED;
-
-    // Replaces the end of a trajectory from the given landing time to land smoothly to
-    // the given landing position. Modifies the trajectory and the landing time in place.
-    // Returns true on success, false on error.
-    bool replace_end_of_trajectory_to_land_at(
-        struct sb_trajectory_s* trajectory, 
-        float* landing_time_sec,
-        sb_vector3_with_yaw_t landing_position
-    );
     
     // Asks the drone show manager to schedule the start of a collective RTL
     // maneuver at the given timestamp. Returns whether the CRTL maneuver was
