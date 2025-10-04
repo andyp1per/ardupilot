@@ -121,7 +121,7 @@ public:
     void process_pulse_list(const uint32_t *widths, uint16_t n, bool need_swap);
     bool process_byte(uint8_t byte, uint32_t baudrate);
     void process_handshake(uint32_t baudrate);
-    void update(void) WARN_IF_UNUSED;
+    void update(void);
 
     bool failsafe_active() const {
         return _failsafe_active;
