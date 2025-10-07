@@ -1,0 +1,28 @@
+
+# hw definition file for processing by chibios_hwdef.py
+# for OMNIBUSF4 hardware.
+# thanks to betaflight for pin information
+
+include ../TBS_LUCID_PRO/hwdef.dat
+
+USE_BOOTLOADER_FROM_BOARD TBS_LUCID_PRO
+
+undef PB8 PB9
+undef HAL_BATT_MONITOR_DEFAULT
+undef HAL_BATT_CURR_PIN
+undef HAL_BATT_CURR_SCALE
+undef HAL_BATT_VOLT_PIN
+undef HAL_BATT_VOLT_SCALE
+undef HAL_BATT_MONITOR_DEFAULT
+
+# INA226 battery monitor
+define HAL_BATTMON_INA2XX_BUS 0
+define HAL_BATTMON_INA2XX_ADDR 0
+define HAL_BATT_MONITOR_DEFAULT 21
+define AP_BATTERY_INA2XX_ENABLED 1
+
+# I2C1
+PB8 I2C1_SCL I2C1 PULLUP
+PB9 I2C1_SDA I2C1 PULLUP
+
+SPIDEV dataflash SPI3 DEVID1 FLASH1_CS     MODE3 32*MHZ 32*MHZ
