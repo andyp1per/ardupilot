@@ -148,6 +148,10 @@ void AP_Periph_FW::rcout_handle_safety_state(uint8_t safety_state)
 
 void AP_Periph_FW::rcout_update()
 {
+    if (!g.servo_enabled) {
+        return;
+    }
+
     uint32_t now_ms = AP_HAL::millis();
 
     const uint16_t esc_timeout_ms = g.esc_command_timeout_ms >= 0 ? g.esc_command_timeout_ms : 0; // Don't allow negative timeouts!
