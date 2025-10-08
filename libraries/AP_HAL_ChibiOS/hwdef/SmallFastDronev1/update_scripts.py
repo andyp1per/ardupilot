@@ -21,19 +21,20 @@ Dependencies:
 
 Example Usage:
 1. Make the script executable (on Linux/macOS):
-   chmod +x mavproxy_uploader.py
+   chmod +x update_scripts.py
 
 2. Sync a local 'scripts' directory to a SITL instance:
-   ./mavproxy_uploader.py --connect udp:127.0.0.1:14550 ./my_lua_scripts
+   ./update_scripts.py --connect udp:127.0.0.1:14550 ./my_lua_scripts
 
 3. Sync a directory to a vehicle connected via a serial port:
-   python mavproxy_uploader.py --connect /dev/ttyACM0 /path/to/local/scripts
+   python update_scripts.py --connect /dev/ttyACM0 /path/to/local/scripts
 """
 
 import argparse
 import os
 import sys
 import time
+import traceback  # Import the traceback module
 from pymavlink import mavutil
 from pymavlink.mavftp import MAVFTP, FtpError, DirectoryEntry
 
@@ -83,8 +84,7 @@ def sync_directory(connect_str: str, source_dir: str):
         
         if not directory_exists(ftp, "/APM"):
             print("Directory '/APM' not found, creating it...")
-            ftp.cmd_mkdir(["/APM"])
-            result = ftp.process_ftp_reply('CreateDirectory')
+            result = ftp.cmd_mkdir(["/APM"])
             if result.error_code != FtpError.Success:
                 result.display_message()
                 raise RuntimeError("Failed to create /APM directory")
@@ -93,8 +93,7 @@ def sync_directory(connect_str: str, source_dir: str):
 
         if not directory_exists(ftp, "/APM/scripts"):
             print("Directory '/APM/scripts' not found, creating it...")
-            ftp.cmd_mkdir(["/APM/scripts"])
-            result = ftp.process_ftp_reply('CreateDirectory')
+            result = ftp.cmd_mkdir(["/APM/scripts"])
             if result.error_code != FtpError.Success:
                 result.display_message()
                 raise RuntimeError("Failed to create /APM/scripts directory")
@@ -109,10 +108,9 @@ def sync_directory(connect_str: str, source_dir: str):
             remote_path = f"/APM/scripts/{filename}"
             print(f"Uploading '{local_path}' to '{remote_path}'...")
             try:
-                # Initiate the put command
+                # Initiate the put command (this part is non-blocking and was already correct)
                 ftp.cmd_put([local_path, remote_path])
                 # Process replies until the operation is complete.
-                # A long timeout is needed for the actual file transfer.
                 result = ftp.process_ftp_reply('put', timeout=600)
 
                 if result.error_code == FtpError.Success:
@@ -123,6 +121,10 @@ def sync_directory(connect_str: str, source_dir: str):
                     result.display_message()
 
             except Exception as e:
+                # MODIFIED: Print the full stack trace for detailed debugging
+                print("\n--- DETAILED EXCEPTION TRACE ---")
+                traceback.print_exc()
+                print("------------------------------------")
                 print(f"\n  [FAILURE] An exception occurred during upload of '{filename}'. Reason: {e}")
                 # Attempt to cancel any stuck operation
                 ftp.cmd_cancel()
@@ -152,10 +154,8 @@ def directory_exists(ftp: MAVFTP, path: str) -> bool:
     print(f"\n[DEBUG] Checking if directory '{target_name}' exists in '{parent_dir}'...")
 
     try:
-        # Initiate list command
-        ftp.cmd_list([parent_dir])
-        # Process the reply
-        result = ftp.process_ftp_reply('ListDirectory')
+        # CORRECTED: cmd_list is now a blocking call. Use its direct return value.
+        result = ftp.cmd_list([parent_dir])
 
         if result.error_code != FtpError.Success:
             print(f"[DEBUG] Failed to list '{parent_dir}'. Assuming directory does not exist.")
@@ -168,7 +168,8 @@ def directory_exists(ftp: MAVFTP, path: str) -> bool:
         
         # The result is stored in the list_result attribute of the ftp object
         for entry in ftp.list_result:
-            entry_name = entry.name.strip()
+            # ArduPilot FTP server entries might have null terminators or whitespace
+            entry_name = entry.name.strip('\x00').strip()
             print(f"[DEBUG]   - Found entry: name='{entry.name}', stripped='{entry_name}', is_dir={entry.is_dir}")
             if entry_name == target_name and entry.is_dir:
                 print(f"[DEBUG]   >>> Match found for '{target_name}'.")
