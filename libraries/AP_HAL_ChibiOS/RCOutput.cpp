@@ -158,7 +158,7 @@ void RCOutput::init()
     chMtxObjectInit(&trigger_mutex);
     chVTObjectInit(&_dshot_rate_timer);
     // setup default output rate of 50Hz
-    set_freq(0xFFFF ^ ((1U<<chan_offset)-1), 50);
+    set_freq(0xFFFF ^ ((1U<<chan_offset)-1), 20);
 
     safety_state = AP_HAL::Util::SAFETY_DISARMED;
 
