@@ -1,7 +1,7 @@
 -- crsf_helper.lua
 -- A reusable helper library to simplify the creation of ArduPilot CRSF menus.
 -- This library abstracts away the complexity of binary packing/unpacking and event loop management.
--- Version 2.1: Fixed memory corruption bug by keeping references to all CRSF objects.
+-- Version 2.2: Balanced the event loop to prevent crashes on busy menus while maintaining responsiveness.
 
 local helper = {}
 
@@ -122,7 +122,7 @@ end
 local function event_loop()
     -- Process multiple events per cycle to keep the menu responsive, but with a limit
     -- to prevent starving the main scheduler, which can cause a crash.
-    local MAX_EVENTS_PER_CYCLE = 10
+    local MAX_EVENTS_PER_CYCLE = 5
     local events_processed = 0
 
     while events_processed < MAX_EVENTS_PER_CYCLE do
@@ -198,8 +198,8 @@ local function event_loop()
         ::continue_loop::
     end
 
-    -- Reschedule the event loop to run again. A shorter delay makes the UI feel snappier.
-    return event_loop, 10
+    -- Reschedule the event loop to run again. 20ms provides a good balance of responsiveness and stability.
+    return event_loop, 20
 end
 
 
