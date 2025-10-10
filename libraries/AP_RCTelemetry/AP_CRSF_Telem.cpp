@@ -544,7 +544,7 @@ bool AP_CRSF_Telem::_process_frame(AP_RCProtocol_CRSF::FrameType frame_type, voi
         break;
 
     case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_COMMAND:
-        process_command_frame((CommandFrame*)data);
+        process_command_frame((AP_CRSF_Protocol::CommandFrame*)data);
         break;
 
     default:
@@ -711,7 +711,7 @@ void AP_CRSF_Telem::process_device_info_frame(ParameterDeviceInfoFrame* info)
 }
 
 // request for a general command
-void AP_CRSF_Telem::process_command_frame(CommandFrame* command)
+void AP_CRSF_Telem::process_command_frame(AP_CRSF_Protocol::CommandFrame* command)
 {
     debug("process_command_frame: 0x%x -> 0x%x: 0x%x", command->origin, command->destination, command->payload[0]);
     if (command->destination != 0 && command->destination != AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER) {

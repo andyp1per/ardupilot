@@ -19,6 +19,7 @@
 #if HAL_CRSF_TELEM_ENABLED
 
 #include <AP_OSD/AP_OSD.h>
+#include <AP_RCProtocol/AP_CRSF_Protocol.h>
 #include <AP_RCProtocol/AP_RCProtocol_CRSF.h>
 #include "AP_RCTelemetry.h"
 #include <AP_HAL/utility/sparse-endian.h>
@@ -107,14 +108,6 @@ public:
 
     struct PACKED FlightModeFrame {
         char flight_mode[16]; // ( Null-terminated string )
-    };
-
-    // CRSF_FRAMETYPE_COMMAND
-    struct PACKED CommandFrame {
-        uint8_t destination;
-        uint8_t origin;
-        uint8_t command_id;
-        uint8_t payload[9]; // 8 maximum for LED command + crc8
     };
 
     // CRSF_FRAMETYPE_PARAM_DEVICE_PING
@@ -305,7 +298,7 @@ public:
     };
 
     union PACKED ExtendedFrame {
-        CommandFrame command;
+        AP_CRSF_Protocol::CommandFrame command;
         ParameterPingFrame ping;
         ParameterDeviceInfoFrame info;
         ParameterSettingsEntry param_entry;
@@ -396,7 +389,7 @@ private:
     void process_param_read_frame(ParameterSettingsReadFrame* read);
     void process_param_write_frame(ParameterSettingsWriteFrame* write, uint8_t length);
     void process_device_info_frame(ParameterDeviceInfoFrame* info);
-    void process_command_frame(CommandFrame* command);
+    void process_command_frame(AP_CRSF_Protocol::CommandFrame* command);
 
     // setup ready for passthrough operation
     void setup_wfq_scheduler(void) override;
