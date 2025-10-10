@@ -1,13 +1,13 @@
 -- gain_tuner.lua
--- A script to provide a CRSF menu for in-flight PID gain tuning.
+-- A script to provide a CRSF menu for in-flight PID gain tuning and utility functions.
 -- Allows for increasing or decreasing key PID gains for an entire axis at once.
--- This version includes Save/Revert functionality, stateful step-based adjustments,
--- and a configurable tuning step percentage.
+-- Includes Save/Revert, stateful step-based adjustments, and a configurable tuning step.
+-- Also includes utilities for logging and autotune setup.
 
 local crsf_helper = require('crsf_helper')
 
 -- MAVLink severity for GCS messages
-local MAV_SEVERITY = {INFO = 6, WARNING = 4}
+local MAV_SEVERITY = {INFO = 6, WARNING = 4, ERROR = 3}
 
 -- The percentage change for each step, can be changed via the menu
 local tuning_step_percent -- This will be initialized later from the menu definition
@@ -139,6 +139,95 @@ local function revert_all_gains()
 end
 
 -- ####################
+-- # UTILITY CALLBACKS
+-- ####################
+
+-- Sets parameters for batch logging
+local function toggle_batch_logging(enable)
+    if enable then
+        param:set('INS_LOG_BAT_CNT', 2048)
+        param:set('INS_LOG_BAT_LGCT', 32)
+        param:set('INS_LOG_BAT_LGIN', 10)
+        param:set('INS_LOG_BAT_MASK', 3)
+        param:set('INS_LOG_BAT_OPT', 4)
+        gcs:send_text(MAV_SEVERITY.INFO, "Batch logging enabled.")
+    else
+        param:set('INS_LOG_BAT_MASK', 0)
+        gcs:send_text(MAV_SEVERITY.INFO, "Batch logging disabled.")
+    end
+end
+
+-- Enables or disables fast attitude logging by modifying LOG_BITMASK
+local function toggle_fast_attitude_logging(enable)
+    local log_bitmask = Parameter('LOG_BITMASK')
+    local current_val = log_bitmask:get()
+    if enable then
+        if current_val % 2 == 0 then -- It's even, so add 1 to make it odd
+            log_bitmask:set(current_val + 1)
+            gcs:send_text(MAV_SEVERITY.INFO, "Fast attitude logging enabled.")
+        else
+            gcs:send_text(MAV_SEVERITY.INFO, "Fast attitude logging already enabled.")
+        end
+    else
+        if current_val % 2 ~= 0 then -- It's odd, so subtract 1 to make it even
+            log_bitmask:set(current_val - 1)
+            gcs:send_text(MAV_SEVERITY.INFO, "Fast attitude logging disabled.")
+        else
+            gcs:send_text(MAV_SEVERITY.INFO, "Fast attitude logging already disabled.")
+        end
+    end
+end
+
+-- Erases all logs from the flight controller
+local function erase_logs()
+    -- MAV_CMD_PREFLIGHT_STORAGE (245), param2 = 2 for erase logs
+    local result = gcs:run_command_int(245, {p2=2})
+    if result == 0 then -- MAV_RESULT_ACCEPTED
+        gcs:send_text(MAV_SEVERITY.INFO, "Log erase command sent.")
+    else
+        gcs:send_text(MAV_SEVERITY.ERROR, "Log erase command failed.")
+    end
+end
+
+-- Sets up parameters for an autotune session
+local function setup_autotune(axes_value, name)
+    param:set('AUTOTUNE_AGGR', 0.075)
+    param:set('AUTOTUNE_AXES', axes_value)
+    param:set('AUTOTUNE_MIN_D', 0.0003)
+    gcs:send_text(MAV_SEVERITY.INFO, "Autotune configured for: " .. name)
+end
+
+-- Sets the AUTOTUNE_GMBK parameter based on user selection
+local function on_backoff_change(selection)
+    local autotune_gmbk = Parameter('AUTOTUNE_GMBK')
+    if selection == "Soft Tune" then
+        autotune_gmbk:set(0.25)
+        gcs:send_text(MAV_SEVERITY.INFO, "Autotune Backoff set to 0.25 (Soft).")
+    elseif selection == "Firm Tune" then
+        autotune_gmbk:set(0.1)
+        gcs:send_text(MAV_SEVERITY.INFO, "Autotune Backoff set to 0.1 (Firm).")
+    end
+end
+
+-- Callback for the Fast Attitude Log on/off selection
+local function on_fast_att_log_change(selection)
+    if selection == "On" then
+        toggle_fast_attitude_logging(true)
+    elseif selection == "Off" then
+        toggle_fast_attitude_logging(false)
+    end
+end
+
+-- Callback for the Batch Logging on/off selection
+local function on_batch_log_change(selection)
+    if selection == "On" then
+        toggle_batch_logging(true)
+    elseif selection == "Off" then
+        toggle_batch_logging(false)
+    end
+end
+
+-- ####################
 -- # MENU DEFINITION
 -- ####################
 
@@ -173,6 +262,46 @@ local menu_definition = {
                 {type = 'COMMAND', name = "Decrease Gains", callback = function(v) if v then adjust_axis_gains("Yaw", -1) end end},
             }
         },
+        -- ====== AUTOTUNE MENU ======
+        {
+            type = 'MENU',
+            name = "Autotune",
+            items = {
+                {type = 'COMMAND', name = "Setup Roll/Pitch", callback = function(v) if v then setup_autotune(3, "Roll/Pitch") end end},
+                {type = 'COMMAND', name = "Setup Yaw", callback = function(v) if v then setup_autotune(4, "Yaw") end end},
+                {type = 'COMMAND', name = "Setup Yaw D Only", callback = function(v) if v then setup_autotune(8, "Yaw D") end end},
+                {
+                    type = 'SELECTION',
+                    name = "Backoff",
+                    options = {"Soft Tune", "Firm Tune"},
+                    default = 1, -- 1-based index for "Soft Tune"
+                    callback = on_backoff_change
+                }
+            }
+        },
+        -- ====== LOGGING MENU ======
+        {
+            type = 'MENU',
+            name = "Logging",
+            items = {
+                {
+                    type = 'SELECTION',
+                    name = "Batch Logging",
+                    options = {"Off", "On"},
+                    default = 1, -- 1-based index for "Off"
+                    callback = on_batch_log_change
+                },
+                {
+                    type = 'SELECTION',
+                    name = "Fast Attitude Log",
+                    options = {"Off", "On"},
+                    default = 1, -- 1-based index for "Off"
+                    callback = on_fast_att_log_change
+                },
+                {type = 'INFO', name = "Warning", info = "Erase is final"},
+                {type = 'COMMAND', name = "Erase All Logs", callback = function(v) if v then erase_logs() end end},
+            }
+        },
         -- ====== SETTINGS SUB-MENU ======
         {
             type = 'MENU',
@@ -184,7 +313,7 @@ local menu_definition = {
                     options = {"1%", "5%", "10%", "25%", "50%"},
                     default = 3, -- 1-based index for "10%"
                     callback = on_step_change
-                }
+                },
             }
         },
         -- ====== SAVE & REVERT SUB-MENU ======
@@ -204,13 +333,29 @@ local menu_definition = {
 -- # INITIALIZATION
 -- ####################
 
--- Find the settings definition in the menu table to get the default value
-local settings_menu = menu_definition.items[4]
+-- Initialize default Step %
+local settings_menu = menu_definition.items[6] -- Find the settings menu
 local step_selection = settings_menu.items[1]
 local default_step_string = step_selection.options[step_selection.default]
-
--- Initialize the tuning_step_percent with the default value from the menu
 on_step_change(default_step_string)
+
+-- Initialize default logging settings
+local logging_menu = menu_definition.items[5] -- Find the logging menu
+local batch_log_selection = logging_menu.items[1]
+local default_batch_log_string = batch_log_selection.options[batch_log_selection.default]
+on_batch_log_change(default_batch_log_string)
+
+local fast_log_selection = logging_menu.items[2]
+local default_fast_log_string = fast_log_selection.options[fast_log_selection.default]
+on_fast_att_log_change(default_fast_log_string)
+
+-- Initialize default Autotune Backoff setting
+local autotune_menu = menu_definition.items[4] -- Find the autotune menu
+local backoff_selection = autotune_menu.items[4]
+local default_backoff_string = backoff_selection.options[backoff_selection.default]
+on_backoff_change(default_backoff_string)
+
 
 -- Pass the menu definition to the helper library to build the menu and start the event loop.
 return crsf_helper.init(menu_definition)
+
