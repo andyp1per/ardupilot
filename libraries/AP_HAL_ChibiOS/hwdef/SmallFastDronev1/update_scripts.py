@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """
-Pymavlink Directory Uploader Script
+Pymavlink Directory Uploader Script (with subdirectory support)
 
-This script uses the MAVFTP class from the pymavlink library to upload the
-contents of a local directory to the /APM/scripts/ directory on a vehicle
-running ArduPilot.
-
-This version is specifically adapted to use the MAVFTP class API provided
-by the user.
+This script uses the MAVFTP class from the pymavlink library to recursively
+upload the contents of a local directory to the /APM/scripts/ directory on a
+vehicle running ArduPilot, preserving the subdirectory structure.
 
 It automates the process of:
 1. Connecting to the vehicle.
-2. Attempting to create '/APM' and '/APM/scripts' and handling 'FileExists'
-   errors gracefully.
-3. Uploading each file from the specified local source directory individually.
-4. Terminating the connection gracefully.
+2. Traversing the local source directory.
+3. Creating a corresponding directory structure on the remote vehicle.
+4. Uploading each file to its correct remote location.
+5. Terminating the connection gracefully.
 
 Dependencies:
 - Pymavlink (with mavftp module)
@@ -23,7 +20,7 @@ Example Usage:
 1. Make the script executable (on Linux/macOS):
    chmod +x update_scripts.py
 
-2. Sync a local 'scripts' directory to a SITL instance:
+2. Sync a local 'scripts' directory (including subdirectories) to a SITL instance:
    ./update_scripts.py --connect udp:127.0.0.1:14550 ./my_lua_scripts
 
 3. Sync a directory to a vehicle connected via a serial port:
@@ -34,24 +31,44 @@ import argparse
 import os
 import sys
 import time
-import traceback  # Import the traceback module
+import traceback
 from pymavlink import mavutil
 from pymavlink.mavftp import MAVFTP, FtpError, DirectoryEntry
 
+def ensure_remote_dir(ftp: MAVFTP, remote_path: str):
+    """
+    Ensures a full directory path exists on the remote, creating parts as needed.
+    """
+    parts = remote_path.strip('/').split('/')
+    current_remote_path = ""
+    for part in parts:
+        current_remote_path += f"/{part}"
+        if not directory_exists(ftp, current_remote_path):
+            print(f"Creating remote directory '{current_remote_path}'...")
+            result = ftp.cmd_mkdir([current_remote_path])
+            if result.error_code not in [FtpError.Success, FtpError.FileExists]:
+                result.display_message()
+                raise RuntimeError(f"Failed to create directory {current_remote_path}")
+
 def sync_directory(connect_str: str, source_dir: str):
     """
-    Connects to a vehicle and syncs a local directory to the vehicle's
-    /APM/scripts/ directory using the MAVFTP class.
+    Connects to a vehicle and recursively syncs a local directory to the
+    vehicle's /APM/scripts/ directory.
     """
     if not os.path.isdir(source_dir):
         print(f"Error: Source directory not found at '{source_dir}'")
         sys.exit(1)
 
-    files_to_upload = sorted([
-        (f, os.path.join(source_dir, f))
-        for f in os.listdir(source_dir)
-        if os.path.isfile(os.path.join(source_dir, f))
-    ])
+    # --- Step 1: Discover all files and their remote paths ---
+    files_to_upload = []
+    for dirpath, _, filenames in os.walk(source_dir):
+        for filename in filenames:
+            local_path = os.path.join(dirpath, filename)
+            # Create a relative path to replicate the structure remotely
+            relative_path = os.path.relpath(local_path, source_dir)
+            # Ensure forward slashes for the remote path
+            remote_path = f"/APM/scripts/{relative_path.replace(os.path.sep, '/')}"
+            files_to_upload.append((local_path, remote_path))
 
     if not files_to_upload:
         print("\nSource directory is empty. No files to upload.")
@@ -67,7 +84,6 @@ def sync_directory(connect_str: str, source_dir: str):
         master.wait_heartbeat(timeout=10)
         print("Heartbeat received. Vehicle is connected.")
 
-        # Add a delay to allow the vehicle to initialize its FTP server
         print("Waiting for vehicle to settle...")
         time.sleep(1)
 
@@ -79,38 +95,21 @@ def sync_directory(connect_str: str, source_dir: str):
         sys.exit(1)
 
     try:
-        # --- Step 1: Ensure remote directories exist ---
+        # --- Step 2: Ensure all remote directories exist ---
         print("\n--- Ensuring remote directories exist ---")
-        
-        if not directory_exists(ftp, "/APM"):
-            print("Directory '/APM' not found, creating it...")
-            result = ftp.cmd_mkdir(["/APM"])
-            if result.error_code != FtpError.Success:
-                result.display_message()
-                raise RuntimeError("Failed to create /APM directory")
-        else:
-            print("Directory '/APM' already exists.")
+        # Get a unique set of directories needed for all the files
+        remote_dirs = sorted(list(set(os.path.dirname(remote) for _, remote in files_to_upload)))
+        for r_dir in remote_dirs:
+            ensure_remote_dir(ftp, r_dir)
 
-        if not directory_exists(ftp, "/APM/scripts"):
-            print("Directory '/APM/scripts' not found, creating it...")
-            result = ftp.cmd_mkdir(["/APM/scripts"])
-            if result.error_code != FtpError.Success:
-                result.display_message()
-                raise RuntimeError("Failed to create /APM/scripts directory")
-        else:
-            print("Directory '/APM/scripts' already exists.")
-
-
-        # --- Step 2: Upload each file individually ---
+        # --- Step 3: Upload each file individually ---
         print(f"\n--- Uploading {len(files_to_upload)} files ---")
         successful_uploads = 0
-        for filename, local_path in files_to_upload:
-            remote_path = f"/APM/scripts/{filename}"
+        for local_path, remote_path in files_to_upload:
+            filename = os.path.basename(local_path)
             print(f"Uploading '{local_path}' to '{remote_path}'...")
             try:
-                # Initiate the put command (this part is non-blocking and was already correct)
                 ftp.cmd_put([local_path, remote_path])
-                # Process replies until the operation is complete.
                 result = ftp.process_ftp_reply('put', timeout=600)
 
                 if result.error_code == FtpError.Success:
@@ -121,17 +120,14 @@ def sync_directory(connect_str: str, source_dir: str):
                     result.display_message()
 
             except Exception as e:
-                # MODIFIED: Print the full stack trace for detailed debugging
                 print("\n--- DETAILED EXCEPTION TRACE ---")
                 traceback.print_exc()
                 print("------------------------------------")
                 print(f"\n  [FAILURE] An exception occurred during upload of '{filename}'. Reason: {e}")
-                # Attempt to cancel any stuck operation
                 ftp.cmd_cancel()
                 ftp.process_ftp_reply('cancel', timeout=5)
 
-
-        # --- Step 3: Final Report ---
+        # --- Step 4: Final Report ---
         print("\n--- Sync Complete ---")
         print(f"Successfully uploaded {successful_uploads} of {len(files_to_upload)} files.")
         if successful_uploads == len(files_to_upload):
@@ -151,12 +147,14 @@ def directory_exists(ftp: MAVFTP, path: str) -> bool:
     if not parent_dir:
         parent_dir = "/"
     
+    # Path root ('/') has no parent to list, assume it always exists.
+    if not target_name:
+        return True
+
     print(f"\n[DEBUG] Checking if directory '{target_name}' exists in '{parent_dir}'...")
 
     try:
-        # CORRECTED: cmd_list is now a blocking call. Use its direct return value.
         result = ftp.cmd_list([parent_dir])
-
         if result.error_code != FtpError.Success:
             print(f"[DEBUG] Failed to list '{parent_dir}'. Assuming directory does not exist.")
             result.display_message()
@@ -166,9 +164,7 @@ def directory_exists(ftp: MAVFTP, path: str) -> bool:
         if not ftp.list_result:
             print("[DEBUG]   (empty listing)")
         
-        # The result is stored in the list_result attribute of the ftp object
         for entry in ftp.list_result:
-            # ArduPilot FTP server entries might have null terminators or whitespace
             entry_name = entry.name.strip('\x00').strip()
             print(f"[DEBUG]   - Found entry: name='{entry.name}', stripped='{entry_name}', is_dir={entry.is_dir}")
             if entry_name == target_name and entry.is_dir:
@@ -184,7 +180,7 @@ def directory_exists(ftp: MAVFTP, path: str) -> bool:
 def main():
     """Parses command-line arguments and initiates the directory sync."""
     parser = argparse.ArgumentParser(
-        description="Upload files from a local directory to /APM/scripts/ on an ArduPilot vehicle using Pymavlink.",
+        description="Recursively upload files from a local directory to /APM/scripts/ on an ArduPilot vehicle.",
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("--connect", required=True, help="Pymavlink connection string (e.g., udp:127.0.0.1:14550, /dev/ttyUSB0).")
