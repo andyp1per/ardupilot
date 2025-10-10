@@ -153,8 +153,10 @@ local function event_loop()
                 crsf:send_write_response(packed_data)
             end
 
-        -- Handle a WRITE request from the transmitter only if it wasn't a read.
-        elseif (events & CRSF_EVENT.PARAMETER_WRITE) ~= 0 then
+        end
+
+        -- Handle a WRITE request from the transmitter.
+        if (events & CRSF_EVENT.PARAMETER_WRITE) ~= 0 then
             if not item_def.callback then
                 goto continue_loop -- No callback found for this write event
             end
