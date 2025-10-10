@@ -26,6 +26,14 @@
 
 class AP_CRSF_Protocol {
 public:
+    // CRSF_FRAMETYPE_COMMAND
+    struct PACKED CommandFrame {
+        uint8_t destination;
+        uint8_t origin;
+        uint8_t command_id;
+        uint8_t payload[9]; // 8 maximum for LED command + crc8
+    };
+
     // decode channels from the standard 11bit format (CRSFv2)
     static void decode_11bit_channels(const uint8_t* payload, uint8_t nchannels, uint16_t *values);
 

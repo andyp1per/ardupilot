@@ -51,6 +51,12 @@ public:
         DIRECT_RCOUT,
     };
 
+    enum class BaudNegotiationResult : uint8_t {
+        PENDING,
+        SUCCESS,
+        FAILED,
+    };
+
     // Constructor for RCIN "passthrough" mode (called by AP_RCProtocol)
     AP_RCProtocol_CRSF(AP_RCProtocol &_frontend);
     // Constructor for "direct-attach" modes (called by manager)
@@ -92,6 +98,11 @@ public:
 #if AP_CRSF_OUT_ENABLED
     // send RC channels out
     bool send_rc_channels(const uint16_t* channels, uint8_t nchannels);
+    // send a baudrate proposal
+    void send_speed_proposal(uint32_t baudrate);
+    // check baudrate negotiation status
+    BaudNegotiationResult get_baud_negotiation_result() const { return _baud_negotiation_result; }
+    void reset_baud_negotiation() { _baud_negotiation_result = BaudNegotiationResult::PENDING; }
 #endif
 
     // Manager functions
@@ -388,6 +399,7 @@ private:
     uint32_t _start_frame_time_us;
     mutable bool telem_available;
     uint32_t _new_baud_rate;
+    BaudNegotiationResult _baud_negotiation_result;
     bool _crsf_v3_active;
     PortMode _mode;
 
@@ -407,4 +419,5 @@ namespace AP {
 };
 
 #endif  // AP_RCPROTOCOL_CRSF_ENABLED
+
 

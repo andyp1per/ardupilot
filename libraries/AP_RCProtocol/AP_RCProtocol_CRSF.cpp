@@ -237,6 +237,7 @@ AP_RCProtocol_CRSF::AP_RCProtocol_CRSF(AP_RCProtocol &_frontend) :
     _protocol_helper = new AP_CRSF_Protocol();
     // This is the RCIN instance, register it as the singleton
     Manager_State::_rcin_singleton = this;
+    _baud_negotiation_result = BaudNegotiationResult::PENDING;
 }
 
 // constructor for "direct-attach" modes
@@ -247,6 +248,7 @@ AP_RCProtocol_CRSF::AP_RCProtocol_CRSF(AP_RCProtocol &_frontend, PortMode mode, 
 {
     _protocol_helper = new AP_CRSF_Protocol();
     start_uart();
+    _baud_negotiation_result = BaudNegotiationResult::PENDING;
 }
 
 AP_RCProtocol_CRSF::~AP_RCProtocol_CRSF()
@@ -338,8 +340,19 @@ bool AP_RCProtocol_CRSF::check_frame(uint32_t timestamp_us)
         return true;
     }
 
-    if (_frame.device_address != DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER) {
-        return false;
+#if AP_CRSF_OUT_ENABLED
+    // in RCOUT mode, we are the master, so frames will be addressed from the FC
+    if (_mode == PortMode::DIRECT_RCOUT) {
+        if (_frame.device_address != DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER &&
+            _frame.device_address != DeviceAddress::CRSF_ADDRESS_RADIO_TRANSMITTER) {
+            return false;
+        }
+    } else
+#endif
+    {
+        if (_frame.device_address != DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER) {
+            return false;
+        }
     }
 
     // check validity of the length byte if we have received it
@@ -549,14 +562,30 @@ bool AP_RCProtocol_CRSF::decode_crsf_packet()
         case CRSF_FRAMETYPE_LINK_STATISTICS_TX:
             process_link_stats_tx_frame((uint8_t*)&_frame.payload);
             break;
+        case CRSF_FRAMETYPE_COMMAND: {
+            const AP_CRSF_Protocol::CommandFrame* cmd = (const AP_CRSF_Protocol::CommandFrame*)&_frame.payload[-1]; // cmd starts at type
+            if (cmd->command_id == CRSF_COMMAND_GENERAL && cmd->payload[0] == CRSF_COMMAND_GENERAL_CRSF_SPEED_RESPONSE) {
+                const bool success = cmd->payload[2];
+                if (success) {
+                    _baud_negotiation_result = BaudNegotiationResult::SUCCESS;
+                    // change baud on our end now
+                    change_baud_rate(_new_baud_rate);
+                } else {
+                    _baud_negotiation_result = BaudNegotiationResult::FAILED;
+                }
+            }
+            break;
+        }
         default:
             break;
     }
 #if HAL_CRSF_TELEM_ENABLED
-    // RC Out mode does not use the ArduPilot telemetry system
+#if AP_CRSF_OUT_ENABLED
+    // RC Out mode does not use the ArduPilot telemetry system, but can parse link stats
     if (_mode == PortMode::DIRECT_RCOUT) {
         return rc_active; // will be false, which is correct
     }
+#endif
 
     if (AP_CRSF_Telem::process_frame(FrameType(_frame.type), (uint8_t*)&_frame.payload, _frame.length - 2U)) {
 #if defined(CRSF_DEBUG_TELEM) || defined(CRSF_DEBUG_PARAMS)
@@ -614,12 +643,50 @@ bool AP_RCProtocol_CRSF::send_rc_channels(const uint16_t* channels, uint8_t ncha
         return false;
     }
     Frame frame;
-    frame.device_address = DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER;
+    frame.device_address = DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER;
     frame.type = CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED;
     uint8_t payload_len = _protocol_helper->encode_variable_bit_channels(frame.payload, channels, nchannels);
     frame.length = payload_len + 2; // +1 for type, +1 for CRC
     write_frame(&frame);
     return true;
+}
+
+// send a baudrate proposal
+void AP_RCProtocol_CRSF::send_speed_proposal(uint32_t baudrate)
+{
+    if (_mode != PortMode::DIRECT_RCOUT || !_uart) {
+        return;
+    }
+    _new_baud_rate = baudrate;
+
+    Frame frame;
+    frame.device_address = DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER;
+
+    AP_CRSF_Protocol::CommandFrame* cmd = (AP_CRSF_Protocol::CommandFrame*)&frame.type;
+    cmd->destination = DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER;
+    cmd->origin = DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER;
+    cmd->command_id = CRSF_COMMAND_GENERAL;
+    cmd->payload[0] = CRSF_COMMAND_GENERAL_CRSF_SPEED_PROPOSAL;
+    cmd->payload[1] = 0; // port ID, 0 for UART
+    // payload[2-5] is the baudrate
+    uint32_t baud_be = htobe32(baudrate);
+    memcpy(&cmd->payload[2], &baud_be, sizeof(baud_be));
+
+    const uint8_t payload_len = 6; // subcommand + port_id + baudrate
+    const uint8_t cmd_len = 3 + payload_len + 1; // dest, origin, cmd_id, payload, crc
+    frame.type = CRSF_FRAMETYPE_COMMAND;
+    frame.length = cmd_len + 1; // +1 for type
+
+    // calculate command crc which includes frame type
+    uint8_t* crcptr = &frame.type;
+    uint8_t crc = 0;
+    // CRC is over type, dest, origin, cmd_id, and payload
+    for (uint8_t i=0; i< (4+payload_len); i++) {
+        crc = crc8_dvb(crc, crcptr[i], 0xBA);
+    }
+    frame.payload[payload_len + 2] = crc;
+
+    write_frame(&frame);
 }
 #endif
 
@@ -820,8 +887,8 @@ AP_RCProtocol_CRSF* AP_RCProtocol_CRSF::get_rcin_singleton()
 AP_RCProtocol_CRSF* AP_RCProtocol_CRSF::get_direct_attach_singleton(AP_SerialManager::SerialProtocol protocol, uint8_t instance)
 {
     manager_init(); // ensure manager is running
-    uint8_t port_num = AP::serialmanager().find_portnum(protocol, instance);
-    if (port_num < HAL_NUM_SERIAL_PORTS) {
+    const int8_t port_num = AP::serialmanager().find_portnum(protocol, instance);
+    if (port_num >= 0 && port_num < HAL_NUM_SERIAL_PORTS) {
         return Manager_State::_instances[port_num];
     }
     return nullptr;
@@ -836,4 +903,3 @@ namespace AP {
 };
 
 #endif  // AP_RCPROTOCOL_CRSF_ENABLED
-

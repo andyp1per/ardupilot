@@ -15,6 +15,11 @@
 
 /*
  * AP_CRSF_Out.cpp - High-level driver for CRSF RC Output
+ *
+ * This class provides the high-level "application" logic for the
+ * CRSF RC Output feature. It is responsible for reading servo output values
+ * from the main SRV_Channels and telling its underlying CRSF protocol instance
+ * to send them at a user-configurable rate.
  */
 #include <AP_RCProtocol/AP_RCProtocol_config.h>
 
@@ -42,7 +47,8 @@ const AP_Param::GroupInfo AP_CRSF_Out::var_info[] = {
 
 AP_CRSF_Out* AP_CRSF_Out::_singleton;
 
-AP_CRSF_Out::AP_CRSF_Out(void)
+AP_CRSF_Out::AP_CRSF_Out(void) :
+    _state(State::WAITING_FOR_PORT)
 {
     AP_Param::setup_object_defaults(this, var_info);
     _singleton = this;
@@ -51,7 +57,7 @@ AP_CRSF_Out::AP_CRSF_Out(void)
 // Initialise the CRSF output driver
 void AP_CRSF_Out::init()
 {
-    if (_initialised) {
+    if (_state != State::WAITING_FOR_PORT) {
         return;
     }
 
@@ -70,14 +76,16 @@ void AP_CRSF_Out::init()
         _frame_interval_us = 20000; // 50Hz default
     }
 
-    _initialised = true;
-    debug_rcout("Initialised at %u Hz, interval %lu us", (unsigned)rate, (unsigned long)_frame_interval_us);
+    _state = State::NEGOTIATING_2M;
+    _target_baudrate = 2000000;
+    _crsf_port->reset_baud_negotiation();
+    debug_rcout("Initialised, negotiating baudrate");
 }
 
 // Main update call, sends RC frames at the configured rate
 void AP_CRSF_Out::update()
 {
-    if (!_initialised) {
+    if (_state == State::WAITING_FOR_PORT) {
 #ifdef CRSF_RCOUT_DEBUG
         const uint32_t now_ms = AP_HAL::millis();
         if (now_ms - last_update_debug_ms > 5000) { // print every 5s
@@ -89,29 +97,83 @@ void AP_CRSF_Out::update()
     }
 
     const uint32_t now = AP_HAL::micros();
-    if (now - _last_frame_us < _frame_interval_us) {
-        return;
-    }
-    _last_frame_us = now;
+    const uint32_t BAUD_NEG_TIMEOUT_US = 1500000; // 1.5 second timeout for a response
+    const uint32_t BAUD_NEG_INTERVAL_US = 500000; // send proposal every 500ms
 
-    uint16_t channels[CRSF_MAX_CHANNELS] {};
-    const uint8_t nchan = MIN(NUM_SERVO_CHANNELS, (uint8_t)CRSF_MAX_CHANNELS);
+    switch (_state) {
+    case State::WAITING_FOR_PORT:
+        // should have been handled above
+        break;
 
-    for (uint8_t i = 0; i < nchan; ++i) {
-        SRV_Channel *c = SRV_Channels::srv_channel(i);
-        if (c != nullptr) {
-            channels[i] = c->get_output_pwm();
+    case State::NEGOTIATING_2M:
+    case State::NEGOTIATING_1M: {
+        // Check for response
+        const auto result = _crsf_port->get_baud_negotiation_result();
+
+        if (result == AP_RCProtocol_CRSF::BaudNegotiationResult::SUCCESS) {
+            debug_rcout("%u baud negotiation successful", (unsigned)_target_baudrate);
+            _state = State::RUNNING;
+            break;
         }
+
+        // Check for failure or timeout
+        if (_baud_neg_start_us == 0) {
+            _baud_neg_start_us = now;
+        }
+        const bool failed = (result == AP_RCProtocol_CRSF::BaudNegotiationResult::FAILED);
+        const bool timeout = (now - _baud_neg_start_us > BAUD_NEG_TIMEOUT_US);
+
+        if (failed || timeout) {
+            if (_state == State::NEGOTIATING_2M) {
+                debug_rcout("2M baud failed, trying 1M");
+                _state = State::NEGOTIATING_1M;
+                _target_baudrate = 1000000;
+                _crsf_port->reset_baud_negotiation();
+                _last_baud_neg_us = 0; // force immediate send
+                _baud_neg_start_us = 0;
+            } else { // NEGOTIATING_1M
+                debug_rcout("1M baud failed, falling back to default");
+                _state = State::RUNNING;
+            }
+            break;
+        }
+
+        // If pending, send proposal periodically
+        if (now - _last_baud_neg_us > BAUD_NEG_INTERVAL_US) {
+            _last_baud_neg_us = now;
+            _crsf_port->send_speed_proposal(_target_baudrate);
+            debug_rcout("Sent speed proposal for %u", (unsigned)_target_baudrate);
+        }
+        break;
     }
+    case State::RUNNING:
+        if (now - _last_frame_us < _frame_interval_us) {
+            return;
+        }
+        _last_frame_us = now;
+
+        uint16_t channels[CRSF_MAX_CHANNELS] {};
+        const uint8_t nchan = MIN(NUM_SERVO_CHANNELS, (uint8_t)CRSF_MAX_CHANNELS);
+
+        for (uint8_t i = 0; i < nchan; ++i) {
+            SRV_Channel *c = SRV_Channels::srv_channel(i);
+            if (c != nullptr) {
+                channels[i] = c->get_output_pwm();
+            } else {
+                channels[i] = 1500; // Default to neutral if channel is null
+            }
+        }
 
 #ifdef CRSF_RCOUT_DEBUG
-    const uint32_t now_ms = AP_HAL::millis();
-    if (now_ms - last_update_debug_ms > 1000) {
-        last_update_debug_ms = now_ms;
-        debug_rcout("Updating channels. CH1=%u CH2=%u CH3=%u", channels[0], channels[1], channels[2]);
-    }
+        const uint32_t now_ms = AP_HAL::millis();
+        if (now_ms - last_update_debug_ms > 1000) {
+            last_update_debug_ms = now_ms;
+            debug_rcout("Updating channels. CH1=%u CH2=%u CH3=%u", channels[0], channels[1], channels[2]);
+        }
 #endif
-    _crsf_port->send_rc_channels(channels, nchan);
+        _crsf_port->send_rc_channels(channels, nchan);
+        break;
+    }
 }
 
 AP_CRSF_Out* AP_CRSF_Out::get_singleton()

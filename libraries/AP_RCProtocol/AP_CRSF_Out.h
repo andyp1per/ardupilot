@@ -31,7 +31,7 @@ class AP_RCProtocol_CRSF;
  * The AP_CRSF_Out class provides the high-level "application" logic for the
  * CRSF RC Output feature. It is responsible for reading servo output values
  * from the main SRV_Channels and telling its underlying CRSF protocol instance
- * to send them at a user-configurable rate.
+ * to send them at a user-configurable rate. It also handles baud rate negotiation.
  */
 class AP_CRSF_Out {
 public:
@@ -49,11 +49,21 @@ public:
     static AP_CRSF_Out* get_singleton();
 
 private:
+    enum class State : uint8_t {
+        WAITING_FOR_PORT,
+        NEGOTIATING_2M,
+        NEGOTIATING_1M,
+        RUNNING,
+    };
+
     static AP_CRSF_Out* _singleton;
 
-    bool _initialised;
+    State _state;
     uint32_t _last_frame_us;
+    uint32_t _last_baud_neg_us;
+    uint32_t _baud_neg_start_us;
     uint32_t _frame_interval_us;
+    uint32_t _target_baudrate;
 
     // @Param: RATE
     // @DisplayName: CRSF output rate
@@ -72,4 +82,3 @@ namespace AP {
 };
 
 #endif // AP_CRSF_OUT_ENABLED
-
