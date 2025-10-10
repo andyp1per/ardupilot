@@ -44,6 +44,8 @@ public:
     void init();
     // periodic update, called from the main vehicle scheduler
     void update();
+    // sends RC frames at the configured rate
+    void send_rc_frame();
 
     static const struct AP_Param::GroupInfo var_info[];
     static AP_CRSF_Out* get_singleton();

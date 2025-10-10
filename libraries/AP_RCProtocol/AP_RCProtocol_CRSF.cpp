@@ -563,14 +563,18 @@ bool AP_RCProtocol_CRSF::decode_crsf_packet()
             process_link_stats_tx_frame((uint8_t*)&_frame.payload);
             break;
         case CRSF_FRAMETYPE_COMMAND: {
-            const AP_CRSF_Protocol::CommandFrame* cmd = (const AP_CRSF_Protocol::CommandFrame*)&_frame.payload[-1]; // cmd starts at type
-            if (cmd->command_id == CRSF_COMMAND_GENERAL && cmd->payload[0] == CRSF_COMMAND_GENERAL_CRSF_SPEED_RESPONSE) {
+            const AP_CRSF_Protocol::CommandFrame* cmd = (const AP_CRSF_Protocol::CommandFrame*)_frame.payload;
+            if (cmd->origin == DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER &&
+                cmd->command_id == CRSF_COMMAND_GENERAL &&
+                cmd->payload[0] == CRSF_COMMAND_GENERAL_CRSF_SPEED_RESPONSE) {
                 const bool success = cmd->payload[2];
                 if (success) {
+                    debug("CRSF Speed Response Received: SUCCESS");
                     _baud_negotiation_result = BaudNegotiationResult::SUCCESS;
                     // change baud on our end now
                     change_baud_rate(_new_baud_rate);
                 } else {
+                    debug("CRSF Speed Response Received: FAILED");
                     _baud_negotiation_result = BaudNegotiationResult::FAILED;
                 }
             }
@@ -651,6 +655,20 @@ bool AP_RCProtocol_CRSF::send_rc_channels(const uint16_t* channels, uint8_t ncha
     return true;
 }
 
+// Helper function for CRC8 with custom polynomial, based on PDF
+static uint8_t crsf_crc8_calc(uint8_t crc, uint8_t data, uint8_t poly)
+{
+    crc ^= data;
+    for (int i = 0; i < 8; i++) {
+        if (crc & 0x80) {
+            crc = (crc << 1) ^ poly;
+        } else {
+            crc <<= 1;
+        }
+    }
+    return crc;
+}
+
 // send a baudrate proposal
 void AP_RCProtocol_CRSF::send_speed_proposal(uint32_t baudrate)
 {
@@ -661,30 +679,41 @@ void AP_RCProtocol_CRSF::send_speed_proposal(uint32_t baudrate)
 
     Frame frame;
     frame.device_address = DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER;
-
-    AP_CRSF_Protocol::CommandFrame* cmd = (AP_CRSF_Protocol::CommandFrame*)&frame.type;
-    cmd->destination = DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER;
-    cmd->origin = DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER;
-    cmd->command_id = CRSF_COMMAND_GENERAL;
-    cmd->payload[0] = CRSF_COMMAND_GENERAL_CRSF_SPEED_PROPOSAL;
-    cmd->payload[1] = 0; // port ID, 0 for UART
-    // payload[2-5] is the baudrate
-    uint32_t baud_be = htobe32(baudrate);
-    memcpy(&cmd->payload[2], &baud_be, sizeof(baud_be));
-
-    const uint8_t payload_len = 6; // subcommand + port_id + baudrate
-    const uint8_t cmd_len = 3 + payload_len + 1; // dest, origin, cmd_id, payload, crc
     frame.type = CRSF_FRAMETYPE_COMMAND;
-    frame.length = cmd_len + 1; // +1 for type
 
-    // calculate command crc which includes frame type
-    uint8_t* crcptr = &frame.type;
-    uint8_t crc = 0;
-    // CRC is over type, dest, origin, cmd_id, and payload
-    for (uint8_t i=0; i< (4+payload_len); i++) {
-        crc = crc8_dvb(crc, crcptr[i], 0xBA);
+    // Command payload buffer: dest(1), origin(1), cmd_id(1), sub_cmd(1), port_id(1), baud(4)
+    uint8_t command_data[9];
+
+    // Construct the inner command frame header
+    AP_CRSF_Protocol::CommandFrame* cmd_header = (AP_CRSF_Protocol::CommandFrame*)command_data;
+    cmd_header->destination = DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER;
+    cmd_header->origin = DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER;
+    cmd_header->command_id = CRSF_COMMAND_GENERAL;
+
+    // Construct the sub-command payload
+    uint8_t* sub_payload = cmd_header->payload;
+    sub_payload[0] = CRSF_COMMAND_GENERAL_CRSF_SPEED_PROPOSAL;
+    sub_payload[1] = 1; // port ID, 0 for UART
+    uint32_t baud_be = htobe32(baudrate);
+    memcpy(&sub_payload[2], &baud_be, sizeof(baud_be));
+
+    // Calculate the inner CRC (poly 0xBA) over the 9-byte command data
+    const uint8_t inner_payload_len = 9;
+    uint8_t inner_crc = 0;
+    for (uint8_t i = 0; i < inner_payload_len; i++) {
+        inner_crc = crsf_crc8_calc(inner_crc, command_data[i], 0xBA);
     }
-    frame.payload[payload_len + 2] = crc;
+
+    // Copy the command data and the inner CRC into the final frame payload
+    memcpy(frame.payload, command_data, inner_payload_len);
+    frame.payload[inner_payload_len] = inner_crc;
+
+    // Set the outer frame length.
+    // It is the length of the payload (Type + Inner Command Frame)
+    // Inner Command Frame = command_data(9) + inner_crc(1) = 10 bytes
+    // Total length = Type(1) + Inner Command Frame(10) = 11 bytes.
+    // The spec example shows a length of 12, which is correct as it includes a placeholder for the outer CRC
+    frame.length = 12;
 
     write_frame(&frame);
 }
@@ -903,3 +932,4 @@ namespace AP {
 };
 
 #endif  // AP_RCPROTOCOL_CRSF_ENABLED
+
