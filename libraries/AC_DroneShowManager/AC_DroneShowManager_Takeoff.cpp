@@ -99,7 +99,8 @@ bool AC_DroneShowManager::notify_takeoff_attempt()
         );
         */
 
-        if (sb_trajectory_replace_end_to_land_at(_trajectory, &_landing_time_sec, end)) {
+        // TODO: query landing velocity from parameters
+        if (sb_trajectory_replace_end_to_land_at(_trajectory, _trajectory_stats, end, 500)) {
             goto exit;
         }
 
