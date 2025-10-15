@@ -849,6 +849,11 @@ private:
     // Callback that is called when entering the "landed" stage
     void _handle_switch_to_landed_state();
 
+    // Returns whether the given option flag is set in the SHOW_OPTIONS parameter
+    bool _has_option(DroneShowOptionFlag option) const {
+        return (_params.show_options & option) != 0;
+    }
+
     // Returns whether the drone is close enough to its expected position during a show.
     // Returns true unconditionally if the drone is not performing a show.
     bool _is_at_expected_position() const;

@@ -66,8 +66,10 @@ bool AC_DroneShowManager::notify_takeoff_attempt()
     //
     // This correction is nice to have but is not crucial. If an error happens
     // in the process below, we just bail out and proceed without the correction.
-    if (_trajectory_is_circular && !_trajectory_modified_for_landing)
-    {
+    if (
+        _has_option(DroneShowOption_CorrectLandingPositionForCircularTrajectories) &&
+        _trajectory_is_circular && !_trajectory_modified_for_landing
+    ) {
         Location takeoff_location;
         sb_vector3_with_yaw_t end;
 
@@ -77,27 +79,6 @@ bool AC_DroneShowManager::notify_takeoff_attempt()
         }
 
         _show_coordinate_system.convert_global_to_show_coordinate(takeoff_location, end);
-
-        /*
-        sb_vector3_with_yaw_t desired_takeoff_location_in_show_coordinates;
-        if (sb_trajectory_player_get_position_at(_trajectory_player, 0.0f, &desired_takeoff_location_in_show_coordinates) != SB_SUCCESS)
-        {
-            goto exit;
-        }
-        gcs().send_text(MAV_SEVERITY_WARNING, "GPS coord: (%d, %d)",
-            takeoff_location.lat, takeoff_location.lng);
-        gcs().send_text(MAV_SEVERITY_WARNING, "SCS: (%d, %d) %.2f",
-            _show_coordinate_system.origin_lat, _show_coordinate_system.origin_lng, _show_coordinate_system.orientation_rad * 180.0f / M_PI);
-        gcs().send_text(MAV_SEVERITY_WARNING, "Desired: (%.2f, %.2f)",
-            desired_takeoff_location_in_show_coordinates.x, desired_takeoff_location_in_show_coordinates.y);
-        gcs().send_text(MAV_SEVERITY_WARNING, "Actual: (%.2f, %.2f)", end.x, end.y);
-        gcs().send_text(MAV_SEVERITY_WARNING, "Diff: (%.2f, %.2f) --> %.2fm",
-            end.x - desired_takeoff_location_in_show_coordinates.x,
-            end.y - desired_takeoff_location_in_show_coordinates.y,
-            hypotf(end.x - desired_takeoff_location_in_show_coordinates.x,
-            end.y - desired_takeoff_location_in_show_coordinates.y) / 1000.0f
-        );
-        */
 
         // TODO: query landing velocity from parameters
         if (sb_trajectory_replace_end_to_land_at(_trajectory, _trajectory_stats, end, 500)) {

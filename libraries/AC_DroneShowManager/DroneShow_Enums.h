@@ -105,4 +105,5 @@ enum DroneShowEventResult : uint8_t {
 // Enum representing the flags in the drone show option bitmap
 enum DroneShowOptionFlag {
     DroneShowOption_DisableFailsafeLights = 1,
+    DroneShowOption_CorrectLandingPositionForCircularTrajectories = 2,
 };
