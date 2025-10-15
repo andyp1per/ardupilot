@@ -42,22 +42,23 @@ public:
      * @return whether the initialization was successful.
      */
     bool init() {
-        uint8_t num_channels = this->num_channels();
-
         if (_ignited_at) {
             deinit();
-        }
-
-        if (num_channels > 0) {
-            _ignited_at = static_cast<uint32_t*>(calloc(num_channels, sizeof(uint32_t)));
-            if (!_ignited_at) {
-                return false; // Memory allocation failed
-            }
         }
 
         if (!init_impl()) {
             deinit();
             return false; // Device-specific initialization failed
+        }
+
+        uint8_t num_channels = this->num_channels();
+
+        if (num_channels > 0) {
+            _ignited_at = static_cast<uint32_t*>(calloc(num_channels, sizeof(uint32_t)));
+            if (!_ignited_at) {
+                deinit();
+                return false; // Memory allocation failed
+            }
         }
 
         return true; // Initialization successful

@@ -136,7 +136,7 @@ const AP_Param::GroupInfo AC_DroneShowManager::var_info[] = {
     // @Param: GROUP
     // @DisplayName: Show group index
     // @Description: Index of the group that this drone belongs to
-    // @Range: 0 7
+    // @Range: 0 63
     // @Increment: 1
     // @User: Standard
     AP_GROUPINFO("GROUP", 13, AC_DroneShowManager, _params.group_index, 0),
@@ -280,7 +280,7 @@ const AP_Param::GroupInfo AC_DroneShowManager::var_info[] = {
     // @Param: PYRO_TYPE
     // @DisplayName: Pyrotechnic device type
     // @Description: Specifies the type of the pyrotechnic device that is used to trigger pyrotechnic effects during the show
-    // @Values: 0:None, 1:Debug, 2:Servo
+    // @Values: 0:None, 1:Debug, 2:SingleServo, 3:MultipleServos
     // @User: Advanced
     AP_GROUPINFO("PYRO_TYPE", 34, AC_DroneShowManager, _params.pyro_spec.type, DroneShowPyroDeviceType_None),
 
@@ -353,7 +353,7 @@ void AC_DroneShowManager::_check_changes_in_parameters()
     static float last_seen_orientation_deg = INFINITY;      // intentionally invalid
     uint32_t start_time_gps_msec;
 
-    bool new_control_rate_pending = _params.control_rate_hz != last_seen_control_rate_hz;    
+    bool new_control_rate_pending = _params.control_rate_hz != last_seen_control_rate_hz;
     bool new_coordinate_system_pending = (
         _params.origin_lat != last_seen_origin_lat ||
         _params.origin_lng != last_seen_origin_lng ||
@@ -448,7 +448,7 @@ bool AC_DroneShowManager::_copy_show_coordinate_system_from_parameters_to(
         _coordinate_system.clear();
         return false;
     }
-        
+
     _coordinate_system.orientation_rad = radians(_params.orientation_deg);
     _coordinate_system.origin_lat = static_cast<int32_t>(_params.origin_lat);
     _coordinate_system.origin_lng = static_cast<int32_t>(_params.origin_lng);
