@@ -23,6 +23,7 @@
 
 #if AP_RCPROTOCOL_CRSF_ENABLED
 
+#include "AP_CRSF_Protocol.h"
 #include "AP_RCProtocol.h"
 #include <AP_Math/AP_Math.h>
 #include <RC_Channel/RC_Channel.h>
@@ -100,6 +101,8 @@ public:
     bool send_rc_channels(const uint16_t* channels, uint8_t nchannels);
     // send a baudrate proposal
     void send_speed_proposal(uint32_t baudrate);
+    // send a ping frame
+    void send_ping_frame();
     // check baudrate negotiation status
     BaudNegotiationResult get_baud_negotiation_result() const { return _baud_negotiation_result; }
     void reset_baud_negotiation() { _baud_negotiation_result = BaudNegotiationResult::PENDING; }
@@ -292,12 +295,6 @@ public:
         // uint16_t digital_switch_channel[]:10; // digital switch channel
     } PACKED;
 
-    enum class ProtocolType {
-        PROTOCOL_CRSF,
-        PROTOCOL_TRACER,
-        PROTOCOL_ELRS
-    };
-
     // Source for ELRS RF modes: https://www.expresslrs.org/info/signal-health/#rf-mode-indexes-rfmd
     enum RFMode {
         CRSF_RF_MODE_4HZ = 0,
@@ -350,10 +347,12 @@ public:
     }
 
     // return the link rate as defined by the LinkStatistics
-    uint16_t get_link_rate(ProtocolType protocol) const;
+    uint16_t get_link_rate(AP_CRSF_Protocol::ProtocolType protocol) const;
 
     // return the protocol string
-    const char* get_protocol_string(ProtocolType protocol) const;
+    const char* get_protocol_string(AP_CRSF_Protocol::ProtocolType protocol) const;
+
+    const AP_CRSF_Protocol::VersionInfo& get_version_info() const { return version; }
 
 private:
     // private class to hold static state for the manager
@@ -402,6 +401,7 @@ private:
     BaudNegotiationResult _baud_negotiation_result;
     bool _crsf_v3_active;
     PortMode _mode;
+    AP_CRSF_Protocol::VersionInfo version;
 
     bool _use_lq_for_rssi;
     int16_t derive_scaled_lq_value(uint8_t uplink_lq);

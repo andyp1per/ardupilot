@@ -76,10 +76,7 @@ void AP_CRSF_Out::init()
         _frame_interval_us = 20000; // 50Hz default
     }
 
-    _state = State::NEGOTIATING_2M;
-    _target_baudrate = 2000000;
-    _crsf_port->reset_baud_negotiation();
-    debug_rcout("Initialised, negotiating baudrate");
+    _state = State::WAITING_FOR_DEVICE_INFO;
 }
 
 // sends RC frames at the configured rate
@@ -113,6 +110,16 @@ void AP_CRSF_Out::send_rc_frame()
     _crsf_port->send_rc_channels(channels, nchan);
 }
 
+void AP_CRSF_Out::send_ping_frame()
+{
+    const uint32_t now = AP_HAL::micros();
+    if (now - _last_frame_us < _frame_interval_us) {
+        return;
+    }
+    _last_frame_us = now;
+
+    _crsf_port->send_ping_frame();
+}
 
 // Main update call, sends RC frames at the configured rate
 void AP_CRSF_Out::update()
@@ -137,10 +144,21 @@ void AP_CRSF_Out::update()
         // should have been handled above
         break;
 
+    case State::WAITING_FOR_DEVICE_INFO:
+        send_ping_frame();
+
+        if (_crsf_port->get_version_info().major > 0) {
+            _state = State::NEGOTIATING_2M;
+            _target_baudrate = 2000000;
+            _crsf_port->reset_baud_negotiation();
+            debug_rcout("Initialised, negotiating baudrate");
+        }
+        break;
+
     case State::NEGOTIATING_2M:
     case State::NEGOTIATING_1M: {
         // Continue sending RC frames to keep the link alive
-        send_rc_frame();
+        send_ping_frame();
 
         // Check for response
         const auto result = _crsf_port->get_baud_negotiation_result();

@@ -46,6 +46,8 @@ public:
     void update();
     // sends RC frames at the configured rate
     void send_rc_frame();
+    // sends ping frames at the configured rate
+    void send_ping_frame();
 
     static const struct AP_Param::GroupInfo var_info[];
     static AP_CRSF_Out* get_singleton();
@@ -53,6 +55,7 @@ public:
 private:
     enum class State : uint8_t {
         WAITING_FOR_PORT,
+        WAITING_FOR_DEVICE_INFO,
         NEGOTIATING_2M,
         NEGOTIATING_1M,
         RUNNING,

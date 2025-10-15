@@ -26,12 +26,38 @@
 
 class AP_CRSF_Protocol {
 public:
+    enum class ProtocolType {
+        PROTOCOL_CRSF,
+        PROTOCOL_TRACER,
+        PROTOCOL_ELRS
+    };
+
     // CRSF_FRAMETYPE_COMMAND
     struct PACKED CommandFrame {
         uint8_t destination;
         uint8_t origin;
         uint8_t command_id;
         uint8_t payload[9]; // 8 maximum for LED command + crc8
+    };
+
+    // CRSF_FRAMETYPE_PARAM_DEVICE_PING
+    struct PACKED ParameterPingFrame {
+        uint8_t destination;
+        uint8_t origin;
+    };
+
+    // CRSF_FRAMETYPE_PARAM_DEVICE_INFO
+    struct PACKED ParameterDeviceInfoFrame {
+        uint8_t destination;
+        uint8_t origin;
+        uint8_t payload[58];   // largest possible frame is 60
+    };
+
+    struct VersionInfo {
+        uint8_t minor;
+        uint8_t major;
+        bool use_rf_mode;
+        ProtocolType protocol;
     };
 
     // decode channels from the standard 11bit format (CRSFv2)
@@ -43,6 +69,9 @@ public:
     // encode channels into a variable bit length format (CRSFv3)
     // returns number of bytes written to payload
     static uint8_t encode_variable_bit_channels(uint8_t *payload, const uint16_t *values, uint8_t nchannels);
+
+    // process a device info frame for version information
+    static bool process_device_info_frame(ParameterDeviceInfoFrame* info, VersionInfo* version, bool fakerx);
 };
 
 #endif // AP_RCPROTOCOL_CRSF_ENABLED

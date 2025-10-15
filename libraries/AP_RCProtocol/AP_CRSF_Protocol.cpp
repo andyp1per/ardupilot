@@ -32,6 +32,15 @@
 #define CRSF_SUBSET_RC_RES_BITS_11B                 11
 #define CRSF_SUBSET_RC_RES_MASK_11B                 0x07FF
 
+extern const AP_HAL::HAL& hal;
+
+#define CRSF_PROTOCOL_DEBUG
+#if defined(CRSF_PROTOCOL_DEBUG)
+# define debug(fmt, args...)	hal.console->printf("CRSF: " fmt "\n", ##args)
+#else
+# define debug(fmt, args...)	do {} while(0)
+#endif
+
 // unpack channels from a CRSFv2 11-bit fixed-width frame payload
 void AP_CRSF_Protocol::decode_11bit_channels(const uint8_t* payload, uint8_t nchannels, uint16_t *values)
 {
@@ -134,6 +143,65 @@ uint8_t AP_CRSF_Protocol::encode_variable_bit_channels(uint8_t *payload, const u
     }
 
     return writeByteIndex;
+}
+
+// request for device info
+bool AP_CRSF_Protocol::process_device_info_frame(ParameterDeviceInfoFrame* info, VersionInfo* version, bool fakerx)
+{
+    const uint8_t destination = fakerx ? AP_RCProtocol_CRSF::CRSF_ADDRESS_CRSF_RECEIVER : AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER;
+    const uint8_t origin = fakerx ? AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER : AP_RCProtocol_CRSF::CRSF_ADDRESS_CRSF_RECEIVER;
+
+    if (info->destination != 0 && info->destination != destination) {
+        return false; // request was not for us
+    }
+
+    // we are only interested in RC device info for firmware version detection
+    if (info->origin != 0 && info->origin != origin) {
+        return false;
+    }
+
+    /*
+        Payload size is 58:
+        char[] Device name ( Null-terminated string, max len is 42 )
+        uint32_t Serial number
+        uint32_t Hardware ID
+        uint32_t Firmware ID (0x00:0x00:0xAA:0xBB AA=major, BB=minor)
+        uint8_t Parameters count
+        uint8_t Parameter version number
+    */
+    // get the terminator of the device name string
+    const uint8_t offset = strnlen((char*)info->payload,42U);
+    if (strncmp((char*)info->payload, "Tracer", 6) == 0) {
+        version->protocol = ProtocolType::PROTOCOL_TRACER;
+    } else if (strncmp((char*)&info->payload[offset+1], "ELRS", 4) == 0) {
+        // ELRS magic number is ELRS encoded in the serial number
+        // 0x45 'E' 0x4C 'L' 0x52 'R' 0x53 'S'
+        version->protocol = ProtocolType::PROTOCOL_ELRS;
+    }
+
+    if (version->protocol != ProtocolType::PROTOCOL_ELRS) {
+        /*
+            fw major ver = offset + terminator (8bits) + serial (32bits) + hw id (32bits) + 3rd byte of sw id = 11bytes
+            fw minor ver = offset + terminator (8bits) + serial (32bits) + hw id (32bits) + 4th byte of sw id = 12bytes
+        */
+        version->major = info->payload[offset+11];
+        version->minor = info->payload[offset+12];
+    } else {
+        // ELRS does not populate the version field so cook up something sensible
+        version->major = 1;
+        version->minor = 0;
+    }
+
+    // should we use rf_mode reported by link statistics?
+    if (version->protocol == ProtocolType::PROTOCOL_ELRS
+        || (version->protocol != ProtocolType::PROTOCOL_TRACER
+            && (version->major > 3 || (version->major == 3 && version->minor >= 72)))) {
+        version->use_rf_mode = true;
+    }
+
+    debug("process_device_info_frame(): %u %u %u", version->major, version->minor, (unsigned)version->protocol);
+
+    return true;
 }
 
 #endif // AP_RCPROTOCOL_CRSF_ENABLED

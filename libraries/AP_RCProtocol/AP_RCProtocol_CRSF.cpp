@@ -84,8 +84,8 @@
 
 extern const AP_HAL::HAL& hal;
 
-//#define CRSF_DEBUG
-//#define CRSF_DEBUG_CHARS
+#define CRSF_DEBUG
+#define CRSF_DEBUG_CHARS
 //#define CRSF_DEBUG_TELEM
 //#define CRSF_DEBUG_PARAMS
 #if defined(CRSF_DEBUG) || defined(CRSF_DEBUG_TELEM) || defined(CRSF_DEBUG_PARAMS)
@@ -265,8 +265,8 @@ AP_RCProtocol_CRSF::~AP_RCProtocol_CRSF()
 }
 
 // get the protocol string
-const char* AP_RCProtocol_CRSF::get_protocol_string(ProtocolType protocol) const {
-    if (protocol == ProtocolType::PROTOCOL_ELRS) {
+const char* AP_RCProtocol_CRSF::get_protocol_string(AP_CRSF_Protocol::ProtocolType protocol) const {
+    if (protocol == AP_CRSF_Protocol::ProtocolType::PROTOCOL_ELRS) {
         return "ELRS";
     } else if (_crsf_v3_active) {
         return "CRSFv3";
@@ -276,10 +276,10 @@ const char* AP_RCProtocol_CRSF::get_protocol_string(ProtocolType protocol) const
 }
 
 // return the link rate as defined by the LinkStatistics
-uint16_t AP_RCProtocol_CRSF::get_link_rate(ProtocolType protocol) const {
-    if (protocol == ProtocolType::PROTOCOL_ELRS) {
+uint16_t AP_RCProtocol_CRSF::get_link_rate(AP_CRSF_Protocol::ProtocolType protocol) const {
+    if (protocol == AP_CRSF_Protocol::ProtocolType::PROTOCOL_ELRS) {
         return RF_MODE_RATES[_link_status.rf_mode + RFMode::CRSF_RF_MAX_MODES];
-    } else if (protocol == ProtocolType::PROTOCOL_TRACER) {
+    } else if (protocol == AP_CRSF_Protocol::ProtocolType::PROTOCOL_TRACER) {
         return 250;
     } else {
         return RF_MODE_RATES[_link_status.rf_mode];
@@ -580,17 +580,15 @@ bool AP_RCProtocol_CRSF::decode_crsf_packet()
             }
             break;
         }
+        case CRSF_FRAMETYPE_PARAM_DEVICE_INFO:
+            AP_CRSF_Protocol::process_device_info_frame((AP_CRSF_Protocol::ParameterDeviceInfoFrame*)_frame.payload,
+                                                         &version, _mode == PortMode::DIRECT_RCOUT);
+            break;
+
         default:
             break;
     }
 #if HAL_CRSF_TELEM_ENABLED
-#if AP_CRSF_OUT_ENABLED
-    // RC Out mode does not use the ArduPilot telemetry system, but can parse link stats
-    if (_mode == PortMode::DIRECT_RCOUT) {
-        return rc_active; // will be false, which is correct
-    }
-#endif
-
     if (AP_CRSF_Telem::process_frame(FrameType(_frame.type), (uint8_t*)&_frame.payload, _frame.length - 2U)) {
 #if defined(CRSF_DEBUG_TELEM) || defined(CRSF_DEBUG_PARAMS)
         switch (_frame.type) {
@@ -669,12 +667,55 @@ static uint8_t crsf_crc8_calc(uint8_t crc, uint8_t data, uint8_t poly)
     return crc;
 }
 
+// send ping frame out
+void AP_RCProtocol_CRSF::send_ping_frame()
+{
+    if (_mode != PortMode::DIRECT_RCOUT) {
+        return;
+    }
+
+    hal.console->printf("Sending ping frame\n");
+
+    Frame frame;
+    frame.device_address = DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER;
+    frame.type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAM_DEVICE_PING;
+
+    // Command payload buffer: dest(1), origin(1)
+    uint8_t command_data[2];
+
+    // Construct the inner command frame header
+    AP_CRSF_Protocol::ParameterPingFrame* cmd_header = (AP_CRSF_Protocol::ParameterPingFrame*)command_data;
+    cmd_header->destination = DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER;
+    cmd_header->origin = DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER;
+
+    // Calculate the inner CRC (poly 0xBA) over the 2-byte command data
+    const uint8_t inner_payload_len = 2;
+    uint8_t inner_crc = 0;
+    for (uint8_t i = 0; i < inner_payload_len; i++) {
+        inner_crc = crsf_crc8_calc(inner_crc, command_data[i], 0xBA);
+    }
+
+    // Copy the command data and the inner CRC into the final frame payload
+    memcpy(frame.payload, command_data, inner_payload_len);
+    frame.payload[inner_payload_len] = inner_crc;
+
+    // Set the outer frame length.
+    // It is the length of the payload (Type + Inner Command Frame)
+    // Inner Command Frame = command_data(2) + inner_crc(1) = 10 bytes
+    // Total length = Type(1) + Inner Command Frame(3) = 4 bytes.
+    frame.length = 5;
+
+    write_frame(&frame);
+}
+
 // send a baudrate proposal
 void AP_RCProtocol_CRSF::send_speed_proposal(uint32_t baudrate)
 {
     if (_mode != PortMode::DIRECT_RCOUT || !_uart) {
         return;
     }
+
+    hal.console->printf("Sending speed proposal %u\n", (unsigned)baudrate);
     _new_baud_rate = baudrate;
 
     Frame frame;
