@@ -107,3 +107,9 @@ enum DroneShowOptionFlag {
     DroneShowOption_DisableFailsafeLights = 1,
     DroneShowOption_CorrectLandingPositionForCircularTrajectories = 2,
 };
+
+// Enum representing the telemetry profiles supported by the parameter set
+enum TelemetryProfile {
+    TelemetryProfile_Standard = 0,
+    TelemetryProfile_Compact = 1
+};
