@@ -38,7 +38,7 @@
 
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
-//#define CRSF_DEBUG
+#define CRSF_DEBUG
 #ifdef CRSF_DEBUG
 # define debug(fmt, args...)	hal.console->printf("CRSF: " fmt "\n", ##args)
 #else
@@ -204,7 +204,7 @@ bool AP_CRSF_Telem::process_rf_mode_changes()
         return true;
     }
 
-    if (!crsf->is_detected()) {
+    if (!crsf->is_rx_active()) {    // check for no live incoming frames, don't use is_detected() here as there could be no rc frames
         return false;
     }
     // note if option was set to show LQ in place of RSSI
@@ -286,7 +286,7 @@ AP_RCProtocol_CRSF::RFMode AP_CRSF_Telem::get_rf_mode() const
 
 bool AP_CRSF_Telem::is_high_speed_telemetry(const AP_RCProtocol_CRSF::RFMode rf_mode) const
 {
-    if (_crsf_version.protocol != AP_RCProtocol_CRSF::ProtocolType::PROTOCOL_ELRS) {
+    if (_crsf_version.protocol != AP_CRSF_Protocol::ProtocolType::PROTOCOL_ELRS) {
         return rf_mode == AP_RCProtocol_CRSF::RFMode::CRSF_RF_MODE_150HZ || rf_mode == AP_RCProtocol_CRSF::RFMode::CRSF_RF_MODE_250HZ;
     }
     return get_telemetry_rate() > 30;
@@ -294,7 +294,7 @@ bool AP_CRSF_Telem::is_high_speed_telemetry(const AP_RCProtocol_CRSF::RFMode rf_
 
 uint16_t AP_CRSF_Telem::get_telemetry_rate() const
 {
-    if (_crsf_version.protocol != AP_RCProtocol_CRSF::ProtocolType::PROTOCOL_ELRS) {
+    if (_crsf_version.protocol != AP_CRSF_Protocol::ProtocolType::PROTOCOL_ELRS) {
         return get_avg_packet_rate();
     }
     AP_RCProtocol_CRSF* crsf = AP::crsf();
@@ -428,6 +428,7 @@ bool AP_CRSF_Telem::is_packet_ready(uint8_t idx, bool queue_empty)
 // WFQ scheduler
 void AP_CRSF_Telem::process_packet(uint8_t idx)
 {
+    hal.console->printf("process packet %u\n", idx);
     // send packet
     switch (idx) {
         case HEARTBEAT: // HEARTBEAT
@@ -528,7 +529,7 @@ bool AP_CRSF_Telem::_process_frame(AP_RCProtocol_CRSF::FrameType frame_type, voi
 #endif
 
     case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAM_DEVICE_PING:
-        process_ping_frame((ParameterPingFrame*)data);
+        process_ping_frame((AP_CRSF_Protocol::ParameterPingFrame*)data);
         break;
 
     case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAMETER_READ:
@@ -540,7 +541,7 @@ bool AP_CRSF_Telem::_process_frame(AP_RCProtocol_CRSF::FrameType frame_type, voi
         break;
 
     case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAM_DEVICE_INFO:
-        process_device_info_frame((ParameterDeviceInfoFrame*)data);
+        process_device_info_frame((AP_CRSF_Protocol::ParameterDeviceInfoFrame*)data);
         break;
 
     case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_COMMAND:
@@ -645,7 +646,7 @@ void AP_CRSF_Telem::process_vtx_telem_frame(VTXTelemetryFrame* vtx)
 #endif  // AP_VIDEOTX_ENABLED
 
 // request for device info
-void AP_CRSF_Telem::process_ping_frame(ParameterPingFrame* ping)
+void AP_CRSF_Telem::process_ping_frame(AP_CRSF_Protocol::ParameterPingFrame* ping)
 {
     debug("process_ping_frame: %d -> %d", ping->origin, ping->destination);
     if (ping->destination != 0 && ping->destination != AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER) {
@@ -658,52 +659,12 @@ void AP_CRSF_Telem::process_ping_frame(ParameterPingFrame* ping)
 }
 
 // request for device info
-void AP_CRSF_Telem::process_device_info_frame(ParameterDeviceInfoFrame* info)
+void AP_CRSF_Telem::process_device_info_frame(AP_CRSF_Protocol::ParameterDeviceInfoFrame* info)
 {
     debug("process_device_info_frame: 0x%x -> 0x%x", info->origin, info->destination);
-    if (info->destination != 0 && info->destination != AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER) {
-        return; // request was not for us
-    }
 
-    // we are only interested in RC device info for firmware version detection
-    if (info->origin != 0 && info->origin != AP_RCProtocol_CRSF::CRSF_ADDRESS_CRSF_RECEIVER) {
+    if (!AP_CRSF_Protocol::process_device_info_frame(info, &_crsf_version, false)) {
         return;
-    }
-    /*
-        Payload size is 58:
-        char[] Device name ( Null-terminated string, max len is 42 )
-        uint32_t Serial number
-        uint32_t Hardware ID
-        uint32_t Firmware ID (0x00:0x00:0xAA:0xBB AA=major, BB=minor)
-        uint8_t Parameters count
-        uint8_t Parameter version number
-    */
-    // get the terminator of the device name string
-    const uint8_t offset = strnlen((char*)info->payload,42U);
-    if (strncmp((char*)info->payload, "Tracer", 6) == 0) {
-        _crsf_version.protocol = AP_RCProtocol_CRSF::ProtocolType::PROTOCOL_TRACER;
-    } else if (strncmp((char*)&info->payload[offset+1], "ELRS", 4) == 0) {
-        // ELRS magic number is ELRS encoded in the serial number
-        // 0x45 'E' 0x4C 'L' 0x52 'R' 0x53 'S'
-        _crsf_version.protocol = AP_RCProtocol_CRSF::ProtocolType::PROTOCOL_ELRS;
-    }
-
-    if (!is_elrs()) {
-        /*
-            fw major ver = offset + terminator (8bits) + serial (32bits) + hw id (32bits) + 3rd byte of sw id = 11bytes
-            fw minor ver = offset + terminator (8bits) + serial (32bits) + hw id (32bits) + 4th byte of sw id = 12bytes
-        */
-        _crsf_version.major = info->payload[offset+11];
-        _crsf_version.minor = info->payload[offset+12];
-    } else {
-        // ELRS does not populate the version field so cook up something sensible
-        _crsf_version.major = 1;
-        _crsf_version.minor = 0;
-    }
-
-    // should we use rf_mode reported by link statistics?
-    if (is_elrs() || (!is_tracer() && (_crsf_version.major > 3 || (_crsf_version.major == 3 && _crsf_version.minor >= 72)))) {
-        _crsf_version.use_rf_mode = true;
     }
 
     _crsf_version.pending = false;
@@ -898,7 +859,7 @@ void AP_CRSF_Telem::calc_parameter_ping()
     _telem_type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAM_DEVICE_PING;
     _telem.ext.ping.destination = AP_RCProtocol_CRSF::CRSF_ADDRESS_VTX;
     _telem.ext.ping.origin = AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER;
-    _telem_size = sizeof(ParameterPingFrame);
+    _telem_size = sizeof(AP_CRSF_Protocol::ParameterPingFrame);
     _telem_pending = true;
 }
 
@@ -1058,8 +1019,17 @@ void AP_CRSF_Telem::calc_flight_mode()
 // return device information about ArduPilot
 void AP_CRSF_Telem::calc_device_info() {
 #if !APM_BUILD_TYPE(APM_BUILD_UNKNOWN)
+    debug("calc_device_info: %u -> %u", AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER, _param_request.origin);
+
     _telem.ext.info.destination = _param_request.origin;
     _telem.ext.info.origin = AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER;
+
+    // char[] Device name ( Null-terminated string )
+    // uint32_t Serial number
+    // uint32_t Hardware ID
+    // uint32_t Firmware ID
+    // uint8_t Parameters count
+    // uint8_t Parameter version number
 
     const AP_FWVersion &fwver = AP::fwversion();
     // write out the name with version, max width is 60 - 18 = the meaning of life
@@ -1067,15 +1037,18 @@ void AP_CRSF_Telem::calc_device_info() {
     strncpy((char*)_telem.ext.info.payload, fwver.fw_short_string, 41);
     n = MIN(n + 1, 42);
 
-    put_be32_ptr(&_telem.ext.info.payload[n], // serial number
-        uint32_t(fwver.major) << 24 | uint32_t(fwver.minor) << 16 | uint32_t(fwver.patch) << 8 | uint32_t(fwver.fw_type));
+    put_be32_ptr(&_telem.ext.info.payload[n], fwver.os_sw_version);   // serial number
     n += 4;
+
     put_be32_ptr(&_telem.ext.info.payload[n], // hardware id
         uint32_t(fwver.vehicle_type) << 24 | uint32_t(fwver.board_type) << 16 | uint32_t(fwver.board_subtype));
     n += 4;
-    put_be32_ptr(&_telem.ext.info.payload[n], fwver.os_sw_version);   // software id
+
+    put_be32_ptr(&_telem.ext.info.payload[n], // firmware id, major/minor should be 3rd and 4th byte
+        uint32_t(fwver.major) << 8 | uint32_t(fwver.minor) | uint32_t(fwver.patch) << 24 | uint32_t(fwver.fw_type) << 16);
     n += 4;
-#if OSD_PARAM_ENABLED
+
+    #if OSD_PARAM_ENABLED
     _telem.ext.info.payload[n] = AP_OSD_ParamScreen::NUM_PARAMS * AP_OSD_NUM_PARAM_SCREENS; // param count
 #if AP_CRSF_SCRIPTING_ENABLED
     for (ScriptedMenu* m = &scripted_menus; m != nullptr; m = m->next_menu) {
@@ -1909,7 +1882,7 @@ void AP_CRSF_Telem::calc_status_text()
     if (!_statustext.available) {
         WITH_SEMAPHORE(_statustext.sem);
         // check link speed
-        if (_crsf_version.protocol != AP_RCProtocol_CRSF::ProtocolType::PROTOCOL_ELRS
+        if (_crsf_version.protocol != AP_CRSF_Protocol::ProtocolType::PROTOCOL_ELRS
                 && !is_high_speed_telemetry(_telem_rf_mode)) {
             // keep only warning/error/critical/alert/emergency status text messages
             bool got_message = false;
