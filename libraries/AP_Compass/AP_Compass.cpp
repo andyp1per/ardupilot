@@ -29,6 +29,7 @@
 #include "AP_Compass_LSM303D.h"
 #include "AP_Compass_LSM9DS1.h"
 #include "AP_Compass_LIS3MDL.h"
+#include "AP_Compass_LIS2MDL.h"
 #include "AP_Compass_AK09916.h"
 #include "AP_Compass_QMC5883L.h"
 #if AP_COMPASS_DRONECAN_ENABLED
@@ -530,7 +531,7 @@ const AP_Param::GroupInfo Compass::var_info[] = {
     // @Param: DISBLMSK
     // @DisplayName: Compass disable driver type mask
     // @Description: This is a bitmask of driver types to disable. If a driver type is set in this mask then that driver will not try to find a sensor at startup
-    // @Bitmask: 0:HMC5883,1:LSM303D,2:AK8963,3:BMM150,4:LSM9DS1,5:LIS3MDL,6:AK0991x,7:IST8310,8:ICM20948,9:MMC3416,11:DroneCAN,12:QMC5883,14:MAG3110,15:IST8308,16:RM3100,17:MSP,18:ExternalAHRS,19:MMC5XX3,20:QMC5883P,21:BMM350,22:IIS2MDC
+    // @Bitmask: 0:HMC5883,1:LSM303D,2:AK8963,3:BMM150,4:LSM9DS1,5:LIS3MDL,6:AK0991x,7:IST8310,8:ICM20948,9:MMC3416,11:DroneCAN,12:QMC5883,14:MAG3110,15:IST8308,16:RM3100,17:MSP,18:ExternalAHRS,19:MMC5XX3,20:QMC5883P,21:BMM350,22:IIS2MDC,23:LIS2MDL
     // @User: Advanced
     AP_GROUPINFO("DISBLMSK", 33, Compass, _driver_type_mask, 0),
 
@@ -1102,7 +1103,20 @@ bool Compass::_have_i2c_driver(uint8_t bus, uint8_t address) const
         CHECK_UNREG_LIMIT_RETURN; \
     } while (0)
 
+#ifdef HAL_I2C_INTERNAL_DEVICE_LIST
+static bool is_i2c_device_internal(uint8_t bus, uint8_t address) {
+    struct AP_HAL::Device::DeviceStructure i2c_devlist[] HAL_I2C_INTERNAL_DEVICE_LIST;
+    for (auto &i2c_device : i2c_devlist) {
+        if (i2c_device.address == address and i2c_device.bus == bus) {
+            return true;
+        }
+    }
+    return false;
+}
+#define GET_I2C_DEVICE(bus, address) _have_i2c_driver(bus, address) || is_i2c_device_internal(bus, address)?nullptr:hal.i2c_mgr->get_device(bus, address)
+#else
 #define GET_I2C_DEVICE(bus, address) _have_i2c_driver(bus, address)?nullptr:hal.i2c_mgr->get_device(bus, address)
+#endif
 
 /*
   look for compasses on external i2c buses
@@ -1242,6 +1256,21 @@ void Compass::_probe_external_i2c_compasses(void)
     }
 #endif  // AP_COMPASS_LIS3MDL_ENABLED
 
+#if AP_COMPASS_LIS2MDL_ENABLED
+    // internal lis2mdl
+#if !defined(HAL_SKIP_AUTO_INTERNAL_I2C_PROBE)
+    FOREACH_I2C_INTERNAL(i) {
+        ADD_BACKEND(DRIVER_LIS2MDL, AP_Compass_LIS2MDL::probe(GET_I2C_DEVICE(i, HAL_COMPASS_LIS2MDL_I2C_ADDR),
+                    all_external, all_external?ROTATION_YAW_90:ROTATION_NONE));
+    }
+#endif
+    // external lis2mdl
+    FOREACH_I2C_EXTERNAL(i) {
+        ADD_BACKEND(DRIVER_LIS2MDL, AP_Compass_LIS2MDL::probe(GET_I2C_DEVICE(i, HAL_COMPASS_LIS2MDL_I2C_ADDR),
+                    true, ROTATION_YAW_90));
+    }
+#endif  // AP_COMPASS_LIS2MDL_ENABLED
+
 #if AP_COMPASS_AK09916_ENABLED
     // AK09916. This can be found twice, due to the ICM20948 i2c bus pass-thru, so we need to be careful to avoid that
     FOREACH_I2C_EXTERNAL(i) {
@@ -1364,6 +1393,9 @@ void Compass::_probe_external_i2c_compasses(void)
 #endif
 #endif // AP_COMPASS_BMM350_ENABLED
 }
+
+#undef GET_I2C_DEVICE
+#define GET_I2C_DEVICE(bus, address) _have_i2c_driver(bus, address)?nullptr:hal.i2c_mgr->get_device(bus, address)
 
 /*
   detect available backends for this board
