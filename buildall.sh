@@ -14,7 +14,6 @@
 # Pixhawk4 -- for the Holybro Pixhawk 4 (fmuv5 with a few tweaks)
 # PH4-mini -- for the PixHawk 4 Mini
 # Durandal -- for the Holybro Durandal
-# lightdynamix-pixel -- for the Lightdynamix Pixel drone
 # luminuousbee5 -- for LuminousBee5 outdoor
 # QioTekZealotH743 -- donated to the Skybrush project
 # speedybeef4v3 -- with disabled OSD support to make the firmware fit
@@ -29,7 +28,7 @@
 # You may define the BOARDS= variable in the environment to override which
 # boards to build for.
 
-BOARDS=${BOARDS:-"sitl Pixhawk1 cmcopter CubeBlack CubeOrange CubeOrangePlus fmuv3 fmuv5 Pixhawk4 Pixhawk6C PH4-mini Durandal luminousbee5 QioTekZealotH743 MatekH743 MatekH743-bdshot lightdynamix-pixel speedybeef4v3 speedybeef4v4 MicoAir743v2"}
+BOARDS=${BOARDS:-"sitl Pixhawk1 cmcopter CubeBlack CubeOrange CubeOrangePlus fmuv3 fmuv5 Pixhawk4 Pixhawk6C PH4-mini Durandal luminousbee5 QioTekZealotH743 MatekH743 MatekH743-bdshot speedybeef4v3 speedybeef4v4 MicoAir743v2"}
 ARM_TOOLCHAIN=${ARM_TOOLCHAIN:-"${HOME}/opt/toolchains/ardupilot"}
 
 # Name of the folder to store compiled firmwares in
@@ -42,7 +41,6 @@ set -e
 # the base bootloader was not built with flash-from-SD support if we enabled
 # it by ourselves
 BASE_BOARD_OF_cmcopter=Pixhawk1
-BASE_BOARD_OF_lightdynamix_pixel=MatekH743-bdshot
 
 cd "$(dirname $0)"
 
