@@ -24,6 +24,7 @@
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Param/AP_Param.h>
+#include "AP_CRSF_Protocol.h"
 
 class AP_RCProtocol_CRSF;
 
@@ -49,26 +50,47 @@ public:
     // sends ping frames at the configured rate
     void send_ping_frame();
 
+    bool decode_crsf_packet(AP_CRSF_Protocol::Frame& _frame);
+
     static const struct AP_Param::GroupInfo var_info[];
     static AP_CRSF_Out* get_singleton();
 
 private:
     enum class State : uint8_t {
         WAITING_FOR_PORT,
+        WAITING_FOR_RC_LOCK,
         WAITING_FOR_DEVICE_INFO,
         NEGOTIATING_2M,
         NEGOTIATING_1M,
+        HEALTH_CHECK_PING,
         RUNNING,
     };
+    
+    enum class BaudNegotiationResult : uint8_t {
+        PENDING,
+        SUCCESS,
+        FAILED,
+    };
+
+    bool do_status_update();
 
     static AP_CRSF_Out* _singleton;
 
     State _state;
     uint32_t _last_frame_us;
+    uint32_t _last_status_update_ms;
     uint32_t _last_baud_neg_us;
     uint32_t _baud_neg_start_us;
     uint32_t _frame_interval_us;
     uint32_t _target_baudrate;
+    uint32_t _last_liveness_check_us;
+    uint32_t _last_ping_frame_ms;
+
+    AP_CRSF_Protocol::VersionInfo version;
+    BaudNegotiationResult _baud_negotiation_result;
+    // check baudrate negotiation status
+    BaudNegotiationResult get_baud_negotiation_result() const { return _baud_negotiation_result; }
+    void reset_baud_negotiation();
 
     // @Param: RATE
     // @DisplayName: CRSF output rate

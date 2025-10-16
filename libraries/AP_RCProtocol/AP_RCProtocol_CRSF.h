@@ -32,9 +32,6 @@
 #include <AP_OSD/AP_OSD_config.h>
 
 #define CRSF_MAX_CHANNELS   24U      // Maximum number of channels from crsf datastream
-#define CRSF_FRAMELEN_MAX   64U      // maximum possible framelength
-#define CRSF_HEADER_LEN     2U       // header length
-#define CRSF_FRAME_PAYLOAD_MAX (CRSF_FRAMELEN_MAX - CRSF_HEADER_LEN)     // maximum size of the frame length field in a packet
 #define CRSF_FRAME_LENGTH_MIN 2 // min value for _frame.length
 #define CRSF_BAUDRATE      416666U
 #define ELRS_BAUDRATE      420000U
@@ -50,12 +47,6 @@ public:
         PASSTHROUGH_RCIN,
         DIRECT_VTX,
         DIRECT_RCOUT,
-    };
-
-    enum class BaudNegotiationResult : uint8_t {
-        PENDING,
-        SUCCESS,
-        FAILED,
     };
 
     // Constructor for RCIN "passthrough" mode (called by AP_RCProtocol)
@@ -103,14 +94,11 @@ public:
     void send_speed_proposal(uint32_t baudrate);
     // send a ping frame
     void send_ping_frame();
-    // check baudrate negotiation status
-    BaudNegotiationResult get_baud_negotiation_result() const { return _baud_negotiation_result; }
-    void reset_baud_negotiation() { _baud_negotiation_result = BaudNegotiationResult::PENDING; }
+    void reset_bootstrap_baudrate();
 #endif
 
     // Manager functions
     static void manager_init();
-    static void manager_update();
     // get singleton instance for RCIN
     static AP_RCProtocol_CRSF* get_rcin_singleton();
     // get singleton instance for any direct attach port
@@ -222,6 +210,7 @@ public:
 
     enum DeviceAddress {
         CRSF_ADDRESS_BROADCAST = 0x00,
+        CRSF_ADDRESS_SYNC_BYTE = 0xC8,
         CRSF_ADDRESS_USB = 0x10,
         CRSF_ADDRESS_TBS_CORE_PNP_PRO = 0x80,
         CRSF_ADDRESS_RESERVED1 = 0x8A,
@@ -244,13 +233,6 @@ public:
         CRSF_EXTENDED_FRAME_ORIGIN_OFFSET = 4,
         CRSF_EXTENDED_FRAME_PAYLOAD_OFFSET = 5,
     };
-
-    struct Frame {
-        uint8_t device_address;
-        uint8_t length;
-        uint8_t type;
-        uint8_t payload[CRSF_FRAME_PAYLOAD_MAX - 1]; // type is already accounted for
-    } PACKED;
 
     struct LinkStatisticsFrame {
         uint8_t uplink_rssi_ant1; // ( dBm * -1 )
@@ -352,8 +334,6 @@ public:
     // return the protocol string
     const char* get_protocol_string(AP_CRSF_Protocol::ProtocolType protocol) const;
 
-    const AP_CRSF_Protocol::VersionInfo& get_version_info() const { return version; }
-
 private:
     // private class to hold static state for the manager
     class Manager_State {
@@ -363,9 +343,9 @@ private:
         static uint32_t _last_manager_check_ms;
     };
 
-    struct Frame _frame;
+    struct AP_CRSF_Protocol::Frame _frame;
     uint8_t *_frame_bytes = (uint8_t*)&_frame;
-    struct Frame _telemetry_frame;
+    struct AP_CRSF_Protocol::Frame _telemetry_frame;
     uint8_t _frame_ofs;
 
     const uint8_t MAX_CHANNELS = MIN((uint8_t)CRSF_MAX_CHANNELS, (uint8_t)MAX_RCIN_CHANNELS);
@@ -381,7 +361,7 @@ private:
     void process_link_stats_rx_frame(const void* data);
     void process_link_stats_tx_frame(const void* data);
 
-    void write_frame(Frame* frame) const;
+    void write_frame(AP_CRSF_Protocol::Frame* frame) const;
     void start_uart();
     AP_HAL::UARTDriver* get_current_UART() const {
         if (_uart) return _uart;
@@ -398,10 +378,8 @@ private:
     uint32_t _start_frame_time_us;
     mutable bool telem_available;
     uint32_t _new_baud_rate;
-    BaudNegotiationResult _baud_negotiation_result;
     bool _crsf_v3_active;
     PortMode _mode;
-    AP_CRSF_Protocol::VersionInfo version;
 
     bool _use_lq_for_rssi;
     int16_t derive_scaled_lq_value(uint8_t uplink_lq);
