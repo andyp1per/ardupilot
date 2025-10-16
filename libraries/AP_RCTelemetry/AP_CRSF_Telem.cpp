@@ -428,7 +428,6 @@ bool AP_CRSF_Telem::is_packet_ready(uint8_t idx, bool queue_empty)
 // WFQ scheduler
 void AP_CRSF_Telem::process_packet(uint8_t idx)
 {
-    hal.console->printf("process packet %u\n", idx);
     // send packet
     switch (idx) {
         case HEARTBEAT: // HEARTBEAT
@@ -1963,7 +1962,7 @@ void AP_CRSF_Telem::get_multi_packet_passthrough_telem_data(uint8_t size)
   fetch CRSF frame data
   if is_tx_active is true then this will be a request for telemetry after receiving an RC frame
  */
-bool AP_CRSF_Telem::_get_telem_data(const AP_RCProtocol_CRSF* crsf_port, AP_RCProtocol_CRSF::Frame* data, bool is_tx_active)
+bool AP_CRSF_Telem::_get_telem_data(const AP_RCProtocol_CRSF* crsf_port, AP_CRSF_Protocol::Frame* data, bool is_tx_active)
 {
     memset(&_telem, 0, sizeof(TelemetryPayload));
     // update telemetry tasks if we either lost or regained the transmitter
@@ -2005,7 +2004,7 @@ bool AP_CRSF_Telem::process_frame(AP_RCProtocol_CRSF::FrameType frame_type, void
 /*
   fetch data for an external transport, such as CRSF
  */
-bool AP_CRSF_Telem::get_telem_data(const AP_RCProtocol_CRSF* crsf_port, AP_RCProtocol_CRSF::Frame* data, bool is_tx_active)
+bool AP_CRSF_Telem::get_telem_data(const AP_RCProtocol_CRSF* crsf_port, AP_CRSF_Protocol::Frame* data, bool is_tx_active)
 {
     if (!get_singleton()) {
         return false;
