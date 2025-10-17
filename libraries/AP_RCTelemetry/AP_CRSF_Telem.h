@@ -44,6 +44,11 @@ public:
     static const uint8_t PASSTHROUGH_MULTI_PACKET_FRAME_MAX_SIZE = 9U;
     static const uint8_t CRSF_RX_DEVICE_PING_MAX_RETRY = 50U;
 
+    using FrameType = AP_CRSF_Protocol::FrameType;
+    using DeviceAddress = AP_CRSF_Protocol::DeviceAddress;
+    using CommandID = AP_CRSF_Protocol::CommandID;
+    using CommandGeneral = AP_CRSF_Protocol::CommandGeneral;
+
     // Broadcast frame definitions courtesy of TBS
     struct PACKED GPSFrame {   // curious fact, calling this GPS makes sizeof(GPS) return 1!
         int32_t latitude; // ( degree / 10`000`000 )
