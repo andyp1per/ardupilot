@@ -24,6 +24,7 @@
 #include "AP_CRSF_Protocol.h"
 #include "AP_RCProtocol_CRSF.h"
 #include <AP_HAL/AP_HAL.h>
+#include <AP_Common/AP_FWVersion.h>
 #include <string.h>
 
 // Defines for CRSFv3 subset RC frame packing/unpacking
@@ -201,11 +202,79 @@ uint8_t AP_CRSF_Protocol::encode_variable_bit_channels(uint8_t *payload, const u
     return writeByteIndex;
 }
 
+// encode a ping frame
+void AP_CRSF_Protocol::encode_ping_frame(Frame& frame, DeviceAddress destination, DeviceAddress origin)
+{
+    frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
+    frame.type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAM_DEVICE_PING;
+
+    // Command payload buffer: dest(1), origin(1)
+    uint8_t command_data[2];
+
+    // Construct the inner command frame header
+    ParameterPingFrame* cmd_header = (ParameterPingFrame*)command_data;
+    cmd_header->destination = destination;
+    cmd_header->origin = origin;
+
+    // Calculate the inner CRC (poly 0xBA) over the 2-byte command data
+
+    const uint8_t inner_payload_len = 2;
+    uint8_t inner_crc = crc8_dvb_update_generic(0, command_data, inner_payload_len, 0xBA);
+
+    // Copy the command data and the inner CRC into the final frame payload
+    memcpy(frame.payload, command_data, inner_payload_len);
+    frame.payload[inner_payload_len] = inner_crc;
+
+    // Set the outer frame length.
+    // It is the length of the payload (Type + Inner Command Frame)
+    // Inner Command Frame = command_data(2) + inner_crc(1) = 10 bytes
+    // Total length = Type(1) + Inner Command Frame(3) = 4 bytes.
+    frame.length = 5;
+}
+
+// send a baudrate proposal
+void AP_CRSF_Protocol::encode_speed_proposal(Frame& frame, uint32_t baudrate, DeviceAddress destination, DeviceAddress origin)
+{
+    frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
+    frame.type = CRSF_FRAMETYPE_COMMAND;
+
+    // Command payload buffer: dest(1), origin(1), cmd_id(1), sub_cmd(1), port_id(1), baud(4)
+    uint8_t command_data[9];
+
+    // Construct the inner command frame header
+    CommandFrame* cmd_header = (CommandFrame*)command_data;
+    cmd_header->destination = destination;
+    cmd_header->origin = origin;
+    cmd_header->command_id = CRSF_COMMAND_GENERAL;
+
+    // Construct the sub-command payload
+    uint8_t* sub_payload = cmd_header->payload;
+    sub_payload[0] = CRSF_COMMAND_GENERAL_CRSF_SPEED_PROPOSAL;
+    sub_payload[1] = 1; // port ID, 0 for UART
+    uint32_t baud_be = htobe32(baudrate);
+    memcpy(&sub_payload[2], &baud_be, sizeof(baud_be));
+
+    // Calculate the inner CRC (poly 0xBA) over the 9-byte command data
+    const uint8_t inner_payload_len = 9;
+    uint8_t inner_crc = crc8_dvb_update_generic(0, command_data, inner_payload_len, 0xBA);
+
+    // Copy the command data and the inner CRC into the final frame payload
+    memcpy(frame.payload, command_data, inner_payload_len);
+    frame.payload[inner_payload_len] = inner_crc;
+
+    // Set the outer frame length.
+    // It is the length of the payload (Type + Inner Command Frame)
+    // Inner Command Frame = command_data(9) + inner_crc(1) = 10 bytes
+    // Total length = Type(1) + Inner Command Frame(10) = 11 bytes.
+    // The spec example shows a length of 12, which is correct as it includes a placeholder for the outer CRC
+    frame.length = 12;
+}
+
 // request for device info
 bool AP_CRSF_Protocol::process_device_info_frame(ParameterDeviceInfoFrame* info, VersionInfo* version, bool fakerx)
 {
-    const uint8_t destination = fakerx ? AP_RCProtocol_CRSF::CRSF_ADDRESS_CRSF_RECEIVER : AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER;
-    const uint8_t origin = fakerx ? AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER : AP_RCProtocol_CRSF::CRSF_ADDRESS_CRSF_RECEIVER;
+    const uint8_t destination = fakerx ? CRSF_ADDRESS_CRSF_RECEIVER : CRSF_ADDRESS_FLIGHT_CONTROLLER;
+    const uint8_t origin = fakerx ? CRSF_ADDRESS_FLIGHT_CONTROLLER : CRSF_ADDRESS_CRSF_RECEIVER;
 
     if (info->destination != 0 && info->destination != destination) {
         return false; // request was not for us
@@ -259,6 +328,57 @@ bool AP_CRSF_Protocol::process_device_info_frame(ParameterDeviceInfoFrame* info,
 
     return true;
 }
+
+#if 0
+bool AP_CRSF_Protocol::process_ping_frame(ParameterPingFrame* info, bool fakerx)
+{
+    const uint8_t destination = fakerx ? AP_RCProtocol_CRSF::CRSF_ADDRESS_CRSF_RECEIVER : AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER;
+    const uint8_t origin = fakerx ? AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER : AP_RCProtocol_CRSF::CRSF_ADDRESS_CRSF_RECEIVER;
+
+    if (info->destination != 0 && info->destination != destination) {
+        return false; // request was not for us
+    }
+
+    // we are only interested in RC device info for firmware version detection
+    if (info->origin != 0 && info->origin != origin) {
+        return false;
+    }
+}
+#endif
+
+// return device information about ArduPilot
+uint32_t AP_CRSF_Protocol::encode_device_info(ParameterDeviceInfoFrame& info, uint8_t num_params)
+{
+    // char[] Device name ( Null-terminated string )
+    // uint32_t Serial number
+    // uint32_t Hardware ID
+    // uint32_t Firmware ID
+    // uint8_t Parameters count
+    // uint8_t Parameter version number
+
+    const AP_FWVersion &fwver = AP::fwversion();
+    // write out the name with version, max width is 60 - 18 = the meaning of life
+    uint32_t n = strlen(fwver.fw_short_string);
+    strncpy((char*)info.payload, fwver.fw_short_string, 41);
+    n = MIN(n + 1, 42);
+
+    put_be32_ptr(&info.payload[n], fwver.os_sw_version);   // serial number
+    n += 4;
+
+    put_be32_ptr(&info.payload[n], // hardware id
+        uint32_t(fwver.vehicle_type) << 24 | uint32_t(fwver.board_type) << 16 | uint32_t(fwver.board_subtype));
+    n += 4;
+
+    put_be32_ptr(&info.payload[n], // firmware id, major/minor should be 3rd and 4th byte
+        uint32_t(fwver.major) << 8 | uint32_t(fwver.minor) | uint32_t(fwver.patch) << 24 | uint32_t(fwver.fw_type) << 16);
+    n += 4;
+
+    info.payload[n++] = num_params;
+    info.payload[n++] = 0;   // param version
+
+    return n;
+}
+
 
 #endif // AP_RCPROTOCOL_CRSF_ENABLED
 

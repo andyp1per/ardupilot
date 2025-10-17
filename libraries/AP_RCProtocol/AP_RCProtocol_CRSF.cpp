@@ -586,20 +586,6 @@ bool AP_RCProtocol_CRSF::send_rc_channels(const uint16_t* channels, uint8_t ncha
     return true;
 }
 
-// Helper function for CRC8 with custom polynomial, based on PDF
-static uint8_t crsf_crc8_calc(uint8_t crc, uint8_t data, uint8_t poly)
-{
-    crc ^= data;
-    for (int i = 0; i < 8; i++) {
-        if (crc & 0x80) {
-            crc = (crc << 1) ^ poly;
-        } else {
-            crc <<= 1;
-        }
-    }
-    return crc;
-}
-
 // send ping frame out
 void AP_RCProtocol_CRSF::send_ping_frame()
 {
@@ -610,33 +596,7 @@ void AP_RCProtocol_CRSF::send_ping_frame()
     debug("send_ping_frame() at %luk baud\n", _uart->get_baud_rate()/1000);
 
     AP_CRSF_Protocol::Frame frame;
-    frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
-    frame.type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAM_DEVICE_PING;
-
-    // Command payload buffer: dest(1), origin(1)
-    uint8_t command_data[2];
-
-    // Construct the inner command frame header
-    AP_CRSF_Protocol::ParameterPingFrame* cmd_header = (AP_CRSF_Protocol::ParameterPingFrame*)command_data;
-    cmd_header->destination = DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER;
-    cmd_header->origin = DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER;
-
-    // Calculate the inner CRC (poly 0xBA) over the 2-byte command data
-    const uint8_t inner_payload_len = 2;
-    uint8_t inner_crc = 0;
-    for (uint8_t i = 0; i < inner_payload_len; i++) {
-        inner_crc = crsf_crc8_calc(inner_crc, command_data[i], 0xBA);
-    }
-
-    // Copy the command data and the inner CRC into the final frame payload
-    memcpy(frame.payload, command_data, inner_payload_len);
-    frame.payload[inner_payload_len] = inner_crc;
-
-    // Set the outer frame length.
-    // It is the length of the payload (Type + Inner Command Frame)
-    // Inner Command Frame = command_data(2) + inner_crc(1) = 10 bytes
-    // Total length = Type(1) + Inner Command Frame(3) = 4 bytes.
-    frame.length = 5;
+    AP_CRSF_Protocol::encode_ping_frame(frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
 
     write_frame(&frame);
 }
@@ -652,42 +612,7 @@ void AP_RCProtocol_CRSF::send_speed_proposal(uint32_t baudrate)
     _new_baud_rate = baudrate;
 
     AP_CRSF_Protocol::Frame frame;
-    frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
-    frame.type = CRSF_FRAMETYPE_COMMAND;
-
-    // Command payload buffer: dest(1), origin(1), cmd_id(1), sub_cmd(1), port_id(1), baud(4)
-    uint8_t command_data[9];
-
-    // Construct the inner command frame header
-    AP_CRSF_Protocol::CommandFrame* cmd_header = (AP_CRSF_Protocol::CommandFrame*)command_data;
-    cmd_header->destination = DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER;
-    cmd_header->origin = DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER;
-    cmd_header->command_id = CRSF_COMMAND_GENERAL;
-
-    // Construct the sub-command payload
-    uint8_t* sub_payload = cmd_header->payload;
-    sub_payload[0] = CRSF_COMMAND_GENERAL_CRSF_SPEED_PROPOSAL;
-    sub_payload[1] = 1; // port ID, 0 for UART
-    uint32_t baud_be = htobe32(baudrate);
-    memcpy(&sub_payload[2], &baud_be, sizeof(baud_be));
-
-    // Calculate the inner CRC (poly 0xBA) over the 9-byte command data
-    const uint8_t inner_payload_len = 9;
-    uint8_t inner_crc = 0;
-    for (uint8_t i = 0; i < inner_payload_len; i++) {
-        inner_crc = crsf_crc8_calc(inner_crc, command_data[i], 0xBA);
-    }
-
-    // Copy the command data and the inner CRC into the final frame payload
-    memcpy(frame.payload, command_data, inner_payload_len);
-    frame.payload[inner_payload_len] = inner_crc;
-
-    // Set the outer frame length.
-    // It is the length of the payload (Type + Inner Command Frame)
-    // Inner Command Frame = command_data(9) + inner_crc(1) = 10 bytes
-    // Total length = Type(1) + Inner Command Frame(10) = 11 bytes.
-    // The spec example shows a length of 12, which is correct as it includes a placeholder for the outer CRC
-    frame.length = 12;
+    AP_CRSF_Protocol::encode_speed_proposal(frame, baudrate, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
 
     write_frame(&frame);
 }

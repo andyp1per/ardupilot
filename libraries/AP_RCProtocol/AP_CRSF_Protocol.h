@@ -156,6 +156,13 @@ public:
 
     // process a device info frame for version information
     static bool process_device_info_frame(ParameterDeviceInfoFrame* info, VersionInfo* version, bool fakerx);
+
+    // encode a device info frame for version information
+    static uint32_t encode_device_info(ParameterDeviceInfoFrame& info, uint8_t num_params);
+
+    static void encode_ping_frame(Frame& frame, DeviceAddress destination, DeviceAddress origin);
+
+    static void encode_speed_proposal(Frame& frame, uint32_t baudrate, DeviceAddress destination, DeviceAddress origin);
 };
 
 #endif // AP_RCPROTOCOL_CRSF_ENABLED
