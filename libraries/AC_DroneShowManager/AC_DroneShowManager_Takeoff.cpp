@@ -1,5 +1,9 @@
 #include "AC_DroneShowManager.h"
 
+#include <skybrush/skybrush.h>
+
+#include <GCS_MAVLink/GCS.h>
+
 bool AC_DroneShowManager::get_global_takeoff_position(Location& loc) const
 {
     // This function may be called any time, not only during the show, so we
@@ -33,6 +37,15 @@ float AC_DroneShowManager::get_motor_spool_up_time_sec() const {
     return DEFAULT_MOTOR_SPOOL_UP_TIME_SEC;
 }
 
+float AC_DroneShowManager::get_takeoff_speed_m_sec() const {
+    float result = _wp_nav ? _wp_nav->get_default_speed_up() / 100.0f : 0;
+    if (result <= 0 || !isfinite(result)) {
+        /* safety check */
+        result = DEFAULT_TAKEOFF_SPEED_METERS_PER_SEC;
+    }
+    return result;
+}
+
 float AC_DroneShowManager::get_time_until_takeoff_sec() const
 {
     return get_time_until_start_sec() + get_relative_takeoff_time_sec();
@@ -50,7 +63,44 @@ bool AC_DroneShowManager::notify_takeoff_attempt()
         return false;
     }
     
-    return _copy_show_coordinate_system_from_parameters_to(_show_coordinate_system);
+    if (!_copy_show_coordinate_system_from_parameters_to(_show_coordinate_system))
+    {
+        return false;
+    }
+
+    // If the trajectory is circular (i.e. drone is supposed to land where it
+    // took off from), tweak the end of the trajectory to account for placement
+    // inaccuracies (we want to land where we took off from, not where we
+    // _should_ have taken off from in a perfect world).
+    //
+    // This correction is nice to have but is not crucial. If an error happens
+    // in the process below, we just bail out and proceed without the correction.
+    if (
+        _has_option(DroneShowOption_CorrectLandingPositionForCircularTrajectories) &&
+        _trajectory_is_circular && !_trajectory_modified_for_landing
+    ) {
+        Location takeoff_location;
+        sb_vector3_with_yaw_t end;
+        float land_speed_mm_s;
+
+        if (!get_current_location(takeoff_location))
+        {
+            goto exit;
+        }
+
+        _show_coordinate_system.convert_global_to_show_coordinate(takeoff_location, end);
+
+        // TODO: query landing velocity from parameters
+        land_speed_mm_s = get_landing_speed_m_sec() * 1000.0f;   /* [mm/s] */
+        if (sb_trajectory_replace_end_to_land_at(_trajectory, _trajectory_stats, end, land_speed_mm_s)) {
+            goto exit;
+        }
+
+        _trajectory_modified_for_landing = true;
+    }
+
+exit:
+    return true;
 }
 
 bool AC_DroneShowManager::_is_at_takeoff_position_xy(float xy_threshold) const

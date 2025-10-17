@@ -44,10 +44,7 @@ AC_DroneShowManager::AC_DroneShowManager() :
     _start_time_requested_by(StartTimeSource::NONE),
     _start_time_on_internal_clock_usec(0),
     _start_time_unix_usec(0),
-    _takeoff_time_sec(0),
-    _landing_time_sec(0),
     _crtl_start_time_sec(0),
-    _total_duration_sec(0),
     _trajectory_is_circular(false),
     _cancel_requested(false),
     _controller_update_delta_msec(1000 / DEFAULT_UPDATE_RATE_HZ),
@@ -64,6 +61,9 @@ AC_DroneShowManager::AC_DroneShowManager() :
     _trajectory_player = new sb_trajectory_player_t;
     sb_trajectory_player_init(_trajectory_player, _trajectory);
 
+    _trajectory_stats = new sb_trajectory_stats_t;
+    sb_trajectory_stats_init(_trajectory_stats);
+    
     _light_program = new sb_light_program_t;
     sb_light_program_init_empty(_light_program);
 
@@ -105,6 +105,9 @@ AC_DroneShowManager::~AC_DroneShowManager()
 
     sb_light_program_destroy(_light_program);
     delete _light_program;
+
+    sb_trajectory_stats_destroy(_trajectory_stats);
+    delete _trajectory_stats;
 
     sb_trajectory_player_destroy(_trajectory_player);
     delete _trajectory_player;

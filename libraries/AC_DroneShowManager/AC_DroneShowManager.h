@@ -17,6 +17,7 @@
 #include <GCS_MAVLink/ap_message.h>
 
 #include <skybrush/colors.h>
+#include <skybrush/stats.h>
 
 #include "DroneShow_Enums.h"
 #include "DroneShow_FenceConfig.h"
@@ -278,10 +279,10 @@ public:
     const TelemetryRequest* get_preferred_telemetry_messages() const;
 
     // Returns the landing time relative to the start of the show
-    float get_relative_landing_time_sec() const { return _landing_time_sec; }
+    float get_relative_landing_time_sec() const { return _trajectory_stats->landing_time_sec; }
 
     // Returns the takeoff time relative to the start of the show
-    float get_relative_takeoff_time_sec() const { return _takeoff_time_sec; }
+    float get_relative_takeoff_time_sec() const { return _trajectory_stats->takeoff_time_sec; }
 
     // Returns the start time in microseconds. Depending on the value of the
     // SHOW_SYNC_MODE parameter, this might be an internal timestamp or a
@@ -296,7 +297,7 @@ public:
     }
 
     // Returns the total duration of the loaded trajectory, in seconds
-    float get_total_duration_sec() const { return _total_duration_sec; }
+    float get_total_duration_sec() const { return _trajectory_stats->duration_sec; }
 
     // Returns the number of seconds elapsed since show start, in microseconds
     int64_t get_elapsed_time_since_start_usec() const;
@@ -309,6 +310,9 @@ public:
 
     // Returns the current stage that the drone show mode is in
     DroneShowModeStage get_stage_in_drone_show_mode() const { return _stage_in_drone_show_mode; }
+
+    // Returns the landing speed in meters per second
+    float get_landing_speed_m_sec() const;
 
     // Returns the takeoff acceleration in meters per second squared
     float get_motor_spool_up_time_sec() const;
@@ -327,14 +331,7 @@ public:
     int32_t get_takeoff_altitude_cm() const { return _params.takeoff_altitude_m * 100.0f; }
 
     // Returns the takeoff speed in meters per second
-    float get_takeoff_speed_m_s() const {
-        float result = _wp_nav ? _wp_nav->get_default_speed_up() / 100.0f : 0;
-        if (result <= 0) {
-            /* safety check */
-            result = DEFAULT_TAKEOFF_SPEED_METERS_PER_SEC;
-        }
-        return result;
-    }
+    float get_takeoff_speed_m_sec() const;
 
     // Returns the number of seconds left until show start, in microseconds
     int64_t get_time_until_start_usec() const;
@@ -399,7 +396,10 @@ public:
 
     // Returns whether a valid takeoff time was determined for the show
     bool has_valid_takeoff_time() const {
-        return _takeoff_time_sec >= 0 && _landing_time_sec > _takeoff_time_sec;
+        return (
+            _trajectory_stats->takeoff_time_sec >= 0 && 
+            _trajectory_stats->landing_time_sec > _trajectory_stats->takeoff_time_sec
+        );
     }
 
     // Returns whether the drone is in the group with the given index
@@ -459,7 +459,7 @@ public:
     // at all. Returns false if the motors are running, the show file is corrupted or
     // there was an IO error.
     bool reload_show_from_storage() WARN_IF_UNUSED;
-
+    
     // Asks the drone show manager to schedule the start of a collective RTL
     // maneuver at the given timestamp. Returns whether the CRTL maneuver was
     // scheduled successfully.
@@ -528,6 +528,10 @@ public:
 
     // Bubble fence subsystem. See also the comment for the hard fence.
     AC_BubbleFence bubble_fence;
+
+    // Landing speed; we assume that the drone should attempt to land with this
+    // vertical speed if LAND_SPEED seems invalid
+    static constexpr float DEFAULT_LANDING_SPEED_METERS_PER_SEC = 1.0f;
 
     // Takeoff acceleration; we assume that the drone attempts to take off with
     // this vertical acceleration if WPNAV_ACCEL_Z seems invalid
@@ -657,6 +661,7 @@ private:
 
     struct sb_trajectory_s* _trajectory;
     struct sb_trajectory_player_s* _trajectory_player;
+    sb_trajectory_stats_t* _trajectory_stats;
     bool _trajectory_valid;
 
     struct sb_light_program_s* _light_program;
@@ -703,13 +708,7 @@ private:
     // Takeoff position, in local coordinates, relative to the show coordinate system.
     // Zero if no show data is loaded. Units are in millimeters.
     Vector3f _takeoff_position_mm;
-
-    // Time when we need to take off, relative to the start of the show, in seconds
-    float _takeoff_time_sec;
-
-    // Time when we need to land relative to the start of the show, in seconds
-    float _landing_time_sec;
-
+    
     // Time when we need to start a coordinated RTL trajectory, relative to the
     // start of the show, in seconds. Zero if unscheduled.
     float _crtl_start_time_sec;
@@ -731,9 +730,6 @@ private:
     // Current execution stage of the drone show mode. This is pushed here from
     // the drone show mode when the stage changes in the mode.
     DroneShowModeStage _stage_in_drone_show_mode;
-
-    // Total duration of the show, in seconds
-    float _total_duration_sec;
 
     // Flag to indicate whether the trajectory ends at the same location where
     // it started. This is used to determine whether the drone should land or
@@ -877,6 +873,11 @@ private:
 
     // Callback that is called when entering the "landed" stage
     void _handle_switch_to_landed_state();
+
+    // Returns whether the given option flag is set in the SHOW_OPTIONS parameter
+    bool _has_option(DroneShowOptionFlag option) const {
+        return (_params.show_options & option) != 0;
+    }
 
     // Returns whether the drone is close enough to its expected position during a show.
     // Returns true unconditionally if the drone is not performing a show.

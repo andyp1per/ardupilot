@@ -299,7 +299,7 @@ const AP_Param::GroupInfo AC_DroneShowManager::var_info[] = {
     // @Param: OPTIONS
     // @DisplayName: Show flight mode options
     // @Description: General options related to the show flight mode
-    // @Bitmask: 0:Disable failsafe lights
+    // @Bitmask: 0:Disable failsafe lights, 1:Attempt to adjust the landing segment of circular trajectories to land at the exact takeoff position
     // @User: Advanced
     AP_GROUPINFO("OPTIONS", 37, AC_DroneShowManager, _params.show_options, 0),
 

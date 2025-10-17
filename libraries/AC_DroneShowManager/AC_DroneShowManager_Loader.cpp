@@ -197,7 +197,9 @@ bool AC_DroneShowManager::_load_show_file_from_storage()
             {
                 hal.console->printf(
                     "Loaded show: %.1fs, takeoff at %.1fs, landing at %.1fs\n",
-                    _total_duration_sec, _takeoff_time_sec, _landing_time_sec
+                    _trajectory_stats->duration_sec, 
+                    _trajectory_stats->takeoff_time_sec, 
+                    _trajectory_stats->landing_time_sec
                 );
                 success = true;
             }
@@ -283,7 +285,6 @@ bool AC_DroneShowManager::_load_show_file_from_storage()
 bool AC_DroneShowManager::_recalculate_trajectory_properties()
 {
     sb_trajectory_stats_calculator_t stats_calculator;
-    sb_trajectory_stats_t stats;
     sb_vector3_with_yaw_t vec;
     bool success = false;
 
@@ -302,20 +303,17 @@ bool AC_DroneShowManager::_recalculate_trajectory_properties()
     _takeoff_position_mm.y = vec.y;
     _takeoff_position_mm.z = vec.z;
 
-    _total_duration_sec = 0;
-    _takeoff_time_sec = _landing_time_sec = -1;
+    _trajectory_stats->duration_sec = 0;
+    _trajectory_stats->takeoff_time_sec = _trajectory_stats->landing_time_sec = -1;
     _trajectory_is_circular = false;
 
     stats_calculator.min_ascent = get_takeoff_altitude_cm() * 10.0f; /* [mm] */
     stats_calculator.preferred_descent = stats_calculator.min_ascent;
-    stats_calculator.takeoff_speed = get_takeoff_speed_m_s() * 1000.0f; /* [mm/s] */
+    stats_calculator.takeoff_speed = get_takeoff_speed_m_sec() * 1000.0f; /* [mm/s] */
     stats_calculator.acceleration = get_takeoff_acceleration_m_ss() * 1000.0f; /* [mm/s/s] */
 
-    if (sb_trajectory_stats_calculator_run(&stats_calculator, _trajectory, &stats) == SB_SUCCESS)
+    if (sb_trajectory_stats_calculator_run(&stats_calculator, _trajectory, _trajectory_stats) == SB_SUCCESS)
     {
-        _total_duration_sec = stats.duration_sec;
-        _takeoff_time_sec = stats.takeoff_time_sec;
-        _landing_time_sec = stats.landing_time_sec;
         success = true;
     }
 
@@ -326,7 +324,7 @@ bool AC_DroneShowManager::_recalculate_trajectory_properties()
         // The trajectory is circular if the takeoff and landing positions are
         // sufficiently close in the XY plane
         _trajectory_is_circular = (
-            stats.start_to_end_distance_xy <=
+            _trajectory_stats->start_to_end_distance_xy <=
             DEFAULT_START_END_XY_DISTANCE_THRESHOLD_METERS * 1000.0f /* [mm] */
         );
 
@@ -337,25 +335,25 @@ bool AC_DroneShowManager::_recalculate_trajectory_properties()
         _trajectory_modified_for_landing = false;
 
         // We need to takeoff earlier due to expected motor spool up time
-        _takeoff_time_sec -= get_motor_spool_up_time_sec();
+        _trajectory_stats->takeoff_time_sec -= get_motor_spool_up_time_sec();
 
         // Make sure that we never take off before the scheduled start of the
         // show, even if we are going to be a bit late with the takeoff
-        if (_takeoff_time_sec < 0)
+        if (_trajectory_stats->takeoff_time_sec < 0)
         {
-            _takeoff_time_sec = 0;
+            _trajectory_stats->takeoff_time_sec = 0;
         }
 
         // Check whether the landing time is later than the takeoff time. If it is
         // earlier, it shows that there's something wrong with the trajectory so
         // let's not take off at all.
-        success = _landing_time_sec >= _takeoff_time_sec;
+        success = _trajectory_stats->landing_time_sec >= _trajectory_stats->takeoff_time_sec;
     }
 
     if (!success)
     {
         // This should ensure that has_valid_takeoff_time() returns false
-        _landing_time_sec = _takeoff_time_sec = -1;
+        _trajectory_stats->landing_time_sec = _trajectory_stats->takeoff_time_sec = -1;
     }
 
     return true;
