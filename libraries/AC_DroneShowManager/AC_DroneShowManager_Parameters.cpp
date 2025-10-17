@@ -152,7 +152,7 @@ const AP_Param::GroupInfo AC_DroneShowManager::var_info[] = {
 
     // @Param: VEL_FF_GAIN
     // @DisplayName: Velocity feed-forward gain
-    // @Description: Multiplier used when mixing the desired velocity of the drone into the velocity target of the position controller. Lower values will result in more relaxed/stable behaviour, at the price of a smoothed trajectory with rounded corners, less accuracy and more lag behind desired position. Higher values will decrease lag, make trajectory following more accurate, sharp and agressive, but might increase overshoot at corners and decrease stability if general attitude control is not tuned well.
+    // @Description: Multiplier used when mixing the desired velocity of the drone into the velocity target of the position controller. Lower values will result in more relaxed/stable behaviour, at the price of a smoothed trajectory with rounded corners, less accuracy and more lag behind desired position. Higher values will decrease lag, make trajectory following more accurate, sharp and aggressive, but might increase overshoot at corners and decrease stability if general attitude control is not tuned well.
     // @Range: 0 1
     // @Increment: 0.1
     // @User: Advanced
