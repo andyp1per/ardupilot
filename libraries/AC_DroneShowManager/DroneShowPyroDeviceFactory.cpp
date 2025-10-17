@@ -2,6 +2,7 @@
 
 #include <SRV_Channel/SRV_Channel.h>
 
+#include "DroneShowPyroDevice_Cobra.h"
 #include "DroneShowPyroDevice_Debug.h"
 #include "DroneShowPyroDevice_SingleServo.h"
 #include "DroneShowPyroDevice_MultipleServos.h"
@@ -34,6 +35,10 @@ DroneShowPyroDevice* DroneShowPyroDeviceFactory::new_pyro_device_by_type(
             if (channel_mask) {
                 result = new DroneShowPyroDevice_MultipleServos(channel_mask);
             }
+            break;
+
+        case DroneShowPyroDeviceType_Cobra:
+            result = new DroneShowPyroDevice_Cobra();
             break;
 
         default:

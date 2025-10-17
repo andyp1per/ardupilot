@@ -160,6 +160,10 @@
 // Drone show - perform a timed waypoint flight with LED lights
 #ifndef MODE_DRONE_SHOW_ENABLED
 # define MODE_DRONE_SHOW_ENABLED 1
+// Disable the Volz servo protocol as we use this value in the SerialProtocol
+// enum for the Cobra pyro ignition device instead
+# undef AP_VOLZ_ENABLED
+# define AP_VOLZ_ENABLED 0
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
