@@ -204,13 +204,19 @@ const char* AP_RCProtocol_CRSF::get_protocol_string(AP_CRSF_Protocol::ProtocolTy
 
 // return the link rate as defined by the LinkStatistics
 uint16_t AP_RCProtocol_CRSF::get_link_rate(AP_CRSF_Protocol::ProtocolType protocol) const {
+    if (_link_status.fps > 0) { // new way - direct linkn rate
+        return _link_status.fps * 10;
+    }
+
     if (protocol == AP_CRSF_Protocol::ProtocolType::PROTOCOL_ELRS) {
         return RF_MODE_RATES[_link_status.rf_mode + RFMode::CRSF_RF_MAX_MODES];
-    } else if (protocol == AP_CRSF_Protocol::ProtocolType::PROTOCOL_TRACER) {
-        return 250;
-    } else {
-        return RF_MODE_RATES[_link_status.rf_mode];
     }
+
+    if (protocol == AP_CRSF_Protocol::ProtocolType::PROTOCOL_TRACER) {
+        return 250;
+    }
+
+    return RF_MODE_RATES[_link_status.rf_mode];
 }
 
 // process a byte provided by a uart from rc stack (Passthrough mode)
@@ -612,7 +618,7 @@ void AP_RCProtocol_CRSF::send_speed_proposal(uint32_t baudrate)
     _new_baud_rate = baudrate;
 
     AP_CRSF_Protocol::Frame frame;
-    AP_CRSF_Protocol::encode_speed_proposal(frame, baudrate, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
+    AP_CRSF_Protocol::encode_speed_proposal(baudrate, frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
 
     write_frame(&frame);
 }
@@ -627,6 +633,20 @@ void AP_RCProtocol_CRSF::send_device_info()
 
     AP_CRSF_Protocol::Frame frame;
     AP_CRSF_Protocol::encode_device_info_frame(frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
+
+    write_frame(&frame);
+}
+
+void AP_RCProtocol_CRSF::send_link_stats_tx(uint32_t fps)
+{
+    if (_mode != PortMode::DIRECT_RCOUT || !_uart) {
+        return;
+    }
+
+    debug("send_link_stats_tx(%u)\n");
+
+    AP_CRSF_Protocol::Frame frame;
+    AP_CRSF_Protocol::encode_link_stats_tx_frame(fps, frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
 
     write_frame(&frame);
 }
@@ -729,13 +749,15 @@ void AP_RCProtocol_CRSF::process_link_stats_rx_frame(const void* data)
 // process link statistics to get TX RSSI
 void AP_RCProtocol_CRSF::process_link_stats_tx_frame(const void* data)
 {
-    const LinkStatisticsTXFrame* link = (const LinkStatisticsTXFrame*)data;
+    const AP_CRSF_Protocol::LinkStatisticsTXFrame* link = (const AP_CRSF_Protocol::LinkStatisticsTXFrame*)data;
 
     if (_use_lq_for_rssi) {
         _link_status.rssi = derive_scaled_lq_value(link->link_quality);
     } else {
         _link_status.rssi = link->rssi_percent * 255.0f * 0.01f;
     }
+
+    _link_status.fps = link->fps;
 }
 
 // start the uart if we have one

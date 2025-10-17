@@ -233,7 +233,7 @@ void AP_CRSF_Protocol::encode_ping_frame(Frame& frame, DeviceAddress destination
 }
 
 // send a baudrate proposal
-void AP_CRSF_Protocol::encode_speed_proposal(Frame& frame, uint32_t baudrate, DeviceAddress destination, DeviceAddress origin)
+void AP_CRSF_Protocol::encode_speed_proposal(uint32_t baudrate, Frame& frame, DeviceAddress destination, DeviceAddress origin)
 {
     frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
     frame.type = CRSF_FRAMETYPE_COMMAND;
@@ -370,6 +370,24 @@ void AP_CRSF_Protocol::encode_device_info_frame(Frame& frame, DeviceAddress dest
     // It is the length of the payload (Type + Inner Command Frame)
     // Inner Command Frame = data + crc
     frame.length = inner_payload_len + 3;
+}
+
+// encode a link stats frame
+void AP_CRSF_Protocol::encode_link_stats_tx_frame(uint32_t fps, Frame& frame, DeviceAddress destination, DeviceAddress origin)
+{
+    frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
+    frame.type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_LINK_STATISTICS_TX;
+
+    LinkStatisticsTXFrame* stats = (LinkStatisticsTXFrame*)&frame.payload;
+    stats->fps = fps/10;
+    stats->rssi_db = 0;
+    stats->rssi_percent = 100;
+    stats->link_quality = fps;
+    stats->snr = 30;
+    stats->rf_power_db = 14;    // 25mW
+
+    // It is the length of the payload + type + crc
+    frame.length = sizeof(LinkStatisticsTXFrame) + 2;
 }
 
 // return device information about ArduPilot

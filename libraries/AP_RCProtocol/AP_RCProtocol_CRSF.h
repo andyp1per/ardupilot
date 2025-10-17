@@ -96,6 +96,8 @@ public:
     void send_ping_frame();
     // send a device info frame
     void send_device_info();
+    // send the link stats frame
+    void send_link_stats_tx(uint32_t fps);
     void reset_bootstrap_baudrate();
 #endif
 
@@ -241,15 +243,6 @@ public:
         uint8_t rf_power_db;    // rf power in dBm
     } PACKED;
 
-    struct LinkStatisticsTXFrame {
-        uint8_t rssi_db;        // RSSI(dBm*-1)
-        uint8_t rssi_percent;   // RSSI in percent
-        uint8_t link_quality;   // Package success rate / Link quality ( % )
-        int8_t snr;             // SNR(dB)
-        uint8_t rf_power_db;    // rf power in dBm
-        uint8_t fps;            // rf frames per second (fps / 10)
-    } PACKED;
-
     struct SubsetChannelsFrame {
 #if __BYTE_ORDER != __LITTLE_ENDIAN
 #error "Only supported on little-endian architectures"
@@ -298,6 +291,7 @@ public:
         int16_t rssi = -1;
         int16_t link_quality = -1;
         uint8_t rf_mode;
+        uint8_t fps;    // fps / 10
 #if AP_OSD_LINK_STATS_EXTENSIONS_ENABLED
         // Add the extra data fields to be used by the OSD panels
         int16_t tx_power = -1;
@@ -319,6 +313,9 @@ public:
 
     // return the protocol string
     const char* get_protocol_string(AP_CRSF_Protocol::ProtocolType protocol) const;
+
+    // write a CRSF Frame structure to the managed uart
+    void write_frame(AP_CRSF_Protocol::Frame* frame) const;
 
 private:
     // private class to hold static state for the manager
@@ -347,7 +344,6 @@ private:
     void process_link_stats_rx_frame(const void* data);
     void process_link_stats_tx_frame(const void* data);
 
-    void write_frame(AP_CRSF_Protocol::Frame* frame) const;
     void start_uart();
     AP_HAL::UARTDriver* get_current_UART() const {
         if (_uart) return _uart;

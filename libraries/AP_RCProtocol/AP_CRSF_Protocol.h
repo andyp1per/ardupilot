@@ -114,6 +114,15 @@ public:
         uint8_t payload[CRSF_FRAME_PAYLOAD_MAX - 1]; // type is already accounted for
     } PACKED;
 
+    struct LinkStatisticsTXFrame {
+        uint8_t rssi_db;        // RSSI(dBm*-1)
+        uint8_t rssi_percent;   // RSSI in percent
+        uint8_t link_quality;   // Package success rate / Link quality ( % )
+        int8_t snr;             // SNR(dB)
+        uint8_t rf_power_db;    // rf power in dBm
+        uint8_t fps;            // rf frames per second (fps / 10)
+    } PACKED;
+
     // CRSF_FRAMETYPE_COMMAND
     struct PACKED CommandFrame {
         uint8_t destination;
@@ -164,7 +173,9 @@ public:
 
     static void encode_ping_frame(Frame& frame, DeviceAddress destination, DeviceAddress origin);
 
-    static void encode_speed_proposal(Frame& frame, uint32_t baudrate, DeviceAddress destination, DeviceAddress origin);
+    static void encode_speed_proposal(uint32_t baudrate, Frame& frame, DeviceAddress destination, DeviceAddress origin);
+
+    static void encode_link_stats_tx_frame(uint32_t fps, Frame& frame, DeviceAddress destination, DeviceAddress origin);
 };
 
 #endif // AP_RCPROTOCOL_CRSF_ENABLED

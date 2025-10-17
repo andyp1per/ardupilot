@@ -249,7 +249,13 @@ void AP_CRSF_Out::update()
 
     case State::RUNNING:
         if (_crsf_port->is_rx_active()) {   // the remote side is sending data, we can send frames
-            send_rc_frame();
+            // periodically send link stats info
+            if (now - _last_liveness_check_us > LIVENESS_CHECK_TIMEOUT_US) {
+                _crsf_port->send_link_stats_tx(_rate_hz);
+                _last_liveness_check_us = now;
+            } else {
+                send_rc_frame();
+            }
         } else {
             debug_rcout("Connection lost, checking liveness");
             _last_liveness_check_us = now;
