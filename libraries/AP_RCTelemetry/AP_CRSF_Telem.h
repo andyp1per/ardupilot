@@ -408,7 +408,7 @@ private:
     bool _is_tx_active;
 
     struct {
-        uint8_t destination = AP_RCProtocol_CRSF::CRSF_ADDRESS_BROADCAST;
+        uint8_t destination = AP_CRSF_Protocol::CRSF_ADDRESS_BROADCAST;
         uint8_t frame_type;
     } _pending_request;
 
