@@ -68,6 +68,7 @@ public:
         CRSF_COMMAND_LED = 0x09,
         CRSF_COMMAND_GENERAL = 0x0A,
         CRSF_COMMAND_RX = 0x10,
+        CRSF_COMMAND_ACK = 0xFF,
     };
 
     enum DeviceAddress {
@@ -99,6 +100,13 @@ public:
         CRSF_COMMAND_GENERAL_SOFTWARE_PRODUCT_KEY = 0x60,
         CRSF_COMMAND_GENERAL_CRSF_SPEED_PROPOSAL = 0x70,    // proposed new CRSF port speed
         CRSF_COMMAND_GENERAL_CRSF_SPEED_RESPONSE = 0x71,    // response to the proposed CRSF port speed
+    };
+
+    // SubType IDs for CRSF_FRAMETYPE_CUSTOM_TELEM
+    enum CustomTelemSubTypeID : uint8_t {
+        CRSF_AP_CUSTOM_TELEM_SINGLE_PACKET_PASSTHROUGH = 0xF0,
+        CRSF_AP_CUSTOM_TELEM_STATUS_TEXT = 0xF1,
+        CRSF_AP_CUSTOM_TELEM_MULTI_PACKET_PASSTHROUGH = 0xF2,
     };
 
     enum class ProtocolType {

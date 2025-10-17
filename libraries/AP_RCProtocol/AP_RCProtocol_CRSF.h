@@ -88,16 +88,6 @@ public:
     }
 
 #if AP_CRSF_OUT_ENABLED
-    // send RC channels out
-    bool send_rc_channels(const uint16_t* channels, uint8_t nchannels);
-    // send a baudrate proposal
-    void send_speed_proposal(uint32_t baudrate);
-    // send a ping frame
-    void send_ping_frame();
-    // send a device info frame
-    void send_device_info();
-    // send the link stats frame
-    void send_link_stats_tx(uint32_t fps);
     void reset_bootstrap_baudrate();
 #endif
 
@@ -108,45 +98,11 @@ public:
     // get singleton instance for any direct attach port
     static AP_RCProtocol_CRSF* get_direct_attach_singleton(AP_SerialManager::SerialProtocol protocol, uint8_t instance);
 
-    enum FrameType {
-        CRSF_FRAMETYPE_GPS = 0x02,
-        CRSF_FRAMETYPE_VARIO = 0x07,
-        CRSF_FRAMETYPE_BATTERY_SENSOR = 0x08,
-        CRSF_FRAMETYPE_BARO_VARIO = 0x09,
-        CRSF_FRAMETYPE_HEARTBEAT = 0x0B,
-        CRSF_FRAMETYPE_VTX = 0x0F,
-        CRSF_FRAMETYPE_VTX_TELEM = 0x10,
-        CRSF_FRAMETYPE_LINK_STATISTICS = 0x14,
-        CRSF_FRAMETYPE_RC_CHANNELS_PACKED = 0x16,
-        CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED = 0x17,
-        CRSF_FRAMETYPE_RC_CHANNELS_PACKED_11BIT = 0x18,
-        CRSF_FRAMETYPE_LINK_STATISTICS_RX = 0x1C,
-        CRSF_FRAMETYPE_LINK_STATISTICS_TX = 0x1D,
-        CRSF_FRAMETYPE_ATTITUDE = 0x1E,
-        CRSF_FRAMETYPE_FLIGHT_MODE = 0x21,
-        // Extended Header Frames, range: 0x28 to 0x96
-        CRSF_FRAMETYPE_PARAM_DEVICE_PING = 0x28,
-        CRSF_FRAMETYPE_PARAM_DEVICE_INFO = 0x29,
-        CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY = 0x2B,
-        CRSF_FRAMETYPE_PARAMETER_READ = 0x2C,
-        CRSF_FRAMETYPE_PARAMETER_WRITE = 0x2D,
-        CRSF_FRAMETYPE_COMMAND = 0x32,
-        // Custom Telemetry Frames 0x7F,0x80
-        CRSF_FRAMETYPE_AP_CUSTOM_TELEM_LEGACY = 0x7F,   // as suggested by Remo Masina for fw < 4.06
-        CRSF_FRAMETYPE_AP_CUSTOM_TELEM = 0x80,          // reserved for ArduPilot by TBS, requires fw >= 4.06
-    };
-
-    // Command IDs for CRSF_FRAMETYPE_COMMAND
-    enum CommandID {
-        CRSF_COMMAND_FC = 0x01,
-        CRSF_COMMAND_BLUETOOTH = 0x03,
-        CRSF_COMMAND_OSD = 0x05,
-        CRSF_COMMAND_VTX = 0x08,
-        CRSF_COMMAND_LED = 0x09,
-        CRSF_COMMAND_GENERAL = 0x0A,
-        CRSF_COMMAND_RX = 0x10,
-        CRSF_COMMAND_ACK = 0xFF,
-    };
+    // import enums from AP_CRSF_Protocol for convenience
+    using FrameType = AP_CRSF_Protocol::FrameType;
+    using DeviceAddress = AP_CRSF_Protocol::DeviceAddress;
+    using CommandID = AP_CRSF_Protocol::CommandID;
+    using CommandGeneral = AP_CRSF_Protocol::CommandGeneral;
 
     // Commands for CRSF_COMMAND_FC
     enum CommandFC {
@@ -191,28 +147,6 @@ public:
         CRSF_COMMAND_RX_CANCEL_BIND = 0x02,
         CRSF_COMMAND_RX_SET_BIND_ID = 0x03,
     };
-
-    // Commands for CRSF_COMMAND_GENERAL
-    enum CommandGeneral {
-        CRSF_COMMAND_GENERAL_CHILD_DEVICE_REQUEST = 0x04,
-        CRSF_COMMAND_GENERAL_CHILD_DEVICE_FRAME = 0x05,
-        CRSF_COMMAND_GENERAL_FIRMWARE_UPDATE_BOOTLOADER = 0x0A,
-        CRSF_COMMAND_GENERAL_FIRMWARE_UPDATE_ERASE = 0x0B,
-        CRSF_COMMAND_GENERAL_WRITE_SERIAL_NUMBER = 0x13,
-        CRSF_COMMAND_GENERAL_USER_ID = 0x15,
-        CRSF_COMMAND_GENERAL_SOFTWARE_PRODUCT_KEY = 0x60,
-        CRSF_COMMAND_GENERAL_CRSF_SPEED_PROPOSAL = 0x70,    // proposed new CRSF port speed
-        CRSF_COMMAND_GENERAL_CRSF_SPEED_RESPONSE = 0x71,    // response to the proposed CRSF port speed
-    };
-
-    // SubType IDs for CRSF_FRAMETYPE_CUSTOM_TELEM
-    enum CustomTelemSubTypeID : uint8_t {
-        CRSF_AP_CUSTOM_TELEM_SINGLE_PACKET_PASSTHROUGH = 0xF0,
-        CRSF_AP_CUSTOM_TELEM_STATUS_TEXT = 0xF1,
-        CRSF_AP_CUSTOM_TELEM_MULTI_PACKET_PASSTHROUGH = 0xF2,
-    };
-
-    using DeviceAddress = AP_CRSF_Protocol::DeviceAddress;
 
     enum ExtendedFrameOffset {
         CRSF_EXTENDED_FRAME_LENGTH_OFFSET = 1,
@@ -332,8 +266,6 @@ private:
     uint8_t _frame_ofs;
 
     const uint8_t MAX_CHANNELS = MIN((uint8_t)CRSF_MAX_CHANNELS, (uint8_t)MAX_RCIN_CHANNELS);
-
-    AP_CRSF_Protocol* _protocol_helper;
 
     void _process_byte(uint8_t byte);
     bool check_frame(uint32_t timestamp_us);

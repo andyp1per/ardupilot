@@ -45,52 +45,52 @@ extern const AP_HAL::HAL& hal;
 const char* AP_CRSF_Protocol::get_frame_type(uint8_t byte, uint8_t subtype)
 {
     switch(byte) {
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_GPS:
+    case CRSF_FRAMETYPE_GPS:
         return "GPS";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_BATTERY_SENSOR:
+    case CRSF_FRAMETYPE_BATTERY_SENSOR:
         return "BATTERY";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_HEARTBEAT:
+    case CRSF_FRAMETYPE_HEARTBEAT:
         return "HEARTBEAT";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_VTX:
+    case CRSF_FRAMETYPE_VTX:
         return "VTX";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_VTX_TELEM:
+    case CRSF_FRAMETYPE_VTX_TELEM:
         return "VTX_TELEM";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAM_DEVICE_PING:
+    case CRSF_FRAMETYPE_PARAM_DEVICE_PING:
         return "PING";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_COMMAND:
+    case CRSF_FRAMETYPE_COMMAND:
         return "COMMAND";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_ATTITUDE:
+    case CRSF_FRAMETYPE_ATTITUDE:
         return "ATTITUDE";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_FLIGHT_MODE:
+    case CRSF_FRAMETYPE_FLIGHT_MODE:
         return "FLIGHT_MODE";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAM_DEVICE_INFO:
+    case CRSF_FRAMETYPE_PARAM_DEVICE_INFO:
         return "DEVICE_INFO";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAMETER_READ:
+    case CRSF_FRAMETYPE_PARAMETER_READ:
         return "PARAM_READ";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY:
+    case CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY:
         return "SETTINGS_ENTRY";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_LINK_STATISTICS:
+    case CRSF_FRAMETYPE_LINK_STATISTICS:
         return "LINK_STATS";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_RC_CHANNELS_PACKED:
+    case CRSF_FRAMETYPE_RC_CHANNELS_PACKED:
         return "RC";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED:
+    case CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED:
         return "RCv3";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_RC_CHANNELS_PACKED_11BIT:
+    case CRSF_FRAMETYPE_RC_CHANNELS_PACKED_11BIT:
         return "RCv3_11BIT";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_LINK_STATISTICS_RX:
+    case CRSF_FRAMETYPE_LINK_STATISTICS_RX:
         return "LINK_STATSv3_RX";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_LINK_STATISTICS_TX:
+    case CRSF_FRAMETYPE_LINK_STATISTICS_TX:
         return "LINK_STATSv3_TX";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAMETER_WRITE:
+    case CRSF_FRAMETYPE_PARAMETER_WRITE:
         return "PARAM_WRITE";
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_AP_CUSTOM_TELEM_LEGACY:
-    case AP_RCProtocol_CRSF::CRSF_FRAMETYPE_AP_CUSTOM_TELEM:
+    case CRSF_FRAMETYPE_AP_CUSTOM_TELEM_LEGACY:
+    case CRSF_FRAMETYPE_AP_CUSTOM_TELEM:
         switch (subtype) {
-        case AP_RCProtocol_CRSF::CRSF_AP_CUSTOM_TELEM_SINGLE_PACKET_PASSTHROUGH:
+        case CRSF_AP_CUSTOM_TELEM_SINGLE_PACKET_PASSTHROUGH:
             return "AP_CUSTOM_SINGLE";
-        case AP_RCProtocol_CRSF::CRSF_AP_CUSTOM_TELEM_STATUS_TEXT:
+        case CRSF_AP_CUSTOM_TELEM_STATUS_TEXT:
             return "AP_CUSTOM_TEXT";
-        case AP_RCProtocol_CRSF::CRSF_AP_CUSTOM_TELEM_MULTI_PACKET_PASSTHROUGH:
+        case CRSF_AP_CUSTOM_TELEM_MULTI_PACKET_PASSTHROUGH:
             return "AP_CUSTOM_MULTI";
         }
         return "AP_CUSTOM";
@@ -206,7 +206,7 @@ uint8_t AP_CRSF_Protocol::encode_variable_bit_channels(uint8_t *payload, const u
 void AP_CRSF_Protocol::encode_ping_frame(Frame& frame, DeviceAddress destination, DeviceAddress origin)
 {
     frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
-    frame.type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAM_DEVICE_PING;
+    frame.type = CRSF_FRAMETYPE_PARAM_DEVICE_PING;
 
     // Command payload buffer: dest(1), origin(1)
     uint8_t command_data[2];
@@ -350,7 +350,7 @@ bool AP_CRSF_Protocol::process_ping_frame(ParameterPingFrame* info, bool fakerx)
 void AP_CRSF_Protocol::encode_device_info_frame(Frame& frame, DeviceAddress destination, DeviceAddress origin)
 {
     frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
-    frame.type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAM_DEVICE_INFO;
+    frame.type = CRSF_FRAMETYPE_PARAM_DEVICE_INFO;
 
     ParameterDeviceInfoFrame info;
 
@@ -376,7 +376,7 @@ void AP_CRSF_Protocol::encode_device_info_frame(Frame& frame, DeviceAddress dest
 void AP_CRSF_Protocol::encode_link_stats_tx_frame(uint32_t fps, Frame& frame, DeviceAddress destination, DeviceAddress origin)
 {
     frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
-    frame.type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_LINK_STATISTICS_TX;
+    frame.type = CRSF_FRAMETYPE_LINK_STATISTICS_TX;
 
     LinkStatisticsTXFrame* stats = (LinkStatisticsTXFrame*)&frame.payload;
     stats->fps = fps/10;

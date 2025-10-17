@@ -163,7 +163,6 @@ AP_RCProtocol_CRSF::AP_RCProtocol_CRSF(AP_RCProtocol &_frontend) :
     _mode(PortMode::PASSTHROUGH_RCIN),
     _uart(nullptr)
 {
-    _protocol_helper = new AP_CRSF_Protocol();
     // This is the RCIN instance, register it as the singleton
     Manager_State::_rcin_singleton = this;
 }
@@ -174,13 +173,11 @@ AP_RCProtocol_CRSF::AP_RCProtocol_CRSF(AP_RCProtocol &_frontend, PortMode mode, 
     _mode(mode),
     _uart(uart)
 {
-    _protocol_helper = new AP_CRSF_Protocol();
     start_uart();
 }
 
 AP_RCProtocol_CRSF::~AP_RCProtocol_CRSF()
 {
-    delete _protocol_helper;
     for (uint8_t i = 0; i < HAL_NUM_SERIAL_PORTS; i++) {
         if (Manager_State::_instances[i] == this) {
             Manager_State::_instances[i] = nullptr;
@@ -436,10 +433,10 @@ void AP_RCProtocol_CRSF::write_frame(AP_CRSF_Protocol::Frame* frame) const
 #if defined(CRSF_DEBUG) || defined(CRSF_DEBUG_PARAMS)
 #ifdef CRSF_DEBUG_PARAMS
     switch (frame->type) {
-        case CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY:
-        case CRSF_FRAMETYPE_PARAMETER_READ:
-        case CRSF_FRAMETYPE_PARAMETER_WRITE:
-        case CRSF_FRAMETYPE_COMMAND:
+        case FrameType::CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY:
+        case FrameType::CRSF_FRAMETYPE_PARAMETER_READ:
+        case FrameType::CRSF_FRAMETYPE_PARAMETER_WRITE:
+        case FrameType::CRSF_FRAMETYPE_COMMAND:
 #endif
     if (_mode == PortMode::DIRECT_RCOUT) {
         hal.console->printf("CRSF: writing %s @%lukbaud -> 0x%x:", AP_CRSF_Protocol::get_frame_type(frame->type, frame->payload[0]), _uart->get_baud_rate()/1000, frame->device_address);
@@ -490,26 +487,26 @@ bool AP_RCProtocol_CRSF::decode_crsf_packet()
     }
 
     switch (_frame.type) {
-        case CRSF_FRAMETYPE_RC_CHANNELS_PACKED:
+        case FrameType::CRSF_FRAMETYPE_RC_CHANNELS_PACKED:
             // scale factors defined by TBS - TICKS_TO_US(x) ((x - 992) * 5 / 8 + 1500)
             AP_CRSF_Protocol::decode_11bit_channels((const uint8_t*)(&_frame.payload), MAX_CHANNELS, _channels);
             _crsf_v3_active = false;
             rc_active = true;
             break;
-        case CRSF_FRAMETYPE_LINK_STATISTICS:
+        case FrameType::CRSF_FRAMETYPE_LINK_STATISTICS:
             process_link_stats_frame((uint8_t*)&_frame.payload);
             break;
-        case CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED:
+        case FrameType::CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED:
             if (_mode == PortMode::PASSTHROUGH_RCIN) {
                 AP_CRSF_Protocol::decode_variable_bit_channels((const uint8_t*)(&_frame.payload), _frame.length, MAX_CHANNELS, _channels);
                 _crsf_v3_active = true;
                 rc_active = true;
             }
             break;
-        case CRSF_FRAMETYPE_LINK_STATISTICS_RX:
+        case FrameType::CRSF_FRAMETYPE_LINK_STATISTICS_RX:
             process_link_stats_rx_frame((uint8_t*)&_frame.payload);
             break;
-        case CRSF_FRAMETYPE_LINK_STATISTICS_TX:
+        case FrameType::CRSF_FRAMETYPE_LINK_STATISTICS_TX:
             process_link_stats_tx_frame((uint8_t*)&_frame.payload);
             break;
 
@@ -521,17 +518,17 @@ bool AP_RCProtocol_CRSF::decode_crsf_packet()
     if (!decoded && AP_CRSF_Telem::process_frame(FrameType(_frame.type), (uint8_t*)&_frame.payload, _frame.length - 2U)) {
 #if defined(CRSF_DEBUG_TELEM) || defined(CRSF_DEBUG_PARAMS)
         switch (_frame.type) {
-            case CRSF_FRAMETYPE_RC_CHANNELS_PACKED:
-            case CRSF_FRAMETYPE_LINK_STATISTICS:
-            case CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED:
-            case CRSF_FRAMETYPE_LINK_STATISTICS_RX:
-            case CRSF_FRAMETYPE_LINK_STATISTICS_TX:
+            case FrameType::CRSF_FRAMETYPE_RC_CHANNELS_PACKED:
+            case FrameType::CRSF_FRAMETYPE_LINK_STATISTICS:
+            case FrameType::CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED:
+            case FrameType::CRSF_FRAMETYPE_LINK_STATISTICS_RX:
+            case FrameType::CRSF_FRAMETYPE_LINK_STATISTICS_TX:
                 break;
 #ifdef CRSF_DEBUG_PARAMS
-            case CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY:
-            case CRSF_FRAMETYPE_PARAMETER_READ:
-            case CRSF_FRAMETYPE_PARAMETER_WRITE:
-            case CRSF_FRAMETYPE_COMMAND:
+            case FrameType::CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY:
+            case FrameType::CRSF_FRAMETYPE_PARAMETER_READ:
+            case FrameType::CRSF_FRAMETYPE_PARAMETER_WRITE:
+            case FrameType::CRSF_FRAMETYPE_COMMAND:
 #else
             default:
 #endif
@@ -577,79 +574,6 @@ void AP_RCProtocol_CRSF::reset_bootstrap_baudrate()
     }
 }
 
-// send RC channel frame out
-bool AP_RCProtocol_CRSF::send_rc_channels(const uint16_t* channels, uint8_t nchannels)
-{
-    if (_mode != PortMode::DIRECT_RCOUT) {
-        return false;
-    }
-    AP_CRSF_Protocol::Frame frame;
-    frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
-    frame.type = CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED;
-    uint8_t payload_len = _protocol_helper->encode_variable_bit_channels(frame.payload, channels, nchannels);
-    frame.length = payload_len + 2; // +1 for type, +1 for CRC
-    write_frame(&frame);
-    return true;
-}
-
-// send ping frame out
-void AP_RCProtocol_CRSF::send_ping_frame()
-{
-    if (_mode != PortMode::DIRECT_RCOUT || !_uart) {
-        return;
-    }
-
-    debug("send_ping_frame() at %luk baud\n", _uart->get_baud_rate()/1000);
-
-    AP_CRSF_Protocol::Frame frame;
-    AP_CRSF_Protocol::encode_ping_frame(frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
-
-    write_frame(&frame);
-}
-
-// send a baudrate proposal
-void AP_RCProtocol_CRSF::send_speed_proposal(uint32_t baudrate)
-{
-    if (_mode != PortMode::DIRECT_RCOUT || !_uart) {
-        return;
-    }
-
-    debug("send_speed_proposal(%u)\n", (unsigned)baudrate);
-    _new_baud_rate = baudrate;
-
-    AP_CRSF_Protocol::Frame frame;
-    AP_CRSF_Protocol::encode_speed_proposal(baudrate, frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
-
-    write_frame(&frame);
-}
-
-void AP_RCProtocol_CRSF::send_device_info()
-{
-    if (_mode != PortMode::DIRECT_RCOUT || !_uart) {
-        return;
-    }
-
-    debug("send_device_info(%u)\n");
-
-    AP_CRSF_Protocol::Frame frame;
-    AP_CRSF_Protocol::encode_device_info_frame(frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
-
-    write_frame(&frame);
-}
-
-void AP_RCProtocol_CRSF::send_link_stats_tx(uint32_t fps)
-{
-    if (_mode != PortMode::DIRECT_RCOUT || !_uart) {
-        return;
-    }
-
-    debug("send_link_stats_tx(%u)\n");
-
-    AP_CRSF_Protocol::Frame frame;
-    AP_CRSF_Protocol::encode_link_stats_tx_frame(fps, frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
-
-    write_frame(&frame);
-}
 #endif
 
 // send out telemetry

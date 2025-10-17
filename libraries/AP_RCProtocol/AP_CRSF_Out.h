@@ -45,10 +45,6 @@ public:
     void init();
     // periodic update, called from the main vehicle scheduler
     void update();
-    // sends RC frames at the configured rate
-    void send_rc_frame();
-    // sends ping frames at the configured rate
-    void send_ping_frame();
 
     bool decode_crsf_packet(AP_CRSF_Protocol::Frame& _frame);
 
@@ -65,6 +61,12 @@ private:
         HEALTH_CHECK_PING,
         RUNNING,
     };
+
+    // import enums from AP_CRSF_Protocol for convenience
+    using FrameType = AP_CRSF_Protocol::FrameType;
+    using DeviceAddress = AP_CRSF_Protocol::DeviceAddress;
+    using CommandID = AP_CRSF_Protocol::CommandID;
+    using CommandGeneral = AP_CRSF_Protocol::CommandGeneral;
     
     enum class BaudNegotiationResult : uint8_t {
         PENDING,
@@ -73,6 +75,17 @@ private:
     };
 
     bool do_status_update();
+
+    // sends RC frames at the configured rate
+    void send_rc_frame();
+    // send a baudrate proposal
+    void send_speed_proposal(uint32_t baudrate);
+    // send a ping frame
+    void send_ping_frame();
+    // send a device info frame
+    void send_device_info();
+    // send the link stats frame
+    void send_link_stats_tx(uint32_t fps);
 
     static AP_CRSF_Out* _singleton;
 

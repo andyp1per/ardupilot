@@ -82,31 +82,6 @@ void AP_CRSF_Out::init()
     _state = State::WAITING_FOR_RC_LOCK;
 }
 
-// sends RC frames at the configured rate
-void AP_CRSF_Out::send_rc_frame()
-{
-    uint16_t channels[CRSF_MAX_CHANNELS] {};
-    const uint8_t nchan = MIN(NUM_SERVO_CHANNELS, (uint8_t)CRSF_MAX_CHANNELS);
-
-    for (uint8_t i = 0; i < nchan; ++i) {
-        SRV_Channel *c = SRV_Channels::srv_channel(i);
-        if (c != nullptr) {
-            channels[i] = c->get_output_pwm();
-        } else {
-            channels[i] = 1500; // Default to neutral if channel is null
-        }
-    }
-
-#ifdef CRSF_RCOUT_DEBUG
-    const uint32_t now_ms = AP_HAL::millis();
-    if (now_ms - last_update_debug_ms > 1000) {
-        last_update_debug_ms = now_ms;
-        debug_rcout("Updating channels. CH1=%u CH2=%u CH3=%u", channels[0], channels[1], channels[2]);
-    }
-#endif
-    _crsf_port->send_rc_channels(channels, nchan);
-}
-
 bool AP_CRSF_Out::do_status_update()
 {
     uint32_t now_ms = AP_HAL::millis();
@@ -116,17 +91,6 @@ bool AP_CRSF_Out::do_status_update()
     }
 
     return false;
-}
-
-void AP_CRSF_Out::send_ping_frame()
-{
-    // only send pings at 50Hz max
-    uint32_t now_ms = AP_HAL::millis();
-    if (now_ms - _last_ping_frame_ms < 20) {
-        return;
-    }
-    _last_ping_frame_ms = now_ms;
-    _crsf_port->send_ping_frame();
 }
 
 // Main update call, sends RC frames at the configured rate
@@ -241,7 +205,7 @@ void AP_CRSF_Out::update()
         // If pending, send proposal periodically
         if (now - _last_baud_neg_us > BAUD_NEG_INTERVAL_US) {
             _last_baud_neg_us = now;
-            _crsf_port->send_speed_proposal(_target_baudrate);
+            send_speed_proposal(_target_baudrate);
             debug_rcout("Sent speed proposal for %u", (unsigned)_target_baudrate);
         }
         break;
@@ -251,7 +215,7 @@ void AP_CRSF_Out::update()
         if (_crsf_port->is_rx_active()) {   // the remote side is sending data, we can send frames
             // periodically send link stats info
             if (now - _last_liveness_check_us > LIVENESS_CHECK_TIMEOUT_US) {
-                _crsf_port->send_link_stats_tx(_rate_hz);
+                send_link_stats_tx(_rate_hz);
                 _last_liveness_check_us = now;
             } else {
                 send_rc_frame();
@@ -289,7 +253,7 @@ bool AP_CRSF_Out::decode_crsf_packet(AP_CRSF_Protocol::Frame& _frame)
 #endif
 
     switch (_frame.type) {
-        case AP_CRSF_Protocol::CRSF_FRAMETYPE_COMMAND: {
+        case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_COMMAND: {
             const AP_CRSF_Protocol::CommandFrame* cmd = (const AP_CRSF_Protocol::CommandFrame*)_frame.payload;
             if (cmd->origin == AP_CRSF_Protocol::DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER &&
                 cmd->command_id == AP_CRSF_Protocol::CRSF_COMMAND_GENERAL &&
@@ -307,13 +271,13 @@ bool AP_CRSF_Out::decode_crsf_packet(AP_CRSF_Protocol::Frame& _frame)
             }
         }
             break;
-        case AP_CRSF_Protocol::CRSF_FRAMETYPE_PARAM_DEVICE_INFO:
+        case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_PARAM_DEVICE_INFO:
             AP_CRSF_Protocol::process_device_info_frame((AP_CRSF_Protocol::ParameterDeviceInfoFrame*)_frame.payload,
                                                          &version, true);
             break;
 
-        case AP_CRSF_Protocol::CRSF_FRAMETYPE_PARAM_DEVICE_PING:
-            _crsf_port->send_device_info();
+        case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_PARAM_DEVICE_PING:
+            send_device_info();
             break;
 
         default:
@@ -321,6 +285,88 @@ bool AP_CRSF_Out::decode_crsf_packet(AP_CRSF_Protocol::Frame& _frame)
     }
 
     return true;
+}
+
+// sends RC frames at the configured rate
+void AP_CRSF_Out::send_rc_frame()
+{
+    uint16_t channels[CRSF_MAX_CHANNELS] {};
+    const uint8_t nchan = MIN(NUM_SERVO_CHANNELS, (uint8_t)CRSF_MAX_CHANNELS);
+
+    for (uint8_t i = 0; i < nchan; ++i) {
+        SRV_Channel *c = SRV_Channels::srv_channel(i);
+        if (c != nullptr) {
+            channels[i] = c->get_output_pwm();
+        } else {
+            channels[i] = 1500; // Default to neutral if channel is null
+        }
+    }
+
+#ifdef CRSF_RCOUT_DEBUG
+    const uint32_t now_ms = AP_HAL::millis();
+    if (now_ms - last_update_debug_ms > 1000) {
+        last_update_debug_ms = now_ms;
+        debug_rcout("Updating channels. CH1=%u CH2=%u CH3=%u", channels[0], channels[1], channels[2]);
+    }
+#endif
+    AP_CRSF_Protocol::Frame frame;
+
+    frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
+    frame.type = FrameType::CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED;
+    uint8_t payload_len = AP_CRSF_Protocol::encode_variable_bit_channels(frame.payload, channels, nchan);
+    frame.length = payload_len + 2; // +1 for type, +1 for CRC
+
+    _crsf_port->write_frame(&frame);
+}
+
+void AP_CRSF_Out::send_ping_frame()
+{
+    // only send pings at 50Hz max
+    uint32_t now_ms = AP_HAL::millis();
+    if (now_ms - _last_ping_frame_ms < 20) {
+        return;
+    }
+    _last_ping_frame_ms = now_ms;
+
+    debug_rcout("send_ping_frame()");
+
+    AP_CRSF_Protocol::Frame frame;
+    AP_CRSF_Protocol::encode_ping_frame(frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
+
+    _crsf_port->write_frame(&frame);
+}
+
+// send a baudrate proposal
+void AP_CRSF_Out::send_speed_proposal(uint32_t baudrate)
+{
+    debug_rcout("send_speed_proposal(%u)", (unsigned)baudrate);
+
+    _crsf_port->change_baud_rate(baudrate);
+
+    AP_CRSF_Protocol::Frame frame;
+    AP_CRSF_Protocol::encode_speed_proposal(baudrate, frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
+
+    _crsf_port->write_frame(&frame);
+}
+
+void AP_CRSF_Out::send_device_info()
+{
+    debug_rcout("send_device_info(%u)");
+
+    AP_CRSF_Protocol::Frame frame;
+    AP_CRSF_Protocol::encode_device_info_frame(frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
+
+    _crsf_port->write_frame(&frame);
+}
+
+void AP_CRSF_Out::send_link_stats_tx(uint32_t fps)
+{
+    debug_rcout("send_link_stats_tx(%u)");
+
+    AP_CRSF_Protocol::Frame frame;
+    AP_CRSF_Protocol::encode_link_stats_tx_frame(fps, frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
+
+    _crsf_port->write_frame(&frame);
 }
 
 AP_CRSF_Out* AP_CRSF_Out::get_singleton()
