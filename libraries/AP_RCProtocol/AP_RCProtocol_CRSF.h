@@ -94,6 +94,8 @@ public:
     void send_speed_proposal(uint32_t baudrate);
     // send a ping frame
     void send_ping_frame();
+    // send a device info frame
+    void send_device_info();
     void reset_bootstrap_baudrate();
 #endif
 

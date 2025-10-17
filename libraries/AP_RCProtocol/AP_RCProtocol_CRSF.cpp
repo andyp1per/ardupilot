@@ -616,6 +616,20 @@ void AP_RCProtocol_CRSF::send_speed_proposal(uint32_t baudrate)
 
     write_frame(&frame);
 }
+
+void AP_RCProtocol_CRSF::send_device_info()
+{
+    if (_mode != PortMode::DIRECT_RCOUT || !_uart) {
+        return;
+    }
+
+    debug("send_device_info(%u)\n");
+
+    AP_CRSF_Protocol::Frame frame;
+    AP_CRSF_Protocol::encode_device_info_frame(frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
+
+    write_frame(&frame);
+}
 #endif
 
 // send out telemetry

@@ -306,6 +306,10 @@ bool AP_CRSF_Out::decode_crsf_packet(AP_CRSF_Protocol::Frame& _frame)
                                                          &version, true);
             break;
 
+        case AP_CRSF_Protocol::CRSF_FRAMETYPE_PARAM_DEVICE_PING:
+            _crsf_port->send_device_info();
+            break;
+
         default:
             break;
     }

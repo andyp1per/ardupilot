@@ -346,6 +346,32 @@ bool AP_CRSF_Protocol::process_ping_frame(ParameterPingFrame* info, bool fakerx)
 }
 #endif
 
+// encode a ping frame
+void AP_CRSF_Protocol::encode_device_info_frame(Frame& frame, DeviceAddress destination, DeviceAddress origin)
+{
+    frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
+    frame.type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAM_DEVICE_INFO;
+
+    ParameterDeviceInfoFrame info;
+
+    // Construct the inner command frame header
+    info.destination = destination;
+    info.origin = origin;
+
+    const uint8_t inner_payload_len = encode_device_info(info, 0);
+    // Calculate the inner CRC (poly 0xBA) over the 2-byte command data
+    uint8_t inner_crc = crc8_dvb_update_generic(0, (uint8_t*)&info, inner_payload_len, 0xBA);
+
+    // Copy the command data and the inner CRC into the final frame payload
+    memcpy(frame.payload, (uint8_t*)&info, inner_payload_len);
+    frame.payload[inner_payload_len] = inner_crc;
+
+    // Set the outer frame length.
+    // It is the length of the payload (Type + Inner Command Frame)
+    // Inner Command Frame = data + crc
+    frame.length = inner_payload_len + 3;
+}
+
 // return device information about ArduPilot
 uint32_t AP_CRSF_Protocol::encode_device_info(ParameterDeviceInfoFrame& info, uint8_t num_params)
 {
