@@ -311,6 +311,9 @@ public:
     // Returns the current stage that the drone show mode is in
     DroneShowModeStage get_stage_in_drone_show_mode() const { return _stage_in_drone_show_mode; }
 
+    // Returns the landing speed in meters per second
+    float get_landing_speed_m_sec() const;
+
     // Returns the takeoff acceleration in meters per second squared
     float get_motor_spool_up_time_sec() const;
     
@@ -328,14 +331,7 @@ public:
     int32_t get_takeoff_altitude_cm() const { return _params.takeoff_altitude_m * 100.0f; }
 
     // Returns the takeoff speed in meters per second
-    float get_takeoff_speed_m_s() const {
-        float result = _wp_nav ? _wp_nav->get_default_speed_up() / 100.0f : 0;
-        if (result <= 0) {
-            /* safety check */
-            result = DEFAULT_TAKEOFF_SPEED_METERS_PER_SEC;
-        }
-        return result;
-    }
+    float get_takeoff_speed_m_sec() const;
 
     // Returns the number of seconds left until show start, in microseconds
     int64_t get_time_until_start_usec() const;
@@ -532,6 +528,10 @@ public:
 
     // Bubble fence subsystem. See also the comment for the hard fence.
     AC_BubbleFence bubble_fence;
+
+    // Landing speed; we assume that the drone should attempt to land with this
+    // vertical speed if LAND_SPEED seems invalid
+    static constexpr float DEFAULT_LANDING_SPEED_METERS_PER_SEC = 1.0f;
 
     // Takeoff acceleration; we assume that the drone attempts to take off with
     // this vertical acceleration if WPNAV_ACCEL_Z seems invalid

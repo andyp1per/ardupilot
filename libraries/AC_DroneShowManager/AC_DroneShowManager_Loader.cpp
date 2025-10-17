@@ -309,7 +309,7 @@ bool AC_DroneShowManager::_recalculate_trajectory_properties()
 
     stats_calculator.min_ascent = get_takeoff_altitude_cm() * 10.0f; /* [mm] */
     stats_calculator.preferred_descent = stats_calculator.min_ascent;
-    stats_calculator.takeoff_speed = get_takeoff_speed_m_s() * 1000.0f; /* [mm/s] */
+    stats_calculator.takeoff_speed = get_takeoff_speed_m_sec() * 1000.0f; /* [mm/s] */
     stats_calculator.acceleration = get_takeoff_acceleration_m_ss() * 1000.0f; /* [mm/s/s] */
 
     if (sb_trajectory_stats_calculator_run(&stats_calculator, _trajectory, _trajectory_stats) == SB_SUCCESS)

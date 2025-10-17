@@ -37,6 +37,15 @@ float AC_DroneShowManager::get_motor_spool_up_time_sec() const {
     return DEFAULT_MOTOR_SPOOL_UP_TIME_SEC;
 }
 
+float AC_DroneShowManager::get_takeoff_speed_m_sec() const {
+    float result = _wp_nav ? _wp_nav->get_default_speed_up() / 100.0f : 0;
+    if (result <= 0 || !isfinite(result)) {
+        /* safety check */
+        result = DEFAULT_TAKEOFF_SPEED_METERS_PER_SEC;
+    }
+    return result;
+}
+
 float AC_DroneShowManager::get_time_until_takeoff_sec() const
 {
     return get_time_until_start_sec() + get_relative_takeoff_time_sec();
