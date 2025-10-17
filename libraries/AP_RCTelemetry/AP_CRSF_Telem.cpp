@@ -38,7 +38,7 @@
 
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
-#define CRSF_DEBUG
+//#define CRSF_DEBUG
 #ifdef CRSF_DEBUG
 # define debug(fmt, args...)	hal.console->printf("CRSF: " fmt "\n", ##args)
 #else
