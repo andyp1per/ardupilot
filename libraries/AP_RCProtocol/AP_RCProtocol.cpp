@@ -50,7 +50,7 @@
 
 extern const AP_HAL::HAL& hal;
 
-#define RCPROTOCOL_DEBUG_DETECTION
+//#define RCPROTOCOL_DEBUG_DETECTION
 #ifdef RCPROTOCOL_DEBUG_DETECTION
 # define debug_detect(fmt, args...)	hal.console->printf("RC: " fmt "\n", ##args)
 #else
