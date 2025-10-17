@@ -81,6 +81,7 @@ bool AC_DroneShowManager::notify_takeoff_attempt()
     ) {
         Location takeoff_location;
         sb_vector3_with_yaw_t end;
+        float land_speed_mm_s;
 
         if (!get_current_location(takeoff_location))
         {
@@ -90,7 +91,8 @@ bool AC_DroneShowManager::notify_takeoff_attempt()
         _show_coordinate_system.convert_global_to_show_coordinate(takeoff_location, end);
 
         // TODO: query landing velocity from parameters
-        if (sb_trajectory_replace_end_to_land_at(_trajectory, _trajectory_stats, end, 500)) {
+        land_speed_mm_s = get_landing_speed_m_sec() * 1000.0f;   /* [mm/s] */
+        if (sb_trajectory_replace_end_to_land_at(_trajectory, _trajectory_stats, end, land_speed_mm_s)) {
             goto exit;
         }
 
