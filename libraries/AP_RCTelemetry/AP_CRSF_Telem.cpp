@@ -1377,7 +1377,7 @@ void AP_CRSF_Telem::calc_parameter() {
                     _param_request.payload.payload_length);
             idx += _param_request.payload.payload_length;
 
-            _telem_size = sizeof(AP_CRSF_Telem::ParameterSettingsWriteFrame) + idx;
+            _telem_size = sizeof(AP_CRSF_Telem::ParameterSettingsHeader) + idx;
             _telem_type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAMETER_WRITE;
         }
         _pending_request.frame_type = 0;
@@ -1782,7 +1782,7 @@ uint8_t AP_CRSF_Telem::peek_menu_event(uint8_t& param_id, ScriptedPayload& paylo
     events = spw.type;
     param_id = spw.param->id;
 
-    debug("peek_menu_event(%u) -> %s", param_id, events == ScriptedParameterEvents::PARAMETER_WRITE ? "WRITE" : "READ");
+    debug("peek_menu_event(%u) -> %s, size: %u", param_id, events == ScriptedParameterEvents::PARAMETER_WRITE ? "WRITE" : "READ", payload.payload_length);
 
     return inbound_params.available();
 }
@@ -1996,7 +1996,7 @@ bool AP_CRSF_Telem::process_scripted_param_write(ParameterSettingsWriteFrame* wr
         return false;
     }
     ScriptedParameterWrite spw { ScriptedParameterEvents::PARAMETER_WRITE, *write_frame, param };
-    spw.payload.payload_length = uint8_t(length - 3U);
+    spw.payload.payload_length = uint8_t(length - 3U);  // remove destination, origin and param number from payload length
     memcpy(spw.payload.payload, write_frame->payload, spw.payload.payload_length);
     inbound_params.push(spw); // payload size in frame
 
