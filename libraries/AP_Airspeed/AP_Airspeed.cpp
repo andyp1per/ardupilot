@@ -102,6 +102,7 @@ const AP_Param::GroupInfo AP_Airspeed::var_info[] = {
     // @DisplayName: Airspeed Enable
     // @Description: Enable airspeed sensor support
     // @Values: 0:Disable, 1:Enable
+    // @RebootRequired: True
     // @User: Standard
     AP_GROUPINFO_FLAGS("_ENABLE", 30, AP_Airspeed, _enable, 0, AP_PARAM_FLAG_ENABLE),
 #endif
@@ -709,13 +710,12 @@ void AP_Airspeed::read(uint8_t i)
 #endif // HAL_BUILD_AP_PERIPH
 }
 
-// read all airspeed sensors
+// read all airspeed sensors at 10Hz
 void AP_Airspeed::update()
 {
     if (!lib_enabled()) {
         return;
     }
-
     for (uint8_t i=0; i<AIRSPEED_MAX_SENSORS; i++) {
         read(i);
     }
