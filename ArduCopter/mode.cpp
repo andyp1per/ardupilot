@@ -152,6 +152,11 @@ Mode *Copter::mode_from_mode_num(const Mode::Number mode)
             return &mode_turtle;
 #endif
 
+#if MODE_CRUISE_ENABLED
+        case Mode::Number::CRUISE:
+            return &mode_cruise;
+#endif
+
         default:
             break;
     }

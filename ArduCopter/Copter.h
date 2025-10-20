@@ -1061,6 +1061,9 @@ private:
 #if MODE_LOITER_ENABLED
     ModeLoiter mode_loiter;
 #endif
+#if MODE_CRUISE_ENABLED
+    ModeCruise mode_cruise;
+#endif
 #if MODE_POSHOLD_ENABLED
     ModePosHold mode_poshold;
 #endif

@@ -191,6 +191,12 @@
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
+// Cruise mode - fly like a fixed wing
+#ifndef MODE_CRUISE_ENABLED
+# define MODE_CRUISE_ENABLED 1
+#endif
+
+//////////////////////////////////////////////////////////////////////////////
 // Position Hold - enable holding of global position
 #ifndef MODE_POSHOLD_ENABLED
 # define MODE_POSHOLD_ENABLED 1

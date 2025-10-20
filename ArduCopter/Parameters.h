@@ -701,6 +701,11 @@ public:
     AP_Float rc_tuning2_min;
     AP_Float rc_tuning2_max;
 #endif  // AP_RC_TRANSMITTER_TUNING_ENABLED
+
+    // minimum cruising speed in m/s
+    AP_Float cruise_speed_ms;
+    // maximum airspeed for cruising in m/s
+    AP_Float cruise_speed_max_ms;
 };
 
 extern const AP_Param::Info        var_info[];

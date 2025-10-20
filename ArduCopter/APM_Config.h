@@ -15,6 +15,7 @@
 //#define MODE_GUIDED_ENABLED   0            // disable guided mode support
 //#define MODE_GUIDED_NOGPS_ENABLED   0      // disable guided/nogps mode support
 //#define MODE_LOITER_ENABLED   0            // disable loiter mode support
+//#define MODE_CRUISE_ENABLED   0            // disable cruise mode support
 //#define MODE_POSHOLD_ENABLED  0            // disable poshold mode support
 //#define MODE_RTL_ENABLED      0            // disable rtl mode support
 //#define MODE_SMARTRTL_ENABLED 0            // disable smartrtl mode support

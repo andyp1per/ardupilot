@@ -1227,6 +1227,18 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     AP_GROUPINFO("TUNE2", 13, ParametersG2, rc_tuning2_param, 0),
 #endif  // AP_RC_TRANSMITTER_TUNING_ENABLED
 
+#if MODE_CRUISE_ENABLED
+    // @Param: AIRSPEED_CRUISE
+    // @DisplayName: Cruise speed in m/s
+    // @Description: Cruise speed in m/s
+    AP_GROUPINFO("AIRSPEED_CRUISE", 14, ParametersG2, cruise_speed_ms, 0),
+
+    // @Param: AIRSPEED_MAX
+    // @DisplayName: Maximum airspeed allowed in cruise in m/s
+    // @Description: Maximum airspeed allowed in cruise in m/s
+    AP_GROUPINFO("AIRSPEED_MAX", 15, ParametersG2, cruise_speed_max_ms, 0),
+#endif
+
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
 
     AP_GROUPEND

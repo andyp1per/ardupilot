@@ -101,6 +101,7 @@ public:
         AUTOROTATE =   26,  // Autonomous autorotation
         AUTO_RTL =     27,  // Auto RTL, this is not a true mode, AUTO will report as this mode if entered to perform a DO_LAND_START Landing sequence
         TURTLE =       28,  // Flip over after crash
+        CRUISE =       29,  // Cruise like a fixed-wing
 
         // Mode number 30 reserved for "offboard" for external/lua control.
 
@@ -1265,7 +1266,6 @@ private:
 
 };
 
-
 class ModeLand : public Mode {
 
 public:
@@ -1361,6 +1361,30 @@ private:
 
 };
 
+class ModeCruise : public ModeLoiter {
+
+public:
+    // inherit constructor
+    using ModeLoiter::Mode;
+    Number mode_number() const override { return Number::CRUISE; }
+
+    bool init(bool ignore_checks) override;
+    void run() override;
+    void update_fly_forward();
+    void airspeed_ratio_update(void);
+
+    bool requires_GPS() const override { return false; }
+    bool has_manual_throttle() const override { return false; }
+    bool is_autopilot() const override { return true; }
+
+protected:
+
+    const char *name() const override { return "CRUISE"; }
+    const char *name4() const override { return "CRSE"; }
+
+private:
+    uint32_t last_airspeed_calibration_ms;
+};
 
 class ModePosHold : public Mode {
 
