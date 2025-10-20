@@ -259,6 +259,14 @@ bool AC_Loiter::loiter_option_is_set(LoiterOption option) const {
     return (_options & int8_t(option)) != 0;
 }
 
+void AC_Loiter::set_loiter_option(LoiterOption option) {
+    _options.set(uint8_t(_options.get()) | uint8_t(option));
+}
+
+void AC_Loiter::reset_loiter_option(LoiterOption option) {
+    _options.set(uint8_t(_options.get()) & ~uint8_t(option));
+}
+
 // Updates feed-forward velocity using pilot-requested acceleration and braking logic.
 // - Applies drag and braking forces when sticks are released.
 // - Velocity is adjusted for fence/avoidance if enabled.

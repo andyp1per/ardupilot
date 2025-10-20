@@ -91,6 +91,15 @@ public:
     // Directional only; magnitude is handled by the attitude controller.
     Vector3f get_thrust_vector() const { return _pos_control.get_thrust_vector(); }
 
+    // Bitfields of LOITER_OPTIONS
+    enum class LoiterOption : uint8_t {
+        COORDINATED_TURN_ENABLED    = (1U << 0),    // Enable Coordinated Turn
+    };
+
+    void set_loiter_option(LoiterOption option);
+    void reset_loiter_option(LoiterOption option);
+    bool loiter_option_is_set(LoiterOption option) const;
+
     static const struct AP_Param::GroupInfo var_info[];
 
 protected:
@@ -118,12 +127,6 @@ protected:
     AP_Float    _brake_jerk_max_cmsss;  // Maximum braking jerk (in cm/s³) applied during braking transitions after pilot release.
     AP_Float    _brake_delay_s;         // Delay in seconds before braking begins after sticks are centered. Prevents premature deceleration during brief pauses.
     AP_Int8     _options;               // Loiter options bit mask
-
-    // Bitfields of LOITER_OPTIONS
-    enum class LoiterOption {
-        COORDINATED_TURN_ENABLED    = (1U << 0),    // Enable Coordinated Turn
-    };
-    bool loiter_option_is_set(LoiterOption option) const;
 
     // loiter controller internal variables
     Vector2f    _desired_accel_ne_mss;      // Pilot-requested horizontal acceleration in m/s² (after smoothing), in the NE (horizontal) frame.
