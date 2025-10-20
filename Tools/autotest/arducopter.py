@@ -259,6 +259,60 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         self.do_RTL()
 
+    # loiter - fly south west, then loiter within 5m position and altitude
+    def ModeCruise(self, holdtime=10, maxaltchange=5, maxdistchange=5):
+        """Hold cruise position."""
+
+        self.set_parameters({
+            "ARSPD_TYPE": 100,
+            "ARSPD_USE": 1,
+            "ARSPD_ENABLE": 1,
+            "SIM_WIND_SPD": 7,
+            "SIM_WIND_DIR": 0,
+            "ARSPD_WIND_MAX": 15,
+            "AIRSPEED_CRUISE": 5,
+        })
+
+        ## need to reboot for ARSPEED_ENABLE to work correctly
+        self.reboot_sitl()
+
+        self.takeoff(10, mode=29)
+
+        # first aim south east
+        self.progress("turn south east")
+        self.set_rc(4, 1580)
+        self.wait_heading(170)
+        self.set_rc(4, 1500)
+
+        # fly south east 50m
+        self.set_rc(2, 1100)
+        self.wait_distance(50)
+        self.wait_groundspeed(3, 10)
+
+        m = self.assert_receive_message('VFR_HUD')
+        start_altitude = m.alt
+        start = self.mav.location()
+        tstart = self.get_sim_time()
+        self.progress("Holding cruise at %u meters for %u seconds" %
+                      (start_altitude, holdtime))
+        while self.get_sim_time_cached() < tstart + holdtime:
+            m = self.assert_receive_message('VFR_HUD')
+            pos = self.mav.location()
+            delta = self.get_distance(start, pos)
+            alt_delta = math.fabs(m.alt - start_altitude)
+            self.progress("Cruise Dist: %.2fm, alt:%u" % (delta, m.alt))
+
+        self.progress("Cruise OK for %u seconds" % holdtime)
+        self.set_rc(2, 1500)
+
+        self.progress("Climb to 30m")
+        self.change_alt(30)
+
+        self.progress("Descend to 20m")
+        self.change_alt(20)
+
+        self.do_RTL()
+
     def ModeAltHold(self):
         '''Test AltHold Mode'''
         self.takeoff(10, mode="ALT_HOLD")
@@ -12326,6 +12380,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.GPSGlitchAuto,
              self.ModeAltHold,
              self.ModeLoiter,
+             self.ModeCruise,
              self.SimpleMode,
              self.SuperSimpleCircle,
              self.ModeCircle,
