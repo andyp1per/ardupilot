@@ -271,6 +271,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "SIM_WIND_DIR": 0,
             "ARSPD_WIND_MAX": 15,
             "AIRSPEED_CRUISE": 5,
+            "FS_DR_TIMEOUT": 6000,
+            "LOG_REPLAY": 1,
+            "LOG_DISARMED": 1,
         })
 
         ## need to reboot for ARSPEED_ENABLE to work correctly
@@ -286,7 +289,19 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         # fly south east 50m
         self.set_rc(2, 1100)
+
+        # wait to engage cruise and then disable the GPS
+        self.wait_groundspeed(5, 8)
+        self.set_parameter("GPS1_TYPE", 0)
+
+        # go 50m
         self.wait_distance(50)
+
+        # change heading SW and fly for another 100m
+        self.set_rc(4, 1580)
+        self.wait_heading(190)
+        self.set_rc(4, 1500)
+        self.wait_distance(100)
         self.wait_groundspeed(3, 10)
 
         m = self.assert_receive_message('VFR_HUD')
@@ -303,6 +318,10 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.progress("Cruise Dist: %.2fm, alt:%u" % (delta, m.alt))
 
         self.progress("Cruise OK for %u seconds" % holdtime)
+
+        # re-enable the GPS
+        self.set_parameter("GPS1_TYPE", 1)
+
         self.set_rc(2, 1500)
 
         self.progress("Climb to 30m")
