@@ -1,8 +1,8 @@
 -- crsf_helper.lua
 -- A reusable helper library to simplify the creation of ArduPilot CRSF menus.
 -- This library abstracts away the complexity of binary packing/unpacking and event loop management.
--- Version 6.2: Number State. Adds full state tracking and correct read/write
---              response handling for NUMBER menu items.
+-- Version 6.4: Adds default handling for COMMAND POLL requests in the event loop,
+--              ensuring state synchronization even if script callbacks ignore POLL.
 
 local helper = {}
 
@@ -30,7 +30,7 @@ helper.CRSF_COMMAND_STATUS = {
 }
 local CRSF_COMMAND_STATUS = helper.CRSF_COMMAND_STATUS -- local alias
 
--- These tables are now local, respecting the script sandbox.
+-- These tables are local, respecting the script sandbox.
 -- Each script will have its own instance of this state.
 local menu_items = {}
 local crsf_objects = {}
@@ -166,9 +166,9 @@ local function event_loop()
     local item_def = menu_items[param_id]
     if not item_def then
         -- This event is not for us. Yield and let another script's loop handle it.
-        return event_loop, IDLE_DELAY
+        return event_loop, ACTIVE_DELAY -- Use active delay as UI might be busy with other script
     end
-    
+
     -- ## 3. Pop the event from the queue ##
     -- This is critical: pop the event before handling it.
     crsf:pop_menu_event()
@@ -192,6 +192,9 @@ local function event_loop()
             local packed_data = create_number_entry(item_def.name, item_def.current_val, item_def.min, item_def.max, item_def.default, item_def.dpoint, item_def.step, item_def.unit)
             crsf:send_write_response(packed_data)
         else
+            -- Send generic response if type not handled explicitly for read
+            -- Note: send_response() is deprecated, but kept for potential backward compatibility
+            -- or if a generic case is truly needed. It uses the popped context.
             crsf:send_response()
         end
     end
@@ -199,8 +202,21 @@ local function event_loop()
     -- Handle a WRITE request from the transmitter.
     if (events & CRSF_EVENT.PARAMETER_WRITE) ~= 0 then
         if not item_def.callback then
-            -- No callback, but we must still pop the event
-            return event_loop, ACTIVE_DELAY
+            -- No callback, but we must still respond if needed
+            if item_def.type == 'COMMAND' then
+                 -- Respond with current state even if no callback
+                 local packed_data = create_command_entry(item_def.name, item_def.status, item_def.info)
+                 crsf:send_write_response(packed_data)
+            elseif item_def.type == 'SELECTION' then
+                 local packed_data = string.pack('>B', item_def.current_idx - 1)
+                 crsf:send_write_response(packed_data)
+            elseif item_def.type == 'NUMBER' then
+                 local scale = 10^(item_def.dpoint or 0)
+                 local packed_value = math.floor(item_def.current_val * scale + 0.5)
+                 local packed_data = string.pack('>l', packed_value)
+                 crsf:send_write_response(packed_data)
+            end
+            goto reschedule -- Skip callback logic
         end
 
         local new_value = nil
@@ -217,7 +233,9 @@ local function event_loop()
         elseif item_def.type == 'COMMAND' then
             -- Pass the specific command action to the callback
             local command_action = string.unpack(">B", payload)
-            if command_action == CRSF_COMMAND_STATUS.START or
+            -- Check for START, CONFIRM, CANCEL, or POLL
+            if command_action == CRSF_COMMAND_STATUS.POLL or
+               command_action == CRSF_COMMAND_STATUS.START or
                command_action == CRSF_COMMAND_STATUS.CONFIRM or
                command_action == CRSF_COMMAND_STATUS.CANCEL then
                 new_value = command_action
@@ -226,10 +244,11 @@ local function event_loop()
 
         if new_value ~= nil then
             -- pcall now expects return values for command state
-            local success, ret1, ret2 = pcall(item_def.callback, new_value)
+            -- For POLL, callback might return nil or fewer than 2 values if unhandled
+            local success, ret_status, ret_info = pcall(item_def.callback, new_value)
 
             if not success then
-                gcs:send_text(MAV_SEVERITY.ERROR, "CRSF Callback Err: " .. tostring(ret1))
+                gcs:send_text(MAV_SEVERITY.ERROR, "CRSF Callback Err: " .. tostring(ret_status)) -- ret_status holds error msg on failure
                 if item_def.type == 'COMMAND' then
                     -- Reset command to READY on error
                     item_def.status = CRSF_COMMAND_STATUS.READY
@@ -238,8 +257,13 @@ local function event_loop()
             else
                 -- Store new state returned from a successful command callback
                 if item_def.type == 'COMMAND' then
-                    item_def.status = ret1 or CRSF_COMMAND_STATUS.READY
-                    item_def.info = ret2 or "Execute"
+                    -- Only update state if callback handled the action (returned non-nil status)
+                    -- For POLL, if callback returns nil, status remains unchanged.
+                    if ret_status ~= nil then
+                        item_def.status = ret_status
+                        item_def.info = ret_info or "Execute" -- Use default info if callback only returns status
+                    end
+                    -- If ret_status is nil (e.g., callback ignored POLL), item_def.status/info remain unchanged.
                 elseif item_def.type == 'NUMBER' then
                     -- Store the new value
                     item_def.current_val = new_value
@@ -248,8 +272,10 @@ local function event_loop()
         end
 
         -- After a write event, we must respond to confirm the new state to the transmitter.
-        if item_def.type == 'COMMAND' and new_value then
-            -- Respond with the *new* status that the callback returned
+        -- For POLL, respond with current state if callback didn't handle it.
+        -- For other actions, respond with state potentially updated by callback.
+        if item_def.type == 'COMMAND' then
+            -- Respond with the current item_def status/info
             local packed_data = create_command_entry(item_def.name, item_def.status, item_def.info)
             crsf:send_write_response(packed_data)
         elseif item_def.type == 'SELECTION' then
@@ -265,7 +291,7 @@ local function event_loop()
         end
     end
 
-
+    ::reschedule::
     -- ## 5. Reschedule the loop ##
     -- Use the (now dynamic) active delay.
     return event_loop, ACTIVE_DELAY
@@ -277,9 +303,9 @@ end
 
 --- Initializes a CRSF menu system for the calling script.
 -- @param menu_definition (table) The menu definition table for this script.
-function helper.register_menu(menu_definition)
+function helper.init(menu_definition)
     if not (menu_definition and menu_definition.name and menu_definition.items) then
-        gcs:send_text(MAV_SEVERITY.ERROR, "CRSF: Invalid menu definition passed to helper.register_menu().")
+        gcs:send_text(MAV_SEVERITY.ERROR, "CRSF: Invalid menu definition passed to helper.init().")
         return
     end
 
@@ -288,7 +314,7 @@ function helper.register_menu(menu_definition)
     if top_level_menu_obj then
         -- This function now populates the local menu_items and crsf_objects tables
         parse_menu(menu_definition, top_level_menu_obj)
-        gcs:send_text(MAV_SEVERITY.INFO, "CRSF: Loaded menu '" .. menu_definition.name .. "'")
+        gcs:send_text(MAV_SEVERITY.INFO, "CRSF: Built menu '" .. menu_definition.name .. "'")
     else
         gcs:send_text(MAV_SEVERITY.WARNING, "CRSF: Failed to create top-level menu for '" .. menu_definition.name .. "'")
         return -- Do not start the event loop if the menu could not be created
@@ -296,6 +322,12 @@ function helper.register_menu(menu_definition)
 
     -- Start this script's independent, persistent event loop.
     return event_loop, 2000
+end
+
+-- Deprecated/Internal - kept for potential backward compatibility if needed
+function helper.register_menu(menu_definition)
+   gcs:send_text(MAV_SEVERITY.WARNING, "CRSF: register_menu is deprecated. Use init() instead.")
+   return helper.init(menu_definition)
 end
 
 return helper
