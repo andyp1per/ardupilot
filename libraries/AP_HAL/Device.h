@@ -359,9 +359,6 @@ public:
     /* set number of retries on transfers */
     virtual void set_retries(uint8_t retries) {};
 
-protected:
-    uint8_t _read_flag = 0;
-
     /*
       broken out device elements. The bitfields are used to keep
       the overall value small enough to fit in a float accurately,
@@ -374,6 +371,9 @@ protected:
         uint8_t address;   // address on the bus (eg. I2C address)
         uint8_t devtype;   // device class specific device type
     };
+
+protected:
+    uint8_t _read_flag = 0;
 
     union DeviceId {
         struct DeviceStructure devid_s;

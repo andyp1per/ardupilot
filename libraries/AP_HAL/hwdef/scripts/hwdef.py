@@ -53,6 +53,9 @@ class HWDef:
         self.imu_list = []
         self.compass_list = []
         self.baro_list = []
+        # an incomplete list of i2c devices. Currently only contains IMU, MAG and BARO and only MAG is used
+        # for bus discrimination
+        self.i2c_device_list = []
 
         # populate a stale defines map from define name to reason-it-is-bad
         self.stale_defines = self.get_stale_defines()
@@ -301,6 +304,7 @@ class HWDef:
         elif a[1] == 'ALL':
             return ('FOREACH_I2C(b)', 'GET_I2C_DEVICE(b,0x%02x)' % (busaddr))
         busnum = int(a[1])
+        self.i2c_device_list.append("{ AP_HAL::Device::BusType::BUS_TYPE_I2C, %u, %u }" % (busnum, busaddr))
         return ('', 'GET_I2C_DEVICE(%u,0x%02x)' % (busnum, busaddr))
 
     def seen_str(self, dev):
@@ -383,6 +387,8 @@ class HWDef:
             f.write(f"#undef AP_COMPASS_{driver}_ENABLED\n#define AP_COMPASS_{driver}_ENABLED 1\n")
         if len(devlist) > 0:
             f.write('#define HAL_MAG_PROBE_LIST %s\n\n' % ';'.join(devlist))
+            f.write('#define HAL_I2C_INTERNAL_DEVICE_LIST { %s }\n\n' % ','.join(self.i2c_device_list))
+            print(self.i2c_device_list)
 
     def write_BARO_config(self, f):
         '''write barometer config defines'''
