@@ -8005,6 +8005,28 @@ class TestSuite(ABC):
             **kwargs
         )
 
+    def wait_distance_sim_location(self, distance, accuracy=2, timeout=30, **kwargs):
+        """Wait for flight of a given distance."""
+        start = self.sim_location()
+
+        def get_distance():
+            m = self.assert_receive_message('AIRSPEED')
+            self.progress("aspd: %f" % m.airspeed)
+            return self.get_distance(start, self.sim_location())
+
+        def validator(value2, target2):
+            return math.fabs(value2 - target2) <= accuracy
+
+        self.wait_and_maintain(
+            value_name="Distance",
+            target=distance,
+            current_value_getter=lambda: get_distance(),
+            validator=lambda value2, target2: validator(value2, target2),
+            accuracy=accuracy,
+            timeout=timeout,
+            **kwargs
+        )
+
     def wait_distance_to_waypoint(self, wp_num, distance_min, distance_max, **kwargs):
         # TODO: use mission_request_partial_list_send
         wps = self.download_using_mission_protocol(mavutil.mavlink.MAV_MISSION_TYPE_MISSION)

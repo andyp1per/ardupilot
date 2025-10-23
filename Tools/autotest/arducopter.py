@@ -259,6 +259,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         self.do_RTL()
 
+
     # loiter - fly south west, then loiter within 5m position and altitude
     def ModeCruise(self, holdtime=10, maxaltchange=5, maxdistchange=5):
         """Hold cruise position."""
@@ -270,10 +271,14 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "SIM_WIND_SPD": 7,
             "SIM_WIND_DIR": 0,
             "ARSPD_WIND_MAX": 15,
+            "AIRSPEED_MIN": 2,
+            "AIRSPEED_MAX": 15,
             "AIRSPEED_CRUISE": 5,
             "FS_DR_TIMEOUT": 6000,
+            "LOIT_SPEED": 1000,
             "LOG_REPLAY": 1,
             "LOG_DISARMED": 1,
+            "AVOID_ENABLE": 0
         })
 
         ## need to reboot for ARSPEED_ENABLE to work correctly
@@ -282,44 +287,97 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.takeoff(10, mode=29)
 
         # first aim south east
-        self.progress("turn south east")
+        self.progress("Turn E")
         self.set_rc(4, 1580)
-        self.wait_heading(170)
+        self.wait_heading(90)
         self.set_rc(4, 1500)
 
-        # fly south east 50m
+        # fly east 50m
         self.set_rc(2, 1100)
 
         # wait to engage cruise and then disable the GPS
         self.wait_groundspeed(5, 8)
+        self.wait_statustext("^Cruising enabled", timeout=60, regex=True)
         self.set_parameter("GPS1_TYPE", 0)
 
-        # go 50m
-        self.wait_distance(50)
+        class DistanceValidatorAgainstSimState(vehicle_test_suite.TestSuite.MessageHook):
+            '''monitors a message containing a position containing lat/lng in 1e7,
+            makes sure it stays close to SIMSTATE'''
+            def __init__(self, suite, max_allowed_divergence=150):
+                super().__init__(suite)
+                self.max_allowed_divergence = max_allowed_divergence
+                self.max_divergence = 0
+                self.gpi = None
+                self.simstate = None
+                self.last_print = 0
+                self.min_print_interval = 1  # seconds
 
-        # change heading SW and fly for another 100m
+            def progress_prefix(self):
+                return "VIPASS: "
+
+            def process(self, mav, m):
+                if m.get_type() == 'GLOBAL_POSITION_INT':
+                    self.gpi = m
+                elif m.get_type() == 'SIMSTATE':
+                    self.simstate = m
+                if self.gpi is None:
+                    return
+                if self.simstate is None:
+                    return
+
+                divergence = self.suite.get_distance_int(self.gpi, self.simstate)
+                if (time.time() - self.last_print > self.min_print_interval or
+                        divergence > self.max_divergence):
+                    self.progress(f"distance(SIMSTATE,{'GLOBAL_POSITION_INT'})={divergence:.5f}m")
+                    self.last_print = time.time()
+                if divergence > self.max_divergence:
+                    self.max_divergence = divergence
+                if divergence > self.max_allowed_divergence:
+                    raise NotAchievedException(
+                        "%s diverged from simstate by %fm (max=%fm" %
+                        ('GLOBAL_POSITION_INT', divergence, self.max_allowed_divergence,))
+
+            def hook_removed(self):
+                self.progress(f"Maximum divergence was {self.max_divergence}m (max={self.max_allowed_divergence}m)")
+
+        #self.context_push()
+        #validator = DistanceValidatorAgainstSimState(self, max_allowed_divergence=10)
+        #self.install_message_hook_context(validator)
+
+        #self.delay_sim_time(20)
+        #self.progress("Tracked location just fine")
+        #self.context_pop()
+
+        # go 100m E
+
+        leg_distance = 500
+        self.progress("Flying %um East" % leg_distance)
+        self.wait_distance_sim_location(leg_distance, timeout=120)
+
+        m = self.assert_receive_message('AIRSPEED')
+        self.progress("Airspeed: %f" % m.airspeed)
+
+        # change heading Sout
+        self.progress("Distance achieved, heading South")
         self.set_rc(4, 1580)
-        self.wait_heading(190)
+        self.wait_heading(180)
         self.set_rc(4, 1500)
-        self.wait_distance(100)
+
+        m = self.assert_receive_message('AIRSPEED')
+        self.progress("Airspeed: %f" % m.airspeed)
+
+        self.progress("Flying %um South" % leg_distance)
+        self.wait_distance_sim_location(leg_distance, timeout=120)
+        m = self.assert_receive_message('AIRSPEED')
+        self.progress("Airspeed: %f" % m.airspeed)
+
+        self.progress("Distance achieved, waiting for speed")
         self.wait_groundspeed(3, 10)
-
-        m = self.assert_receive_message('VFR_HUD')
-        start_altitude = m.alt
-        start = self.mav.location()
-        tstart = self.get_sim_time()
-        self.progress("Holding cruise at %u meters for %u seconds" %
-                      (start_altitude, holdtime))
-        while self.get_sim_time_cached() < tstart + holdtime:
-            m = self.assert_receive_message('VFR_HUD')
-            pos = self.mav.location()
-            delta = self.get_distance(start, pos)
-            alt_delta = math.fabs(m.alt - start_altitude)
-            self.progress("Cruise Dist: %.2fm, alt:%u" % (delta, m.alt))
-
-        self.progress("Cruise OK for %u seconds" % holdtime)
+        m = self.assert_receive_message('AIRSPEED')
+        self.progress("Airspeed: %f" % m.airspeed)
 
         # re-enable the GPS
+        self.progress("Re-engaging GPS")
         self.set_parameter("GPS1_TYPE", 1)
 
         self.set_rc(2, 1500)
