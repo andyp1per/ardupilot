@@ -704,6 +704,8 @@ public:
 
     // minimum cruising speed in m/s
     AP_Float cruise_speed_ms;
+    // minimum airspeed for cruising in m/s
+    AP_Float cruise_speed_min_ms;
     // maximum airspeed for cruising in m/s
     AP_Float cruise_speed_max_ms;
 };

@@ -1233,10 +1233,15 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Description: Cruise speed in m/s
     AP_GROUPINFO("AIRSPEED_CRUISE", 14, ParametersG2, cruise_speed_ms, 0),
 
+    // @Param: AIRSPEED_MIN
+    // @DisplayName: Minimum airspeed allowed in cruise in m/s
+    // @Description: Minimum airspeed allowed in cruise in m/s
+    AP_GROUPINFO("AIRSPEED_MIN", 15, ParametersG2, cruise_speed_min_ms, 0),
+
     // @Param: AIRSPEED_MAX
     // @DisplayName: Maximum airspeed allowed in cruise in m/s
     // @Description: Maximum airspeed allowed in cruise in m/s
-    AP_GROUPINFO("AIRSPEED_MAX", 15, ParametersG2, cruise_speed_max_ms, 0),
+    AP_GROUPINFO("AIRSPEED_MAX", 16, ParametersG2, cruise_speed_max_ms, 0),
 #endif
 
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION

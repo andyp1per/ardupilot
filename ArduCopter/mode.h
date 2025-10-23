@@ -1373,7 +1373,7 @@ public:
     void update_fly_forward();
     void airspeed_ratio_update(void);
 
-    bool requires_GPS() const override { return false; }
+    bool requires_GPS() const override;
     bool has_manual_throttle() const override { return false; }
     bool is_autopilot() const override { return true; }
 

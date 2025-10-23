@@ -14,6 +14,12 @@ bool ModeCruise::init(bool ignore_checks)
     return true;
 }
 
+bool ModeCruise::requires_GPS() const
+{
+    // requires GPS when not cruising
+    return !ahrs.get_fly_forward();
+}
+
 void ModeCruise::run()
 {
     bool need_coord = !loiter_nav->loiter_option_is_set(AC_Loiter::LoiterOption::COORDINATED_TURN_ENABLED);
@@ -33,6 +39,10 @@ void ModeCruise::run()
     if (now_ms - last_airspeed_calibration_ms > 1000) {
         last_airspeed_calibration_ms = now_ms;
         airspeed_ratio_update();
+
+        // use average of min and max airspeed as default airspeed fusion with high variance
+        ahrs.writeDefaultAirSpeed((float)((g2.cruise_speed_min_ms + g2.cruise_speed_max_ms)/2),
+                                  (float)((g2.cruise_speed_max_ms - g2.cruise_speed_min_ms)/2));
     }
 }
 
@@ -41,18 +51,26 @@ void ModeCruise::update_fly_forward(void)
     float aspeed;
     bool have_airspeed = ahrs.airspeed_estimate(aspeed);
 
-    if (ahrs.using_airspeed_sensor() && have_airspeed && aspeed >= g2.cruise_speed_ms) {
-        if (!ahrs.get_fly_forward()) {
-            gcs().send_text(MAV_SEVERITY_INFO,"Cruising enabled at %fm/s", aspeed);
+    // first check if cruising has to be aborted
+    if (!ahrs.using_airspeed_sensor() || !have_airspeed || aspeed < g2.cruise_speed_min_ms || aspeed > g2.cruise_speed_max_ms) {
+        if (ahrs.get_fly_forward()) {
+            gcs().send_text(MAV_SEVERITY_INFO,"Cruising disabled at %fm/s", aspeed);
+            ahrs.set_fly_forward(false);
         }
-        ahrs.set_fly_forward(true);
         return;
     }
 
-    if (ahrs.get_fly_forward()) {
-        gcs().send_text(MAV_SEVERITY_INFO,"Cruising disabled");
+    // start estimating wind
+    if (aspeed >= g2.cruise_speed_min_ms && !ahrs.get_wind_estimation_enabled()) {
+        //ahrs.set_wind_estimation_enabled(true);
     }
-    ahrs.set_fly_forward(false);
+
+    // can we start cruising
+    if (aspeed >= g2.cruise_speed_ms && !ahrs.get_fly_forward()) {
+        gcs().send_text(MAV_SEVERITY_INFO,"Cruising enabled at %fm/s", aspeed);
+        ahrs.set_fly_forward(true);
+        return;
+    }
 }
 
 #if AP_AIRSPEED_AUTOCAL_ENABLE
