@@ -645,6 +645,9 @@ private:
         // Telemetry profile to use when determining the initial set of messages
         // that a drone will send
         AP_Int8 telemetry_profile;
+
+        // Maximum allowed ESC error rate percentage, -1 when disabled
+        AP_Int8 max_esc_error_rate_pcnt;
     } _params;
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL

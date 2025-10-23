@@ -1,4 +1,5 @@
 #include <AP_Common/AP_Common.h>
+#include <AP_ESC_Telem/AP_ESC_Telem.h>
 #include <AP_GPS/AP_GPS.h>
 #include <GCS_MAVLink/GCS.h>
 
@@ -165,11 +166,18 @@ uint8_t* AC_DroneShowManager::_fill_drone_show_status_packet_buffer(uint8_t* buf
      *
      * Bits 0 and 1: boot count modulo 4
      * Bits 2 and 3: authorization scope
-     * Bits 4-6: reserved, set to zero
-     * Bit 7: indicate that the drone has deviated from its expected position.
+     * Bits 4-5: reserved, set to zero
+     * Bit 6: indicates that at least one ESC is reporting a high error rate.
+     * Bit 7: indicates that the drone has deviated from its expected position.
      */
     flags3 = _boot_count & 0x03;
     flags3 |= (static_cast<uint8_t>(get_authorization_scope()) & 0x03) << 2;
+    if (
+        _params.max_esc_error_rate_pcnt >= 0 &&
+        AP::esc_telem().has_high_error_rate(_params.max_esc_error_rate_pcnt / 100.0f)
+    ) {
+        flags3 |= (1 << 6);
+    }
     if (!_is_at_expected_position()) {
         flags3 |= (1 << 7);
     }

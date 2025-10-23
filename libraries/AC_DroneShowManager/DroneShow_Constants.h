@@ -52,6 +52,10 @@
 // Default minimum altitude for pyro events, in meters.
 #define DEFAULT_PYRO_MIN_ALTITUDE_METERS 20.0f
 
+// Default maximum allowed ESC error rate. Error rates exceeding this threshold,
+// in the range [-1, 100] where 0 means 0%, 100 means 100%, -1 means disabled.
+#define DEFAULT_MAX_ESC_ERROR_RATE_PCNT -1
+
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 // UDP port that the drone show manager uses to broadcast the status of the RGB light
 // when compiled with the SITL simulator. Uncomment if you need it.

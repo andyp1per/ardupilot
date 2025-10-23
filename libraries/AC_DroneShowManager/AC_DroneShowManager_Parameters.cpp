@@ -311,7 +311,16 @@ const AP_Param::GroupInfo AC_DroneShowManager::var_info[] = {
     // @RebootRequired: True
     AP_GROUPINFO("TEL_PROFILE", 38, AC_DroneShowManager, _params.telemetry_profile, TelemetryProfile_Standard),
 
-    // Currently used max parameter ID: 38; update this if you add more parameters.
+    // @Param: MAX_ESC_ERR
+    // @DisplayName: Maximum allowed ESC error rate percentage
+    // @Description: Maximum allowed ESC error rate percentage on any of the ESCs. Requires ESC telemetry. Should be in the range 0-100. Negative values disable the check. Error rates exceeding the threshold will trigger a status flag but do not abort the show.
+    // @Range: -1 100
+    // @Increment: 1
+    // @Units: %
+    // @User: Advanced
+    AP_GROUPINFO("MAX_ESC_ERR", 39, AC_DroneShowManager, _params.max_esc_error_rate_pcnt, DEFAULT_MAX_ESC_ERROR_RATE_PCNT),
+
+    // Currently used max parameter ID: 39; update this if you add more parameters.
     // Note that the max parameter ID may appear in the middle of the above list.
 
     AP_GROUPEND
