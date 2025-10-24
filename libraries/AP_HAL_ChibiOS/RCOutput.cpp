@@ -1487,6 +1487,7 @@ void RCOutput::dshot_send_groups(rcout_timer_t cycle_start_us, rcout_timer_t tim
             _dshot_current_command.cycle = 0;
             _dshot_command_queue.clear();
             dma_cancel(group);
+            AP::logger().WriteStreaming("DSHT", "TimeUS,Instance,Ch1,Ch2,Ch3,Ch4", "s#----", "F-----", "QBHHHH", AP_HAL::micros64(), group.timer_id, -1, -1, -1, -1);
             dshot_send(group, cycle_start_us, timeout_period_us);
             pulse_sent = true;
         }
