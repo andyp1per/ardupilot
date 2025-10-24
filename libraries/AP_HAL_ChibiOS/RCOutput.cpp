@@ -40,6 +40,7 @@
 #include <AP_InternalError/AP_InternalError.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 #include <AP_Common/ExpandingString.h>
+#include <AP_Logger/AP_Logger.h>
 #ifndef HAL_NO_UARTDRIVER
 #include <GCS_MAVLink/GCS.h>
 #endif
@@ -1666,6 +1667,8 @@ void RCOutput::dshot_send(pwm_group &group, rcout_timer_t cycle_start_us, rcout_
 
     memset((uint8_t *)group.dma_buffer, 0, DSHOT_BUFFER_LENGTH);
 
+    uint16_t values[4] {};
+
     for (uint8_t i=0; i<4; i++) {
         uint8_t chan = group.chan[i];
         if (group.is_chan_enabled(i)) {
@@ -1713,6 +1716,7 @@ void RCOutput::dshot_send(pwm_group &group, rcout_timer_t cycle_start_us, rcout_
                 value = 0;
             }
 
+            values[i] = value;
             // according to sskaug requesting telemetry while trying to arm may interfere with the good frame calc
             const uint32_t chan_mask = (1U<<chan);
             bool request_telemetry = telem_request_mask & chan_mask;
@@ -1733,6 +1737,8 @@ void RCOutput::dshot_send(pwm_group &group, rcout_timer_t cycle_start_us, rcout_
     chEvtGetAndClearEvents(group.dshot_event_mask | DSHOT_CASCADE);
     // start sending the pulses out
     send_pulses_DMAR(group, DSHOT_BUFFER_LENGTH);
+
+    AP::logger().WriteStreaming("DSHT", "TimeUS,Instance,Ch1,Ch2,Ch3,Ch4", "s#----", "F-----", "QBHHHH", AP_HAL::micros64(), group.timer_id, values[0], values[1], values[2], values[3]);
 #endif // HAL_DSHOT_ENABLED
 }
 

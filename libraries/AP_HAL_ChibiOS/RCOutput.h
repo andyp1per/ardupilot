@@ -72,7 +72,7 @@ public:
 #ifdef HAL_WITH_BIDIR_DSHOT
     uint16_t get_erpm(uint8_t chan) const override { return _bdshot.erpm[chan]; }
     float get_erpm_error_rate(uint8_t chan) const override {
-      return 100.0f * float(_bdshot.erpm_errors[chan]) / (1 + _bdshot.erpm_errors[chan] + _bdshot.erpm_clean_frames[chan]);
+      return float(_bdshot.erpm_errors[chan]);
     }
     /*
       allow all erpm values to be read and for new updates to be detected - primarily for IOMCU

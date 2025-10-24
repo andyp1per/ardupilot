@@ -20,6 +20,7 @@
 #include "hwdef/common/stm32_util.h"
 #include <AP_InternalError/AP_InternalError.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
+#include <AP_Logger/AP_Logger.h>
 
 #if HAL_USE_PWM == TRUE
 #if HAL_DSHOT_ENABLED
@@ -69,6 +70,8 @@ bool RCOutput::dshot_send_command(pwm_group& group, uint8_t command, uint8_t cha
     const uint16_t zero_packet = create_dshot_packet(0, false, bdshot_telem);
     const uint16_t packet = create_dshot_packet(command, true, bdshot_telem);
 
+    uint16_t values[4] {};
+
     for (uint8_t i = 0; i < 4; i++) {
         if (!group.is_chan_enabled(i)) {
             continue;
@@ -76,14 +79,18 @@ bool RCOutput::dshot_send_command(pwm_group& group, uint8_t command, uint8_t cha
 
         if (group.chan[i] == chan || chan == RCOutput::ALL_CHANNELS) {
             fill_DMA_buffer_dshot(group.dma_buffer + i, 4, packet, group.bit_width_mul);
+            values[i] = command;
         } else {
             fill_DMA_buffer_dshot(group.dma_buffer + i, 4, zero_packet, group.bit_width_mul);
+            values[i] = 0;
         }
     }
 
     chEvtGetAndClearEvents(group.dshot_event_mask);
     // start sending the pulses out
     send_pulses_DMAR(group, DSHOT_BUFFER_LENGTH);
+
+    AP::logger().WriteStreaming("DSHT", "TimeUS,Instance,Ch1,Ch2,Ch3,Ch4", "s#----", "F-----", "QBHHHH", AP_HAL::micros64(), group.timer_id, values[0], values[1], values[2], values[3]);
 #ifdef HAL_GPIO_LINE_GPIO81
     TOGGLE_PIN_DEBUG(81);
 #endif
