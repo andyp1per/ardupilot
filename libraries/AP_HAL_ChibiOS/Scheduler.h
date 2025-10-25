@@ -65,7 +65,7 @@
 #endif
 
 #ifndef RCOUT_THD_WA_SIZE
-#define RCOUT_THD_WA_SIZE    512
+#define RCOUT_THD_WA_SIZE    1024
 #endif
 
 #ifndef RCIN_THD_WA_SIZE
