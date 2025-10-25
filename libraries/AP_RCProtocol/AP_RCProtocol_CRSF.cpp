@@ -29,6 +29,7 @@
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 #include <AP_RCTelemetry/AP_CRSF_Telem.h>
 #include <AP_SerialManager/AP_SerialManager.h>
+#include <GCS_Mavlink/GCS.h>
 
 #define CRSF_SUBSET_RC_STARTING_CHANNEL_BITS        5
 #define CRSF_SUBSET_RC_STARTING_CHANNEL_MASK        0x1F
@@ -369,8 +370,11 @@ void AP_RCProtocol_CRSF::update(void)
 
     // never received RC frames, but have received CRSF frames so make sure we give the telemetry opportunity to run
     uint32_t now = AP_HAL::micros();
-    if (_last_frame_time_us > 0 && (!get_rc_input_count() || !is_tx_active())
+    if ((_last_frame_time_us > 0 || bind_in_progress()) && (!get_rc_input_count() || !is_tx_active())
         && now - _last_frame_time_us > CRSF_INTER_FRAME_TIME_US_250HZ) {
+            if (bind_in_progress()) {
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO,"Sending bind frame");
+            }
         process_telemetry(false);
         _last_frame_time_us = now;
     }
@@ -757,6 +761,15 @@ void AP_RCProtocol_CRSF::start_bind(void)
     if (telem != nullptr) {
         telem->start_bind();
     }
+}
+
+bool AP_RCProtocol_CRSF::bind_in_progress(void)
+{
+    AP_CRSF_Telem* telem = AP::crsf_telem();
+    if (telem != nullptr) {
+        return telem->bind_in_progress();
+    }
+    return false;
 }
 #endif
 
