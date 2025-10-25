@@ -29,7 +29,7 @@
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 #include <AP_RCTelemetry/AP_CRSF_Telem.h>
 #include <AP_SerialManager/AP_SerialManager.h>
-#include <GCS_Mavlink/GCS.h>
+#include <GCS_MAVLink/GCS.h>
 
 #define CRSF_SUBSET_RC_STARTING_CHANNEL_BITS        5
 #define CRSF_SUBSET_RC_STARTING_CHANNEL_MASK        0x1F
