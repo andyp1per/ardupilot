@@ -372,11 +372,12 @@ void AP_RCProtocol_CRSF::update(void)
     uint32_t now = AP_HAL::micros();
     if ((_last_frame_time_us > 0 || bind_in_progress()) && (!get_rc_input_count() || !is_tx_active())
         && now - _last_frame_time_us > CRSF_INTER_FRAME_TIME_US_250HZ) {
-            if (bind_in_progress()) {
-                GCS_SEND_TEXT(MAV_SEVERITY_INFO,"Sending bind frame");
-            }
-        process_telemetry(false);
-        _last_frame_time_us = now;
+        // don't send telemetry unless the UART we are dealing with is configured to send it
+        AP_HAL::UARTDriver *uart = get_available_UART();
+        if (_uart || (uart && (uart->get_baud_rate() == CRSF_BAUDRATE || uart->get_baud_rate() == ELRS_BAUDRATE))) {
+            process_telemetry(false);
+            _last_frame_time_us = now;
+        }
     }
 
 #if AP_RC_CHANNEL_ENABLED
