@@ -804,7 +804,9 @@ void AP_CRSF_Telem::process_command_frame(CommandFrame* command)
         return;
     }
 
-    switch (command->payload[0]) {
+    switch (command->command_id) {
+    case AP_RCProtocol_CRSF::CRSF_COMMAND_RX:
+        switch (command->payload[0]) {
         case AP_RCProtocol_CRSF::CRSF_COMMAND_GENERAL_CRSF_SPEED_PROPOSAL: {
             uint32_t baud_rate = command->payload[2] << 24 | command->payload[3] << 16
                 | command->payload[4] << 8 | command->payload[5];
@@ -816,6 +818,10 @@ void AP_CRSF_Telem::process_command_frame(CommandFrame* command)
         }
         default:
             break; // do nothing
+        }
+        break;
+    default:
+        break;
     }
 }
 
@@ -1242,7 +1248,7 @@ void AP_CRSF_Telem::calc_bind() {
     _pending_request.frame_type = 0;
     _bind_request_pending = false;
 
-    debug("sent bind request");
+    debug("Sent bind request");
     _telem_pending = true;
 }
 
