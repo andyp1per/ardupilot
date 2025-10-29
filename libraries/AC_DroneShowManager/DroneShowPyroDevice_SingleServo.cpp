@@ -1,5 +1,4 @@
 #include <AP_HAL/AP_HAL.h>
-#include <GCS_MAVLink/GCS.h>
 #include <SRV_Channel/SRV_Channel.h>
 
 #include "DroneShowPyroDevice_SingleServo.h"
@@ -69,7 +68,6 @@ bool DroneShowPyroDevice_SingleServo::set_duty_cycle_percentage(uint8_t pct) con
         hal.rcout->set_freq(mask, freq_motor);
     }
 
-    gcs().send_text(MAV_SEVERITY_INFO, "Servo %d to %d%% (%d)", (_servo_channel + 1), pct, duty_cycle);
     SRV_Channels::set_output_pwm_chan(_servo_channel, duty_cycle);
 
     return true;
