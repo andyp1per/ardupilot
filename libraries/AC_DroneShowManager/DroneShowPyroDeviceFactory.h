@@ -21,6 +21,9 @@ enum DroneShowPyroDeviceType {
 
     // Cobra pyro ignition device
     DroneShowPyroDeviceType_Cobra = 4,
+
+    // Pyorotechnic device is triggered via multiple relays, one per pyro channel
+    DroneShowPyroDeviceType_Relay = 5,
 };
 
 class DroneShowPyroDeviceFactory
