@@ -174,7 +174,7 @@ uint8_t* AC_DroneShowManager::_fill_drone_show_status_packet_buffer(uint8_t* buf
     flags3 |= (static_cast<uint8_t>(get_authorization_scope()) & 0x03) << 2;
     if (
         _params.max_esc_error_rate_pcnt >= 0 &&
-        AP::esc_telem().has_high_error_rate(_params.max_esc_error_rate_pcnt / 100.0f)
+        AP::esc_telem().has_high_error_rate(_params.max_esc_error_rate_pcnt)
     ) {
         flags3 |= (1 << 6);
     }

@@ -403,7 +403,8 @@ bool AP_ESC_Telem::get_power_percentage(uint8_t esc_index, uint8_t& power_percen
 }
 #endif // AP_EXTENDED_ESC_TELEM_ENABLED
 
-    // returns whether at least one ESC is reporting a high error rate
+// returns whether at least one ESC is reporting a high error rate. The threshold
+// is in percentages, from 0 to 100, similarly to _rpm_data[i].error_rate
 bool AP_ESC_Telem::has_high_error_rate(float threshold) const
 {
     if (threshold < 0.0f) {
