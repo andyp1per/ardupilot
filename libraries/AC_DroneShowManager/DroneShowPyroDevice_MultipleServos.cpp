@@ -80,7 +80,7 @@ bool DroneShowPyroDevice_MultipleServos::set_duty_cycle_percentage(uint8_t servo
     const uint16_t duty_cycle = min_pwm + ((max_pwm - min_pwm) * pct) / 100;
 
     /* This section of the code was taken from RCOutputRGBLed.cpp */
-    const uint16_t freq_motor = hal.rcout->get_freq(0);
+    const uint16_t freq_motor = 20;
     const uint16_t freq = hal.rcout->get_freq(servo_channel);
 
     if (freq_motor != freq) {
