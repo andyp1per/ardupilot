@@ -156,6 +156,7 @@ public:
         uint8_t minor;
         uint8_t major;
         bool use_rf_mode;
+        bool is_betaflight;
         ProtocolType protocol;
     };
 
