@@ -21,6 +21,7 @@
 #pragma once
 
 #include "AP_CRSF_config.h"
+#include <AP_Math/vector3.h>
 
 #if AP_RCPROTOCOL_CRSF_ENABLED
 
@@ -59,6 +60,7 @@ public:
         CRSF_FRAMETYPE_PARAMETER_READ = 0x2C,
         CRSF_FRAMETYPE_PARAMETER_WRITE = 0x2D,
         CRSF_FRAMETYPE_COMMAND = 0x32,
+        CRSF_FRAMETYPE_ACCGYRO = 0x41,    // full resolution IMU frames
         // Custom Telemetry Frames 0x7F,0x80
         CRSF_FRAMETYPE_AP_CUSTOM_TELEM_LEGACY = 0x7F,   // as suggested by Remo Masina for fw < 4.06
         CRSF_FRAMETYPE_AP_CUSTOM_TELEM = 0x80,          // reserved for ArduPilot by TBS, requires fw >= 4.06
@@ -175,6 +177,18 @@ public:
         uint8_t origin; // Device address
     };
 
+    // CRSF_FRAMETYPE_ACCGYRO
+    struct PACKED AccGyroFrame {
+        uint8_t destination;
+        uint8_t origin;
+        int16_t gyro_x;             // LSB = 32768/4000 DPS
+        int16_t gyro_y;             // LSB = 32768/4000 DPS
+        int16_t gyro_z;             // LSB = 32768/4000 DPS
+        int16_t acc_x;              // LSB = 32768/32 G
+        int16_t acc_y;              // LSB = 32768/32 G
+        int16_t acc_z;              // LSB = 32768/32 G
+    };
+
     struct VersionInfo {
         uint8_t minor;
         uint8_t major;
@@ -200,6 +214,9 @@ public:
 
     // process a device info frame for version information
     static bool process_device_info_frame(ParameterDeviceInfoFrame* info, VersionInfo* version, bool fakerx);
+
+    // process a raw IMU frame
+    static bool process_accgyro_frame(AccGyroFrame*, Vector3f& acc, Vector3f& gyro);
 
     // encode a device info frame for version information
     static uint32_t encode_device_info(ParameterDeviceInfoFrame& info, uint8_t num_params);

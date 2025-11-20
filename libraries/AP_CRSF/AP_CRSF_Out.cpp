@@ -320,6 +320,8 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
     hal.console->printf("\n");
 #endif
 
+    Vector3f acc, gyro;
+
     switch (_frame.type) {
         case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_COMMAND: {
             const AP_CRSF_Protocol::CommandFrame* cmd = (const AP_CRSF_Protocol::CommandFrame*)_frame.payload;
@@ -350,6 +352,10 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
 
         case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_PARAM_DEVICE_PING:
             send_device_info();
+            break;
+
+        case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_ACCGYRO:
+            AP_CRSF_Protocol::process_accgyro_frame((AP_CRSF_Protocol::AccGyroFrame*)_frame.payload, acc, gyro);
             break;
 
         default:
