@@ -334,22 +334,29 @@ bool AP_CRSF_Protocol::process_device_info_frame(ParameterDeviceInfoFrame* info,
     return true;
 }
 
-#if 0
-bool AP_CRSF_Protocol::process_ping_frame(ParameterPingFrame* info, bool fakerx)
+bool AP_CRSF_Protocol::process_accgyro_frame(AccGyroFrame* accgyro, Vector3f& acc, Vector3f& gyro)
 {
-    const uint8_t destination = fakerx ? AP_RCProtocol_CRSF::CRSF_ADDRESS_CRSF_RECEIVER : AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER;
-    const uint8_t origin = fakerx ? AP_RCProtocol_CRSF::CRSF_ADDRESS_FLIGHT_CONTROLLER : AP_RCProtocol_CRSF::CRSF_ADDRESS_CRSF_RECEIVER;
-
-    if (info->destination != 0 && info->destination != destination) {
-        return false; // request was not for us
-    }
-
-    // we are only interested in RC device info for firmware version detection
-    if (info->origin != 0 && info->origin != origin) {
+    // we are only interested in FC IMU data
+    if (accgyro->origin != 0 && accgyro->origin != CRSF_ADDRESS_FLIGHT_CONTROLLER) {
+        debug("process_accgyro_frame(): rejected origin 0x%x", accgyro->origin);
         return false;
     }
+
+#define C32G16BIT_TO_ACCMSS(x) ((float(int16_t(be16toh(x))) * 32.0 * GRAVITY_MSS) / 32767.0)
+#define C4KDPS16BIT_TO_DEGREES(x) ((float(int16_t(be16toh(x))) * 4000.0) / 32767.0)
+
+    acc.x = C32G16BIT_TO_ACCMSS(accgyro->acc_x);
+    acc.y = C32G16BIT_TO_ACCMSS(accgyro->acc_y);
+    acc.z = C32G16BIT_TO_ACCMSS(accgyro->acc_z);
+
+    gyro.x = C4KDPS16BIT_TO_DEGREES(accgyro->gyro_x);
+    gyro.y = C4KDPS16BIT_TO_DEGREES(accgyro->gyro_y);
+    gyro.z = C4KDPS16BIT_TO_DEGREES(accgyro->gyro_z);
+
+    debug("process_accgyro_frame(): Acc: %f,%f,%f, Gyr: %f,%f,%f", acc.x, acc.y, acc.z, gyro.x, gyro.y, gyro.z);
+
+    return true;
 }
-#endif
 
 // encode a ping frame
 void AP_CRSF_Protocol::encode_device_info_frame(Frame& frame, DeviceAddress destination, DeviceAddress origin)
