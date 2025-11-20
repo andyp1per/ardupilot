@@ -34,6 +34,12 @@
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Scheduler/AP_Scheduler.h>
 
+// Include the external AHRS CRSF header if it is enabled to allow data passing
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+#include <AP_ExternalAHRS/AP_ExternalAHRS_CRSF.h>
+#endif
+
+
 //#define CRSF_RCOUT_DEBUG
 //#define CRSF_RCOUT_DEBUG_FRAME
 #ifdef CRSF_RCOUT_DEBUG
@@ -355,7 +361,15 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
             break;
 
         case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_ACCGYRO:
-            AP_CRSF_Protocol::process_accgyro_frame((AP_CRSF_Protocol::AccGyroFrame*)_frame.payload, acc, gyro);
+            if (AP_CRSF_Protocol::process_accgyro_frame((AP_CRSF_Protocol::AccGyroFrame*)_frame.payload, acc, gyro)) {
+                // Pass the decoded IMU data to the external AHRS CRSF module
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+                AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
+                if (crsf_ahrs != nullptr) {
+                    crsf_ahrs->handle_acc_gyro_frame(acc, gyro);
+                }
+#endif
+            }
             break;
 
         default:
@@ -473,4 +487,3 @@ namespace AP {
 };
 
 #endif // AP_CRSF_OUT_ENABLED
-
