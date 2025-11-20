@@ -62,7 +62,9 @@ public:
 #if AP_EXTERNAL_AHRS_SBG_ENABLED
         SBG = 8,
 #endif
-        // 9 reserved for EulerNav
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+        CRSF_IMU = 9,
+#endif
         // 10 reserved for Aeron
     };
 
@@ -213,4 +215,3 @@ namespace AP {
 };
 
 #endif  // AP_EXTERNAL_AHRS_ENABLED
-
