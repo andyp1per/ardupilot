@@ -63,6 +63,9 @@ public:
     static const struct AP_Param::GroupInfo var_info[];
     static AP_CRSF_Out* get_singleton() { return _singleton; }
 
+    // Returns the instance index of this CRSF output port (0, 1, 2...)
+    uint8_t get_instance_idx() const { return _instance_idx; }
+
 private:
     enum class State : uint8_t {
         WAITING_FOR_PORT,
@@ -114,7 +117,7 @@ private:
     uint32_t _target_baudrate;
     uint32_t _last_liveness_check_us;
     uint32_t _last_ping_frame_ms;
-    uint8_t _instance_idx;
+    uint8_t _instance_idx = 0; // Instance index (0, 1, 2...) for multi-instance use
 
     AP_CRSF_Protocol::VersionInfo version;
     BaudNegotiationResult _baud_negotiation_result;

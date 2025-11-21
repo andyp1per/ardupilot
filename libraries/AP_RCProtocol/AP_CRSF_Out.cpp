@@ -30,12 +30,7 @@
 #include <SRV_Channel/SRV_Channel.h>
 #include <AP_RCProtocol/AP_RCProtocol_CRSF.h>
 #include <GCS_MAVLink/GCS.h>
-
-// Include the external AHRS CRSF header if it is enabled to allow data passing
-#if AP_EXTERNAL_AHRS_CRSF_ENABLED
 #include <AP_ExternalAHRS/AP_ExternalAHRS_CRSF.h>
-#endif
-
 
 //#define CRSF_RCOUT_DEBUG
 //#define CRSF_RCOUT_DEBUG_FRAME
@@ -71,7 +66,17 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver* uart)
         return false;
     }
 
-    _crsf_port = NEW_NOTHROW AP_RCProtocol_CRSF(AP::RC(), AP_RCProtocol_CRSF::PortMode::DIRECT_RCOUT, uart);
+    // Search for the first active CRSF Output port.
+    // We iterate through possible instances (0..3) to find the one the user configured.
+    // This allows AP_CRSF_Out to work regardless of which UART is used.
+    for (uint8_t i = 0; i < 4; i++) {
+        _crsf_port = AP_RCProtocol_CRSF::get_direct_attach_singleton(AP_SerialManager::SerialProtocol_CRSF_Output, i);
+        if (_crsf_port != nullptr) {
+            // Found a valid port
+            _instance_idx = i;
+            break;
+        }
+    }
 
     if (_crsf_port == nullptr) {
         debug_rcout("Init failed: could not create CRSF output port");
@@ -350,7 +355,8 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
                 AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
                 if (crsf_ahrs != nullptr) {
-                    crsf_ahrs->handle_acc_gyro_frame(acc, gyro);
+                    // Pass this instance's index for filtering in the AHRS backend
+                    crsf_ahrs->handle_acc_gyro_frame(_instance_idx, acc, gyro);
                 }
 #endif
             }
