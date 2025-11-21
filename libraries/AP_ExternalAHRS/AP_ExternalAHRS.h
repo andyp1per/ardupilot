@@ -191,6 +191,7 @@ private:
     AP_Int16         log_rate;
     AP_Int16         options;
     AP_Int16         sensors;
+    AP_Int8          crsf_instance_idx;
 
     static AP_ExternalAHRS *_singleton;
 

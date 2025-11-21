@@ -27,7 +27,7 @@
 #include "AP_ExternalAHRS_MicroStrain7.h"
 #include "AP_ExternalAHRS_InertialLabs.h"
 #include "AP_ExternalAHRS_SBG.h"
-#include "AP_ExternalAHRS_CRSF.h" // Include the new CRSF backend
+#include "AP_ExternalAHRS_CRSF.h"
 
 #include <GCS_MAVLink/GCS.h>
 #include <AP_AHRS/AP_AHRS.h>
@@ -91,6 +91,14 @@ const AP_Param::GroupInfo AP_ExternalAHRS::var_info[] = {
     // @Units: Hz
     // @User: Standard
     AP_GROUPINFO("_LOG_RATE", 5, AP_ExternalAHRS, log_rate, 10),
+
+    // @Param: CRSF_IDX
+    // @DisplayName: CRSF Instance Index
+    // @Description: When EAHRS_TYPE is set to CRSF_IMU (9), this selects which CRSF instance (UART) to get IMU data from.
+    // @Values: 0:CRSF Instance 1, 1:CRSF Instance 2, 2:CRSF Instance 3
+    // @Range: 0 3
+    // @User: Standard
+    AP_GROUPINFO("_CRSF_IDX", 6, AP_ExternalAHRS, crsf_instance_idx, 0),
     
     AP_GROUPEND
 };
@@ -102,6 +110,10 @@ void AP_ExternalAHRS::init(void)
         // min 50Hz
         rate.set(50);
     }
+
+    // Use the value set by the user (defaults to 0).
+    // Auto-detection is removed here as it required non-public API calls.
+    int8_t target_crsf_idx = crsf_instance_idx.get();
 
     switch (DevType(devtype)) {
     case DevType::None:
@@ -139,9 +151,16 @@ void AP_ExternalAHRS::init(void)
 #endif // AP_EXTERNAL_AHRS_SBG_ENABLED
 
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
-    case DevType::CRSF_IMU:
-        backend = NEW_NOTHROW AP_ExternalAHRS_CRSF(this, state);
+    case DevType::CRSF_IMU: {
+        // Create the backend
+        auto *crsf_backend = NEW_NOTHROW AP_ExternalAHRS_CRSF(this, state);
+        if (crsf_backend) {
+            // Pass the resolved target index (user-specified, defaults to 0)
+            crsf_backend->set_instance_idx(target_crsf_idx);
+        }
+        backend = crsf_backend;
         return;
+    }
 #endif
 
     }
