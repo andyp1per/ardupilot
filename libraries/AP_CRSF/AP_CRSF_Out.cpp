@@ -39,7 +39,6 @@
 #include <AP_ExternalAHRS/AP_ExternalAHRS_CRSF.h>
 #endif
 
-
 //#define CRSF_RCOUT_DEBUG
 //#define CRSF_RCOUT_DEBUG_FRAME
 #ifdef CRSF_RCOUT_DEBUG
@@ -79,6 +78,7 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver& _uart)
     }
 
     crsf_port = NEW_NOTHROW AP_RCProtocol_CRSF(AP::RC(), AP_RCProtocol_CRSF::PortMode::DIRECT_RCOUT, &_uart);
+    _instance_idx = 0;
 
     if (crsf_port == nullptr) {
         debug_rcout("Init failed: could not create CRSF output port");
@@ -366,7 +366,8 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
                 AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
                 if (crsf_ahrs != nullptr) {
-                    crsf_ahrs->handle_acc_gyro_frame(acc, gyro);
+                    // Pass this instance's index for filtering in the AHRS backend
+                    crsf_ahrs->handle_acc_gyro_frame(_instance_idx, acc, gyro);
                 }
 #endif
             }

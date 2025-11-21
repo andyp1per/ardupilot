@@ -65,6 +65,9 @@ public:
     static const struct AP_Param::GroupInfo var_info[];
     static AP_CRSF_Out* get_singleton() { return singleton; }
 
+    // Returns the instance index of this CRSF output port (0, 1, 2...)
+    uint8_t get_instance_idx() const { return _instance_idx; }
+
 private:
     enum class State : uint8_t {
         WAITING_FOR_PORT,
