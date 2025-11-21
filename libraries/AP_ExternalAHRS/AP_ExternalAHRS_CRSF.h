@@ -21,7 +21,7 @@
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
 
 #include "AP_ExternalAHRS_backend.h"
-#include "AP_CRSF_Protocol.h"
+#include <AP_RCProtocol/AP_CRSF_Protocol.h>
 #include <AP_Math/vector3.h>
 #include <AP_HAL/AP_HAL.h>
 
@@ -48,10 +48,25 @@ public:
     void update() override {};
 
     // Mandatory method to receive the decoded AccGyro frame data from AP_CRSF_Out.
-    void handle_acc_gyro_frame(const Vector3f &acc, const Vector3f &gyro);
+    // The instance_idx identifies which AP_CRSF_Out is sending the data.
+    void handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &acc, const Vector3f &gyro);
 
     // Global accessor for the singleton instance, used by AP_CRSF_Out
     static AP_ExternalAHRS_CRSF* get_singleton();
+
+    // Set the expected CRSF instance index from the parameter system (EAHRS_CRSF_IDX)
+    void set_instance_idx(uint8_t instance_idx) {
+        _instance_idx = instance_idx;
+    }
+
+    // Helper function for the AHRS frontend. Due to CRSF-specific API issues, this is simplified.
+    static int8_t get_default_instance_index();
+
+protected:
+    // CRSF IMU does not provide a GPS feed.
+    uint8_t num_gps_sensors(void) const override {
+        return 0;
+    }
 
 private:
 
@@ -59,16 +74,14 @@ private:
     struct CRSF_IMU_Data {
         Vector3f acc; // Acceleration (m/s/s)
         Vector3f gyro; // Angular velocity (rad/s)
-    };
+    } imu_data;
 
     // Singleton pointer
     static AP_ExternalAHRS_CRSF* _singleton;
+    uint32_t last_imu_pkt_ms; // Timestamp of the last received packet in milliseconds
 
-    CRSF_IMU_Data imu_data {};
-    uint32_t last_imu_pkt_ms = 0; // Timestamp of the last received packet in milliseconds
-
-    // Passes received IMU data to the ArduPilot INS framework
-    void post_imu() const;
+    // The CRSF index (0, 1, 2...) that this AHRS is configured to listen to.
+    uint8_t _instance_idx;
 };
 
 namespace AP {

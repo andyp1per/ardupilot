@@ -22,14 +22,15 @@
 #include <AP_InertialSensor/AP_InertialSensor.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
+#include <AP_SerialManager/AP_SerialManager.h>
 
 extern const AP_HAL::HAL &hal;
 
 AP_ExternalAHRS_CRSF* AP_ExternalAHRS_CRSF::_singleton = nullptr;
 
-// Constructor
-AP_ExternalAHRS_CRSF::AP_ExternalAHRS_CRSF(AP_ExternalAHRS *frontend,
-        AP_ExternalAHRS::state_t &state): AP_ExternalAHRS_backend(frontend, state)
+// Constructor: Renaming 'frontend' to '_frontend' and 'state' to '_state' resolves the shadowing warning/error.
+AP_ExternalAHRS_CRSF::AP_ExternalAHRS_CRSF(AP_ExternalAHRS *_frontend,
+        AP_ExternalAHRS::state_t &_state): AP_ExternalAHRS_backend(_frontend, _state)
 {
     // The AP_ExternalAHRS frontend instantiates this class.
     // Since we are passive, we do not need to open a UART or create a thread.
@@ -40,6 +41,10 @@ AP_ExternalAHRS_CRSF::AP_ExternalAHRS_CRSF(AP_ExternalAHRS *frontend,
     } else {
         GCS_SEND_TEXT(MAV_SEVERITY_ERROR, "ExternalAHRS_CRSF already initialised");
     }
+
+    // CRSF IMU only provides IMU data, so set the default sensors accordingly.
+    // This allows the EAHRS_SENSORS parameter to default to only IMU.
+    set_default_sensors(uint16_t(AP_ExternalAHRS::AvailableSensor::IMU));
 }
 
 // Global accessor for the singleton instance
@@ -56,10 +61,18 @@ namespace AP {
     }
 };
 
+// Returns the default instance index. Due to API restrictions, this must return 0.
+// Auto-detection logic is removed here to prevent layering violations.
+int8_t AP_ExternalAHRS_CRSF::get_default_instance_index()
+{
+    return 0;
+}
+
+
 // Returns the external AHRS port number. Since CRSF is a passive consumer here, return -1.
 int8_t AP_ExternalAHRS_CRSF::get_port(void) const
 {
-    return -1;
+    return _instance_idx;
 }
 
 // Get model/type name
@@ -69,20 +82,18 @@ const char* AP_ExternalAHRS_CRSF::get_name() const
 }
 
 // Handles the received and decoded IMU data from AP_CRSF_Out.
-void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(const Vector3f &acc, const Vector3f &gyro)
+void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &acc, const Vector3f &gyro)
 {
+    // CRITICAL: Only process data if the sender's index matches the configured primary CRSF source index.
+    if (instance_idx != _instance_idx) {
+        return;
+    }
+
     WITH_SEMAPHORE(state.sem);
     imu_data.acc = acc;
     imu_data.gyro = gyro;
     last_imu_pkt_ms = AP_HAL::millis();
 
-    // Pass the IMU data to the ArduPilot INS framework
-    post_imu();
-}
-
-// Posts data from an IMU packet to AP::ins()
-void AP_ExternalAHRS_CRSF::post_imu() const
-{
     // The CRSF frame provides raw accel and gyro data. We pass it through
     // AP::ins().handle_external as required for an external IMU.
     AP_ExternalAHRS::ins_data_message_t ins {
@@ -139,7 +150,6 @@ bool AP_ExternalAHRS_CRSF::get_variances(float &velVar, float &posVar, float &hg
     posVar = 0;
     hgtVar = 0;
     magVar = Vector3f();
-    tasVar = 0;
     return false; // Return false to indicate no full AHRS data is being provided
 }
 
