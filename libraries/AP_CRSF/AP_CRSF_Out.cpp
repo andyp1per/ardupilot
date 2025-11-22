@@ -97,6 +97,10 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver& uart)
     _scheduler.set_task_rate(REPORTING, _frontend._reporting_rate_hz);
 
 
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+    AP::externalAHRS().set_IMU_rate(1000000UL / _frame_interval_us);
+#endif
+
     if (!hal.scheduler->thread_create(FUNCTOR_BIND_MEMBER(&AP_CRSF_Out::crsf_out_thread, void), "crsf", 2048, AP_HAL::Scheduler::PRIORITY_RCOUT, 1)) {
         delete _crsf_port;
         _crsf_port = nullptr;
@@ -335,8 +339,6 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
     hal.console->printf("\n");
 #endif
 
-    Vector3f acc, gyro;
-
     switch (_frame.type) {
         case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_COMMAND: {
             const AP_CRSF_Protocol::CommandFrame* cmd = (const AP_CRSF_Protocol::CommandFrame*)_frame.payload;
@@ -369,19 +371,21 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
             send_device_info();
             break;
 
-        case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_ACCGYRO:
-            if (AP_CRSF_Protocol::process_accgyro_frame((AP_CRSF_Protocol::AccGyroFrame*)_frame.payload, acc, gyro)) {
+        case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_ACCGYRO: {
+            Vector3f acc, gyro;
+            float gyro_temp;
+            if (AP_CRSF_Protocol::process_accgyro_frame((AP_CRSF_Protocol::AccGyroFrame*)_frame.payload, acc, gyro, gyro_temp)) {
                 // Pass the decoded IMU data to the external AHRS CRSF module
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
                 AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
                 if (crsf_ahrs != nullptr) {
                     // Pass this instance's index for filtering in the AHRS backend
-                    crsf_ahrs->handle_acc_gyro_frame(_instance_idx, acc, gyro);
+                    crsf_ahrs->handle_acc_gyro_frame(_instance_idx, acc, gyro, gyro_temp);
                 }
 #endif
             }
             break;
-
+        }
         default:
             break;
     }
