@@ -49,7 +49,7 @@ public:
 
     // Mandatory method to receive the decoded AccGyro frame data from AP_CRSF_Out.
     // The instance_idx identifies which AP_CRSF_Out is sending the data.
-    void handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &acc, const Vector3f &gyro);
+    void handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &acc, const Vector3f &gyro, const float gyro_temp);
 
     // Global accessor for the singleton instance, used by AP_CRSF_Out
     static AP_ExternalAHRS_CRSF* get_singleton();
@@ -69,13 +69,6 @@ protected:
     }
 
 private:
-
-    // Data structure to hold the last received IMU data
-    struct CRSF_IMU_Data {
-        Vector3f acc; // Acceleration (m/s/s)
-        Vector3f gyro; // Angular velocity (rad/s)
-    } imu_data;
-
     // Singleton pointer
     static AP_ExternalAHRS_CRSF* _singleton;
     uint32_t last_imu_pkt_ms; // Timestamp of the last received packet in milliseconds
