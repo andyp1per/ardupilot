@@ -181,12 +181,13 @@ public:
     struct PACKED AccGyroFrame {
         uint8_t destination;
         uint8_t origin;
-        int16_t gyro_x;             // LSB = 32768/4000 DPS
-        int16_t gyro_y;             // LSB = 32768/4000 DPS
-        int16_t gyro_z;             // LSB = 32768/4000 DPS
-        int16_t acc_x;              // LSB = 32768/32 G
-        int16_t acc_y;              // LSB = 32768/32 G
-        int16_t acc_z;              // LSB = 32768/32 G
+        uint16_t gyro_x;             // LSB = 32768/4000 DPS
+        uint16_t gyro_y;             // LSB = 32768/4000 DPS
+        uint16_t gyro_z;             // LSB = 32768/4000 DPS
+        uint16_t acc_x;              // LSB = 32768/32 G
+        uint16_t acc_y;              // LSB = 32768/32 G
+        uint16_t acc_z;              // LSB = 32768/32 G
+        uint16_t gyro_temp;          // C
     };
 
     struct VersionInfo {
@@ -216,7 +217,7 @@ public:
     static bool process_device_info_frame(ParameterDeviceInfoFrame* info, VersionInfo* version, bool fakerx);
 
     // process a raw IMU frame
-    static bool process_accgyro_frame(AccGyroFrame*, Vector3f& acc, Vector3f& gyro);
+    static bool process_accgyro_frame(AccGyroFrame*, Vector3f& acc, Vector3f& gyro, float& gyro_temp);
 
     // encode a device info frame for version information
     static uint32_t encode_device_info(ParameterDeviceInfoFrame& info, uint8_t num_params);
