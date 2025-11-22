@@ -77,6 +77,11 @@ public:
         return rate.get();
     }
 
+    // set the expected update rate
+    void set_IMU_rate(float _rate) {
+        rate.set(_rate);
+    }
+
     // Get model/type name
     const char* get_name() const;
 

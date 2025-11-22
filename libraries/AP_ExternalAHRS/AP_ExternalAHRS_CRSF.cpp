@@ -78,11 +78,11 @@ int8_t AP_ExternalAHRS_CRSF::get_port(void) const
 // Get model/type name
 const char* AP_ExternalAHRS_CRSF::get_name() const
 {
-    return "CRSF-IMU";
+    return "CRSF";
 }
 
 // Handles the received and decoded IMU data from AP_CRSF_Out.
-void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &acc, const Vector3f &gyro)
+void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &acc, const Vector3f &gyro, const float gyro_temp)
 {
     // CRITICAL: Only process data if the sender's index matches the configured primary CRSF source index.
     if (instance_idx != _instance_idx) {
@@ -90,17 +90,15 @@ void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vec
     }
 
     WITH_SEMAPHORE(state.sem);
-    imu_data.acc = acc;
-    imu_data.gyro = gyro;
     last_imu_pkt_ms = AP_HAL::millis();
 
     // The CRSF frame provides raw accel and gyro data. We pass it through
     // AP::ins().handle_external as required for an external IMU.
     AP_ExternalAHRS::ins_data_message_t ins {
-        accel: imu_data.acc,
-        gyro: imu_data.gyro,
+        accel: acc,
+        gyro: gyro,
         // Set temperature to a low value to disable internal calibrations if we don't have a reading
-        temperature: -300
+        temperature: gyro_temp
     };
     AP::ins().handle_external(ins);
 }
