@@ -347,7 +347,7 @@ bool AP_CRSF_Protocol::process_accgyro_frame(AccGyroFrame* accgyro, Vector3f& ac
 
     acc.x = C32G16BIT_TO_ACCMSS(accgyro->acc_x);
     acc.y = C32G16BIT_TO_ACCMSS(accgyro->acc_y);
-    acc.z = C32G16BIT_TO_ACCMSS(accgyro->acc_z);
+    acc.z = -C32G16BIT_TO_ACCMSS(accgyro->acc_z);
 
     gyro.x = C4KDPS16BIT_TO_RADS(accgyro->gyro_x);
     gyro.y = C4KDPS16BIT_TO_RADS(accgyro->gyro_y);
