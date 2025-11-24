@@ -86,6 +86,11 @@
 #include <AP_RPM/AP_RPM.h>
 #endif
 
+#include <AP_RCProtocol/AP_RCProtocol_config.h>
+#if AP_CRSF_OUT_ENABLED
+#include <AP_RCProtocol/AP_CRSF_Out.h>
+#endif
+
 #include <AP_IBus_Telem/AP_IBus_Telem.h>
 
 class AP_DDS_Client;
@@ -499,6 +504,10 @@ protected:
 
 #if AP_RPM_ENABLED
     AP_RPM rpm_sensor;
+#endif
+
+#if AP_CRSF_OUT_ENABLED
+    AP_CRSF_Out crsf_out;
 #endif
 
     static const struct AP_Param::GroupInfo var_info[];

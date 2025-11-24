@@ -290,7 +290,13 @@ const AP_Param::GroupInfo AP_Vehicle::var_info[] = {
     AP_SUBGROUPINFO(rpm_sensor, "RPM", 32, AP_Vehicle, AP_RPM),
 #endif
 
-    AP_GROUPEND
+#if AP_CRSF_OUT_ENABLED
+    // @Group: CRSF
+    // @Path: ../AP_RCProtocol/AP_CRSF_Out.cpp
+    AP_SUBGROUPINFO(crsf_out, "CRSF_OUT_", 33, AP_Vehicle, AP_CRSF_Out),
+#endif
+
+AP_GROUPEND
 };
 
 // reference to the vehicle. using AP::vehicle() here does not work on clang
