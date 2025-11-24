@@ -181,13 +181,14 @@ public:
     struct PACKED AccGyroFrame {
         uint8_t destination;
         uint8_t origin;
-        uint16_t gyro_x;             // LSB = 32768/4000 DPS
-        uint16_t gyro_y;             // LSB = 32768/4000 DPS
-        uint16_t gyro_z;             // LSB = 32768/4000 DPS
-        uint16_t acc_x;              // LSB = 32768/32 G
-        uint16_t acc_y;              // LSB = 32768/32 G
-        uint16_t acc_z;              // LSB = 32768/32 G
+        uint32_t gyro_x;             // LSB = INT_MAX/4000 DPS
+        uint32_t gyro_y;             // LSB = INT_MAX/4000 DPS
+        uint32_t gyro_z;             // LSB = INT_MAX/4000 DPS
+        uint32_t acc_x;              // LSB = INT_MAX/32 G
+        uint32_t acc_y;              // LSB = INT_MAX/32 G
+        uint32_t acc_z;              // LSB = INT_MAX/32 G
         uint16_t gyro_temp;          // C
+        uint32_t sample_time;        // sample time in us
     };
 
     struct VersionInfo {

@@ -24,13 +24,14 @@
 #if AP_RCPROTOCOL_CRSF_ENABLED
 
 #pragma GCC optimize("O2")
+#include <string.h>
+#include <limits.h>
 
 #include "AP_CRSF_Protocol.h"
 #include <AP_RCProtocol/AP_RCProtocol.h>
 #include <AP_Math/AP_Math.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Common/AP_FWVersion.h>
-#include <string.h>
 
 // Defines for CRSFv3 subset RC frame packing/unpacking
 #define CRSF_SUBSET_RC_STARTING_CHANNEL_BITS        5
@@ -335,8 +336,8 @@ bool AP_CRSF_Protocol::process_accgyro_frame(AccGyroFrame* accgyro, Vector3f& ac
         return false;
     }
 
-#define C32G16BIT_TO_ACCMSS(x) ((float(int16_t(be16toh(x))) * 32.0 * GRAVITY_MSS) / 32767.0)
-#define C4KDPS16BIT_TO_RADS(x) radians((float(int16_t(be16toh(x))) * 4000.0) / 32767.0)
+#define C32G16BIT_TO_ACCMSS(x) ((float(int32_t(be32toh(x))) * 32.0 * GRAVITY_MSS) / INT_MAX)
+#define C4KDPS16BIT_TO_RADS(x) radians((float(int32_t(be32toh(x))) * 4000.0) / INT_MAX)
 
     acc.x = C32G16BIT_TO_ACCMSS(accgyro->acc_x);
     acc.y = C32G16BIT_TO_ACCMSS(accgyro->acc_y);
