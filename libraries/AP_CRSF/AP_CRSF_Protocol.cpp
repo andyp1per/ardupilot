@@ -336,16 +336,16 @@ bool AP_CRSF_Protocol::process_accgyro_frame(AccGyroFrame* accgyro, Vector3f& ac
         return false;
     }
 
-#define C32G16BIT_TO_ACCMSS(x) ((float(int32_t(be32toh(x))) * 32.0 * GRAVITY_MSS) / INT_MAX)
-#define C4KDPS16BIT_TO_RADS(x) radians((float(int32_t(be32toh(x))) * 4000.0) / INT_MAX)
+#define C32G32BIT_TO_ACCMSS(x) ((float(int32_t(be32toh(x))) * 32.0 * GRAVITY_MSS) / INT_MAX)
+#define C4KDPS32BIT_TO_RADS(x) radians((float(int32_t(be32toh(x))) * 4000.0) / INT_MAX)
 
-    acc.x = C32G16BIT_TO_ACCMSS(accgyro->acc_x);
-    acc.y = C32G16BIT_TO_ACCMSS(accgyro->acc_y);
-    acc.z = -C32G16BIT_TO_ACCMSS(accgyro->acc_z);
+    acc.x = C32G32BIT_TO_ACCMSS(accgyro->acc_x);
+    acc.y = C32G32BIT_TO_ACCMSS(accgyro->acc_y);
+    acc.z = C32G32BIT_TO_ACCMSS(accgyro->acc_z);
 
-    gyro.x = C4KDPS16BIT_TO_RADS(accgyro->gyro_x);
-    gyro.y = C4KDPS16BIT_TO_RADS(accgyro->gyro_y);
-    gyro.z = C4KDPS16BIT_TO_RADS(accgyro->gyro_z);
+    gyro.x = C4KDPS32BIT_TO_RADS(accgyro->gyro_x);
+    gyro.y = C4KDPS32BIT_TO_RADS(accgyro->gyro_y);
+    gyro.z = C4KDPS32BIT_TO_RADS(accgyro->gyro_z);
 
     gyro_temp = float(int16_t(accgyro->gyro_temp));
 
