@@ -82,7 +82,7 @@ const char* AP_ExternalAHRS_CRSF::get_name() const
 }
 
 // Handles the received and decoded IMU data from AP_CRSF_Out.
-void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &acc, const Vector3f &gyro, const float gyro_temp)
+void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &accel, const Vector3f &gyro, const float gyro_temp)
 {
     // CRITICAL: Only process data if the sender's index matches the configured primary CRSF source index.
     if (instance_idx != _instance_idx) {
@@ -90,12 +90,16 @@ void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vec
     }
 
     WITH_SEMAPHORE(state.sem);
+
+    state.accel = accel;
+    state.gyro = gyro;
+
     last_imu_pkt_ms = AP_HAL::millis();
 
     // The CRSF frame provides raw accel and gyro data. We pass it through
     // AP::ins().handle_external as required for an external IMU.
     AP_ExternalAHRS::ins_data_message_t ins {
-        accel: acc,
+        accel: accel,
         gyro: gyro,
         // Set temperature to a low value to disable internal calibrations if we don't have a reading
         temperature: gyro_temp
@@ -103,11 +107,11 @@ void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vec
     AP::ins().handle_external(ins);
 }
 
-// Check if data is being received within a healthy window (e.g., last 100ms for high-rate IMU)
+// Check if data is being received within a healthy window (e.g., last 10ms for high-rate IMU)
 bool AP_ExternalAHRS_CRSF::healthy(void) const
 {
     const uint32_t now = AP_HAL::millis();
-    return (now - last_imu_pkt_ms < 100);
+    return (now - last_imu_pkt_ms < 10);
 }
 
 // Check if the AHRS has received an initial packet
