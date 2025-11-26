@@ -206,7 +206,11 @@ void Copter::failsafe_ekf_event()
 
     // set true if ekf action is triggered
     AP_Notify::flags.failsafe_ekf = true;
-    gcs().send_text(MAV_SEVERITY_CRITICAL, "EKF Failsafe: changed to %s Mode", flightmode->name());
+    if (g.fs_ekf_action == FS_EKF_ACTION_DISARM) {
+        gcs().send_text(MAV_SEVERITY_CRITICAL, "EKF Failsafe: forced disarm");
+    } else {
+        gcs().send_text(MAV_SEVERITY_CRITICAL, "EKF Failsafe: changed to %s Mode", flightmode->name());
+    }
 }
 
 // failsafe_ekf_off_event - actions to take when EKF failsafe is cleared
