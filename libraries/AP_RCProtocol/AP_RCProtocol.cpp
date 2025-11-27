@@ -424,10 +424,6 @@ void AP_RCProtocol::check_added_uart(void)
 void AP_RCProtocol::update()
 {
 #if !APM_BUILD_TYPE(APM_BUILD_UNKNOWN)
-#if AP_RCPROTOCOL_CRSF_ENABLED
-    // update any CRSF direct-attach ports (VTX, RC Out)
-    AP_RCProtocol_CRSF::manager_init();
-#endif
     check_added_uart();
 #endif
 }

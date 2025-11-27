@@ -38,6 +38,7 @@
 # include <AP_HAL/AP_HAL.h>
 extern const AP_HAL::HAL& hal;
 static uint32_t last_update_debug_ms = 0;
+static uint32_t num_frames = 0;
 # define debug_rcout(fmt, args...) do { if (hal.console) { hal.console->printf("CRSF_OUT: " fmt "\n", ##args); } } while(0)
 #else
 # define debug_rcout(fmt, args...)
@@ -45,46 +46,34 @@ static uint32_t last_update_debug_ms = 0;
 
 #define DEFAULT_CRSF_OUTPUT_RATE      250U // equivalent to tracer
 
-const AP_Param::GroupInfo AP_CRSF_Out::var_info[] = {
-    AP_GROUPINFO("RATE",  1, AP_CRSF_Out, _rate_hz, DEFAULT_CRSF_OUTPUT_RATE),
-    AP_GROUPEND
-};
-
 AP_CRSF_Out* AP_CRSF_Out::_singleton;
 
-AP_CRSF_Out::AP_CRSF_Out(void) :
-    _state(State::WAITING_FOR_PORT)
+extern const AP_HAL::HAL& hal;
+
+AP_CRSF_Out::AP_CRSF_Out(AP_HAL::UARTDriver* uart, uint8_t instance, AP_CRSF_OutManager& frontend) :
+    _state(State::WAITING_FOR_PORT), _instance_idx(instance), _frontend(frontend)
 {
-    AP_Param::setup_object_defaults(this, var_info);
-    _singleton = this;
+    if (_singleton == nullptr) {
+        _singleton = this;
+    }
+    init(uart);
 }
 
 // Initialise the CRSF output driver
-void AP_CRSF_Out::init()
+bool AP_CRSF_Out::init(AP_HAL::UARTDriver* uart)
 {
     if (_state != State::WAITING_FOR_PORT) {
-        return;
+        return false;
     }
 
-    // Search for the first active CRSF Output port.
-    // We iterate through possible instances (0..3) to find the one the user configured.
-    // This allows AP_CRSF_Out to work regardless of which UART is used.
-    for (uint8_t i = 0; i < 4; i++) {
-        _crsf_port = AP_RCProtocol_CRSF::get_direct_attach_singleton(AP_SerialManager::SerialProtocol_CRSF_Output, i);
-        if (_crsf_port != nullptr) {
-            // Found a valid port
-            _instance_idx = i;
-            break;
-        }
-    }
+    _crsf_port = NEW_NOTHROW AP_RCProtocol_CRSF(AP::RC(), AP_RCProtocol_CRSF::PortMode::DIRECT_RCOUT, uart);
 
     if (_crsf_port == nullptr) {
-        debug_rcout("Init failed: No CRSF_Output port found");
-        // not configured on any port
-        return;
+        debug_rcout("Init failed: could not create CRSF output port");
+        return false;
     }
 
-    const uint16_t rate = _rate_hz.get();
+    const uint16_t rate = _frontend._rate_hz.get();
     if (rate > 0) {
         _frame_interval_us = 1000000UL / rate;
     } else {
@@ -96,6 +85,14 @@ void AP_CRSF_Out::init()
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
     AP::externalAHRS().set_IMU_rate(1000000UL / _frame_interval_us);
 #endif
+
+    if (!hal.scheduler->thread_create(FUNCTOR_BIND_MEMBER(&AP_CRSF_Out::crsf_out_thread, void), "crsf", 2048, AP_HAL::Scheduler::PRIORITY_RCOUT, 1)) {
+        delete _crsf_port;
+        debug_rcout("Failed to create CRSF_Out thread");
+        return false;
+    }
+
+    return true;
 }
 
 bool AP_CRSF_Out::do_status_update()
@@ -109,20 +106,33 @@ bool AP_CRSF_Out::do_status_update()
     return false;
 }
 
-// Main update call, sends RC frames at the configured rate
+void AP_CRSF_Out::crsf_out_thread()
+{
+    while (true) {
+        const uint32_t now = AP_HAL::micros();
+        // Calculate time remaining until the next scheduled frame to maintain precise rate
+        const uint32_t next_run = _last_frame_us + _frame_interval_us;
+
+        if (now < next_run) {
+            hal.scheduler->delay_microseconds(next_run - now);
+        }
+
+        loop();
+
+        // process bytes from the UART
+        _crsf_port->update_uart();
+    }
+}
+
+// callback from the RC thread
 void AP_CRSF_Out::update()
 {
-    if (_state == State::WAITING_FOR_PORT) {
-#ifdef CRSF_RCOUT_DEBUG
-        const uint32_t now_ms = AP_HAL::millis();
-        if (now_ms - last_update_debug_ms > 5000) { // print every 5s
-            last_update_debug_ms = now_ms;
-            debug_rcout("Update skipped: not initialised");
-        }
-#endif
-        return;
-    }
 
+}
+
+// Main update call, sends RC frames at the configured rate
+void AP_CRSF_Out::loop()
+{
     const uint32_t now = AP_HAL::micros();
 
     // only process commands at the requested frame rate
@@ -231,7 +241,7 @@ void AP_CRSF_Out::update()
         if (_crsf_port->is_rx_active()) {   // the remote side is sending data, we can send frames
             // periodically send link stats info
             if (now - _last_liveness_check_us > LIVENESS_CHECK_TIMEOUT_US) {
-                send_link_stats_tx(_rate_hz);
+                send_link_stats_tx(_frontend._rate_hz);
                 _last_liveness_check_us = now;
             } else {
                 send_rc_frame();
@@ -336,9 +346,12 @@ void AP_CRSF_Out::send_rc_frame()
 #ifdef CRSF_RCOUT_DEBUG
     const uint32_t now_ms = AP_HAL::millis();
     if (now_ms - last_update_debug_ms > 1000) {
+        debug_rcout("Updating channels @%u(%u)Hz. CH1=%u CH2=%u CH3=%u", unsigned(num_frames), unsigned(_frontend._rate_hz.get()),
+                    unsigned(channels[0]), unsigned(channels[1]), unsigned(channels[2]));
         last_update_debug_ms = now_ms;
-        debug_rcout("Updating channels. CH1=%u CH2=%u CH3=%u", channels[0], channels[1], channels[2]);
+        num_frames = 0;
     }
+    num_frames++;
 #endif
     AP_CRSF_Protocol::Frame frame;
 
@@ -398,14 +411,6 @@ void AP_CRSF_Out::send_link_stats_tx(uint32_t fps)
     AP_CRSF_Protocol::encode_link_stats_tx_frame(fps, frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
 
     _crsf_port->write_frame(&frame);
-}
-
-AP_CRSF_Out* AP_CRSF_Out::get_singleton()
-{
-    if (!_singleton) {
-        _singleton = NEW_NOTHROW AP_CRSF_Out();
-    }
-    return _singleton;
 }
 
 namespace AP {

@@ -25,8 +25,10 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Param/AP_Param.h>
 #include "AP_CRSF_Protocol.h"
+#include "AP_CRSF_OutManager.h"
 
 class AP_RCProtocol_CRSF;
+class AP_CRSF_OutManager;
 
 /*
  * The AP_CRSF_Out class provides the high-level "application" logic for the
@@ -34,22 +36,32 @@ class AP_RCProtocol_CRSF;
  * from the main SRV_Channels and telling its underlying CRSF protocol instance
  * to send them at a user-configurable rate. It also handles baud rate negotiation.
  */
-class AP_CRSF_Out {
+class AP_CRSF_Out : public AP_CRSF_Protocol {
 public:
-    AP_CRSF_Out();
+    // constructor for serial interaction
+    AP_CRSF_Out(AP_HAL::UARTDriver* uart, uint8_t instance, AP_CRSF_OutManager& frontend);
+
+    ~AP_CRSF_Out() override {}
 
     /* Do not allow copies */
     CLASS_NO_COPY(AP_CRSF_Out);
 
     // one-time initialisation
-    void init();
-    // periodic update, called from the main vehicle scheduler
-    void update();
+    bool init(AP_HAL::UARTDriver* uart);
+
+    // rc periodic update, called from loop
+    void update() override;
+
+    // main loop for the CRSF output thread
+    void loop();
+
+    // main loop for the CRSF output thread
+    void crsf_out_thread();
 
     bool decode_crsf_packet(AP_CRSF_Protocol::Frame& _frame);
 
     static const struct AP_Param::GroupInfo var_info[];
-    static AP_CRSF_Out* get_singleton();
+    static AP_CRSF_Out* get_singleton() { return _singleton; }
 
     // Returns the instance index of this CRSF output port (0, 1, 2...)
     uint8_t get_instance_idx() const { return _instance_idx; }
@@ -91,6 +103,7 @@ private:
     void send_link_stats_tx(uint32_t fps);
 
     static AP_CRSF_Out* _singleton;
+    static uint8_t _num_instances;
 
     State _state;
     uint32_t _last_frame_us;
@@ -101,7 +114,7 @@ private:
     uint32_t _target_baudrate;
     uint32_t _last_liveness_check_us;
     uint32_t _last_ping_frame_ms;
-    uint8_t _instance_idx = 0; // Instance index (0, 1, 2...) for multi-instance use
+    uint8_t _instance_idx;
 
     AP_CRSF_Protocol::VersionInfo version;
     BaudNegotiationResult _baud_negotiation_result;
@@ -109,16 +122,9 @@ private:
     BaudNegotiationResult get_baud_negotiation_result() const { return _baud_negotiation_result; }
     void reset_baud_negotiation();
 
-    // @Param: RATE
-    // @DisplayName: CRSF output rate
-    // @Description: This sets the CRSF output frame rate in Hz for RC Out.
-    // @Range: 25 250
-    // @User: Advanced
-    // @Units: Hz
-    AP_Int16 _rate_hz;
-
     // pointer to the CRSF protocol engine instance for our assigned UART
     AP_RCProtocol_CRSF* _crsf_port;
+    AP_CRSF_OutManager& _frontend;
 };
 
 namespace AP {

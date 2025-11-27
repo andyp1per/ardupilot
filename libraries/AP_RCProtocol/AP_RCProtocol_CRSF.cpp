@@ -112,50 +112,7 @@ const uint16_t AP_RCProtocol_CRSF::RF_MODE_RATES[RFMode::RF_MODE_MAX_MODES] = {
 };
 
 // Manager for CRSF instances
-AP_RCProtocol_CRSF* AP_RCProtocol_CRSF::Manager_State::_instances[SERIALMANAGER_NUM_PORTS];
-AP_RCProtocol_CRSF* AP_RCProtocol_CRSF::Manager_State::_rcin_singleton = nullptr;
-uint32_t AP_RCProtocol_CRSF::Manager_State::_last_manager_check_ms;
-
-// Manager init to find all configured CRSF ports
-void AP_RCProtocol_CRSF::manager_init()
-{
-    if (AP_HAL::millis() - Manager_State::_last_manager_check_ms < 1000) {
-        return;
-    }
-
-    AP_SerialManager &serial_manager = AP::serialmanager();
-
-    for (uint8_t i = 0; i < SERIALMANAGER_MAX_PORTS; i++) {
-        const AP_SerialManager::UARTState* port_state = serial_manager.get_state_by_id(i);
-        if (port_state == nullptr) continue;
-        AP_SerialManager::SerialProtocol protocol = port_state->get_protocol();
-        AP_HAL::UARTDriver* uart = serial_manager.get_serial_by_id(i);
-        PortMode mode;
-
-        if (protocol == AP_SerialManager::SerialProtocol_CRSF) {
-            mode = PortMode::DIRECT_VTX;
-#if AP_CRSF_OUT_ENABLED
-        } else if (protocol == AP_SerialManager::SerialProtocol_CRSF_Output) {
-            mode = PortMode::DIRECT_RCOUT;
-#endif
-        } else {
-            continue;
-        }
-
-        if (uart != nullptr) {
-            // prevent creating duplicate instances
-            if (Manager_State::_instances[i] == nullptr) {
-                Manager_State::_instances[i] = NEW_NOTHROW AP_RCProtocol_CRSF(AP::RC(), mode, uart);
-#if AP_CRSF_OUT_ENABLED
-                if (protocol == AP_SerialManager::SerialProtocol_CRSF_Output) {
-                    AP::crsf_out()->init();
-                }
-#endif
-            }
-        }
-    }
-    Manager_State::_last_manager_check_ms = AP_HAL::millis();
-}
+AP_RCProtocol_CRSF* AP_RCProtocol_CRSF::_rcin_singleton = nullptr;
 
 // constructor for RCIN "passthrough" mode
 AP_RCProtocol_CRSF::AP_RCProtocol_CRSF(AP_RCProtocol &_frontend) :
@@ -164,7 +121,7 @@ AP_RCProtocol_CRSF::AP_RCProtocol_CRSF(AP_RCProtocol &_frontend) :
     _uart(nullptr)
 {
     // This is the RCIN instance, register it as the singleton
-    Manager_State::_rcin_singleton = this;
+    _rcin_singleton = this;
 }
 
 // constructor for "direct-attach" modes
@@ -174,18 +131,6 @@ AP_RCProtocol_CRSF::AP_RCProtocol_CRSF(AP_RCProtocol &_frontend, PortMode mode, 
     _uart(uart)
 {
     start_uart();
-}
-
-AP_RCProtocol_CRSF::~AP_RCProtocol_CRSF()
-{
-    for (uint8_t i = 0; i < SERIALMANAGER_NUM_PORTS; i++) {
-        if (Manager_State::_instances[i] == this) {
-            Manager_State::_instances[i] = nullptr;
-        }
-    }
-    if (Manager_State::_rcin_singleton == this) {
-        Manager_State::_rcin_singleton = nullptr;
-    }
 }
 
 // get the protocol string
@@ -360,35 +305,37 @@ void AP_RCProtocol_CRSF::skip_to_next_frame(uint32_t timestamp_us)
     check_frame(timestamp_us);
 }
 
+// start the uart (if necessary) and consume bytes from it
+// only called for non-RCIN instances
+void AP_RCProtocol_CRSF::update_uart(void)
+{
+    if (!_uart) {
+        return;
+    }
+
+    uint32_t now = AP_HAL::millis();
+    // for some reason it's necessary to keep trying to start the uart until we get data
+    if (now - _last_uart_start_time_ms > 1000U && _last_frame_time_us == 0) {
+        start_uart();
+        _last_uart_start_time_ms = now;
+    }
+
+    uint32_t n = _uart->available();
+    for (uint32_t i = 0; i < n; i++) {
+        int16_t b = _uart->read();
+        if (b >= 0) {
+            _process_byte(uint8_t(b));
+        }
+    }
+}
+
 // called at 1KHz from new_input() by the rcin thread
 void AP_RCProtocol_CRSF::update(void)
 {
-    // if we are in direct attach mode, process data from the uart
-    if (_mode != PortMode::PASSTHROUGH_RCIN) {
-        uint32_t now = AP_HAL::millis();
-        // for some reason it's necessary to keep trying to start the uart until we get data
-        if (now - _last_uart_start_time_ms > 1000U && _last_frame_time_us == 0) {
-            start_uart();
-            _last_uart_start_time_ms = now;
-        }
-        if (_uart) {
-#if AP_CRSF_OUT_ENABLED
-            AP::crsf_out()->update();
-#endif
-            uint32_t n = _uart->available();
-            for (uint32_t i = 0; i < n; i++) {
-                int16_t b = _uart->read();
-                if (b >= 0) {
-                    _process_byte(uint8_t(b));
-                }
-            }
-        }
-    } else {
-        for (uint8_t i = 0; i < SERIALMANAGER_NUM_PORTS; i++) {
-            if (Manager_State::_instances[i] != nullptr && Manager_State::_instances[i]->_mode != PortMode::PASSTHROUGH_RCIN) {
-                Manager_State::_instances[i]->update();
-            }
-        }
+    // if we are in direct attach mode for VTX, process data from the uart
+    // CRSF out ports manage this independently
+    if (_mode == PortMode::DIRECT_VTX) {
+        update_uart();
     }
 
     // never received RC frames, but have received CRSF frames so make sure we give the telemetry opportunity to run
@@ -765,30 +712,10 @@ bool AP_RCProtocol_CRSF::bind_in_progress(void)
 }
 #endif
 
-// Static singleton accessor for RCIN (legacy)
-AP_RCProtocol_CRSF* AP_RCProtocol_CRSF::get_rcin_singleton()
-{
-    // The RCIN instance is created by the frontend and registers itself.
-    return Manager_State::_rcin_singleton;
-}
-
-#if AP_CRSF_OUT_ENABLED
-// Static singleton accessor for direct attach ports
-AP_RCProtocol_CRSF* AP_RCProtocol_CRSF::get_direct_attach_singleton(AP_SerialManager::SerialProtocol protocol, uint8_t instance)
-{
-    manager_init(); // ensure manager is running
-    const int8_t port_num = AP::serialmanager().find_portnum(protocol, instance);
-    if (port_num >= 0 && port_num < SERIALMANAGER_NUM_PORTS) {
-        return Manager_State::_instances[port_num];
-    }
-    return nullptr;
-}
-#endif
-
 namespace AP {
     // legacy accessor
     AP_RCProtocol_CRSF* crsf() {
-        return AP_RCProtocol_CRSF::get_rcin_singleton();
+        return AP_RCProtocol_CRSF::get_singleton();
     }
 };
 

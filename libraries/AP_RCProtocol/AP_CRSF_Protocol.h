@@ -176,6 +176,10 @@ public:
         ProtocolType protocol;
     };
 
+    // protocol pure virtual base class
+    virtual ~AP_CRSF_Protocol() = 0;
+    virtual void update(void) = 0;
+
     static const char* get_frame_type(uint8_t byte, uint8_t subtype = 0);
 
     // decode channels from the standard 11bit format (CRSFv2)
@@ -205,5 +209,7 @@ public:
 
     static void encode_link_stats_tx_frame(uint32_t fps, Frame& frame, DeviceAddress destination, DeviceAddress origin);
 };
+
+inline AP_CRSF_Protocol::~AP_CRSF_Protocol() {};
 
 #endif // AP_RCPROTOCOL_CRSF_ENABLED
