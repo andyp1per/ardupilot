@@ -411,6 +411,16 @@ void AP_CRSF_Out::send_rc_frame(uint8_t start_chan, uint8_t nchan)
         }
     }
 
+#ifdef CRSF_RCOUT_DEBUG
+    const uint32_t now_ms = AP_HAL::millis();
+    if (now_ms - last_update_debug_ms > 1000) {
+        debug_rcout("Updating channels @%u(%u)Hz. CH1=%u CH2=%u CH3=%u", unsigned(num_frames), unsigned(_frontend._rate_hz.get()),
+                    unsigned(channels[0]), unsigned(channels[1]), unsigned(channels[2]));
+        last_update_debug_ms = now_ms;
+        num_frames = 0;
+    }
+    num_frames++;
+#endif
     AP_CRSF_Protocol::Frame frame {};
 
     frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
