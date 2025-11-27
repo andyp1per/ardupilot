@@ -127,7 +127,6 @@ private:
 
     // pointer to the CRSF protocol engine instance for our assigned UART
     AP_RCProtocol_CRSF* _crsf_port;
-    AP_HAL::UARTDriver* _uart;
     AP_CRSF_OutManager& _frontend;
 };
 
