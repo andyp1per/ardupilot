@@ -365,13 +365,14 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
         case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_ACCGYRO: {
             Vector3f acc, gyro;
             float gyro_temp;
-            if (AP_CRSF_Protocol::process_accgyro_frame((AP_CRSF_Protocol::AccGyroFrame*)_frame.payload, acc, gyro, gyro_temp)) {
+            uint32_t sample_us;
+            if (AP_CRSF_Protocol::process_accgyro_frame((AP_CRSF_Protocol::AccGyroFrame*)_frame.payload, acc, gyro, gyro_temp, sample_us)) {
                 // Pass the decoded IMU data to the external AHRS CRSF module
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
                 AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
                 if (crsf_ahrs != nullptr) {
                     // Pass this instance's index for filtering in the AHRS backend
-                    crsf_ahrs->handle_acc_gyro_frame(_instance_idx, acc, gyro, gyro_temp);
+                    crsf_ahrs->handle_acc_gyro_frame(_instance_idx, acc, gyro, gyro_temp, sample_us);
                 }
 #endif
             }
