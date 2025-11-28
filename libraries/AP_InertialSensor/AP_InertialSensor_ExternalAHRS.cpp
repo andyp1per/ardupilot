@@ -20,15 +20,16 @@ void AP_InertialSensor_ExternalAHRS::handle_external(const AP_ExternalAHRS::ins_
     }
     Vector3f accel = pkt.accel;
     Vector3f gyro = pkt.gyro;
+    uint64_t sample_us = pkt.sample_us > 0 ? pkt.sample_us : AP_HAL::micros64();
 
     _rotate_and_correct_accel(accel_instance, accel);
-    _notify_new_accel_raw_sample(accel_instance, accel, AP_HAL::micros64());
+    _notify_new_accel_raw_sample(accel_instance, accel, sample_us);
 
     _publish_temperature(accel_instance, pkt.temperature);
 
     _notify_new_gyro_sensor_rate_sample(gyro_instance, gyro);
     _rotate_and_correct_gyro(gyro_instance, gyro);
-    _notify_new_gyro_raw_sample(gyro_instance, gyro, AP_HAL::micros64());
+    _notify_new_gyro_raw_sample(gyro_instance, gyro, sample_us);
 }
 
 bool AP_InertialSensor_ExternalAHRS::update(void)
