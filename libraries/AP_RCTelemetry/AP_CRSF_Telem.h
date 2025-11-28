@@ -48,6 +48,7 @@ public:
     using DeviceAddress = AP_CRSF_Protocol::DeviceAddress;
     using CommandID = AP_CRSF_Protocol::CommandID;
     using CommandGeneral = AP_CRSF_Protocol::CommandGeneral;
+    using HeartbeatFrame = AP_CRSF_Protocol::HeartbeatFrame;
 
     // Broadcast frame definitions courtesy of TBS
     struct PACKED GPSFrame {   // curious fact, calling this GPS makes sizeof(GPS) return 1!
@@ -57,10 +58,6 @@ public:
         uint16_t gps_heading; // ( degree / 100 )
         uint16_t altitude; // ( meter - 1000m offset )
         uint8_t satellites; // in use ( counter )
-    };
-
-    struct HeartbeatFrame {
-        uint8_t origin; // Device address
     };
 
     struct PACKED BatteryFrame {
