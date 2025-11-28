@@ -43,13 +43,11 @@ public:
     bool pre_arm_check(char *failure_msg, uint8_t failure_msg_len) const override;
     void get_filter_status(nav_filter_status &status) const override;
     bool get_variances(float &velVar, float &posVar, float &hgtVar, Vector3f &magVar, float &tasVar) const override;
-
-    // This module is passive (data is pushed to it), so the update() is a no-op.
-    void update() override {};
+    void update() override;
 
     // Mandatory method to receive the decoded AccGyro frame data from AP_CRSF_Out.
     // The instance_idx identifies which AP_CRSF_Out is sending the data.
-    void handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &acc, const Vector3f &gyro, const float gyro_temp);
+    void handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &acc, const Vector3f &gyro, const float gyro_temp, uint32_t sample_us);
 
     // Global accessor for the singleton instance, used by AP_CRSF_Out
     static AP_ExternalAHRS_CRSF* get_singleton();
@@ -71,7 +69,11 @@ protected:
 private:
     // Singleton pointer
     static AP_ExternalAHRS_CRSF* _singleton;
-    uint32_t last_imu_pkt_ms; // Timestamp of the last received packet in milliseconds
+    uint32_t last_imu_pkt_us; // Timestamp of the last received packet in milliseconds
+    uint32_t last_loop_check_ms;
+    uint16_t current_loop_rate;
+    uint32_t imu_pkts_received;
+    uint64_t sample_base_us;
 
     // The CRSF index (0, 1, 2...) that this AHRS is configured to listen to.
     uint8_t _instance_idx;

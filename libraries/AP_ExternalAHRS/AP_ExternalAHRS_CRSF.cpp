@@ -82,7 +82,8 @@ const char* AP_ExternalAHRS_CRSF::get_name() const
 }
 
 // Handles the received and decoded IMU data from AP_CRSF_Out.
-void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &accel, const Vector3f &gyro, const float gyro_temp)
+// called at the configured CRSF output rate.
+void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &accel, const Vector3f &gyro, const float gyro_temp, uint32_t sample_us)
 {
     // CRITICAL: Only process data if the sender's index matches the configured primary CRSF source index.
     if (instance_idx != _instance_idx) {
@@ -94,7 +95,14 @@ void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vec
     state.accel = accel;
     state.gyro = gyro;
 
-    last_imu_pkt_ms = AP_HAL::millis();
+    if (sample_base_us == 0) {
+        sample_base_us = sample_us - AP_HAL::micros64();
+    }
+
+    uint64_t sample_time = sample_us - sample_base_us;
+
+    last_imu_pkt_us = AP_HAL::micros();
+    imu_pkts_received++;
 
     // The CRSF frame provides raw accel and gyro data. We pass it through
     // AP::ins().handle_external as required for an external IMU.
@@ -102,22 +110,37 @@ void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vec
         accel: accel,
         gyro: gyro,
         // Set temperature to a low value to disable internal calibrations if we don't have a reading
-        temperature: gyro_temp
+        temperature: gyro_temp,
+        sample_us: sample_time
     };
     AP::ins().handle_external(ins);
+}
+
+void AP_ExternalAHRS_CRSF::update()
+{
+    if (!healthy()) {
+        sample_base_us = 0;
+    }
+
+    const uint32_t now_ms = AP_HAL::millis();
+    if (now_ms - last_loop_check_ms > 1000) {
+        current_loop_rate = imu_pkts_received;
+        imu_pkts_received = 0;
+        last_loop_check_ms = now_ms;
+    }
 }
 
 // Check if data is being received within a healthy window (e.g., last 10ms for high-rate IMU)
 bool AP_ExternalAHRS_CRSF::healthy(void) const
 {
-    const uint32_t now = AP_HAL::millis();
-    return (now - last_imu_pkt_ms < 10);
+    const uint32_t now = AP_HAL::micros();
+    return (now - last_imu_pkt_us < 10000);
 }
 
 // Check if the AHRS has received an initial packet
 bool AP_ExternalAHRS_CRSF::initialised(void) const
 {
-    return last_imu_pkt_ms != 0;
+    return last_imu_pkt_us != 0;
 }
 
 // Pre-arm check: ensure we are receiving data
@@ -125,6 +148,11 @@ bool AP_ExternalAHRS_CRSF::pre_arm_check(char *failure_msg, uint8_t failure_msg_
 {
     if (!healthy()) {
         hal.util->snprintf(failure_msg, failure_msg_len, "CRSF-IMU unhealthy (no recent data)");
+        return false;
+    }
+
+    if (current_loop_rate < get_rate() * 9 / 10) {
+        hal.util->snprintf(failure_msg, failure_msg_len, "CRSF-IMU unhealthy: (sample rate %u < %u)", current_loop_rate, get_rate());
         return false;
     }
 
