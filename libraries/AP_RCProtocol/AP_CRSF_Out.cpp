@@ -51,7 +51,7 @@ AP_CRSF_Out* AP_CRSF_Out::_singleton;
 extern const AP_HAL::HAL& hal;
 
 AP_CRSF_Out::AP_CRSF_Out(AP_HAL::UARTDriver* uart, uint8_t instance, AP_CRSF_OutManager& frontend) :
-    _state(State::WAITING_FOR_PORT), _instance_idx(instance), _frontend(frontend)
+    _state(State::WAITING_FOR_PORT), _instance_idx(instance), _uart(uart), _frontend(frontend)
 {
     if (_singleton == nullptr) {
         _singleton = this;
@@ -76,8 +76,10 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver* uart)
     const uint16_t rate = _frontend._rate_hz.get();
     if (rate > 0) {
         _frame_interval_us = 1000000UL / rate;
+        _heartbeat_to_frame_ratio = MAX(1, rate / DEFAULT_CRSF_OUTPUT_RATE);
     } else {
         _frame_interval_us = 1000000UL / DEFAULT_CRSF_OUTPUT_RATE;
+        _heartbeat_to_frame_ratio = 1;
     }
 
     _state = State::WAITING_FOR_RC_LOCK;
@@ -108,16 +110,55 @@ bool AP_CRSF_Out::do_status_update()
 
 void AP_CRSF_Out::crsf_out_thread()
 {
+    uint8_t frame_counter = 0;
+
+    // make sure the current thread is the uart owner
+    _crsf_port->start_uart();
+
     while (true) {
+
+#ifdef CRSF_RCOUT_DEBUG
+        const uint32_t now_ms = AP_HAL::millis();
+        if (now_ms - last_update_debug_ms > 1000) {
+            debug_rcout("Frame rate: %uHz, wanted: %uHz.", unsigned(num_frames), unsigned(_frontend._rate_hz.get()));
+            last_update_debug_ms = now_ms;
+            num_frames = 0;
+        }
+#endif
+
         const uint32_t now = AP_HAL::micros();
+
         // Calculate time remaining until the next scheduled frame to maintain precise rate
-        const uint32_t next_run = _last_frame_us + _frame_interval_us;
+        uint32_t next_run = _last_frame_us + _frame_interval_us;
+        uint8_t frame_ratio = _heartbeat_to_frame_ratio;
+
+        // if we have not negotiated a faster baudrate do not go above the default output rate
+        if (_frontend._rate_hz.get() > DEFAULT_CRSF_OUTPUT_RATE && _uart->get_baud_rate() == CRSF_BAUDRATE) {
+            next_run = _last_frame_us + 1000000UL / DEFAULT_CRSF_OUTPUT_RATE;
+            frame_ratio = 1;
+        }
+
+        // Check for overrun - if we are late by more than 50% of an interval,
+        // give up on the old timeline and reset.
+        if (now > next_run + (_frame_interval_us / 2)) {
+             next_run = now; 
+        }
 
         if (now < next_run) {
             hal.scheduler->delay_microseconds(next_run - now);
         }
 
-        loop();
+        // last time we sent and received a frame
+        _last_frame_us = next_run;
+#ifdef CRSF_RCOUT_DEBUG
+        num_frames++;
+#endif
+        if (_state == State::RUNNING && ++frame_counter < frame_ratio) {
+            send_heartbeat();
+        } else {
+            loop();
+            frame_counter = 0;
+        }
 
         // process bytes from the UART
         _crsf_port->update_uart();
@@ -134,12 +175,6 @@ void AP_CRSF_Out::update()
 void AP_CRSF_Out::loop()
 {
     const uint32_t now = AP_HAL::micros();
-
-    // only process commands at the requested frame rate
-    if (now - _last_frame_us < _frame_interval_us) {
-        return;
-    }
-    _last_frame_us = now;
 
     const uint32_t BAUD_NEG_TIMEOUT_US = 1500000; // 1.5 second timeout for a response
     const uint32_t BAUD_NEG_INTERVAL_US = 500000; // send proposal every 500ms
@@ -343,16 +378,6 @@ void AP_CRSF_Out::send_rc_frame()
         }
     }
 
-#ifdef CRSF_RCOUT_DEBUG
-    const uint32_t now_ms = AP_HAL::millis();
-    if (now_ms - last_update_debug_ms > 1000) {
-        debug_rcout("Updating channels @%u(%u)Hz. CH1=%u CH2=%u CH3=%u", unsigned(num_frames), unsigned(_frontend._rate_hz.get()),
-                    unsigned(channels[0]), unsigned(channels[1]), unsigned(channels[2]));
-        last_update_debug_ms = now_ms;
-        num_frames = 0;
-    }
-    num_frames++;
-#endif
     AP_CRSF_Protocol::Frame frame;
 
     frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
@@ -412,6 +437,15 @@ void AP_CRSF_Out::send_link_stats_tx(uint32_t fps)
 
     _crsf_port->write_frame(&frame);
 }
+
+void AP_CRSF_Out::send_heartbeat()
+{
+    AP_CRSF_Protocol::Frame frame;
+    AP_CRSF_Protocol::encode_heartbeat_frame(frame, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
+
+    _crsf_port->write_frame(&frame);
+}
+
 
 namespace AP {
     AP_CRSF_Out* crsf_out() {

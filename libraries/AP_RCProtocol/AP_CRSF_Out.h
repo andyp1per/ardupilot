@@ -101,6 +101,8 @@ private:
     void send_device_info();
     // send the link stats frame
     void send_link_stats_tx(uint32_t fps);
+    // low bandwidth heartbeat to provoke telemetry return
+    void send_heartbeat();
 
     static AP_CRSF_Out* _singleton;
     static uint8_t _num_instances;
@@ -111,6 +113,7 @@ private:
     uint32_t _last_baud_neg_us;
     uint32_t _baud_neg_start_us;
     uint32_t _frame_interval_us;
+    uint8_t _heartbeat_to_frame_ratio;
     uint32_t _target_baudrate;
     uint32_t _last_liveness_check_us;
     uint32_t _last_ping_frame_ms;
@@ -124,6 +127,7 @@ private:
 
     // pointer to the CRSF protocol engine instance for our assigned UART
     AP_RCProtocol_CRSF* _crsf_port;
+    AP_HAL::UARTDriver* _uart;
     AP_CRSF_OutManager& _frontend;
 };
 
