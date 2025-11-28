@@ -245,6 +245,9 @@ public:
     // write a CRSF Frame structure to the managed uart
     void write_frame(AP_CRSF_Protocol::Frame* frame) const;
 
+    // restart the uart
+    void start_uart();
+
     static AP_RCProtocol_CRSF* get_singleton() { return _rcin_singleton; }
 
 private:
@@ -266,7 +269,6 @@ private:
     void process_link_stats_rx_frame(const void* data);
     void process_link_stats_tx_frame(const void* data);
 
-    void start_uart();
     AP_HAL::UARTDriver* get_current_UART() const {
         if (_uart) return _uart;
         // Fallback for RCIN mode
