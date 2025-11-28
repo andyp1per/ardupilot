@@ -168,6 +168,11 @@ public:
         uint32_t sample_time;        // sample time in us
     };
 
+    // CRSF_FRAMETYPE_HEARTBEAT
+    struct HeartbeatFrame {
+        uint8_t origin; // Device address
+    };
+
     struct VersionInfo {
         uint8_t minor;
         uint8_t major;
@@ -208,6 +213,8 @@ public:
     static void encode_speed_proposal(uint32_t baudrate, Frame& frame, DeviceAddress destination, DeviceAddress origin);
 
     static void encode_link_stats_tx_frame(uint32_t fps, Frame& frame, DeviceAddress destination, DeviceAddress origin);
+
+    static void encode_heartbeat_frame(Frame& frame, DeviceAddress origin);
 };
 
 inline AP_CRSF_Protocol::~AP_CRSF_Protocol() {};

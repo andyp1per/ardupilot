@@ -439,6 +439,18 @@ uint32_t AP_CRSF_Protocol::encode_device_info(ParameterDeviceInfoFrame& info, ui
     return n;
 }
 
+// prepare qos data - mandatory frame that must be sent periodically
+void AP_CRSF_Protocol::encode_heartbeat_frame(Frame& frame, DeviceAddress origin)
+{
+    frame.device_address = DeviceAddress::CRSF_ADDRESS_SYNC_BYTE;
+    frame.type = CRSF_FRAMETYPE_HEARTBEAT;
+
+    HeartbeatFrame* hb = (HeartbeatFrame*)&frame.payload;
+    hb->origin = origin;
+
+    // It is the length of the payload + type + crc
+    frame.length = sizeof(HeartbeatFrame) + 2;
+}
 
 #endif // AP_RCPROTOCOL_CRSF_ENABLED
 
