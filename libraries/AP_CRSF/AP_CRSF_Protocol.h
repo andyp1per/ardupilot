@@ -191,6 +191,11 @@ public:
         uint32_t sample_time;        // sample time in us
     };
 
+    // CRSF_FRAMETYPE_HEARTBEAT
+    struct HeartbeatFrame {
+        uint8_t origin; // Device address
+    };
+
     struct VersionInfo {
         uint8_t minor;
         uint8_t major;
