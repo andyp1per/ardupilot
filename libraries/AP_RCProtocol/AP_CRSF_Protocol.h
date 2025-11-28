@@ -201,7 +201,7 @@ public:
     static bool process_device_info_frame(ParameterDeviceInfoFrame* info, VersionInfo* version, bool fakerx);
 
     // process a raw IMU frame
-    static bool process_accgyro_frame(AccGyroFrame*, Vector3f& acc, Vector3f& gyro, float& gyro_temp);
+    static bool process_accgyro_frame(AccGyroFrame*, Vector3f& acc, Vector3f& gyro, float& gyro_temp, uint32_t& sample_us);
 
     // encode a device info frame for version information
     static uint32_t encode_device_info(ParameterDeviceInfoFrame& info, uint8_t num_params);
