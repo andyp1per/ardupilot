@@ -169,6 +169,7 @@ public:
         Vector3f accel;
         Vector3f gyro;
         float temperature;
+        uint64_t sample_us;
     } ins_data_message_t;
 
     typedef struct {
