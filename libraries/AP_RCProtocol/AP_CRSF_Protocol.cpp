@@ -336,7 +336,7 @@ bool AP_CRSF_Protocol::process_device_info_frame(ParameterDeviceInfoFrame* info,
     return true;
 }
 
-bool AP_CRSF_Protocol::process_accgyro_frame(AccGyroFrame* accgyro, Vector3f& acc, Vector3f& gyro, float& gyro_temp)
+bool AP_CRSF_Protocol::process_accgyro_frame(AccGyroFrame* accgyro, Vector3f& acc, Vector3f& gyro, float& gyro_temp, uint32_t& sample_us)
 {
     // we are only interested in FC IMU data
     if (accgyro->origin != 0 && accgyro->origin != CRSF_ADDRESS_FLIGHT_CONTROLLER) {
@@ -355,7 +355,8 @@ bool AP_CRSF_Protocol::process_accgyro_frame(AccGyroFrame* accgyro, Vector3f& ac
     gyro.y = C4KDPS32BIT_TO_RADS(accgyro->gyro_y);
     gyro.z = C4KDPS32BIT_TO_RADS(accgyro->gyro_z);
 
-    gyro_temp = float(int16_t(accgyro->gyro_temp));
+    gyro_temp = float(int16_t(be16toh(accgyro->gyro_temp)));
+    sample_us = be32toh(accgyro->sample_time);
 
     debug("process_accgyro_frame(): Acc: %f,%f,%f, Gyr: %f,%f,%f", acc.x, acc.y, acc.z, gyro.x, gyro.y, gyro.z);
 
