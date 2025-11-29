@@ -1202,7 +1202,7 @@ AP_InertialSensor::detect_backends(void)
 #if AP_EXTERNAL_AHRS_ENABLED
     // if enabled, make the first IMU the external AHRS
     const int8_t serial_port = AP::externalAHRS().get_port(AP_ExternalAHRS::AvailableSensor::IMU);
-    if (serial_port >= 0) {
+    if (serial_port >= 0 && !AP::externalAHRS().option_is_set(AP_ExternalAHRS::OPTIONS::FINAL_IMU)) {
         ADD_BACKEND(NEW_NOTHROW AP_InertialSensor_ExternalAHRS(*this, serial_port));
     }
 #endif
@@ -1300,6 +1300,13 @@ AP_InertialSensor::detect_backends(void)
     // no INS device
 #else
     #error Unrecognised HAL_INS_TYPE setting
+#endif
+
+#if AP_EXTERNAL_AHRS_ENABLED
+    // allow the last IMU to be the EAHRS IMU so that the ordering is not changed if the EAHRS goes away
+    if (serial_port >= 0 && AP::externalAHRS().option_is_set(AP_ExternalAHRS::OPTIONS::FINAL_IMU)) {
+        ADD_BACKEND(NEW_NOTHROW AP_InertialSensor_ExternalAHRS(*this, serial_port));
+    }
 #endif
 
     if (_backend_count == 0) {
