@@ -1663,7 +1663,11 @@ bool AP_InertialSensor::accel_calibrated_ok_all() const
             return false;
         }
     }
-    
+#if AP_EXTERNAL_AHRS_ENABLED
+    if (AP::externalAHRS().option_is_set(AP_ExternalAHRS::OPTIONS::FINAL_IMU)) {
+        return true;
+    }
+#endif
     // check calibrated accels matches number of accels (no unused accels should have offsets or scaling)
     if (get_accel_count() < INS_MAX_INSTANCES) {
         for (uint8_t i=get_accel_count(); i<INS_MAX_INSTANCES; i++) {
