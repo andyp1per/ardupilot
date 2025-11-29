@@ -182,12 +182,13 @@ public:
         gnss_is_disabled = disable;
     }
 
-protected:
-
     enum class OPTIONS {
         VN_UNCOMP_IMU = 1U << 0,
+        FINAL_IMU = 1U << 1 // optionally make the EAHRS IMU the last one rather than the first one
     };
     bool option_is_set(OPTIONS option) const { return (options.get() & int32_t(option)) != 0; }
+
+protected:
 
 private:
     AP_ExternalAHRS_backend *backend;
