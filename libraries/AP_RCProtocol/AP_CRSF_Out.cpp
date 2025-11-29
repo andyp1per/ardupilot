@@ -59,6 +59,16 @@ AP_CRSF_Out::AP_CRSF_Out(AP_HAL::UARTDriver* uart, uint8_t instance, AP_CRSF_Out
     init(uart);
 }
 
+// get the configured output rate
+uint16_t AP_CRSF_Out::get_configured_update_rate() const
+{
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+    return AP::externalAHRS().get_IMU_rate();
+#else
+    return _frontend._rate_hz.get();
+#endif
+}
+
 // Initialise the CRSF output driver
 bool AP_CRSF_Out::init(AP_HAL::UARTDriver* uart)
 {
@@ -73,7 +83,8 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver* uart)
         return false;
     }
 
-    const uint16_t rate = _frontend._rate_hz.get();
+    const uint16_t rate = get_configured_update_rate();
+
     if (rate > 0) {
         _frame_interval_us = 1000000UL / rate;
         _heartbeat_to_frame_ratio = MAX(1, rate / DEFAULT_CRSF_OUTPUT_RATE);
@@ -83,10 +94,6 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver* uart)
     }
 
     _state = State::WAITING_FOR_RC_LOCK;
-
-#if AP_EXTERNAL_AHRS_CRSF_ENABLED
-    AP::externalAHRS().set_IMU_rate(1000000UL / _frame_interval_us);
-#endif
 
     if (!hal.scheduler->thread_create(FUNCTOR_BIND_MEMBER(&AP_CRSF_Out::crsf_out_thread, void), "crsf", 2048, AP_HAL::Scheduler::PRIORITY_RCOUT, 1)) {
         delete _crsf_port;
@@ -120,7 +127,7 @@ void AP_CRSF_Out::crsf_out_thread()
 #ifdef CRSF_RCOUT_DEBUG
         const uint32_t now_ms = AP_HAL::millis();
         if (now_ms - last_update_debug_ms > 1000) {
-            debug_rcout("Frame rate: %uHz, wanted: %uHz.", unsigned(num_frames), unsigned(_frontend._rate_hz.get()));
+            debug_rcout("Frame rate: %uHz, wanted: %uHz.", unsigned(num_frames), unsigned(get_configured_update_rate()));
             last_update_debug_ms = now_ms;
             num_frames = 0;
         }
@@ -133,7 +140,7 @@ void AP_CRSF_Out::crsf_out_thread()
         uint8_t frame_ratio = _heartbeat_to_frame_ratio;
 
         // if we have not negotiated a faster baudrate do not go above the default output rate
-        if (_frontend._rate_hz.get() > DEFAULT_CRSF_OUTPUT_RATE && _uart->get_baud_rate() == CRSF_BAUDRATE) {
+        if (get_configured_update_rate() > DEFAULT_CRSF_OUTPUT_RATE && _uart->get_baud_rate() == CRSF_BAUDRATE) {
             next_run = _last_frame_us + 1000000UL / DEFAULT_CRSF_OUTPUT_RATE;
             frame_ratio = 1;
         }
@@ -276,7 +283,7 @@ void AP_CRSF_Out::loop()
         if (_crsf_port->is_rx_active()) {   // the remote side is sending data, we can send frames
             // periodically send link stats info
             if (now - _last_liveness_check_us > LIVENESS_CHECK_TIMEOUT_US) {
-                send_link_stats_tx(_frontend._rate_hz);
+                send_link_stats_tx(get_configured_update_rate());
                 _last_liveness_check_us = now;
             } else {
                 send_rc_frame();

@@ -28,6 +28,7 @@
 #define DEFAULT_CRSF_OUTPUT_RATE      250U // equivalent to tracer
 
 const AP_Param::GroupInfo AP_CRSF_OutManager::var_info[] = {
+#if !AP_EXTERNAL_AHRS_CRSF_ENABLED  // will use EAHRS rate if configured in the build.
     // @Param: RATE
     // @DisplayName: CRSF output rate
     // @Description: This sets the CRSF output frame rate in Hz for RC Out.
@@ -35,12 +36,15 @@ const AP_Param::GroupInfo AP_CRSF_OutManager::var_info[] = {
     // @User: Advanced
     // @Units: Hz
     AP_GROUPINFO("RATE",  1, AP_CRSF_OutManager, _rate_hz, DEFAULT_CRSF_OUTPUT_RATE),
+#endif
     AP_GROUPEND
 };
 
 AP_CRSF_OutManager::AP_CRSF_OutManager(void)
 {
+#if !AP_EXTERNAL_AHRS_CRSF_ENABLED
     AP_Param::setup_object_defaults(this, var_info);
+#endif
 }
 
 AP_CRSF_Out* AP_CRSF_OutManager::create_instance(AP_HAL::UARTDriver* uart)
