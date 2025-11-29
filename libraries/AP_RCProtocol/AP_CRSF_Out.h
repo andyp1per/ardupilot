@@ -66,6 +66,9 @@ public:
     // Returns the instance index of this CRSF output port (0, 1, 2...)
     uint8_t get_instance_idx() const { return _instance_idx; }
 
+    // get the configured output rate
+    uint16_t get_configured_update_rate() const;
+
 private:
     enum class State : uint8_t {
         WAITING_FOR_PORT,
