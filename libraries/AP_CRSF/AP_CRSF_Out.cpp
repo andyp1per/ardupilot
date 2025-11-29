@@ -70,6 +70,16 @@ AP_CRSF_Out::AP_CRSF_Out(AP_HAL::UARTDriver& _uart, uint8_t instance, AP_CRSF_Ou
     init(uart);
 }
 
+// get the configured output rate
+uint16_t AP_CRSF_Out::get_configured_update_rate() const
+{
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+    return AP::externalAHRS().get_IMU_rate();
+#else
+    return frontend.rate_hz.get();
+#endif
+}
+
 // Initialise the CRSF output driver
 bool AP_CRSF_Out::init(AP_HAL::UARTDriver& _uart)
 {
@@ -85,7 +95,8 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver& _uart)
         return false;
     }
 
-    const uint16_t rate = frontend.rate_hz.get();
+    const uint16_t rate = get_configured_update_rate();
+
     if (rate > 0) {
         frame_interval_us = 1000000UL / rate;
     } else {
@@ -96,10 +107,6 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver& _uart)
     state = State::WAITING_FOR_RC_LOCK;
     scheduler.set_task_rate(REPORTING, frontend.reporting_rate_hz);
 
-
-#if AP_EXTERNAL_AHRS_CRSF_ENABLED
-    AP::externalAHRS().set_IMU_rate(1000000UL / _frame_interval_us);
-#endif
 
     if (!hal.scheduler->thread_create(FUNCTOR_BIND_MEMBER(&AP_CRSF_Out::crsf_out_thread, void), "crsf", 2048, AP_HAL::Scheduler::PRIORITY_RCOUT, 1)) {
         delete crsf_port;
@@ -130,7 +137,7 @@ void AP_CRSF_Out::crsf_out_thread()
 #ifdef CRSF_RCOUT_DEBUG
         const uint32_t now_ms = AP_HAL::millis();
         if (now_ms - last_update_debug_ms > 1000) {
-            debug_rcout("Frame rate: %uHz, wanted: %uHz.", unsigned(num_frames), unsigned(frontend.rate_hz.get()));
+            debug_rcout("Frame rate: %uHz, wanted: %uHz.", unsigned(num_frames), unsigned(get_configured_update_rate()));
             last_update_debug_ms = now_ms;
             num_frames = 0;
         }
@@ -140,7 +147,7 @@ void AP_CRSF_Out::crsf_out_thread()
         uint32_t interval_us = frame_interval_us;
 
         // if we have not negotiated a faster baudrate do not go above the default output rate
-        if (uint16_t(frontend.rate_hz.get()) > DEFAULT_CRSF_OUTPUT_RATE && uart.get_baud_rate() == CRSF_BAUDRATE) {
+        if (get_configured_update_rate() > DEFAULT_CRSF_OUTPUT_RATE && uart->get_baud_rate() == CRSF_BAUDRATE) {
             interval_us = 1000000UL / DEFAULT_CRSF_OUTPUT_RATE;
         }
 
@@ -473,7 +480,7 @@ void AP_CRSF_Out::send_link_stats_tx()
     debug_rcout("send_link_stats_tx()");
 
     AP_CRSF_Protocol::Frame frame;
-    AP_CRSF_Protocol::encode_link_stats_tx_frame(frontend.rate_hz, frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
+    AP_CRSF_Protocol::encode_link_stats_tx_frame(get_configured_update_rate(), frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
 
     crsf_port->write_frame(&frame);
 }
@@ -486,10 +493,6 @@ void AP_CRSF_Out::send_heartbeat()
     crsf_port->write_frame(&frame);
 }
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 4242350e05 (AP_RCProtocol: normalize CRSF output thread to regular beats and only send rc frames at 250Hz)
 namespace AP {
     AP_CRSF_Out* crsf_out() {
         return AP_CRSF_Out::get_singleton();
