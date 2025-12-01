@@ -134,7 +134,7 @@ void AP_ExternalAHRS_CRSF::update()
 bool AP_ExternalAHRS_CRSF::healthy(void) const
 {
     const uint32_t now = AP_HAL::micros();
-    return (now - last_imu_pkt_us < 10000);
+    return last_imu_pkt_us != 0 && (now - last_imu_pkt_us < 10000);
 }
 
 // Check if the AHRS has received an initial packet
