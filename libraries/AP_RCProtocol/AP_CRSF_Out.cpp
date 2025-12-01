@@ -454,10 +454,6 @@ void AP_CRSF_Out::send_heartbeat()
     _crsf_port->write_frame(&frame);
 }
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 4242350e05 (AP_RCProtocol: normalize CRSF output thread to regular beats and only send rc frames at 250Hz)
 namespace AP {
     AP_CRSF_Out* crsf_out() {
         return AP_CRSF_Out::get_singleton();
