@@ -44,7 +44,7 @@ AP_ExternalAHRS_CRSF::AP_ExternalAHRS_CRSF(AP_ExternalAHRS *_frontend,
 
     // CRSF IMU only provides IMU data, so set the default sensors accordingly.
     // This allows the EAHRS_SENSORS parameter to default to only IMU.
-    set_default_sensors(uint16_t(AP_ExternalAHRS::AvailableSensor::IMU));
+    set_default_sensors(uint16_t(AP_ExternalAHRS::AvailableSensor::IMU) | uint16_t(AP_ExternalAHRS::AvailableSensor::GPS));
 }
 
 // Global accessor for the singleton instance
@@ -114,6 +114,41 @@ void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vec
         sample_us: sample_time
     };
     AP::ins().handle_external(ins);
+}
+
+// Handles the received and decoded GPS data from AP_CRSF_Out.
+void AP_ExternalAHRS_CRSF::handle_gps_frame(uint8_t instance_idx, const AP_GPS::GPS_State &gps_state)
+{
+    // Only process data if the sender's index matches the configured primary CRSF source index.
+    if (instance_idx != _instance_idx) {
+        return;
+    }
+
+    WITH_SEMAPHORE(state.sem);
+
+    state.location = gps_state.location;
+    state.have_location = true;
+    state.have_velocity = true;
+    state.last_location_update_us = AP_HAL::micros();
+
+    AP_ExternalAHRS::gps_data_message_t gps {
+        gps_week: gps_state.time_week,
+        ms_tow: gps_state.time_week_ms,
+        fix_type : AP_GPS_FixType(gps_state.status),
+        satellites_in_view : gps_state.num_sats,
+        horizontal_pos_accuracy : gps_state.horizontal_accuracy,
+        vertical_pos_accuracy: gps_state.vertical_accuracy,
+        horizontal_vel_accuracy: gps_state.speed_accuracy,
+        hdop: float(gps_state.hdop),
+        vdop: float(gps_state.vdop),
+        longitude: gps_state.location.lng,
+        latitude: gps_state.location.lat,
+        msl_altitude: gps_state.location.alt,      // cm
+        ned_vel_north: gps_state.velocity.x,
+        ned_vel_east: gps_state.velocity.y,
+        ned_vel_down: gps_state.velocity.z,
+    };
+    AP::gps().handle_external(gps, _instance_idx);
 }
 
 void AP_ExternalAHRS_CRSF::update()

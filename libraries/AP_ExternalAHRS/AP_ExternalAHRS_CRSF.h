@@ -24,6 +24,7 @@
 #include <AP_RCProtocol/AP_CRSF_Protocol.h>
 #include <AP_Math/vector3.h>
 #include <AP_HAL/AP_HAL.h>
+#include <AP_GPS/AP_GPS.h>
 
 class AP_ExternalAHRS_CRSF: public AP_ExternalAHRS_backend
 {
@@ -49,6 +50,9 @@ public:
     // The instance_idx identifies which AP_CRSF_Out is sending the data.
     void handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &acc, const Vector3f &gyro, const float gyro_temp, uint32_t sample_us);
 
+    // method to receive the decoded GPS_State data from AP_CRSF_Out.
+    void handle_gps_frame(uint8_t instance_idx, const AP_GPS::GPS_State &gps_state);
+
     // Global accessor for the singleton instance, used by AP_CRSF_Out
     static AP_ExternalAHRS_CRSF* get_singleton();
 
@@ -61,9 +65,8 @@ public:
     static int8_t get_default_instance_index();
 
 protected:
-    // CRSF IMU does not provide a GPS feed.
     uint8_t num_gps_sensors(void) const override {
-        return 0;
+        return 1;
     }
 
 private:
