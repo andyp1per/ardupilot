@@ -385,6 +385,28 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
             }
             break;
         }
+
+        case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_GPS_EXTENDED:
+            AP_CRSF_Protocol::process_extended_gps_frame((AP_CRSF_Protocol::GPSExtendedFrame*)_frame.payload, &gps_state);
+            break;
+
+        case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_GPS_TIME:
+            AP_CRSF_Protocol::process_gps_time_frame((AP_CRSF_Protocol::GPSTimeFrame*)_frame.payload, &gps_state);
+            break;
+
+        case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_GPS: {
+            //debug_rcout("CRSF_FRAMETYPE_GPS");
+            AP_CRSF_Protocol::process_gps_frame((AP_CRSF_Protocol::GPSFrame*)_frame.payload, &gps_state);
+            // Pass the decoded gps data to the external AHRS CRSF module
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+            AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
+            if (crsf_ahrs != nullptr) {
+                // Pass this instance's index for filtering in the AHRS backend
+                crsf_ahrs->handle_gps_frame(_instance_idx, gps_state);
+            }
+#endif
+            break;
+        }
         default:
             break;
     }
