@@ -49,16 +49,7 @@ public:
     using CommandID = AP_CRSF_Protocol::CommandID;
     using CommandGeneral = AP_CRSF_Protocol::CommandGeneral;
     using HeartbeatFrame = AP_CRSF_Protocol::HeartbeatFrame;
-
-    // Broadcast frame definitions courtesy of TBS
-    struct PACKED GPSFrame {   // curious fact, calling this GPS makes sizeof(GPS) return 1!
-        int32_t latitude; // ( degree / 10`000`000 )
-        int32_t longitude; // (degree / 10`000`000 )
-        uint16_t groundspeed; // ( km/h / 100 )
-        uint16_t gps_heading; // ( degree / 100 )
-        uint16_t altitude; // ( meter - 1000m offset )
-        uint8_t satellites; // in use ( counter )
-    };
+    using GPSFrame = AP_CRSF_Protocol::GPSFrame;
 
     struct PACKED BatteryFrame {
         uint16_t voltage; // ( mV * 100 )
