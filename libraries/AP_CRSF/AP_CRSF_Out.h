@@ -26,6 +26,7 @@
 #include <AP_HAL/utility/MinimalScheduler.h>
 #include <AP_Param/AP_Param.h>
 #include <GCS_MAVLink/GCS.h>
+#include <AP_GPS/AP_GPS.h>
 #include "AP_CRSF_Protocol.h"
 #include "AP_CRSF_OutManager.h"
 
@@ -141,6 +142,7 @@ private:
     volatile bool _pwm_is_fresh;
 
     AP_CRSF_Protocol::VersionInfo version;
+    AP_GPS::GPS_State gps_state;
     BaudNegotiationResult _baud_negotiation_result;
     // check baudrate negotiation status
     BaudNegotiationResult get_baud_negotiation_result() const { return _baud_negotiation_result; }
