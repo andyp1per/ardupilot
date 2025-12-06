@@ -20,6 +20,7 @@
 
 #include "AP_RCProtocol_config.h"
 #include <AP_Math/vector3.h>
+#include <AP_GPS/AP_GPS.h>
 
 #if AP_RCPROTOCOL_CRSF_ENABLED
 
@@ -34,6 +35,8 @@ public:
 
     enum FrameType {
         CRSF_FRAMETYPE_GPS = 0x02,
+        CRSF_FRAMETYPE_GPS_TIME = 0x03,
+        CRSF_FRAMETYPE_GPS_EXTENDED = 0x06,
         CRSF_FRAMETYPE_VARIO = 0x07,
         CRSF_FRAMETYPE_BATTERY_SENSOR = 0x08,
         CRSF_FRAMETYPE_BARO_VARIO = 0x09,
@@ -173,6 +176,41 @@ public:
         uint16_t gyro_temp;          // C
     };
 
+    // Broadcast frame definitions courtesy of TBS
+    struct PACKED GPSFrame {   // curious fact, calling this GPS makes sizeof(GPS) return 1!
+        int32_t latitude; // ( degree / 10`000`000 )
+        int32_t longitude; // (degree / 10`000`000 )
+        uint16_t groundspeed; // ( km/h / 100 )
+        uint16_t gps_heading; // ( degree / 100 )
+        uint16_t altitude; // ( meter - 1000m offset )
+        uint8_t satellites; // in use ( counter )
+    };
+
+    struct PACKED GPSTimeFrame {
+        int16_t year;
+        uint8_t month;
+        uint8_t day;
+        uint8_t hour;
+        uint8_t minute;
+        uint8_t second;
+        uint16_t millisecond;
+    };
+
+    struct PACKED GPSExtendedFrame {
+        uint8_t fix_type;       // Current GPS fix quality
+        int16_t n_speed;        // Northward (north = positive) Speed [cm/sec]
+        int16_t e_speed;        // Eastward (east = positive) Speed [cm/sec]
+        int16_t v_speed;        // Vertical (up = positive) Speed [cm/sec]
+        int16_t h_speed_acc;    // Horizontal Speed accuracy cm/sec
+        int16_t track_acc;      // Heading accuracy in degrees scaled with 1e-1 degrees times 10)
+        int16_t alt_ellipsoid;  // Meters Height above GPS Ellipsoid (not MSL)
+        int16_t h_acc;          // horizontal accuracy in cm
+        int16_t v_acc;          // vertical accuracy in cm
+        uint8_t reserved;
+        uint8_t hDOP;           // Horizontal dilution of precision,Dimensionless in nits of.1.
+        uint8_t vDOP;           // vertical dilution of precision, Dimensionless in nits of .1.
+    };
+
     struct VersionInfo {
         uint8_t minor;
         uint8_t major;
@@ -202,6 +240,15 @@ public:
 
     // process a raw IMU frame
     static bool process_accgyro_frame(AccGyroFrame*, Vector3f& acc, Vector3f& gyro, float& gyro_temp, uint32_t& sample_us);
+
+    // process gps data
+    void process_gps_frame(GPSFrame* gps, AP_GPS::GPS_State* state);
+
+    // process extended gps data
+    void process_gps_time_frame(GPSTimeFrame* gps, AP_GPS::GPS_State* state);
+
+    // process gps data
+    void process_extended_gps_frame(GPSExtendedFrame* gps, AP_GPS::GPS_State* state);
 
     // encode a device info frame for version information
     static uint32_t encode_device_info(ParameterDeviceInfoFrame& info, uint8_t num_params);

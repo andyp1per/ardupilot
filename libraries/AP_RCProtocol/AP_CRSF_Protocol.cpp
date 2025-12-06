@@ -28,6 +28,7 @@
 #include "AP_RCProtocol_CRSF.h"
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Common/AP_FWVersion.h>
+#include <AP_Common/time.h>
 
 // Defines for CRSFv3 subset RC frame packing/unpacking
 #define CRSF_SUBSET_RC_STARTING_CHANNEL_BITS        5
@@ -361,6 +362,65 @@ bool AP_CRSF_Protocol::process_accgyro_frame(AccGyroFrame* accgyro, Vector3f& ac
     debug("process_accgyro_frame(): Acc: %f,%f,%f, Gyr: %f,%f,%f", acc.x, acc.y, acc.z, gyro.x, gyro.y, gyro.z);
 
     return true;
+}
+
+// process gps data
+void AP_CRSF_Protocol::process_gps_frame(GPSFrame* gps, AP_GPS::GPS_State* state)
+{
+    state->location.lat = int32_t(be32toh(gps->latitude));
+    state->location.lng = int32_t(be32toh(gps->longitude));
+    state->ground_speed = be16toh(gps->groundspeed) / 36.0f;
+    state->location.alt = (float(be16toh(gps->altitude)) - 1000) * 100;
+    state->ground_course = wrap_360(be16toh(gps->gps_heading) / 100.0f);
+    state->num_sats = gps->satellites;
+}
+
+// process extended gps data
+void AP_CRSF_Protocol::process_gps_time_frame(GPSTimeFrame* gps, AP_GPS::GPS_State* state)
+{
+    // 1. Extract and Byte-Swap fields
+    uint32_t ms = be16toh(gps->millisecond);
+
+    // 2. Prepare struct tm for conversion
+    struct tm tm_time;
+    memset(&tm_time, 0, sizeof(tm_time));
+    tm_time.tm_year = int16_t(be16toh(gps->year)) - 1900;  // tm_year is years since 1900
+    tm_time.tm_mon  = gps->month - 1;    // tm_mon is 0-11
+    tm_time.tm_mday = gps->day;
+    tm_time.tm_hour = gps->hour;
+    tm_time.tm_min  = gps->minute;
+    tm_time.tm_sec  = gps->second;
+    tm_time.tm_isdst = 0;           // UTC has no DST
+
+    // 3. Convert to Unix Epoch (Seconds since Jan 1 1970 UTC)
+    time_t unix_sec =  ap_mktime(&tm_time);
+
+    // convert to time since GPS epoch
+    const uint32_t unix_to_GPS_secs = 315964800UL;
+    const uint16_t leap_seconds_unix = GPS_LEAPSECONDS_MILLIS/1000U;
+    uint32_t ret = unix_sec + leap_seconds_unix - unix_to_GPS_secs;
+
+    // get GPS week and time
+    state->time_week = ret / AP_SEC_PER_WEEK;
+    state->time_week_ms = (ret % AP_SEC_PER_WEEK) * AP_MSEC_PER_SEC;
+    state->time_week_ms += ms;
+}
+
+// process extended gps data
+void AP_CRSF_Protocol::process_extended_gps_frame(GPSExtendedFrame* gps, AP_GPS::GPS_State* state)
+{
+    state->status = AP_GPS::GPS_Status(gps->fix_type);
+    state->velocity.x = int16_t(be16toh(gps->n_speed)) * 0.01;
+    state->velocity.y = int16_t(be16toh(gps->e_speed)) * 0.01;
+    state->velocity.z = -int16_t(be16toh(gps->v_speed)) * 0.01;
+    state->speed_accuracy = int16_t(be16toh(gps->h_speed_acc)) * 0.01;
+    state->gps_yaw_accuracy = int16_t(be16toh(gps->track_acc)) * 0.01;
+    //alt
+    state->horizontal_accuracy = int16_t(be16toh(gps->h_acc)) * 0.01;
+    state->vertical_accuracy = int16_t(be16toh(gps->v_acc)) * 0.01;
+    // reserved
+    state->hdop = gps->hDOP * 10;
+    state->vdop = gps->vDOP * 10;
 }
 
 // encode a ping frame

@@ -24,6 +24,7 @@
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Param/AP_Param.h>
+#include <AP_GPS/AP_GPS.h>
 #include "AP_CRSF_Protocol.h"
 #include "AP_CRSF_OutManager.h"
 
@@ -123,6 +124,7 @@ private:
     uint8_t _instance_idx = 0; // Instance index (0, 1, 2...) for multi-instance use
 
     AP_CRSF_Protocol::VersionInfo version;
+    AP_GPS::GPS_State gps_state;
     BaudNegotiationResult _baud_negotiation_result;
     // check baudrate negotiation status
     BaudNegotiationResult get_baud_negotiation_result() const { return _baud_negotiation_result; }
