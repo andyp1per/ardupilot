@@ -50,6 +50,9 @@ public:
     // The instance_idx identifies which AP_CRSF_Out is sending the data.
     void handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &acc, const Vector3f &gyro, const float gyro_temp, uint32_t sample_us);
 
+    // method to receive the decoded Baro data from AP_CRSF_Out.
+    void handle_baro_frame(uint8_t instance_idx, float pressure, float temperature);
+
     // method to receive the decoded GPS_State data from AP_CRSF_Out.
     void handle_gps_frame(uint8_t instance_idx, const AP_GPS::GPS_State &gps_state);
 

@@ -20,6 +20,7 @@
 
 #include "AP_ExternalAHRS_CRSF.h"
 #include <AP_InertialSensor/AP_InertialSensor.h>
+#include <AP_Baro/AP_Baro.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_SerialManager/AP_SerialManager.h>
@@ -42,9 +43,11 @@ AP_ExternalAHRS_CRSF::AP_ExternalAHRS_CRSF(AP_ExternalAHRS *_frontend,
         GCS_SEND_TEXT(MAV_SEVERITY_ERROR, "ExternalAHRS_CRSF already initialised");
     }
 
-    // CRSF IMU only provides IMU data, so set the default sensors accordingly.
-    // This allows the EAHRS_SENSORS parameter to default to only IMU.
-    set_default_sensors(uint16_t(AP_ExternalAHRS::AvailableSensor::IMU) | uint16_t(AP_ExternalAHRS::AvailableSensor::GPS));
+    // CRSF IMU provides IMU, GPS, and Baro data.
+    // This allows the EAHRS_SENSORS parameter to default to all available.
+    set_default_sensors(uint16_t(AP_ExternalAHRS::AvailableSensor::IMU) |
+                        uint16_t(AP_ExternalAHRS::AvailableSensor::GPS) |
+                        uint16_t(AP_ExternalAHRS::AvailableSensor::BARO));
 }
 
 // Global accessor for the singleton instance
@@ -114,6 +117,25 @@ void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vec
         sample_us: sample_time
     };
     AP::ins().handle_external(ins);
+}
+
+// Handles the received and decoded Baro data from AP_CRSF_Out.
+void AP_ExternalAHRS_CRSF::handle_baro_frame(uint8_t instance_idx, float pressure, float temperature)
+{
+    // CRITICAL: Only process data if the sender's index matches the configured primary CRSF source index.
+    if (!has_sensor(AP_ExternalAHRS::AvailableSensor::BARO) || instance_idx != _instance_idx) {
+        return;
+    }
+
+    WITH_SEMAPHORE(state.sem);
+
+    // Pass the data to the AP_Baro external backend
+    AP_ExternalAHRS::baro_data_message_t baro {
+        instance: 0,
+        pressure_pa: pressure,
+        temperature: temperature,
+    };
+    AP::baro().handle_external(baro);
 }
 
 // Handles the received and decoded GPS data from AP_CRSF_Out.
