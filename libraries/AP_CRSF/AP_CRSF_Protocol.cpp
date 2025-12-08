@@ -63,6 +63,8 @@ const char* AP_CRSF_Protocol::get_frame_type_name(uint8_t byte, uint8_t subtype)
         return "VTX";
     case CRSF_FRAMETYPE_VTX_TELEM:
         return "VTX_TELEM";
+    case CRSF_FRAMETYPE_BARO:
+        return "BARO";
     case CRSF_FRAMETYPE_PARAM_DEVICE_PING:
         return "PING";
     case CRSF_FRAMETYPE_COMMAND:
@@ -352,6 +354,14 @@ bool AP_CRSF_Protocol::process_accgyro_frame(AccGyroFrame* accgyro, Vector3f& ac
     sample_us = be32toh(accgyro->sample_time);
 
     debug("process_accgyro_frame(): Acc: %f,%f,%f, Gyr: %f,%f,%f", acc.x, acc.y, acc.z, gyro.x, gyro.y, gyro.z);
+
+    return true;
+}
+
+bool AP_CRSF_Protocol::process_baro_frame(BaroFrame* baro, float& pressure, float& temperature)
+{
+    pressure = float(int32_t(be32toh(baro->pressure)));
+    temperature = float(int32_t(be32toh(baro->temperature))) / 100.f;
 
     return true;
 }

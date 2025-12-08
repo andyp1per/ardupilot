@@ -48,6 +48,7 @@ public:
         CRSF_FRAMETYPE_HEARTBEAT = 0x0B,
         CRSF_FRAMETYPE_VTX = 0x0F,
         CRSF_FRAMETYPE_VTX_TELEM = 0x10,
+        CRSF_FRAMETYPE_BARO = 0x11,     // 0x11 BaroFrame (Broadcast)
         CRSF_FRAMETYPE_LINK_STATISTICS = 0x14,
         CRSF_FRAMETYPE_RC_CHANNELS_PACKED = 0x16,
         CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED = 0x17,
@@ -194,6 +195,12 @@ public:
         uint16_t gyro_temp;          // C
     };
 
+    // CRSF_FRAMETYPE_BARO
+    struct PACKED BaroFrame {
+        int32_t pressure;           // Pascal
+        int32_t temperature;        // C * 100
+    };
+
     // Broadcast frame definitions courtesy of TBS
     struct PACKED GPSFrame {   // curious fact, calling this GPS makes sizeof(GPS) return 1!
         int32_t latitude; // ( degree / 10`000`000 )
@@ -257,6 +264,9 @@ public:
 
     // process a raw IMU frame
     static bool process_accgyro_frame(AccGyroFrame*, Vector3f& acc, Vector3f& gyro, float& gyro_temp, uint32_t& sample_us);
+
+    // process a baro frame
+    static bool process_baro_frame(BaroFrame* baro, float& pressure, float& temperature);
 
     // process gps data
     void process_gps_frame(GPSFrame* gps, AP_GPS::GPS_State* state);
