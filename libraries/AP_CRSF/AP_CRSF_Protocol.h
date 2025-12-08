@@ -49,6 +49,7 @@ public:
         CRSF_FRAMETYPE_VTX = 0x0F,
         CRSF_FRAMETYPE_VTX_TELEM = 0x10,
         CRSF_FRAMETYPE_BARO = 0x11,     // 0x11 BaroFrame (Broadcast)
+        CRSF_FRAMETYPE_MAG = 0x12,      // 0x12 MagFrame (Broadcast)
         CRSF_FRAMETYPE_LINK_STATISTICS = 0x14,
         CRSF_FRAMETYPE_RC_CHANNELS_PACKED = 0x16,
         CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED = 0x17,
@@ -201,6 +202,14 @@ public:
         int32_t temperature;        // C * 100
     };
 
+    // CRSF_FRAMETYPE_MAG
+    struct PACKED MagFrame {
+        // Broadcast frame has no header routing
+        int16_t mag_x;              // Gauss * 3000
+        int16_t mag_y;              // Gauss * 3000
+        int16_t mag_z;              // Gauss * 3000
+    };
+
     // Broadcast frame definitions courtesy of TBS
     struct PACKED GPSFrame {   // curious fact, calling this GPS makes sizeof(GPS) return 1!
         int32_t latitude; // ( degree / 10`000`000 )
@@ -267,6 +276,9 @@ public:
 
     // process a baro frame
     static bool process_baro_frame(BaroFrame* baro, float& pressure, float& temperature);
+
+    // process a mag frame
+    static bool process_mag_frame(MagFrame* mag, Vector3f& mag_field);
 
     // process gps data
     void process_gps_frame(GPSFrame* gps, AP_GPS::GPS_State* state);

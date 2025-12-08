@@ -65,6 +65,8 @@ const char* AP_CRSF_Protocol::get_frame_type_name(uint8_t byte, uint8_t subtype)
         return "VTX_TELEM";
     case CRSF_FRAMETYPE_BARO:
         return "BARO";
+    case CRSF_FRAMETYPE_MAG:
+        return "MAG";
     case CRSF_FRAMETYPE_PARAM_DEVICE_PING:
         return "PING";
     case CRSF_FRAMETYPE_COMMAND:
@@ -362,6 +364,16 @@ bool AP_CRSF_Protocol::process_baro_frame(BaroFrame* baro, float& pressure, floa
 {
     pressure = float(int32_t(be32toh(baro->pressure)));
     temperature = float(int32_t(be32toh(baro->temperature))) / 100.f;
+
+    return true;
+}
+
+bool AP_CRSF_Protocol::process_mag_frame(MagFrame* mag, Vector3f& mag_field)
+{
+    // payload is int16_t for fields, scaled by mguass * 3
+    mag_field.x = float(int16_t(be16toh(mag->mag_x))) / 3.0f;
+    mag_field.y = float(int16_t(be16toh(mag->mag_y))) / 3.0f;
+    mag_field.z = float(int16_t(be16toh(mag->mag_z))) / 3.0f;
 
     return true;
 }

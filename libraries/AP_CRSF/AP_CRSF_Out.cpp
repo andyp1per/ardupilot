@@ -401,6 +401,21 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
             break;
         }
 
+        case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_MAG: {
+            Vector3f mag_field;
+            if (AP_CRSF_Protocol::process_mag_frame((AP_CRSF_Protocol::MagFrame*)_frame.payload, mag_field)) {
+                // Pass the decoded Mag data to the external AHRS CRSF module
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+                AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
+                if (crsf_ahrs != nullptr) {
+                    // Pass this instance's index for filtering in the AHRS backend
+                    crsf_ahrs->handle_mag_frame(_instance_idx, mag_field);
+                }
+#endif
+            }
+            break;
+        }
+
         case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_GPS_EXTENDED:
             AP_CRSF_Protocol::process_extended_gps_frame((AP_CRSF_Protocol::GPSExtendedFrame*)_frame.payload, &gps_state);
             break;
