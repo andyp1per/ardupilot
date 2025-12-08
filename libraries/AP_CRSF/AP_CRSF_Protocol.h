@@ -43,8 +43,9 @@ public:
         CRSF_FRAMETYPE_HEARTBEAT = 0x0B,
         CRSF_FRAMETYPE_VTX = 0x0F,
         CRSF_FRAMETYPE_VTX_TELEM = 0x10,
-        CRSF_FRAMETYPE_BARO = 0x11,     // 0x11 BaroFrame (Broadcast)
-        CRSF_FRAMETYPE_MAG = 0x12,      // 0x12 MagFrame (Broadcast)
+        CRSF_FRAMETYPE_BARO = 0x11,
+        CRSF_FRAMETYPE_MAG = 0x12,
+        CRSF_FRAMETYPE_ACCGYRO = 0x13,    // full resolution IMU frames
         CRSF_FRAMETYPE_LINK_STATISTICS = 0x14,
         CRSF_FRAMETYPE_RC_CHANNELS_PACKED = 0x16,
         CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED = 0x17,
@@ -60,7 +61,6 @@ public:
         CRSF_FRAMETYPE_PARAMETER_READ = 0x2C,
         CRSF_FRAMETYPE_PARAMETER_WRITE = 0x2D,
         CRSF_FRAMETYPE_COMMAND = 0x32,
-        CRSF_FRAMETYPE_ACCGYRO = 0x41,    // full resolution IMU frames
         // Custom Telemetry Frames 0x7F,0x80
         CRSF_FRAMETYPE_AP_CUSTOM_TELEM_LEGACY = 0x7F,   // as suggested by Remo Masina for fw < 4.06
         CRSF_FRAMETYPE_AP_CUSTOM_TELEM = 0x80,          // reserved for ArduPilot by TBS, requires fw >= 4.06
@@ -166,8 +166,6 @@ public:
 
     // CRSF_FRAMETYPE_ACCGYRO
     struct PACKED AccGyroFrame {
-        uint8_t destination;
-        uint8_t origin;
         uint32_t sample_time;        // sample time in us
         uint16_t gyro_x;             // LSB = INT16_MAX/2000 DPS
         uint16_t gyro_y;             // LSB = INT16_MAX/2000 DPS
@@ -175,7 +173,7 @@ public:
         uint16_t acc_x;              // LSB = INT16_MAX/16 G
         uint16_t acc_y;              // LSB = INT16_MAX/16 G
         uint16_t acc_z;              // LSB = INT16_MAX/16 G
-        uint16_t gyro_temp;          // C
+        uint16_t gyro_temp;          // C * 100
     };
 
     // CRSF_FRAMETYPE_BARO
