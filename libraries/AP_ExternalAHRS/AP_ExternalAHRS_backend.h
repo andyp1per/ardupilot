@@ -68,6 +68,11 @@ protected:
         return frontend.gnss_is_disabled;
     }
 
+    // check if a sensor type is enabled
+    bool has_sensor(AP_ExternalAHRS::AvailableSensor sensor) const {
+        return frontend.has_sensor(sensor);
+    }
+
     /*
       return true when we are in fixed wing flight
      */

@@ -86,7 +86,7 @@ const char* AP_ExternalAHRS_CRSF::get_name() const
 void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vector3f &accel, const Vector3f &gyro, const float gyro_temp, uint32_t sample_us)
 {
     // CRITICAL: Only process data if the sender's index matches the configured primary CRSF source index.
-    if (instance_idx != _instance_idx) {
+    if (!has_sensor(AP_ExternalAHRS::AvailableSensor::IMU) || instance_idx != _instance_idx) {
         return;
     }
 
@@ -120,7 +120,7 @@ void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vec
 void AP_ExternalAHRS_CRSF::handle_gps_frame(uint8_t instance_idx, const AP_GPS::GPS_State &gps_state)
 {
     // Only process data if the sender's index matches the configured primary CRSF source index.
-    if (instance_idx != _instance_idx) {
+    if (!has_sensor(AP_ExternalAHRS::AvailableSensor::GPS) || instance_idx != _instance_idx) {
         return;
     }
 
