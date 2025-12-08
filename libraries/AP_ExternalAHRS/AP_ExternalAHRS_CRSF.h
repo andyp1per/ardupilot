@@ -53,6 +53,9 @@ public:
     // method to receive the decoded Baro data from AP_CRSF_Out.
     void handle_baro_frame(uint8_t instance_idx, float pressure, float temperature);
 
+    // method to receive the decoded Mag data from AP_CRSF_Out.
+    void handle_mag_frame(uint8_t instance_idx, const Vector3f &mag_field);
+
     // method to receive the decoded GPS_State data from AP_CRSF_Out.
     void handle_gps_frame(uint8_t instance_idx, const AP_GPS::GPS_State &gps_state);
 
