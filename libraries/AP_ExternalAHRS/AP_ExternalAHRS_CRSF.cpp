@@ -21,6 +21,7 @@
 #include "AP_ExternalAHRS_CRSF.h"
 #include <AP_InertialSensor/AP_InertialSensor.h>
 #include <AP_Baro/AP_Baro.h>
+#include <AP_Compass/AP_Compass.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_SerialManager/AP_SerialManager.h>
@@ -43,11 +44,12 @@ AP_ExternalAHRS_CRSF::AP_ExternalAHRS_CRSF(AP_ExternalAHRS *_frontend,
         GCS_SEND_TEXT(MAV_SEVERITY_ERROR, "ExternalAHRS_CRSF already initialised");
     }
 
-    // CRSF IMU provides IMU, GPS, and Baro data.
+    // CRSF IMU provides IMU, GPS, Baro and Compass data.
     // This allows the EAHRS_SENSORS parameter to default to all available.
     set_default_sensors(uint16_t(AP_ExternalAHRS::AvailableSensor::IMU) |
                         uint16_t(AP_ExternalAHRS::AvailableSensor::GPS) |
-                        uint16_t(AP_ExternalAHRS::AvailableSensor::BARO));
+                        uint16_t(AP_ExternalAHRS::AvailableSensor::BARO) |
+                        uint16_t(AP_ExternalAHRS::AvailableSensor::COMPASS));
 }
 
 // Global accessor for the singleton instance
@@ -136,6 +138,23 @@ void AP_ExternalAHRS_CRSF::handle_baro_frame(uint8_t instance_idx, float pressur
         temperature: temperature,
     };
     AP::baro().handle_external(baro);
+}
+
+// Handles the received and decoded Mag data from AP_CRSF_Out.
+void AP_ExternalAHRS_CRSF::handle_mag_frame(uint8_t instance_idx, const Vector3f &mag_field)
+{
+    // CRITICAL: Only process data if the sender's index matches the configured primary CRSF source index.
+    if (!has_sensor(AP_ExternalAHRS::AvailableSensor::COMPASS) || instance_idx != _instance_idx) {
+        return;
+    }
+
+    WITH_SEMAPHORE(state.sem);
+
+    // Pass the data to the AP_Compass external backend
+    AP_ExternalAHRS::mag_data_message_t mag {
+        field: mag_field
+    };
+    AP::compass().handle_external(mag);
 }
 
 // Handles the received and decoded GPS data from AP_CRSF_Out.
