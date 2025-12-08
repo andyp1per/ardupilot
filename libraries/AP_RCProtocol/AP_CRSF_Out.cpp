@@ -365,6 +365,21 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
             break;
         }
 
+        case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_BARO: {
+            float pressure, temperature;
+            if (AP_CRSF_Protocol::process_baro_frame((AP_CRSF_Protocol::BaroFrame*)_frame.payload, pressure, temperature)) {
+                // Pass the decoded Baro data to the external AHRS CRSF module
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+                AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
+                if (crsf_ahrs != nullptr) {
+                    // Pass this instance's index for filtering in the AHRS backend
+                    crsf_ahrs->handle_baro_frame(_instance_idx, pressure, temperature);
+                }
+#endif
+            }
+            break;
+        }
+
         case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_GPS_EXTENDED:
             AP_CRSF_Protocol::process_extended_gps_frame((AP_CRSF_Protocol::GPSExtendedFrame*)_frame.payload, &gps_state);
             break;
