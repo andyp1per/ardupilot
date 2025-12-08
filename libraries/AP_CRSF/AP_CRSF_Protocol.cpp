@@ -335,12 +335,6 @@ bool AP_CRSF_Protocol::process_device_info_frame(ParameterDeviceInfoFrame* info,
 
 bool AP_CRSF_Protocol::process_accgyro_frame(AccGyroFrame* accgyro, Vector3f& acc, Vector3f& gyro, float& gyro_temp, uint32_t& sample_us)
 {
-    // we are only interested in FC IMU data
-    if (accgyro->origin != 0 && accgyro->origin != CRSF_ADDRESS_FLIGHT_CONTROLLER) {
-        debug("process_accgyro_frame(): rejected origin 0x%x", accgyro->origin);
-        return false;
-    }
-
 #define C16G16BIT_TO_ACCMSS(x) ((float(int16_t(be16toh(x))) * 16.0 * GRAVITY_MSS) / INT16_MAX)
 #define C2KDPS16BIT_TO_RADS(x) radians((float(int16_t(be16toh(x))) * 2000.0) / INT16_MAX)
 
@@ -352,7 +346,7 @@ bool AP_CRSF_Protocol::process_accgyro_frame(AccGyroFrame* accgyro, Vector3f& ac
     gyro.y = C2KDPS16BIT_TO_RADS(accgyro->gyro_y);
     gyro.z = C2KDPS16BIT_TO_RADS(accgyro->gyro_z);
 
-    gyro_temp = float(int16_t(be16toh(accgyro->gyro_temp)));
+    gyro_temp = float(int16_t(be16toh(accgyro->gyro_temp))) / 100.0f;
     sample_us = be32toh(accgyro->sample_time);
 
     debug("process_accgyro_frame(): Acc: %f,%f,%f, Gyr: %f,%f,%f", acc.x, acc.y, acc.z, gyro.x, gyro.y, gyro.z);
