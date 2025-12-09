@@ -3,6 +3,7 @@
 #include <sys/types.h>
 
 #include <AP_Filesystem/AP_Filesystem.h>
+#include <AP_GPS/AP_GPS.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Logger/AP_Logger.h>
 #include <AP_Math/AP_Math.h>

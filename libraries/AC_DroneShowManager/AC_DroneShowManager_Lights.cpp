@@ -50,21 +50,6 @@ sb_rgb_color_t AC_DroneShowManager::get_desired_color_of_rgb_light_at_seconds(fl
     return sb_light_player_get_color_at(_light_player, time < 0 || time > 86400000 ? 0 : time * 1000);
 }
 
-uint32_t AC_DroneShowManager::_get_gps_synced_timestamp_in_millis_for_lights() const
-{
-    // No need to worry about loss of GPS fix; AP::gps().time_epoch_usec() is
-    // smart enough to extrapolate from the timestamp of the latest fix.
-    //
-    // Also no need to worry about overflow; AP::gps().time_epoch_usec() / 1000
-    // is too large for an uint32_t but it doesn't matter as we will truncate
-    // the high bits.
-    if (_is_gps_time_ok()) {
-        return AP::gps().time_epoch_usec() / 1000;
-    } else {
-        return AP_HAL::millis();
-    }
-}
-
 void AC_DroneShowManager::_flash_leds_after_failure()
 {
     _flash_leds_with_color(255, 0, 0, /* count = */ 3, LightEffectPriority_Internal);
