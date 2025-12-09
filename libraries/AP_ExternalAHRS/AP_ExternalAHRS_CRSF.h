@@ -21,7 +21,7 @@
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
 
 #include "AP_ExternalAHRS_backend.h"
-#include <AP_RCProtocol/AP_CRSF_Protocol.h>
+#include <AP_CRSF/AP_CRSF_Protocol.h>
 #include <AP_Math/vector3.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_GPS/AP_GPS.h>
