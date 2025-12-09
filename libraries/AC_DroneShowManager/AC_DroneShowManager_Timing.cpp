@@ -2,15 +2,45 @@
 
 #include "AC_DroneShowManager.h"
 
+// Returns the current time according to the GPS, in microseconds.
+//
+// This function takes care of eliminating glitches in the GPS timestamp that
+// may happen when a GPS message updates the stored GPS time-of-week but not
+// the correspnding GPS week number. This is a glitch that is known to have
+// happened with U-blox GPS modules in ArduPilot 4.6, but other versions or
+// GPS drivers may also be affected so we try to protect against it.
+//
+// The fix we use here is simply to assume that GPS time cannot move backward.
+// If we receive a reported GPS time that is earlier than the previous value
+// (which we store here), we return the previous value instead.
+//
+// We assume that glitches only occur "backwards" in time, not forward. That
+// would require a GPS message handler that updates the GPS week number _without_
+// updating the GPS time-of-week, which is unlikely to happen in practice
+// (all GPS messages that carry the week number are also likely to carry the
+// time-of-week).
+static uint64_t get_gps_timestamp_usec()
+{
+    // AP::gps().time_epoch_usec() is smart enough to handle the case when
+    // the GPS fix was lost so no need to worry about loss of GPS fix here.
+    static uint64_t last_gps_time_usec = 0;
+    uint64_t current_gps_time_usec = AP::gps().time_epoch_usec();
+
+    if (current_gps_time_usec < last_gps_time_usec) {
+        return last_gps_time_usec;
+    } else {
+        last_gps_time_usec = current_gps_time_usec;
+        return current_gps_time_usec;
+    }
+}
+
 // returns the elapsed time since the start of the show, in microseconds
 int64_t AC_DroneShowManager::get_elapsed_time_since_start_usec() const
 {
     uint64_t now, reference, diff;
     
-    // AP::gps().time_epoch_usec() is smart enough to handle the case when
-    // the GPS fix was lost so no need to worry about loss of GPS fix here.
     if (uses_gps_time_for_show_start()) {
-        now = AP::gps().time_epoch_usec();
+        now = get_gps_timestamp_usec();
         reference = _start_time_unix_usec;
     } else {
         now = AP_HAL::micros64();
@@ -90,7 +120,7 @@ uint32_t AC_DroneShowManager::_get_gps_synced_timestamp_in_millis_for_lights() c
     // is too large for an uint32_t but it doesn't matter as we will truncate
     // the high bits.
     if (_is_gps_time_ok()) {
-        return AP::gps().time_epoch_usec() / 1000;
+        return get_gps_timestamp_usec() / 1000;
     } else {
         return AP_HAL::millis();
     }
