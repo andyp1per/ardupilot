@@ -38,6 +38,7 @@ const AP_Param::GroupInfo AP_CRSF_OutManager::var_info[] = {
     // @Units: Hz
     AP_GROUPINFO("RATE",  1, AP_CRSF_OutManager, rate_hz, DEFAULT_CRSF_OUTPUT_RATE),
 
+#endif
     // @Param: RPT_HZ
     // @DisplayName: CRSF output reporting rate
     // @Description: This sets the CRSF output reporting rate in Hz. 0 disables reporting.

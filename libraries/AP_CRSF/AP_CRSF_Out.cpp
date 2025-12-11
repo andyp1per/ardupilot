@@ -38,6 +38,7 @@
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
 #include <AP_ExternalAHRS/AP_ExternalAHRS_CRSF.h>
 #endif
+#include <AP_Scheduler/AP_Scheduler.h>
 
 //#define CRSF_RCOUT_DEBUG
 //#define CRSF_RCOUT_DEBUG_FRAME
@@ -122,9 +123,13 @@ void AP_CRSF_Out::update_rates_status()
 {
     const float report_rate = frontend.reporting_rate_hz.get();
 
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "CRSFOut: RC: %uHz, Lat: %.1fms",
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "CRSFOut: IMU: %uHz, GPS: %uHz, Baro: %uHz, Mag: %uHz, RC: %uHz, Lat: %.1fms",
+                    int16_t(rate_imu_counter*report_rate),
+                    int16_t(rate_gps_counter*report_rate),
+                    int16_t(rate_baro_counter*report_rate),
+                    int16_t(rate_mag_counter*report_rate),
                     int16_t(rate_rc_counter*report_rate), latency_us / 1000.0f);
-    rate_rc_counter = 0;
+    rate_imu_counter = rate_gps_counter = rate_baro_counter = rate_mag_counter = rate_rc_counter = 0;
 }
 
 void AP_CRSF_Out::crsf_out_thread()
@@ -375,6 +380,7 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
             uint32_t sample_us;
             if (AP_CRSF_Protocol::process_accgyro_frame((AP_CRSF_Protocol::AccGyroFrame*)_frame.payload, acc, gyro, gyro_temp, sample_us)) {
                 // Pass the decoded IMU data to the external AHRS CRSF module
+                rate_imu_counter++;
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
                 AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
                 if (crsf_ahrs != nullptr) {
@@ -389,6 +395,7 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
         case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_BARO: {
             float pressure, temperature;
             if (AP_CRSF_Protocol::process_baro_frame((AP_CRSF_Protocol::BaroFrame*)_frame.payload, pressure, temperature)) {
+                rate_baro_counter++;
                 // Pass the decoded Baro data to the external AHRS CRSF module
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
                 AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
@@ -404,6 +411,7 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
         case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_MAG: {
             Vector3f mag_field;
             if (AP_CRSF_Protocol::process_mag_frame((AP_CRSF_Protocol::MagFrame*)_frame.payload, mag_field)) {
+                rate_mag_counter++;
                 // Pass the decoded Mag data to the external AHRS CRSF module
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
                 AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
@@ -427,6 +435,7 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
         case AP_CRSF_Protocol::FrameType::CRSF_FRAMETYPE_GPS: {
             //debug_rcout("CRSF_FRAMETYPE_GPS");
             AP_CRSF_Protocol::process_gps_frame((AP_CRSF_Protocol::GPSFrame*)_frame.payload, &gps_state);
+            rate_gps_counter++;
             // Pass the decoded gps data to the external AHRS CRSF module
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
             AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
@@ -479,6 +488,7 @@ void AP_CRSF_Out::send_rc_frame(uint8_t start_chan, uint8_t nchan)
     frame.length = payload_len + 2; // +1 for type, +1 for CRC
 
     crsf_port->write_frame(&frame);
+    rate_rc_counter++;
 }
 
 void AP_CRSF_Out::send_latency_ping_frame()

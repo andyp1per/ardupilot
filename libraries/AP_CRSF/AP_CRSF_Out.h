@@ -140,6 +140,10 @@ private:
     uint32_t latency_us;
     // latch for PWM push
     volatile bool pwm_is_fresh;
+    uint16_t rate_imu_counter;
+    uint16_t rate_baro_counter;
+    uint16_t rate_gps_counter;
+    uint16_t rate_mag_counter;
 
     AP_CRSF_Protocol::VersionInfo version;
     AP_GPS::GPS_State gps_state;
