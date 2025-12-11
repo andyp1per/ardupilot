@@ -34,7 +34,7 @@
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Scheduler/AP_Scheduler.h>
 
-//#define CRSF_RCOUT_DEBUG
+#define CRSF_RCOUT_DEBUG
 //#define CRSF_RCOUT_DEBUG_FRAME
 #ifdef CRSF_RCOUT_DEBUG
 # include <AP_HAL/AP_HAL.h>
