@@ -379,8 +379,8 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
             float gyro_temp;
             uint32_t sample_us;
             if (AP_CRSF_Protocol::process_accgyro_frame((AP_CRSF_Protocol::AccGyroFrame*)_frame.payload, acc, gyro, gyro_temp, sample_us)) {
-                // Pass the decoded IMU data to the external AHRS CRSF module
                 rate_imu_counter++;
+                // Pass the decoded IMU data to the external AHRS CRSF module
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
                 AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
                 if (crsf_ahrs != nullptr) {
@@ -488,7 +488,6 @@ void AP_CRSF_Out::send_rc_frame(uint8_t start_chan, uint8_t nchan)
     frame.length = payload_len + 2; // +1 for type, +1 for CRC
 
     crsf_port->write_frame(&frame);
-    rate_rc_counter++;
 }
 
 void AP_CRSF_Out::send_latency_ping_frame()
