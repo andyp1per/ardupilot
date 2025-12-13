@@ -24,6 +24,7 @@
 #if AP_RCPROTOCOL_CRSF_ENABLED
 
 #pragma GCC optimize("O2")
+
 #include <string.h>
 #include <limits.h>
 
