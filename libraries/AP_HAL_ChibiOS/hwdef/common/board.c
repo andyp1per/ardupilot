@@ -303,6 +303,11 @@ void __late_init(void) {
   // ensure NRST_MODE is set correctly
   stm32_flash_set_NRST_MODE(HAL_FLASH_SET_NRST_MODE);
 #endif
+
+#ifdef HAL_FLASH_BROWNOUT_MONITOR
+  // monitor for brownout conditions
+  stm32_flash_monitor_brownout(6);
+#endif
 }
 
 #if HAL_USE_SDC || defined(__DOXYGEN__)

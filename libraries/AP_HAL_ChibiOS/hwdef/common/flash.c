@@ -189,6 +189,8 @@ static bool flash_keep_unlocked;
 #define FLASH_OPTKEY2      0x4C5D6E7F
 #endif
 
+static volatile bool pvd_tripped = false;
+
 /* Some compiler options will convert short loads and stores into byte loads
  * and stores.  We don't want this to happen for IO reads and writes!
  */
@@ -1172,6 +1174,62 @@ void stm32_flash_set_NRST_MODE(uint8_t nrst_mode)
 bool stm32_flash_recent_erase(void)
 {
     return hrt_millis32() - last_erase_ms < 3000U;
+}
+#endif
+
+#if defined(HAL_FLASH_BROWNOUT_MONITOR) && defined(STM32H7)
+OSAL_IRQ_HANDLER(STM32_EXTI16_HANDLER) {
+  OSAL_IRQ_PROLOGUE();
+
+  /* Clear EXTI line 16 pending flag (write 1 to clear). */
+  if (EXTI->PR1 & EXTI_PR1_PR16) {
+    EXTI->PR1 |= EXTI_PR1_PR16;
+    pvd_tripped = true;
+  }
+
+  OSAL_IRQ_EPILOGUE();
+}
+
+/* Call once at boot (after halInit/chSysInit). */
+void stm32_flash_monitor_brownout(uint32_t pls_level)
+{
+
+  /* 1) Program PVD threshold (PLS[2:0]) and enable PVD (PVDE). */
+  PWR->CR1 &= ~PWR_CR1_PLS_Msk;
+  PWR->CR1 |=  (pls_level << PWR_CR1_PLS_Pos);
+  PWR->CR1 |=  PWR_CR1_PVDEN;
+
+  /* Optional: clear stale state by reading PVDO and clearing EXTI pending. */
+  (void)PWR->CSR1;                 /* PVDO is in CSR1 on H7 */
+  EXTI->PR1 = EXTI_PR1_PR16;
+
+  /*
+   * 2) Configure EXTI line 16.
+   * PVDO goes ‘active’ when VDD is BELOW threshold, so you usually want
+   * the interrupt on the edge that corresponds to “dropping below”.
+   *
+   * In practice:
+   *  - Use RISING if the EXTI signal is PVDO itself (0->1 when below threshold).
+   *  - Use FALLING if your silicon/port routes inverted polarity (rare).
+   *
+   * Start with RISING; it matches “drops below threshold” for PVDO polarity.
+   */
+  EXTI->IMR1  |= EXTI_IMR1_IM16;       /* Unmask interrupt */
+  EXTI->RTSR1 |= EXTI_RTSR1_TR16;      /* Rising edge */
+  EXTI->FTSR1 &= ~EXTI_FTSR1_TR16;     /* Disable falling */
+
+  /* 3) Enable NVIC interrupt. Pick a priority appropriate for your system. */
+  nvicEnableVector(PVD_AVD_IRQn, 6);
+}
+
+bool stm32_flash_in_brownout(void)
+{
+    return pvd_tripped;
+}
+
+void stm32_flash_reset_brownout_check(void)
+{
+    pvd_tripped = false;
 }
 #endif
 

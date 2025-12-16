@@ -461,6 +461,10 @@ bool Storage::healthy(void)
         return log_fd != -1 || AP_HAL::millis() - _last_empty_ms < 30000U;
     }
 #endif
+    if (_initialisedType == StorageBackend::Flash && stm32_flash_in_brownout()) {
+        stm32_flash_reset_brownout_check();
+        return false;
+    }
     return ((_initialisedType != StorageBackend::None) &&
             (AP_HAL::millis() - _last_empty_ms < 2000u));
 }

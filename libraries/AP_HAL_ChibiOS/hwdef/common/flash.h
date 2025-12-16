@@ -31,6 +31,9 @@ void stm32_flash_protect_flash(bool bootloader, bool protect);
 void stm32_flash_unprotect_flash(void);
 void stm32_flash_set_NRST_MODE(uint8_t nrst_mode);
 #if defined(STM32H7)
+void stm32_flash_monitor_brownout(uint32_t pls_level);
+bool stm32_flash_in_brownout(void);
+void stm32_flash_reset_brownout_check(void);
 void stm32_flash_corrupt(uint32_t addr, bool double_bit);
 #endif
 #ifndef HAL_BOOTLOADER_BUILD
