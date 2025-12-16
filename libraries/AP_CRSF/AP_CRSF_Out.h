@@ -135,15 +135,15 @@ private:
     uint8_t instance_idx = 0; // Instance index (0, 1, 2...) for multi-instance use
     // rate counters
     uint32_t last_rate_update_ms;
-    uint16_t rate_rc_counter;
-    uint32_t last_latency_ping_us;
-    uint32_t latency_us;
     // latch for PWM push
     volatile bool pwm_is_fresh;
     uint16_t rate_imu_counter;
     uint16_t rate_baro_counter;
     uint16_t rate_gps_counter;
     uint16_t rate_mag_counter;
+    uint16_t rate_rc_counter;
+    uint32_t last_latency_ping_us;
+    uint32_t latency_us;
 
     AP_CRSF_Protocol::VersionInfo version;
     AP_GPS::GPS_State gps_state;
