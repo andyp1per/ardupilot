@@ -30,6 +30,7 @@
 #include "AP_CRSF_Out.h"
 #include <AP_SerialManager/AP_SerialManager.h>
 #include <SRV_Channel/SRV_Channel.h>
+#include <RC_Channel/RC_Channel.h>
 #include <AP_RCProtocol/AP_RCProtocol_CRSF.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Scheduler/AP_Scheduler.h>
@@ -473,11 +474,28 @@ void AP_CRSF_Out::send_rc_frame(uint8_t start_chan, uint8_t nchan)
     uint16_t channels[CRSF_MAX_CHANNELS] {};
     for (uint8_t i = start_chan; i < start_chan + nchan; ++i) {
         SRV_Channel *c = SRV_Channels::srv_channel(i);
-        if (c != nullptr) {
-            channels[i] = c->get_output_pwm();
-        } else {
-            channels[i] = 1500; // Default to neutral if channel is null
+
+        if (c == nullptr) { // Default to neutral if channel is null
+            channels[i] = 1500;
+            continue;
         }
+
+        // don't pass on the arming on a switch channel when disarmed in case the other end is also using this for arming
+        SRV_Channel::Function func = c->get_function();
+        if (func >= SRV_Channel::Function::k_rcin1 && func <= SRV_Channel::Function::k_rcin16) {
+            RC_Channels* rc = RC_Channels::get_singleton();
+            if (rc != nullptr) {
+                RC_Channel *chan = rc->channel(func - SRV_Channel::Function::k_rcin1);
+                if (!hal.util->get_soft_armed()
+                    && (chan->option.get() == int16_t(RC_Channel::AUX_FUNC::ARMDISARM)
+                        || chan->option.get() == int16_t(RC_Channel::AUX_FUNC::ARMDISARM_AIRMODE))) {
+                    channels[i] = 1000;
+                    continue;
+                }
+            }
+        }
+
+        channels[i] = c->get_output_pwm();
     }
 
     AP_CRSF_Protocol::Frame frame {};
