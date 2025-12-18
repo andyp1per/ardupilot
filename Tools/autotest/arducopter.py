@@ -12379,6 +12379,61 @@ return update, 1000
             if pname in all_params:
                 raise ValueError(f"{pname} in fetched-all-parameters when it should have gone away")
 
+    def test_SN74HC165(self):
+        """Test SN74HC165 Lua Driver using Relay to drive input"""
+        self.progress("Testing SN74HC165 Lua Driver")
+
+        # 1. Install Script
+        # We use a context manager to ensure the script is removed after the test
+        self.install_driver_script_context("SN74HC165.lua")
+
+        # 2. Configure Parameters
+        # Enable Scripting
+        self.set_parameter("SCR_ENABLE", 1)
+        
+        # Configure Relay 0 to use Pin 52. 
+        # This allows us to drive the pin High/Low from the test harness.
+        self.set_parameter("RELAY1_PIN", 52) 
+        self.reboot_sitl()
+
+        # Configure the Driver
+        self.set_parameters({
+            "HC165_ENABLE": 1,
+            "HC165_PIN_Q7": 52, # Input Pin matches the Relay Pin
+            "HC165_PIN_CP": 51, # Clock Pin (Output)
+            "HC165_PIN_PL": 50, # Latch Pin (Output)
+            "HC165_WIDTH": 1,   # 1 byte width
+            "HC165_DEBUG": 2,   # Continuous debug output
+        })
+        self.reboot_sitl()
+
+        # Start listening for text messages
+        self.context_collect('STATUSTEXT')
+
+        # 3. Test High State (All 1s)
+        self.progress("Driving Input High (expecting 0xFF)")
+        self.set_relay(0, 1) # Drive Pin 52 High
+        
+        # Since the pin is constant High, shifting it in 8 times results in 11111111 binary (255)
+        # We wait for the Named Float to match this value
+        self.wait_named_value("HC165_MASK", 255, timeout=10)
+
+        # 4. Test Low State (All 0s)
+        self.progress("Driving Input Low (expecting 0x00)")
+        self.set_relay(0, 0) # Drive Pin 52 Low
+        
+        # Since the pin is constant Low, shifting it in 8 times results in 0
+        self.wait_named_value("HC165_MASK", 0, timeout=10)
+
+        # 5. Test Invert Logic
+        self.progress("Testing Invert Logic")
+        self.set_parameter("HC165_INVERT", 1)
+        
+        # With Input Low (0) and Invert (1), we expect 1s -> 255
+        self.wait_named_value("HC165_MASK", 255, timeout=10)
+
+        self.progress("SN74HC165 Test Passed")
+
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
         ret = ([
@@ -12485,6 +12540,7 @@ return update, 1000
             self.MAV_CMD_MISSION_START_p1_p2,
             self.ScriptingAHRSSource,
             self.CommonOrigin,
+            self.test_SN74HC165,
         ])
         return ret
 
