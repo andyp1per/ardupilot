@@ -72,8 +72,8 @@ local TLIN_ENABLE = bind_add_param("ENABLE", 1, 0)
 --[[
   // @Param: TLIN_MODE
   // @DisplayName: Test Mode
-  // @Description: Test mode selection. 0=Hover (vertical steps), 1=Forward flight.
-  // @Values: 0:Hover,1:Forward
+  // @Description: Test mode selection. 0=Hover (vertical steps), 1=Forward flight, 2=Calibration (direct throttle).
+  // @Values: 0:Hover,1:Forward,2:Calibration
   // @User: Standard
 --]]
 local TLIN_MODE = bind_add_param("MODE", 2, 0)
@@ -473,6 +473,86 @@ local function complete_test(expo_result)
     g_state.phase = PHASE.DONE
 end
 
+-- Calibration mode throttle steps (relative to hover)
+-- Steps through throttle levels and measures acceleration directly
+local CALIB_STEPS = {
+    {offset = 0.00, duration_ms = 1500, name = "Hover"},
+    {offset = -0.01, duration_ms = 1200, name = "Thr-1%"},
+    {offset = 0.00, duration_ms = 800, name = "Return"},
+    {offset = 0.02, duration_ms = 1200, name = "Thr+2%"},
+    {offset = 0.00, duration_ms = 800, name = "Return"},
+    {offset = 0.04, duration_ms = 1200, name = "Thr+4%"},
+    {offset = 0.00, duration_ms = 800, name = "Return"},
+    {offset = 0.06, duration_ms = 1200, name = "Thr+6%"},
+    {offset = 0.00, duration_ms = 800, name = "Return"},
+    {offset = 0.08, duration_ms = 1200, name = "Thr+8%"},
+    {offset = 0.00, duration_ms = 800, name = "Return"},
+    {offset = 0.10, duration_ms = 1200, name = "Thr+10%"},
+    {offset = 0.00, duration_ms = 1500, name = "Hover"},
+}
+
+-- Run calibration test mode - direct throttle control
+local function run_calibration_test()
+    local now_ms = millis():tofloat()
+    local hover = MOT_THST_HOVER:get() or 0.5
+
+    if g_state.hover_step == 0 then
+        g_state.hover_step = 1
+        g_state.hover_step_start_ms = now_ms
+        g_state.collect_start_ms = now_ms
+        gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Starting calibration test")
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: hover=%.2f", hover))
+    end
+
+    -- Check if current step is complete
+    local step = CALIB_STEPS[g_state.hover_step]
+    if not step then
+        return true  -- all steps complete
+    end
+
+    local step_elapsed = now_ms - g_state.hover_step_start_ms
+    if step_elapsed >= step.duration_ms then
+        g_state.hover_step = g_state.hover_step + 1
+        g_state.hover_step_start_ms = now_ms
+        step = CALIB_STEPS[g_state.hover_step]
+        if not step then
+            gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Calibration done")
+            return true
+        end
+        local pct = math.floor(g_state.hover_step * 100 / #CALIB_STEPS)
+        local thr = hover + step.offset
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: %s %d%% thr=%.2f n=%d",
+                      step.name, pct, thr, g_state.sample_count))
+    end
+
+    -- Command direct throttle with zero rates (hold level)
+    local thr = hover + step.offset
+    thr = math.max(0.01, math.min(1.0, thr))  -- clamp to valid range
+    if not vehicle:set_target_rate_and_throttle(0, 0, 0, thr) then
+        gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Throttle cmd failed")
+    end
+
+    -- Collect data - skip first 300ms of each step for settling
+    if step_elapsed > 300 then
+        local throttle = motors:get_throttle()
+        local accel = ins:get_accel(0)
+        if throttle and accel then
+            add_data_point(throttle, accel:z())
+            g_state.last_throttle = throttle
+        end
+    end
+
+    -- Periodic diagnostic
+    if now_ms - g_state.last_diag_ms > 3000 then
+        g_state.last_diag_ms = now_ms
+        local rel_alt = (baro:get_altitude() or 0) - g_state.start_alt_m
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: thr=%.2f n=%d alt=%+.0fm",
+                      g_state.last_throttle, g_state.sample_count, rel_alt))
+    end
+
+    return false
+end
+
 -- Hover test vertical step sequence
 -- Need long descents to build velocity, then hard brakes for throttle spike
 -- Accept some altitude gain to get throttle variation
@@ -752,10 +832,13 @@ local function update()
 
         -- Run appropriate test mode
         local test_complete = false
-        if TLIN_MODE:get() == 0 then
+        local mode = TLIN_MODE:get()
+        if mode == 0 then
             test_complete = run_hover_test()
-        else
+        elseif mode == 1 then
             test_complete = run_forward_test()
+        else
+            test_complete = run_calibration_test()
         end
 
         if test_complete then
