@@ -153,13 +153,14 @@ LOITER mode.
 
 ## Interpreting Results
 
-The script reports both the calculated expo and current MOT_THST_EXPO:
+The script reports the calculated expo, current value, and spin_min analysis:
 ```
 TLIN: Result: Expo=0.65
 TLIN: Current MOT_THST_EXPO=0.65
+TLIN: SpinMin=0.12 (cur=0.15)
 ```
 
-If the values differ significantly (>0.1), consider updating MOT_THST_EXPO:
+If the expo values differ significantly (>0.1), consider updating MOT_THST_EXPO:
 ```
 param set MOT_THST_EXPO 0.65
 ```
@@ -168,13 +169,29 @@ Values typically range from 0.4 to 0.8 depending on motor/propeller
 combination. Lower values indicate more linear motors; higher values
 indicate more exponential thrust curves.
 
+### MOT_SPIN_MIN Analysis
+
+The script also analyzes low-throttle data to suggest an appropriate MOT_SPIN_MIN
+value. This is the throttle level at which motors begin producing meaningful
+thrust. The analysis looks for where body-frame acceleration exceeds gravity,
+indicating actual lift is being generated.
+
+If the suggested SpinMin differs from your current MOT_SPIN_MIN:
+```
+param set MOT_SPIN_MIN 0.12
+```
+
+Note: MOT_SPIN_MIN is particularly important for overpowered aircraft where the
+default value may be too high, causing poor throttle response at low power.
+
 ## Data Logging
 
 Results are logged to the onboard dataflash log with the "TLIN" message type
 containing:
 - Calculated expo value
 - Current MOT_THST_EXPO value
-- Data sufficiency indicator
+- Suggested MOT_SPIN_MIN value
+- Current MOT_SPIN_MIN value
 
 ## Companion Script
 

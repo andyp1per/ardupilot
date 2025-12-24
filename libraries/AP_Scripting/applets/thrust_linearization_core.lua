@@ -138,6 +138,7 @@ local TLIN_RESULT = bind_add_param("RESULT", 8, 0)
 -- Bind to existing ArduPilot parameters
 local MOT_THST_EXPO = bind_param("MOT_THST_EXPO")
 local MOT_THST_HOVER = bind_param("MOT_THST_HOVER")
+local MOT_SPIN_MIN = bind_param("MOT_SPIN_MIN")
 
 -- Runtime state
 local g_state = {
@@ -157,11 +158,18 @@ local g_state = {
     last_throttle = 0
 }
 
--- Data collection bins (10 bins from 0.1-1.0 throttle)
+-- Data collection bins (10 bins for expo calculation)
 local NUM_BINS = 10
 local g_bins = {}
 for i = 1, NUM_BINS do
     g_bins[i] = {sum_accel = 0, sum_throttle = 0, count = 0}
+end
+
+-- Additional bins for spin_min analysis (20 bins covering 0-0.2 throttle range)
+local NUM_SPIN_BINS = 20
+local g_spin_bins = {}
+for i = 1, NUM_SPIN_BINS do
+    g_spin_bins[i] = {sum_accel = 0, sum_throttle = 0, count = 0}
 end
 
 -- Get throttle range based on MOT_THST_HOVER
@@ -187,6 +195,15 @@ local function get_bin_index(throttle)
     return idx
 end
 
+-- Get spin bin index (1-20) for throttle values 0-0.2
+local function get_spin_bin_index(throttle)
+    if throttle < 0 or throttle > 0.2 then return nil end
+    local idx = math.floor(throttle / 0.01) + 1
+    if idx > NUM_SPIN_BINS then idx = NUM_SPIN_BINS end
+    if idx < 1 then idx = 1 end
+    return idx
+end
+
 -- Clear all data bins
 local function clear_bins()
     for i = 1, NUM_BINS do
@@ -194,17 +211,30 @@ local function clear_bins()
         g_bins[i].sum_throttle = 0
         g_bins[i].count = 0
     end
+    for i = 1, NUM_SPIN_BINS do
+        g_spin_bins[i].sum_accel = 0
+        g_spin_bins[i].sum_throttle = 0
+        g_spin_bins[i].count = 0
+    end
 end
 
 -- Add data point to appropriate bin
 local function add_data_point(throttle, accel_z)
     g_state.last_throttle = throttle
+    -- Add to expo bins (filtered by throttle range)
     local idx = get_bin_index(throttle)
     if idx then
         g_bins[idx].sum_accel = g_bins[idx].sum_accel + (-accel_z)
         g_bins[idx].sum_throttle = g_bins[idx].sum_throttle + throttle
         g_bins[idx].count = g_bins[idx].count + 1
         g_state.sample_count = g_state.sample_count + 1
+    end
+    -- Add to spin_min bins (always collect low throttle data)
+    local spin_idx = get_spin_bin_index(throttle)
+    if spin_idx then
+        g_spin_bins[spin_idx].sum_accel = g_spin_bins[spin_idx].sum_accel + (-accel_z)
+        g_spin_bins[spin_idx].sum_throttle = g_spin_bins[spin_idx].sum_throttle + throttle
+        g_spin_bins[spin_idx].count = g_spin_bins[spin_idx].count + 1
     end
 end
 
@@ -280,6 +310,42 @@ local function solve_expo()
     end
 
     return math.floor(best_expo * 100 + 0.5) / 100
+end
+
+-- Analyze spin bins to estimate MOT_SPIN_MIN
+-- Looks for transition from gravity-only (~9.8 m/s^2 down) to thrust
+local function analyze_spin_min()
+    -- Need at least a few data points
+    local total_spin_samples = 0
+    for i = 1, NUM_SPIN_BINS do
+        total_spin_samples = total_spin_samples + g_spin_bins[i].count
+    end
+    if total_spin_samples < 10 then
+        return nil  -- Not enough data
+    end
+
+    -- Gravity baseline: ~9.8 m/s^2 body-frame accel when no thrust
+    local GRAVITY = 9.8
+    local THRUST_THRESHOLD = 1.0  -- Accel must exceed gravity by this much
+
+    -- Find first bin where average accel significantly exceeds gravity
+    -- This indicates thrust is being generated
+    for i = 1, NUM_SPIN_BINS do
+        if g_spin_bins[i].count >= 3 then
+            local avg_accel = g_spin_bins[i].sum_accel / g_spin_bins[i].count
+            local avg_throttle = g_spin_bins[i].sum_throttle / g_spin_bins[i].count
+            -- If accel > gravity + threshold, props are generating thrust
+            if avg_accel > GRAVITY + THRUST_THRESHOLD then
+                -- Return suggested spin_min (slightly below this throttle)
+                local suggested = math.max(0, avg_throttle - 0.01)
+                return math.floor(suggested * 100 + 0.5) / 100
+            end
+        end
+    end
+
+    -- If no clear transition found, check current MOT_SPIN_MIN
+    local current_spin_min = MOT_SPIN_MIN:get() or 0.15
+    return current_spin_min  -- No change suggested
 end
 
 -- Check pre-flight conditions
@@ -382,12 +448,21 @@ local function complete_test(expo_result)
     gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Result: Expo=%.2f", expo_result))
     gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Current MOT_THST_EXPO=%.2f", MOT_THST_EXPO:get() or 0))
 
+    -- Analyze spin_min data
+    local spin_min_result = analyze_spin_min()
+    local current_spin_min = MOT_SPIN_MIN:get() or 0.15
+    if spin_min_result then
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: SpinMin=%.2f (cur=%.2f)",
+                      spin_min_result, current_spin_min))
+    end
+
     TLIN_RESULT:set(expo_result)
     TLIN_STATE:set(STATE.COMPLETE)
 
     -- Log results
-    logger:write("TLIN", "Expo,CurExpo,Bins", "fff",
-                 expo_result, MOT_THST_EXPO:get() or 0, have_sufficient_data() and 1 or 0)
+    logger:write("TLIN", "Expo,CurExpo,SpinMin,CurSpinMin", "ffff",
+                 expo_result, MOT_THST_EXPO:get() or 0,
+                 spin_min_result or 0, current_spin_min)
 
     vehicle:set_mode(MODE_LOITER)
     g_state.phase = PHASE.DONE
