@@ -495,20 +495,22 @@ end
 
 -- Calibration mode throttle steps (relative to hover)
 -- Steps through throttle levels and measures acceleration directly
+-- Calibration steps - shorter duration and smaller increments for safety
+-- On overpowered aircraft, large throttle increases cause rapid climb
 local CALIB_STEPS = {
-    {offset = 0.00, duration_ms = 1500, name = "Hover"},
-    {offset = -0.01, duration_ms = 1200, name = "Thr-1%"},
-    {offset = 0.00, duration_ms = 800, name = "Return"},
-    {offset = 0.02, duration_ms = 1200, name = "Thr+2%"},
-    {offset = 0.00, duration_ms = 800, name = "Return"},
-    {offset = 0.04, duration_ms = 1200, name = "Thr+4%"},
-    {offset = 0.00, duration_ms = 800, name = "Return"},
-    {offset = 0.06, duration_ms = 1200, name = "Thr+6%"},
-    {offset = 0.00, duration_ms = 800, name = "Return"},
-    {offset = 0.08, duration_ms = 1200, name = "Thr+8%"},
-    {offset = 0.00, duration_ms = 800, name = "Return"},
-    {offset = 0.10, duration_ms = 1200, name = "Thr+10%"},
-    {offset = 0.00, duration_ms = 1500, name = "Hover"},
+    {offset = 0.00, duration_ms = 1000, name = "Hover"},
+    {offset = -0.01, duration_ms = 600, name = "Thr-1%"},
+    {offset = 0.00, duration_ms = 400, name = "Return"},
+    {offset = 0.01, duration_ms = 600, name = "Thr+1%"},
+    {offset = 0.00, duration_ms = 400, name = "Return"},
+    {offset = 0.02, duration_ms = 600, name = "Thr+2%"},
+    {offset = 0.00, duration_ms = 400, name = "Return"},
+    {offset = 0.03, duration_ms = 600, name = "Thr+3%"},
+    {offset = 0.00, duration_ms = 400, name = "Return"},
+    {offset = 0.04, duration_ms = 500, name = "Thr+4%"},
+    {offset = 0.00, duration_ms = 400, name = "Return"},
+    {offset = 0.05, duration_ms = 500, name = "Thr+5%"},
+    {offset = 0.00, duration_ms = 1000, name = "Hover"},
 }
 
 -- Run calibration test mode - direct throttle control
