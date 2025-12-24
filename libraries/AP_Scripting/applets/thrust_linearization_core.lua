@@ -469,15 +469,27 @@ local function complete_test(expo_result)
 end
 
 -- Hover test vertical step sequence
+-- Short aggressive blips to capture acceleration transients
+-- Alternating up/down to manage altitude
 local HOVER_STEPS = {
-    {vz = 0.0, duration_ms = 2000, name = "Hold"},
-    {vz = -3.0, duration_ms = 3000, name = "Climb"},
-    {vz = 0.0, duration_ms = 2000, name = "Hold"},
-    {vz = 2.0, duration_ms = 3000, name = "Descend"},
-    {vz = 0.0, duration_ms = 2000, name = "Hold"},
-    {vz = -5.0, duration_ms = 2000, name = "FastClimb"},
-    {vz = 0.0, duration_ms = 2000, name = "Hold"},
-    {vz = 3.0, duration_ms = 2000, name = "FastDesc"},
+    {vz = 0.0, duration_ms = 1000, name = "Hold"},
+    -- First set of blips
+    {vz = -8.0, duration_ms = 600, name = "BlipUp1"},
+    {vz = 8.0, duration_ms = 600, name = "BlipDn1"},
+    {vz = 0.0, duration_ms = 500, name = "Settle"},
+    -- Second set - faster
+    {vz = -10.0, duration_ms = 500, name = "BlipUp2"},
+    {vz = 10.0, duration_ms = 500, name = "BlipDn2"},
+    {vz = 0.0, duration_ms = 500, name = "Settle"},
+    -- Third set
+    {vz = -8.0, duration_ms = 700, name = "BlipUp3"},
+    {vz = 8.0, duration_ms = 700, name = "BlipDn3"},
+    {vz = 0.0, duration_ms = 500, name = "Settle"},
+    -- Fourth set - aggressive
+    {vz = -12.0, duration_ms = 400, name = "BlipUp4"},
+    {vz = 12.0, duration_ms = 400, name = "BlipDn4"},
+    {vz = 0.0, duration_ms = 500, name = "Settle"},
+    -- Longer holds to capture hover throttle
     {vz = 0.0, duration_ms = 2000, name = "Hold"},
 }
 
