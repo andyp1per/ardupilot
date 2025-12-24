@@ -471,13 +471,13 @@ end
 -- Hover test vertical step sequence
 local HOVER_STEPS = {
     {vz = 0.0, duration_ms = 2000, name = "Hold"},
-    {vz = -1.5, duration_ms = 3000, name = "Climb"},
+    {vz = -3.0, duration_ms = 3000, name = "Climb"},
     {vz = 0.0, duration_ms = 2000, name = "Hold"},
-    {vz = 1.0, duration_ms = 3000, name = "Descend"},
+    {vz = 2.0, duration_ms = 3000, name = "Descend"},
     {vz = 0.0, duration_ms = 2000, name = "Hold"},
-    {vz = -2.0, duration_ms = 2000, name = "FastClimb"},
+    {vz = -5.0, duration_ms = 2000, name = "FastClimb"},
     {vz = 0.0, duration_ms = 2000, name = "Hold"},
-    {vz = 1.5, duration_ms = 2000, name = "FastDesc"},
+    {vz = 3.0, duration_ms = 2000, name = "FastDesc"},
     {vz = 0.0, duration_ms = 2000, name = "Hold"},
 }
 
