@@ -175,8 +175,8 @@ end
 -- Get throttle range based on MOT_THST_HOVER
 local function get_throttle_range()
     local hover = MOT_THST_HOVER:get() or 0.5
-    -- Range from 30% of hover to min(2.5x hover, 1.0)
-    local min_thr = hover * 0.3
+    -- Range from 1% (to accept overpowered vehicles) to min(2.5x hover, 1.0)
+    local min_thr = 0.01
     local max_thr = math.min(hover * 2.5, 1.0)
     return min_thr, max_thr
 end
