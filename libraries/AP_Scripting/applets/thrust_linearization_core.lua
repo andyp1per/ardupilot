@@ -469,28 +469,31 @@ local function complete_test(expo_result)
 end
 
 -- Hover test vertical step sequence
--- Short aggressive blips to capture acceleration transients
--- Alternating up/down to manage altitude
+-- Asymmetric blips: short up, longer down to maintain altitude
+-- Down/brake phases generate highest throttle on overpowered aircraft
 local HOVER_STEPS = {
     {vz = 0.0, duration_ms = 1000, name = "Hold"},
-    -- First set of blips
-    {vz = -8.0, duration_ms = 600, name = "BlipUp1"},
-    {vz = 8.0, duration_ms = 600, name = "BlipDn1"},
+    -- Initial descent to give altitude margin
+    {vz = 4.0, duration_ms = 1500, name = "DescInit"},
     {vz = 0.0, duration_ms = 500, name = "Settle"},
-    -- Second set - faster
-    {vz = -10.0, duration_ms = 500, name = "BlipUp2"},
-    {vz = 10.0, duration_ms = 500, name = "BlipDn2"},
-    {vz = 0.0, duration_ms = 500, name = "Settle"},
-    -- Third set
-    {vz = -8.0, duration_ms = 700, name = "BlipUp3"},
-    {vz = 8.0, duration_ms = 700, name = "BlipDn3"},
-    {vz = 0.0, duration_ms = 500, name = "Settle"},
-    -- Fourth set - aggressive
-    {vz = -12.0, duration_ms = 400, name = "BlipUp4"},
-    {vz = 12.0, duration_ms = 400, name = "BlipDn4"},
-    {vz = 0.0, duration_ms = 500, name = "Settle"},
-    -- Longer holds to capture hover throttle
-    {vz = 0.0, duration_ms = 2000, name = "Hold"},
+    -- Set 1: short up, longer down
+    {vz = -8.0, duration_ms = 400, name = "Up1"},
+    {vz = 10.0, duration_ms = 800, name = "Dn1"},
+    {vz = 0.0, duration_ms = 400, name = "Brake1"},
+    -- Set 2: aggressive
+    {vz = -10.0, duration_ms = 300, name = "Up2"},
+    {vz = 12.0, duration_ms = 700, name = "Dn2"},
+    {vz = 0.0, duration_ms = 400, name = "Brake2"},
+    -- Set 3: very aggressive with hard brake
+    {vz = -12.0, duration_ms = 300, name = "Up3"},
+    {vz = 15.0, duration_ms = 600, name = "Dn3"},
+    {vz = -5.0, duration_ms = 500, name = "Brake3"},
+    -- Set 4: repeat pattern
+    {vz = -8.0, duration_ms = 400, name = "Up4"},
+    {vz = 12.0, duration_ms = 800, name = "Dn4"},
+    {vz = 0.0, duration_ms = 500, name = "Brake4"},
+    -- Final hold
+    {vz = 0.0, duration_ms = 1500, name = "Hold"},
 }
 
 -- Run hover test mode
