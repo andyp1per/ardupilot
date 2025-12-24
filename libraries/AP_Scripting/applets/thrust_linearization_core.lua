@@ -405,7 +405,12 @@ local function run_hover_test()
         g_state.hover_step = 1
         g_state.hover_step_start_ms = now_ms
         g_state.collect_start_ms = now_ms
+        -- Debug: show initial throttle values from both sources
+        local thr = motors:get_throttle()
+        local thr_in = motors:get_throttle_in()
         gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Starting hover test")
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: thr=%.2f thr_in=%.2f",
+                      thr or -1, thr_in or -1))
     end
 
     -- Check if current step is complete
@@ -423,9 +428,10 @@ local function run_hover_test()
             gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Collecting done")
             return true  -- all steps complete
         end
-        -- Show progress: step name and percentage
+        -- Show progress: step name, percentage, and current throttle/samples
         local pct = math.floor(g_state.hover_step * 100 / #HOVER_STEPS)
-        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: %s (%d%%)", step.name, pct))
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: %s %d%% t=%.2f n=%d",
+                      step.name, pct, g_state.last_throttle, g_state.sample_count))
     end
 
     -- Command velocity (NED: positive Z is down)
@@ -437,11 +443,18 @@ local function run_hover_test()
         gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Velocity cmd failed")
     end
 
-    -- Collect data
+    -- Collect data - try both throttle sources
     local throttle = motors:get_throttle()
+    if not throttle or throttle < MIN_THROTTLE then
+        throttle = motors:get_throttle_in()
+    end
     local accel = ins:get_accel(0)
-    if throttle and accel then
+    if throttle and accel and throttle >= MIN_THROTTLE then
         add_data_point(throttle, accel:z())
+    end
+    -- Track last throttle for diagnostics even if not binned
+    if throttle then
+        g_state.last_throttle = throttle
     end
 
     -- Periodic diagnostic every 5 seconds
