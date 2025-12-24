@@ -474,32 +474,33 @@ local function complete_test(expo_result)
 end
 
 -- Hover test vertical step sequence
--- Start with climb for safety margin, then oscillate
+-- Balanced oscillations - equal climb/descent to maintain altitude
 -- Hard brakes from descent generate highest throttle
 local HOVER_STEPS = {
     {vz = 0.0, duration_ms = 1000, name = "Hold"},
-    -- Initial climb for safety margin (5m up)
-    {vz = -3.0, duration_ms = 1500, name = "ClimbInit"},
-    {vz = 0.0, duration_ms = 500, name = "Settle"},
-    -- Set 1: climb then descend back
-    {vz = -6.0, duration_ms = 500, name = "Up1"},
-    {vz = 6.0, duration_ms = 600, name = "Dn1"},
-    {vz = -4.0, duration_ms = 400, name = "Brake1"},
+    -- Set 1: balanced oscillation
+    {vz = -5.0, duration_ms = 400, name = "Up1"},
+    {vz = 5.0, duration_ms = 500, name = "Dn1"},
+    {vz = 0.0, duration_ms = 300, name = "Settle1"},
     -- Set 2: more aggressive
-    {vz = -8.0, duration_ms = 400, name = "Up2"},
-    {vz = 10.0, duration_ms = 600, name = "Dn2"},
-    {vz = -5.0, duration_ms = 500, name = "Brake2"},
+    {vz = -8.0, duration_ms = 350, name = "Up2"},
+    {vz = 8.0, duration_ms = 450, name = "Dn2"},
+    {vz = 0.0, duration_ms = 300, name = "Settle2"},
     -- Set 3: aggressive with hard brake
-    {vz = -10.0, duration_ms = 400, name = "Up3"},
-    {vz = 12.0, duration_ms = 500, name = "Dn3"},
-    {vz = -6.0, duration_ms = 600, name = "Brake3"},
-    -- Set 4: very aggressive
-    {vz = -12.0, duration_ms = 300, name = "Up4"},
-    {vz = 15.0, duration_ms = 400, name = "Dn4"},
-    {vz = -8.0, duration_ms = 600, name = "Brake4"},
-    -- Return to start altitude
-    {vz = -3.0, duration_ms = 1000, name = "Return"},
-    {vz = 0.0, duration_ms = 1500, name = "Hold"},
+    {vz = -10.0, duration_ms = 300, name = "Up3"},
+    {vz = 12.0, duration_ms = 400, name = "Dn3"},
+    {vz = -6.0, duration_ms = 400, name = "Brake3"},
+    {vz = 0.0, duration_ms = 300, name = "Settle3"},
+    -- Set 4: very aggressive with hard brake
+    {vz = -10.0, duration_ms = 300, name = "Up4"},
+    {vz = 15.0, duration_ms = 350, name = "Dn4"},
+    {vz = -8.0, duration_ms = 400, name = "Brake4"},
+    {vz = 0.0, duration_ms = 300, name = "Settle4"},
+    -- Set 5: repeat pattern
+    {vz = -8.0, duration_ms = 350, name = "Up5"},
+    {vz = 12.0, duration_ms = 400, name = "Dn5"},
+    {vz = -6.0, duration_ms = 400, name = "Brake5"},
+    {vz = 0.0, duration_ms = 1000, name = "Hold"},
 }
 
 -- Run hover test mode
