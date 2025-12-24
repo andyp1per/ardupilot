@@ -392,12 +392,17 @@ local function check_safety()
         end
     end
 
-    -- Check altitude limits
+    -- Check altitude limits (relative to start)
+    -- Allow 15m below start (for descent maneuvers) and 25m above
     local alt = baro:get_altitude()
     if alt then
         local rel_alt = alt - g_state.start_alt_m
-        if rel_alt < -5 or rel_alt > 50 then
-            gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Altitude limit exceeded")
+        if rel_alt < -15 then
+            gcs:send_text(MAV_SEVERITY.WARNING, string.format("TLIN: Too low (%.0fm)", rel_alt))
+            return false
+        end
+        if rel_alt > 25 then
+            gcs:send_text(MAV_SEVERITY.WARNING, string.format("TLIN: Too high (%.0fm)", rel_alt))
             return false
         end
     end
@@ -550,11 +555,12 @@ local function run_hover_test()
         g_state.last_throttle = throttle
     end
 
-    -- Periodic diagnostic every 5 seconds
+    -- Periodic diagnostic every 5 seconds - include relative altitude
     if now_ms - g_state.last_diag_ms > 5000 then
         g_state.last_diag_ms = now_ms
-        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: thr=%.2f n=%d",
-                      g_state.last_throttle, g_state.sample_count))
+        local rel_alt = (baro:get_altitude() or 0) - g_state.start_alt_m
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: thr=%.2f n=%d alt=%+.0fm",
+                      g_state.last_throttle, g_state.sample_count, rel_alt))
     end
 
     return false
