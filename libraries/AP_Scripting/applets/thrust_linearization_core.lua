@@ -474,30 +474,31 @@ local function complete_test(expo_result)
 end
 
 -- Hover test vertical step sequence
--- Asymmetric blips: short up, longer down to maintain altitude
--- Down/brake phases generate highest throttle on overpowered aircraft
+-- Start with climb for safety margin, then oscillate
+-- Hard brakes from descent generate highest throttle
 local HOVER_STEPS = {
     {vz = 0.0, duration_ms = 1000, name = "Hold"},
-    -- Initial descent to give altitude margin
-    {vz = 4.0, duration_ms = 1500, name = "DescInit"},
+    -- Initial climb for safety margin (5m up)
+    {vz = -3.0, duration_ms = 1500, name = "ClimbInit"},
     {vz = 0.0, duration_ms = 500, name = "Settle"},
-    -- Set 1: short up, longer down
-    {vz = -8.0, duration_ms = 400, name = "Up1"},
-    {vz = 10.0, duration_ms = 800, name = "Dn1"},
-    {vz = 0.0, duration_ms = 400, name = "Brake1"},
-    -- Set 2: aggressive
-    {vz = -10.0, duration_ms = 300, name = "Up2"},
-    {vz = 12.0, duration_ms = 700, name = "Dn2"},
-    {vz = 0.0, duration_ms = 400, name = "Brake2"},
-    -- Set 3: very aggressive with hard brake
-    {vz = -12.0, duration_ms = 300, name = "Up3"},
-    {vz = 15.0, duration_ms = 600, name = "Dn3"},
-    {vz = -5.0, duration_ms = 500, name = "Brake3"},
-    -- Set 4: repeat pattern
-    {vz = -8.0, duration_ms = 400, name = "Up4"},
-    {vz = 12.0, duration_ms = 800, name = "Dn4"},
-    {vz = 0.0, duration_ms = 500, name = "Brake4"},
-    -- Final hold
+    -- Set 1: climb then descend back
+    {vz = -6.0, duration_ms = 500, name = "Up1"},
+    {vz = 6.0, duration_ms = 600, name = "Dn1"},
+    {vz = -4.0, duration_ms = 400, name = "Brake1"},
+    -- Set 2: more aggressive
+    {vz = -8.0, duration_ms = 400, name = "Up2"},
+    {vz = 10.0, duration_ms = 600, name = "Dn2"},
+    {vz = -5.0, duration_ms = 500, name = "Brake2"},
+    -- Set 3: aggressive with hard brake
+    {vz = -10.0, duration_ms = 400, name = "Up3"},
+    {vz = 12.0, duration_ms = 500, name = "Dn3"},
+    {vz = -6.0, duration_ms = 600, name = "Brake3"},
+    -- Set 4: very aggressive
+    {vz = -12.0, duration_ms = 300, name = "Up4"},
+    {vz = 15.0, duration_ms = 400, name = "Dn4"},
+    {vz = -8.0, duration_ms = 600, name = "Brake4"},
+    -- Return to start altitude
+    {vz = -3.0, duration_ms = 1000, name = "Return"},
     {vz = 0.0, duration_ms = 1500, name = "Hold"},
 }
 
