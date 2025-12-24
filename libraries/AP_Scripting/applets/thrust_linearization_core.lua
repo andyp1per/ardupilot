@@ -137,6 +137,7 @@ local TLIN_RESULT = bind_add_param("RESULT", 8, 0)
 
 -- Bind to existing ArduPilot parameters
 local MOT_THST_EXPO = bind_param("MOT_THST_EXPO")
+local MOT_THST_HOVER = bind_param("MOT_THST_HOVER")
 
 -- Runtime state
 local g_state = {
@@ -163,16 +164,24 @@ for i = 1, NUM_BINS do
     g_bins[i] = {sum_accel = 0, sum_throttle = 0, count = 0}
 end
 
--- Minimum throttle for binning (below this is idle/ground)
-local MIN_THROTTLE = 0.05
+-- Get throttle range based on MOT_THST_HOVER
+local function get_throttle_range()
+    local hover = MOT_THST_HOVER:get() or 0.5
+    -- Range from 30% of hover to min(2.5x hover, 1.0)
+    local min_thr = hover * 0.3
+    local max_thr = math.min(hover * 2.5, 1.0)
+    return min_thr, max_thr
+end
 
--- Get throttle bin index (1-10) for given throttle value (0-1)
+-- Get throttle bin index (1-10) for given throttle value
 local function get_bin_index(throttle)
-    if throttle < MIN_THROTTLE then return nil end
-    if throttle > 1.0 then throttle = 1.0 end
-    -- Map MIN_THROTTLE-1.0 to bins 1-10
-    local range = 1.0 - MIN_THROTTLE
-    local idx = math.floor((throttle - MIN_THROTTLE) / range * NUM_BINS) + 1
+    local min_thr, max_thr = get_throttle_range()
+    if throttle < min_thr then return nil end
+    if throttle > max_thr then throttle = max_thr end
+    -- Map min_thr-max_thr to bins 1-10
+    local range = max_thr - min_thr
+    if range <= 0 then return 1 end
+    local idx = math.floor((throttle - min_thr) / range * NUM_BINS) + 1
     if idx > NUM_BINS then idx = NUM_BINS end
     if idx < 1 then idx = 1 end
     return idx
@@ -405,12 +414,12 @@ local function run_hover_test()
         g_state.hover_step = 1
         g_state.hover_step_start_ms = now_ms
         g_state.collect_start_ms = now_ms
-        -- Debug: show initial throttle values from both sources
-        local thr = motors:get_throttle()
-        local thr_in = motors:get_throttle_in()
+        -- Show throttle range based on MOT_THST_HOVER
+        local min_thr, max_thr = get_throttle_range()
+        local hover = MOT_THST_HOVER:get() or 0.5
         gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Starting hover test")
-        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: thr=%.2f thr_in=%.2f",
-                      thr or -1, thr_in or -1))
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: hover=%.2f range=%.2f-%.2f",
+                      hover, min_thr, max_thr))
     end
 
     -- Check if current step is complete
@@ -443,17 +452,11 @@ local function run_hover_test()
         gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Velocity cmd failed")
     end
 
-    -- Collect data - try both throttle sources
+    -- Collect data
     local throttle = motors:get_throttle()
-    if not throttle or throttle < MIN_THROTTLE then
-        throttle = motors:get_throttle_in()
-    end
     local accel = ins:get_accel(0)
-    if throttle and accel and throttle >= MIN_THROTTLE then
+    if throttle and accel then
         add_data_point(throttle, accel:z())
-    end
-    -- Track last throttle for diagnostics even if not binned
-    if throttle then
         g_state.last_throttle = throttle
     end
 
