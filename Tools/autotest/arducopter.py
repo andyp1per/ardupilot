@@ -13238,6 +13238,82 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_pop()
         self.reboot_sitl()
 
+    def ScriptThrustLinearizationFull(self):
+        '''test the thrust_linearization_core.lua full test mode'''
+        self.context_push()
+        self.context_collect('STATUSTEXT')
+
+        # Enable scripting with RC switch option
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "RC9_OPTION": 300,  # Scripting1 aux function
+        })
+        self.reboot_sitl()
+
+        # Install the thrust linearization core script and reboot
+        self.install_applet_script_context('thrust_linearization_core.lua')
+        self.reboot_sitl()
+
+        # Wait for script to initialize and create parameters
+        self.wait_statustext("TLIN: Core script loaded", check_context=True, timeout=30)
+
+        # Configure for full test mode (auto LOITER->GUIDED + all three tests)
+        self.set_parameters({
+            "TLIN_ENABLE": 1,
+            "TLIN_MODE": 3,     # Full test mode
+            "TLIN_SPD": 5,      # 5 m/s forward speed
+            "TLIN_DIST": 80,    # Max distance
+            "TLIN_LEAN": 45,    # Max lean angle
+        })
+
+        self.wait_ready_to_arm()
+
+        # Take off in LOITER mode - full mode will auto-switch to GUIDED
+        self.change_mode('LOITER')
+        self.arm_vehicle()
+        self.user_takeoff(alt_min=25)
+
+        # Wait for stable hover
+        self.delay_sim_time(3)
+
+        # Trigger test via RC switch - should auto-switch to GUIDED
+        self.progress("Testing full test mode with auto GUIDED transition")
+        self.set_rc(9, 2000)  # Switch high to start test
+
+        # Should see auto-switch to GUIDED then test sequence
+        self.wait_statustext("TLIN: Switching to GUIDED", check_context=True, timeout=10)
+        self.wait_statustext("TLIN: Starting test", check_context=True, timeout=10)
+        self.wait_statustext("TLIN: Full test - starting calibration", check_context=True, timeout=10)
+
+        # Wait for calibration to complete
+        self.wait_statustext("TLIN: Calibration done, starting hover test", check_context=True, timeout=60)
+
+        # Wait for hover test to complete
+        self.wait_statustext("TLIN: Hover done, starting forward test", check_context=True, timeout=60)
+
+        # Wait for full test to complete (forward test can take up to 120s)
+        self.wait_statustext("TLIN: Result: Expo=", check_context=True, timeout=180, regex=True)
+
+        # Verify state is complete
+        state = self.get_parameter("TLIN_STATE")
+        if state != 2:
+            raise NotAchievedException("TLIN_STATE should be 2 (Complete), got %d" % state)
+
+        # Verify we got a result
+        result = self.get_parameter("TLIN_RESULT")
+        self.progress("Full test thrust linearization result: Expo=%.2f" % result)
+        if result < 0 or result > 1:
+            raise NotAchievedException("TLIN_RESULT %.2f out of range [0,1]" % result)
+
+        # Switch back to low
+        self.set_rc(9, 1000)
+
+        # Land and cleanup
+        self.do_RTL()
+
+        self.context_pop()
+        self.reboot_sitl()
+
     def AHRSTrimLand(self):
         '''test land detector with significant AHRS trim'''
         self.context_push()
@@ -15783,6 +15859,7 @@ return update, 1000
             self.ScriptCopterPosOffsets,
             self.ScriptThrustLinearization,
             self.ScriptThrustLinearizationForward,
+            self.ScriptThrustLinearizationFull,
             self.MountSolo,
             self.FlyMissionTwice,
             self.FlyMissionTwiceWithReset,
