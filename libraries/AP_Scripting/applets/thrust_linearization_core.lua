@@ -72,8 +72,8 @@ local TLIN_ENABLE = bind_add_param("ENABLE", 1, 0)
 --[[
   // @Param: TLIN_MODE
   // @DisplayName: Test Mode
-  // @Description: Test mode selection. 0=Hover (vertical steps), 1=Forward flight, 2=Calibration (direct throttle).
-  // @Values: 0:Hover,1:Forward,2:Calibration
+  // @Description: Test mode selection. 0=Hover, 1=Forward, 2=Calibration, 3=Full (all three in sequence).
+  // @Values: 0:Hover,1:Forward,2:Calibration,3:Full
   // @User: Standard
 --]]
 local TLIN_MODE = bind_add_param("MODE", 2, 0)
@@ -140,6 +140,13 @@ local MOT_THST_EXPO = bind_param("MOT_THST_EXPO")
 local MOT_THST_HOVER = bind_param("MOT_THST_HOVER")
 local MOT_SPIN_MIN = bind_param("MOT_SPIN_MIN")
 
+-- Full test sub-phases
+local FULL_SUBTEST = {
+    CALIB = 1,
+    HOVER = 2,
+    FORWARD = 3
+}
+
 -- Runtime state
 local g_state = {
     phase = PHASE.INIT,
@@ -155,7 +162,9 @@ local g_state = {
     turnaround_count = 0,
     sample_count = 0,
     last_diag_ms = 0,
-    last_throttle = 0
+    last_throttle = 0,
+    full_subtest = 0,  -- For full test mode: tracks which sub-test
+    waiting_for_guided = false  -- For auto LOITER->GUIDED transition
 }
 
 -- Data collection bins (10 bins for expo calculation)
@@ -355,10 +364,21 @@ local function check_preconditions()
         return false
     end
 
+    -- In Full mode, auto-switch from LOITER to GUIDED
     if vehicle:get_mode() ~= MODE_GUIDED then
+        if TLIN_MODE:get() == 3 and vehicle:get_mode() == MODE_LOITER then
+            gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Switching to GUIDED")
+            if not vehicle:set_mode(MODE_GUIDED) then
+                gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Failed to set GUIDED")
+                return false
+            end
+            g_state.waiting_for_guided = true
+            return false  -- Will retry next cycle
+        end
         gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Switch to GUIDED first")
         return false
     end
+    g_state.waiting_for_guided = false
 
     local batt_pct = battery:capacity_remaining_pct(0)
     if batt_pct and batt_pct < 20 then
@@ -746,9 +766,25 @@ local function run_forward_test()
 end
 
 -- Start the test
+-- Reset step counters for next sub-test (keeps bin data)
+local function reset_for_subtest()
+    g_state.hover_step = 0
+    g_state.hover_step_start_ms = 0
+    g_state.collect_start_ms = 0
+    g_state.fwd_phase = 0
+    g_state.turnaround_count = 0
+    -- Keep sample_count - accumulates across sub-tests
+    -- Update start location/altitude for new sub-test
+    g_state.start_alt_m = baro:get_altitude() or 0
+    g_state.start_loc = ahrs:get_location()
+end
+
 local function start_test()
     if not check_preconditions() then
-        TLIN_STATE:set(STATE.ERROR)
+        -- In full mode waiting for GUIDED, don't set error
+        if not g_state.waiting_for_guided then
+            TLIN_STATE:set(STATE.ERROR)
+        end
         return
     end
 
@@ -767,6 +803,14 @@ local function start_test()
     g_state.sample_count = 0
     g_state.last_diag_ms = 0
     g_state.last_throttle = 0
+    g_state.full_subtest = 0
+    g_state.waiting_for_guided = false
+
+    -- In full mode, start with calibration
+    if TLIN_MODE:get() == 3 then
+        g_state.full_subtest = FULL_SUBTEST.CALIB
+        gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Full test - starting calibration")
+    end
 
     clear_bins()
 
@@ -784,10 +828,15 @@ local function update()
     -- Check for RC switch trigger
     local switch_pos = rc:get_aux_cached(SCRIPTING_AUX_FUNC)
     if switch_pos then
-        if switch_pos == 2 and g_state.last_switch_pos ~= 2 then
-            -- Switch went high - start test
-            if g_state.phase == PHASE.INIT or g_state.phase == PHASE.DONE then
-                g_state.phase = PHASE.INIT
+        if switch_pos == 2 then
+            if g_state.last_switch_pos ~= 2 then
+                -- Switch went high - start test
+                if g_state.phase == PHASE.INIT or g_state.phase == PHASE.DONE then
+                    g_state.phase = PHASE.INIT
+                    start_test()
+                end
+            elseif g_state.waiting_for_guided then
+                -- Keep retrying while waiting for GUIDED mode
                 start_test()
             end
         elseif switch_pos == 0 and g_state.last_switch_pos ~= 0 then
@@ -795,6 +844,7 @@ local function update()
             if g_state.phase ~= PHASE.INIT and g_state.phase ~= PHASE.DONE then
                 abort_test("RC switch")
             end
+            g_state.waiting_for_guided = false
         end
         g_state.last_switch_pos = switch_pos
     end
@@ -833,7 +883,30 @@ local function update()
         -- Run appropriate test mode
         local test_complete = false
         local mode = TLIN_MODE:get()
-        if mode == 0 then
+
+        if mode == 3 then
+            -- Full test mode: run calibration -> hover -> forward in sequence
+            if g_state.full_subtest == FULL_SUBTEST.CALIB then
+                test_complete = run_calibration_test()
+                if test_complete then
+                    gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Calibration done, starting hover test")
+                    reset_for_subtest()
+                    g_state.full_subtest = FULL_SUBTEST.HOVER
+                    test_complete = false  -- Continue to next sub-test
+                end
+            elseif g_state.full_subtest == FULL_SUBTEST.HOVER then
+                test_complete = run_hover_test()
+                if test_complete then
+                    gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Hover done, starting forward test")
+                    reset_for_subtest()
+                    g_state.full_subtest = FULL_SUBTEST.FORWARD
+                    test_complete = false  -- Continue to next sub-test
+                end
+            elseif g_state.full_subtest == FULL_SUBTEST.FORWARD then
+                test_complete = run_forward_test()
+                -- When forward completes, we're done
+            end
+        elseif mode == 0 then
             test_complete = run_hover_test()
         elseif mode == 1 then
             test_complete = run_forward_test()
