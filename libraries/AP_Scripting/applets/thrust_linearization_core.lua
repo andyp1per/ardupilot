@@ -150,7 +150,10 @@ local g_state = {
     hover_step_start_ms = 0,
     fwd_phase = 0,
     fwd_heading_rad = 0,
-    turnaround_count = 0
+    turnaround_count = 0,
+    sample_count = 0,
+    last_diag_ms = 0,
+    last_throttle = 0
 }
 
 -- Data collection bins (10 bins from 0.1-1.0 throttle)
@@ -160,12 +163,18 @@ for i = 1, NUM_BINS do
     g_bins[i] = {sum_accel = 0, sum_throttle = 0, count = 0}
 end
 
+-- Minimum throttle for binning (below this is idle/ground)
+local MIN_THROTTLE = 0.05
+
 -- Get throttle bin index (1-10) for given throttle value (0-1)
 local function get_bin_index(throttle)
-    if throttle < 0.1 then return nil end
+    if throttle < MIN_THROTTLE then return nil end
     if throttle > 1.0 then throttle = 1.0 end
-    local idx = math.floor((throttle - 0.1) * 10) + 1
+    -- Map MIN_THROTTLE-1.0 to bins 1-10
+    local range = 1.0 - MIN_THROTTLE
+    local idx = math.floor((throttle - MIN_THROTTLE) / range * NUM_BINS) + 1
     if idx > NUM_BINS then idx = NUM_BINS end
+    if idx < 1 then idx = 1 end
     return idx
 end
 
@@ -180,11 +189,13 @@ end
 
 -- Add data point to appropriate bin
 local function add_data_point(throttle, accel_z)
+    g_state.last_throttle = throttle
     local idx = get_bin_index(throttle)
     if idx then
         g_bins[idx].sum_accel = g_bins[idx].sum_accel + (-accel_z)
         g_bins[idx].sum_throttle = g_bins[idx].sum_throttle + throttle
         g_bins[idx].count = g_bins[idx].count + 1
+        g_state.sample_count = g_state.sample_count + 1
     end
 end
 
@@ -270,7 +281,7 @@ local function check_preconditions()
     end
 
     if vehicle:get_mode() ~= MODE_GUIDED then
-        gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Must be in GUIDED mode")
+        gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Switch to GUIDED first")
         return false
     end
 
@@ -375,15 +386,15 @@ end
 
 -- Hover test vertical step sequence
 local HOVER_STEPS = {
-    {vz = 0.0, duration_ms = 2000},   -- stabilize
-    {vz = -1.5, duration_ms = 3000},  -- climb
-    {vz = 0.0, duration_ms = 2000},   -- stabilize
-    {vz = 1.0, duration_ms = 3000},   -- descend
-    {vz = 0.0, duration_ms = 2000},   -- stabilize
-    {vz = -2.0, duration_ms = 2000},  -- fast climb
-    {vz = 0.0, duration_ms = 2000},   -- stabilize
-    {vz = 1.5, duration_ms = 2000},   -- fast descend
-    {vz = 0.0, duration_ms = 2000},   -- stabilize
+    {vz = 0.0, duration_ms = 2000, name = "Hold"},
+    {vz = -1.5, duration_ms = 3000, name = "Climb"},
+    {vz = 0.0, duration_ms = 2000, name = "Hold"},
+    {vz = 1.0, duration_ms = 3000, name = "Descend"},
+    {vz = 0.0, duration_ms = 2000, name = "Hold"},
+    {vz = -2.0, duration_ms = 2000, name = "FastClimb"},
+    {vz = 0.0, duration_ms = 2000, name = "Hold"},
+    {vz = 1.5, duration_ms = 2000, name = "FastDesc"},
+    {vz = 0.0, duration_ms = 2000, name = "Hold"},
 }
 
 -- Run hover test mode
@@ -400,7 +411,6 @@ local function run_hover_test()
     -- Check if current step is complete
     local step = HOVER_STEPS[g_state.hover_step]
     if not step then
-        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Test done, step=%d", g_state.hover_step))
         return true  -- all steps complete
     end
 
@@ -408,12 +418,14 @@ local function run_hover_test()
     if step_elapsed >= step.duration_ms then
         g_state.hover_step = g_state.hover_step + 1
         g_state.hover_step_start_ms = now_ms
-        gcs:send_text(MAV_SEVERITY.DEBUG, string.format("TLIN: Step %d", g_state.hover_step))
         step = HOVER_STEPS[g_state.hover_step]
         if not step then
-            gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: All steps done, step=%d", g_state.hover_step))
+            gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Collecting done")
             return true  -- all steps complete
         end
+        -- Show progress: step name and percentage
+        local pct = math.floor(g_state.hover_step * 100 / #HOVER_STEPS)
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: %s (%d%%)", step.name, pct))
     end
 
     -- Command velocity (NED: positive Z is down)
@@ -430,6 +442,13 @@ local function run_hover_test()
     local accel = ins:get_accel(0)
     if throttle and accel then
         add_data_point(throttle, accel:z())
+    end
+
+    -- Periodic diagnostic every 5 seconds
+    if now_ms - g_state.last_diag_ms > 5000 then
+        g_state.last_diag_ms = now_ms
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: thr=%.2f n=%d",
+                      g_state.last_throttle, g_state.sample_count))
     end
 
     return false
@@ -555,6 +574,9 @@ local function start_test()
     g_state.collect_start_ms = 0
     g_state.fwd_phase = 0
     g_state.turnaround_count = 0
+    g_state.sample_count = 0
+    g_state.last_diag_ms = 0
+    g_state.last_throttle = 0
 
     clear_bins()
 
