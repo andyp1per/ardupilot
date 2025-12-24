@@ -13104,6 +13104,140 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_pop()
         self.reboot_sitl()
 
+    def ScriptThrustLinearization(self):
+        '''test the thrust_linearization_core.lua applet'''
+        self.context_push()
+        self.context_collect('STATUSTEXT')
+
+        # Enable scripting with RC switch option
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "RC9_OPTION": 300,  # Scripting1 aux function
+        })
+        self.reboot_sitl()
+
+        # Install the thrust linearization core script and reboot
+        # This creates the TLIN_* parameters
+        self.install_applet_script_context('thrust_linearization_core.lua')
+        self.reboot_sitl()
+
+        # Wait for script to initialize and create parameters
+        self.wait_statustext("TLIN: Core script loaded", check_context=True, timeout=30)
+
+        # Configure thrust linearization parameters
+        self.set_parameters({
+            "TLIN_ENABLE": 1,
+            "TLIN_MODE": 0,     # Hover test mode
+            "TLIN_DIST": 100,   # Max distance 100m
+            "TLIN_LEAN": 45,    # Max lean angle
+        })
+
+        self.wait_ready_to_arm()
+
+        # Take off in GUIDED mode
+        self.change_mode('GUIDED')
+        self.arm_vehicle()
+        self.user_takeoff(alt_min=15)
+
+        # Wait for stable hover
+        self.delay_sim_time(3)
+
+        # Test 1: Trigger test via RC switch
+        self.progress("Testing RC switch trigger")
+        self.set_rc(9, 2000)  # Switch high to start test
+        self.wait_statustext("TLIN: Starting test", check_context=True, timeout=10)
+        self.wait_statustext("TLIN: Starting hover test", check_context=True, timeout=10)
+
+        # Wait for test to complete (hover test takes ~25 seconds)
+        self.wait_statustext("TLIN: Result: Expo=", check_context=True, timeout=60, regex=True)
+
+        # Verify state is complete
+        state = self.get_parameter("TLIN_STATE")
+        if state != 2:
+            raise NotAchievedException("TLIN_STATE should be 2 (Complete), got %d" % state)
+
+        # Verify we got a result
+        result = self.get_parameter("TLIN_RESULT")
+        self.progress("Thrust linearization result: Expo=%.2f" % result)
+        if result < 0 or result > 1:
+            raise NotAchievedException("TLIN_RESULT %.2f out of range [0,1]" % result)
+
+        # Switch back to low
+        self.set_rc(9, 1000)
+
+        # Land and cleanup
+        self.do_RTL()
+
+        self.context_pop()
+        self.reboot_sitl()
+
+    def ScriptThrustLinearizationForward(self):
+        '''test the thrust_linearization_core.lua forward flight mode'''
+        self.context_push()
+        self.context_collect('STATUSTEXT')
+
+        # Enable scripting with RC switch option
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "RC9_OPTION": 300,  # Scripting1 aux function
+        })
+        self.reboot_sitl()
+
+        # Install the thrust linearization core script and reboot
+        self.install_applet_script_context('thrust_linearization_core.lua')
+        self.reboot_sitl()
+
+        # Wait for script to initialize and create parameters
+        self.wait_statustext("TLIN: Core script loaded", check_context=True, timeout=30)
+
+        # Configure for forward flight test
+        self.set_parameters({
+            "TLIN_ENABLE": 1,
+            "TLIN_MODE": 1,     # Forward flight test mode
+            "TLIN_SPD": 5,      # 5 m/s forward speed
+            "TLIN_DIST": 80,    # Short distance for faster turnaround
+            "TLIN_LEAN": 45,    # Max lean angle
+        })
+
+        self.wait_ready_to_arm()
+
+        # Take off in GUIDED mode
+        self.change_mode('GUIDED')
+        self.arm_vehicle()
+        self.user_takeoff(alt_min=20)
+
+        # Wait for stable hover
+        self.delay_sim_time(3)
+
+        # Trigger test via RC switch
+        self.progress("Testing forward flight mode")
+        self.set_rc(9, 2000)  # Switch high to start test
+        self.wait_statustext("TLIN: Starting test", check_context=True, timeout=10)
+        self.wait_statustext("TLIN: Starting forward test", check_context=True, timeout=10)
+
+        # Wait for test to complete (forward test takes longer, up to 120s)
+        self.wait_statustext("TLIN: Result: Expo=", check_context=True, timeout=180, regex=True)
+
+        # Verify state is complete
+        state = self.get_parameter("TLIN_STATE")
+        if state != 2:
+            raise NotAchievedException("TLIN_STATE should be 2 (Complete), got %d" % state)
+
+        # Verify we got a result
+        result = self.get_parameter("TLIN_RESULT")
+        self.progress("Forward flight thrust linearization result: Expo=%.2f" % result)
+        if result < 0 or result > 1:
+            raise NotAchievedException("TLIN_RESULT %.2f out of range [0,1]" % result)
+
+        # Switch back to low
+        self.set_rc(9, 1000)
+
+        # Land and cleanup
+        self.do_RTL()
+
+        self.context_pop()
+        self.reboot_sitl()
+
     def AHRSTrimLand(self):
         '''test land detector with significant AHRS trim'''
         self.context_push()
@@ -15647,6 +15781,8 @@ return update, 1000
             self.ScriptMountPOI,
             self.ScriptMountAllModes,
             self.ScriptCopterPosOffsets,
+            self.ScriptThrustLinearization,
+            self.ScriptThrustLinearizationForward,
             self.MountSolo,
             self.FlyMissionTwice,
             self.FlyMissionTwiceWithReset,
