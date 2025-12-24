@@ -518,6 +518,16 @@ local function run_calibration_test()
     local now_ms = millis():tofloat()
     local hover = MOT_THST_HOVER:get() or 0.5
 
+    -- Skip calibration for overpowered aircraft (hover < 25%)
+    -- Direct throttle control causes too rapid altitude changes
+    if hover < 0.25 then
+        if g_state.hover_step == 0 then
+            gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Skipping calibration (overpowered)")
+            gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: hover=%.2f too low for direct throttle", hover))
+        end
+        return true  -- Skip to next test
+    end
+
     if g_state.hover_step == 0 then
         g_state.hover_step = 1
         g_state.hover_step_start_ms = now_ms
