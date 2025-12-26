@@ -245,6 +245,13 @@ class VehicleInfo(object):
                     "models/freestyle.param",
                 ],
             },
+            "realflight-Rise255": {
+                "model": "flightaxis",
+                "waf_target": "bin/arducopter",
+                "default_params_filename": "default_params/realflight-Rise255.parm",
+                "external": True,
+            },
+
         },
     },
     "Helicopter": {
