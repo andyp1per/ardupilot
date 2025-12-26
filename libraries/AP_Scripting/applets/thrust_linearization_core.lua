@@ -181,6 +181,12 @@ for i = 1, NUM_SPIN_BINS do
     g_spin_bins[i] = {sum_accel = 0, sum_throttle = 0, count = 0}
 end
 
+-- Raw data storage for dynamic binning (overpowered aircraft support)
+local MAX_RAW_SAMPLES = 2000
+local g_raw_data = {}
+local g_observed_min_thr = 1.0
+local g_observed_max_thr = 0.0
+
 -- Get throttle range based on MOT_THST_HOVER
 local function get_throttle_range()
     local hover = MOT_THST_HOVER:get() or 0.5
@@ -213,6 +219,27 @@ local function get_spin_bin_index(throttle)
     return idx
 end
 
+-- Re-bin state (must be defined before clear_bins)
+local g_rebin_state = {
+    in_progress = false,
+    index = 1,
+    min_thr = 0,
+    max_thr = 0,
+    range = 0,
+    complete = false  -- Set when rebinning done, cleared when solve starts
+}
+
+-- Solve state for chunked processing (must be defined before clear_bins)
+local g_solve_state = {
+    in_progress = false,
+    phase = 0,  -- 0 = grid search, 1 = refinement
+    k = 0,
+    best_expo = 0,
+    best_score = 1e10,
+    start_expo = 0,
+    end_expo = 0
+}
+
 -- Clear all data bins
 local function clear_bins()
     for i = 1, NUM_BINS do
@@ -225,11 +252,30 @@ local function clear_bins()
         g_spin_bins[i].sum_throttle = 0
         g_spin_bins[i].count = 0
     end
+    -- Clear raw data storage
+    g_raw_data = {}
+    g_observed_min_thr = 1.0
+    g_observed_max_thr = 0.0
+    -- Reset rebin state
+    g_rebin_state.in_progress = false
+    g_rebin_state.index = 1
+    g_rebin_state.complete = false
+    -- Reset solve state
+    g_solve_state.in_progress = false
 end
 
 -- Add data point to appropriate bin
 local function add_data_point(throttle, accel_z)
     g_state.last_throttle = throttle
+    -- Track observed throttle range
+    if throttle > 0.005 then  -- Ignore near-zero values
+        if throttle < g_observed_min_thr then g_observed_min_thr = throttle end
+        if throttle > g_observed_max_thr then g_observed_max_thr = throttle end
+    end
+    -- Store raw data for later dynamic binning
+    if #g_raw_data < MAX_RAW_SAMPLES then
+        table.insert(g_raw_data, {thr = throttle, acc = -accel_z})
+    end
     -- Add to expo bins (filtered by throttle range)
     local idx = get_bin_index(throttle)
     if idx then
@@ -247,7 +293,66 @@ local function add_data_point(throttle, accel_z)
     end
 end
 
+-- Re-bin raw data using observed throttle range (for overpowered aircraft)
+-- Processes in chunks to avoid Lua timeout
+local function rebin_with_observed_range()
+    -- Start new rebinning process
+    if not g_rebin_state.in_progress then
+        -- Clear existing bins
+        for i = 1, NUM_BINS do
+            g_bins[i].sum_accel = 0
+            g_bins[i].sum_throttle = 0
+            g_bins[i].count = 0
+        end
+
+        g_rebin_state.min_thr = g_observed_min_thr
+        g_rebin_state.max_thr = g_observed_max_thr
+        g_rebin_state.range = g_rebin_state.max_thr - g_rebin_state.min_thr
+
+        if g_rebin_state.range < 0.005 then
+            gcs:send_text(MAV_SEVERITY.WARNING, string.format("TLIN: Range too small: %.3f-%.3f",
+                          g_rebin_state.min_thr, g_rebin_state.max_thr))
+            return true, false  -- done, failed
+        end
+
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Re-binning %.3f-%.3f",
+                      g_rebin_state.min_thr, g_rebin_state.max_thr))
+        g_rebin_state.index = 1
+        g_rebin_state.in_progress = true
+    end
+
+    -- Process a chunk of samples (limit per call to avoid timeout)
+    local chunk_size = 50
+    local end_idx = math.min(g_rebin_state.index + chunk_size - 1, #g_raw_data)
+    local min_thr = g_rebin_state.min_thr
+    local max_thr = g_rebin_state.max_thr
+    local range = g_rebin_state.range
+
+    for i = g_rebin_state.index, end_idx do
+        local pt = g_raw_data[i]
+        if pt and pt.thr >= min_thr and pt.thr <= max_thr then
+            local idx = math.floor((pt.thr - min_thr) / range * NUM_BINS) + 1
+            if idx > NUM_BINS then idx = NUM_BINS end
+            if idx < 1 then idx = 1 end
+            g_bins[idx].sum_accel = g_bins[idx].sum_accel + pt.acc
+            g_bins[idx].sum_throttle = g_bins[idx].sum_throttle + pt.thr
+            g_bins[idx].count = g_bins[idx].count + 1
+        end
+    end
+
+    g_rebin_state.index = end_idx + 1
+
+    -- Check if done
+    if g_rebin_state.index > #g_raw_data then
+        g_rebin_state.in_progress = false
+        return true, true  -- done, success
+    end
+
+    return false, false  -- not done yet
+end
+
 -- Check if we have enough data in bins
+-- For expo calculation, need data spread across multiple bins
 local function have_sufficient_data()
     local filled_bins = 0
     local total_samples = 0
@@ -258,7 +363,9 @@ local function have_sufficient_data()
         end
     end
     gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Bins=%d samples=%d", filled_bins, total_samples))
-    return filled_bins >= 3 or total_samples >= 50
+    -- Need at least 3 bins with data for meaningful expo calculation
+    -- Single bin with lots of samples doesn't help - no throttle variation
+    return filled_bins >= 3 and total_samples >= 30
 end
 
 -- Calculate linearity score for a given expo value
@@ -291,34 +398,61 @@ local function calc_linearity_score(expo)
     return total_error / point_count
 end
 
--- Find optimal expo value
-local function solve_expo()
-    local best_expo = 0
-    local best_score = 1e10
+-- Find optimal expo value (chunked to avoid timeout)
+-- Returns (done, result) where result is only valid when done=true
+local function solve_expo_chunked()
+    local chunk_size = 3  -- iterations per call (keep small to avoid timeout)
 
-    -- Grid search from 0.0 to 1.0 in steps of 0.02
-    for k = 0, 50 do
-        local expo = k * 0.02
-        local score = calc_linearity_score(expo)
-        if score < best_score then
-            best_score = score
-            best_expo = expo
-        end
+    if not g_solve_state.in_progress then
+        -- Start new solve
+        g_solve_state.in_progress = true
+        g_solve_state.phase = 0
+        g_solve_state.k = 0
+        g_solve_state.best_expo = 0
+        g_solve_state.best_score = 1e10
     end
 
-    -- Refine around best value
-    local start_expo = math.max(0, best_expo - 0.02)
-    local end_expo = math.min(1, best_expo + 0.02)
-    for k = 0, 20 do
-        local expo = start_expo + k * (end_expo - start_expo) / 20
-        local score = calc_linearity_score(expo)
-        if score < best_score then
-            best_score = score
-            best_expo = expo
+    if g_solve_state.phase == 0 then
+        -- Grid search from 0.0 to 1.0 in steps of 0.02
+        local end_k = math.min(g_solve_state.k + chunk_size - 1, 50)
+        for k = g_solve_state.k, end_k do
+            local expo = k * 0.02
+            local score = calc_linearity_score(expo)
+            if score < g_solve_state.best_score then
+                g_solve_state.best_score = score
+                g_solve_state.best_expo = expo
+            end
         end
-    end
+        g_solve_state.k = end_k + 1
 
-    return math.floor(best_expo * 100 + 0.5) / 100
+        if g_solve_state.k > 50 then
+            -- Move to refinement phase
+            g_solve_state.phase = 1
+            g_solve_state.k = 0
+            g_solve_state.start_expo = math.max(0, g_solve_state.best_expo - 0.02)
+            g_solve_state.end_expo = math.min(1, g_solve_state.best_expo + 0.02)
+        end
+        return false, 0  -- not done
+    else
+        -- Refine around best value
+        local end_k = math.min(g_solve_state.k + chunk_size - 1, 20)
+        for k = g_solve_state.k, end_k do
+            local expo = g_solve_state.start_expo + k * (g_solve_state.end_expo - g_solve_state.start_expo) / 20
+            local score = calc_linearity_score(expo)
+            if score < g_solve_state.best_score then
+                g_solve_state.best_score = score
+                g_solve_state.best_expo = expo
+            end
+        end
+        g_solve_state.k = end_k + 1
+
+        if g_solve_state.k > 20 then
+            -- Done
+            g_solve_state.in_progress = false
+            return true, math.floor(g_solve_state.best_expo * 100 + 0.5) / 100
+        end
+        return false, 0  -- not done
+    end
 end
 
 -- Analyze spin bins to estimate MOT_SPIN_MIN
@@ -585,10 +719,9 @@ local function run_calibration_test()
     return false
 end
 
--- Hover test vertical step sequence
--- Need long descents to build velocity, then hard brakes for throttle spike
--- Accept some altitude gain to get throttle variation
-local HOVER_STEPS = {
+-- Hover test vertical step sequences
+-- Standard sequence for normal aircraft
+local HOVER_STEPS_NORMAL = {
     {vz = 0.0, duration_ms = 1000, name = "Hold"},
     -- Set 1: gentle warmup
     {vz = -4.0, duration_ms = 400, name = "Up1"},
@@ -611,9 +744,44 @@ local HOVER_STEPS = {
     {vz = 0.0, duration_ms = 1000, name = "Hold"},
 }
 
+-- Gentle sequence for overpowered aircraft (hover < 25%)
+-- Uses slower velocities and longer holds to avoid rapid altitude changes
+local HOVER_STEPS_GENTLE = {
+    {vz = 0.0, duration_ms = 1500, name = "Hold"},
+    -- Set 1: very gentle
+    {vz = -1.5, duration_ms = 600, name = "Up1"},
+    {vz = 0.0, duration_ms = 500, name = "Settle1"},
+    {vz = 2.0, duration_ms = 800, name = "Dn1"},
+    {vz = -2.0, duration_ms = 600, name = "Brake1"},
+    {vz = 0.0, duration_ms = 500, name = "Settle2"},
+    -- Set 2: slightly more aggressive
+    {vz = -2.0, duration_ms = 600, name = "Up2"},
+    {vz = 0.0, duration_ms = 400, name = "Settle3"},
+    {vz = 3.0, duration_ms = 1000, name = "Dn2"},
+    {vz = -3.0, duration_ms = 800, name = "Brake2"},
+    {vz = 0.0, duration_ms = 500, name = "Settle4"},
+    -- Set 3: repeat with variation
+    {vz = -2.5, duration_ms = 500, name = "Up3"},
+    {vz = 0.0, duration_ms = 400, name = "Settle5"},
+    {vz = 4.0, duration_ms = 1000, name = "Dn3"},
+    {vz = -4.0, duration_ms = 800, name = "Brake3"},
+    {vz = 0.0, duration_ms = 1500, name = "Hold2"},
+}
+
+-- Select appropriate step sequence based on hover throttle
+local function get_hover_steps()
+    local hover = MOT_THST_HOVER:get() or 0.5
+    if hover < 0.25 then
+        return HOVER_STEPS_GENTLE
+    else
+        return HOVER_STEPS_NORMAL
+    end
+end
+
 -- Run hover test mode
 local function run_hover_test()
     local now_ms = millis():tofloat()
+    local hover_steps = get_hover_steps()
 
     if g_state.hover_step == 0 then
         g_state.hover_step = 1
@@ -623,12 +791,17 @@ local function run_hover_test()
         local min_thr, max_thr = get_throttle_range()
         local hover = MOT_THST_HOVER:get() or 0.5
         gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Starting hover test")
-        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: hover=%.2f range=%.2f-%.2f",
-                      hover, min_thr, max_thr))
+        if hover < 0.25 then
+            gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: hover=%.2f (gentle mode)",
+                          hover))
+        else
+            gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: hover=%.2f range=%.2f-%.2f",
+                          hover, min_thr, max_thr))
+        end
     end
 
     -- Check if current step is complete
-    local step = HOVER_STEPS[g_state.hover_step]
+    local step = hover_steps[g_state.hover_step]
     if not step then
         return true  -- all steps complete
     end
@@ -637,13 +810,13 @@ local function run_hover_test()
     if step_elapsed >= step.duration_ms then
         g_state.hover_step = g_state.hover_step + 1
         g_state.hover_step_start_ms = now_ms
-        step = HOVER_STEPS[g_state.hover_step]
+        step = hover_steps[g_state.hover_step]
         if not step then
             gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Collecting done")
             return true  -- all steps complete
         end
         -- Show progress: step name, percentage, and current throttle/samples
-        local pct = math.floor(g_state.hover_step * 100 / #HOVER_STEPS)
+        local pct = math.floor(g_state.hover_step * 100 / #hover_steps)
         gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: %s %d%% t=%.2f n=%d",
                       step.name, pct, g_state.last_throttle, g_state.sample_count))
     end
@@ -931,17 +1104,62 @@ local function update()
         end
 
     elseif g_state.phase == PHASE.SOLVE then
-        -- Calculate result
-        if have_sufficient_data() then
-            local expo = solve_expo()
-            complete_test(expo)
+        -- Solve is chunked - check if already in progress
+        if g_solve_state.in_progress then
+            -- Continue solving
+            local done, expo = solve_expo_chunked()
+            if done then
+                -- Check if this was after rebinning (narrow range warning)
+                local thr_range = g_observed_max_thr - g_observed_min_thr
+                if thr_range < 0.05 then
+                    gcs:send_text(MAV_SEVERITY.WARNING,
+                        string.format("TLIN: Limited (%.1f%% range)", thr_range * 100))
+                end
+                complete_test(expo)
+            end
+            -- If not done, will continue on next update
+        elseif g_rebin_state.complete then
+            -- Rebinning finished, check data and start solve
+            g_rebin_state.complete = false
+            if have_sufficient_data() then
+                gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Solving...")
+                solve_expo_chunked()  -- Start chunked solve
+            else
+                gcs:send_text(MAV_SEVERITY.WARNING,
+                    string.format("TLIN: Range: %.3f-%.3f", g_observed_min_thr, g_observed_max_thr))
+                abort_test("Insufficient throttle variation")
+            end
+        elseif have_sufficient_data() then
+            -- Standard binning worked, start solve
+            gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Solving...")
+            solve_expo_chunked()  -- Start chunked solve
+        elseif not g_rebin_state.in_progress and g_rebin_state.index == 1 then
+            -- Start dynamic binning with observed throttle range
+            gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Standard binning insufficient")
+            local done, success = rebin_with_observed_range()
+            if done and not success then
+                abort_test("Throttle range too small")
+            elseif done and success then
+                -- Mark complete, start solve on next update
+                g_rebin_state.complete = true
+            end
         else
-            abort_test("Insufficient data")
+            -- Continue rebinning
+            local done, success = rebin_with_observed_range()
+            if done then
+                if success then
+                    g_rebin_state.complete = true
+                else
+                    gcs:send_text(MAV_SEVERITY.WARNING,
+                        string.format("TLIN: Range: %.3f-%.3f", g_observed_min_thr, g_observed_max_thr))
+                    abort_test("Insufficient throttle variation")
+                end
+            end
         end
     end
 
-    -- Fast loop during active test
-    if g_state.phase == PHASE.COLLECT or g_state.phase == PHASE.STABILIZE then
+    -- Fast loop during active test or solve phase
+    if g_state.phase == PHASE.COLLECT or g_state.phase == PHASE.STABILIZE or g_state.phase == PHASE.SOLVE then
         return update, 20  -- 50Hz during test
     end
 
