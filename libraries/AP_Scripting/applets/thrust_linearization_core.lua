@@ -627,6 +627,41 @@ local function complete_test(expo_result)
     g_state.phase = PHASE.DONE
 end
 
+-- Complete spin-min calibration - analyze and set MOT_SPIN_MIN
+local function complete_spinmin_calibration()
+    local current_spin_min = MOT_SPIN_MIN:get() or 0.15
+    local spin_min_result = analyze_spin_min()
+
+    if not spin_min_result then
+        gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Could not determine spin-min")
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Keeping MOT_SPIN_MIN=%.2f", current_spin_min))
+        TLIN_STATE:set(STATE.ERROR)
+        vehicle:set_mode(MODE_LOITER)
+        g_state.phase = PHASE.DONE
+        return
+    end
+
+    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: SpinMin Result=%.2f", spin_min_result))
+    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Previous MOT_SPIN_MIN=%.2f", current_spin_min))
+
+    -- Set the new spin_min value
+    if math.abs(spin_min_result - current_spin_min) > 0.01 then
+        MOT_SPIN_MIN:set(spin_min_result)
+        gcs:send_text(MAV_SEVERITY.NOTICE, string.format("TLIN: Set MOT_SPIN_MIN=%.2f", spin_min_result))
+    else
+        gcs:send_text(MAV_SEVERITY.INFO, "TLIN: MOT_SPIN_MIN unchanged")
+    end
+
+    -- Store result and log
+    TLIN_RESULT:set(spin_min_result)
+    TLIN_STATE:set(STATE.COMPLETE)
+
+    logger:write("TSPN", "SpinMin,OldSpinMin", "ff", spin_min_result, current_spin_min)
+
+    vehicle:set_mode(MODE_LOITER)
+    g_state.phase = PHASE.DONE
+end
+
 -- Calibration mode throttle steps (relative to hover)
 -- Steps through throttle levels and measures acceleration directly
 -- Calibration steps - shorter duration and smaller increments for safety
@@ -647,19 +682,96 @@ local CALIB_STEPS = {
     {offset = 0.00, duration_ms = 1000, name = "Hover"},
 }
 
--- Run calibration test mode - direct throttle control
+-- Spin-min calibration steps - uses velocity commands to explore low throttle
+-- Gentle descents followed by climbs to maintain altitude while getting low throttle data
+local SPINMIN_STEPS = {
+    {vz = 0.0, duration_ms = 1500, name = "Hold"},
+    -- Descent 1: gentle
+    {vz = 2.0, duration_ms = 1000, name = "Dn1"},
+    {vz = -2.0, duration_ms = 1200, name = "Up1"},
+    {vz = 0.0, duration_ms = 800, name = "Settle1"},
+    -- Descent 2: moderate
+    {vz = 3.0, duration_ms = 1000, name = "Dn2"},
+    {vz = -3.0, duration_ms = 1200, name = "Up2"},
+    {vz = 0.0, duration_ms = 800, name = "Settle2"},
+    -- Descent 3: faster
+    {vz = 4.0, duration_ms = 1000, name = "Dn3"},
+    {vz = -4.0, duration_ms = 1200, name = "Up3"},
+    {vz = 0.0, duration_ms = 800, name = "Settle3"},
+    -- Descent 4: fastest (still safe)
+    {vz = 5.0, duration_ms = 1000, name = "Dn4"},
+    {vz = -5.0, duration_ms = 1200, name = "Up4"},
+    {vz = 0.0, duration_ms = 1500, name = "Hold2"},
+}
+
+-- Run spin-min calibration using velocity commands (for overpowered aircraft)
+local function run_spinmin_calibration()
+    local now_ms = millis():tofloat()
+
+    if g_state.hover_step == 0 then
+        g_state.hover_step = 1
+        g_state.hover_step_start_ms = now_ms
+        g_state.collect_start_ms = now_ms
+        gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Starting spin-min calibration")
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Current MOT_SPIN_MIN=%.2f", MOT_SPIN_MIN:get() or 0.15))
+    end
+
+    -- Check if current step is complete
+    local step = SPINMIN_STEPS[g_state.hover_step]
+    if not step then
+        return true  -- all steps complete
+    end
+
+    local step_elapsed = now_ms - g_state.hover_step_start_ms
+    if step_elapsed >= step.duration_ms then
+        g_state.hover_step = g_state.hover_step + 1
+        g_state.hover_step_start_ms = now_ms
+        step = SPINMIN_STEPS[g_state.hover_step]
+        if not step then
+            gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Spin-min data collection done")
+            return true
+        end
+        local pct = math.floor(g_state.hover_step * 100 / #SPINMIN_STEPS)
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: %s %d%% t=%.2f n=%d",
+                      step.name, pct, g_state.last_throttle, g_state.sample_count))
+    end
+
+    -- Command velocity (NED: positive Z is down)
+    local vel = Vector3f()
+    vel:x(0)
+    vel:y(0)
+    vel:z(step.vz)
+    if not vehicle:set_target_velocity_NED(vel) then
+        gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Velocity cmd failed")
+    end
+
+    -- Collect data - focus on spin bins for low throttle analysis
+    local throttle = motors:get_throttle()
+    local accel = ins:get_accel(0)
+    if throttle and accel then
+        add_data_point(throttle, accel:z())
+        g_state.last_throttle = throttle
+    end
+
+    -- Periodic diagnostic
+    if now_ms - g_state.last_diag_ms > 3000 then
+        g_state.last_diag_ms = now_ms
+        local rel_alt = (baro:get_altitude() or 0) - g_state.start_alt_m
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: thr=%.2f n=%d alt=%+.0fm",
+                      g_state.last_throttle, g_state.sample_count, rel_alt))
+    end
+
+    return false
+end
+
+-- Run calibration test mode - direct throttle control or spin-min for overpowered
 local function run_calibration_test()
     local now_ms = millis():tofloat()
     local hover = MOT_THST_HOVER:get() or 0.5
 
-    -- Skip calibration for overpowered aircraft (hover < 25%)
-    -- Direct throttle control causes too rapid altitude changes
+    -- For overpowered aircraft, use velocity-based spin-min calibration
     if hover < 0.25 then
-        if g_state.hover_step == 0 then
-            gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Skipping calibration (overpowered)")
-            gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: hover=%.2f too low for direct throttle", hover))
-        end
-        return true  -- Skip to next test
+        return run_spinmin_calibration()
     end
 
     if g_state.hover_step == 0 then
@@ -1104,6 +1216,13 @@ local function update()
         end
 
     elseif g_state.phase == PHASE.SOLVE then
+        -- Check if this is calibration mode (mode 2) - just analyze spin_min
+        local mode = TLIN_MODE:get()
+        if mode == 2 then
+            complete_spinmin_calibration()
+            return update, 100
+        end
+
         -- Solve is chunked - check if already in progress
         if g_solve_state.in_progress then
             -- Continue solving

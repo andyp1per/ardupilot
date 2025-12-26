@@ -15500,12 +15500,14 @@ RTL_ALT 111
         defaults_filepath = self.model_defaults_filepath(model)
         extra_params = 'default_params/realflight-autotest-extra.parm'
         defaults_filepath.append(os.path.join(testdir, extra_params))
+        #home_string = "%s,%s,%s,%s" % (40.059488,-88.551314,206,37)
         self.customise_SITL_commandline(
             [
-                f"--home={home}",
+                "--home", home
             ],
             model=f"flightaxis:{self.realflight_address}",
-            defaults_filepath=defaults_filepath
+            defaults_filepath=defaults_filepath,
+            wipe=True,
         )
 
     def RealFlightHover(self, model, home):
@@ -15568,29 +15570,35 @@ RTL_ALT 111
         # Setup RealFlight connection - this reconfigures SITL
         self.setup_RealFlight_vehicle(model, home)
 
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+        })
+
+        self.reboot_sitl(check_position=False)
+
         # Install the thrust linearization script
         # Rise255 defaults already have SCR_ENABLE=1, script loads on setup_RealFlight reboot
         self.install_applet_script_context('thrust_linearization_core.lua')
+        self.reboot_sitl(check_position=False)
 
         # Wait for script to initialize (should already be loaded from setup reboot)
         self.wait_statustext("TLIN: Core script loaded", check_context=True, timeout=30)
 
-        # Configure for hover test mode (mode 0)
         # Rise255 already has RC7_OPTION=300 (Scripting1)
         self.set_parameters({
             "TLIN_ENABLE": 1,
-            "TLIN_MODE": 0,     # Hover test mode
+            "TLIN_MODE": 2,     # Spin-min calibration mode first
             "TLIN_DIST": 100,   # Max distance 100m
             "TLIN_LEAN": 45,    # Max lean angle
         })
 
         self.wait_ready_to_arm()
 
-        # Take off in LOITER mode
+        # Take off in LOITER mode - higher altitude for spin-min test safety
         self.change_mode("LOITER")
         self.arm_vehicle()
         self.set_rc(3, 2000)
-        self.wait_altitude(8, 12, relative=True)
+        self.wait_altitude(18, 22, relative=True)
         self.set_rc(3, 1500)
 
         # Wait for stable hover
@@ -15599,8 +15607,36 @@ RTL_ALT 111
         # Switch to GUIDED for the test
         self.change_mode("GUIDED")
 
-        # Trigger test via RC7 switch (Scripting1)
-        self.progress("Triggering thrust linearization test via RC7")
+        # ===== Phase 1: Spin-min calibration =====
+        self.progress("Phase 1: Running spin-min calibration")
+        self.set_rc(7, 2000)
+        self.wait_statustext("TLIN: Starting test", check_context=True, timeout=10)
+        self.wait_statustext("TLIN: Starting spin-min calibration", check_context=True, timeout=10)
+
+        # Wait for spin-min calibration to complete
+        self.wait_statustext("TLIN: SpinMin Result=", check_context=True, timeout=90, regex=True)
+
+        # Verify state is complete
+        state = self.get_parameter("TLIN_STATE")
+        if state != 2:
+            raise NotAchievedException("TLIN_STATE should be 2 (Complete) after spin-min, got %d" % state)
+
+        # Get the new spin_min value
+        spin_min = self.get_parameter("MOT_SPIN_MIN")
+        self.progress("Spin-min calibration result: MOT_SPIN_MIN=%.2f" % spin_min)
+
+        # Switch off and reset for hover test
+        self.set_rc(7, 1000)
+        self.delay_sim_time(2)
+
+        # ===== Phase 2: Hover test for expo =====
+        self.progress("Phase 2: Running hover test for expo")
+        self.set_parameter("TLIN_MODE", 0)  # Switch to hover test mode
+
+        # Switch back to GUIDED (spin-min test switched to LOITER on completion)
+        self.change_mode("GUIDED")
+        self.delay_sim_time(1)
+
         self.set_rc(7, 2000)
         self.wait_statustext("TLIN: Starting test", check_context=True, timeout=10)
         self.wait_statustext("TLIN: Starting hover test", check_context=True, timeout=10)
