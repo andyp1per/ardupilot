@@ -3031,11 +3031,10 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         extra_params = 'default_params/realflight-autotest-extra.parm'
         defaults_filepath.append(os.path.join(testdir, extra_params))
         self.customise_SITL_commandline(
-            [
-                f"--home={home}",
-            ],
+            [],
             model=f"flightaxis:{self.realflight_address}",
-            defaults_filepath=defaults_filepath
+            defaults_filepath=defaults_filepath,
+            sitl_home=home,
         )
 
     def RealFlightHover(self, model, home):
