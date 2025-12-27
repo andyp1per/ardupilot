@@ -139,6 +139,15 @@ local TLIN_RESULT = bind_add_param("RESULT", 8, 0)
 local MOT_THST_EXPO = bind_param("MOT_THST_EXPO")
 local MOT_THST_HOVER = bind_param("MOT_THST_HOVER")
 local MOT_SPIN_MIN = bind_param("MOT_SPIN_MIN")
+local MOT_SPIN_MAX = bind_param("MOT_SPIN_MAX")
+
+-- Rate PID parameters for compensation when spin range changes
+local RATE_PID_PARAMS = {
+    "ATC_RAT_RLL_P", "ATC_RAT_RLL_I", "ATC_RAT_RLL_D",
+    "ATC_RAT_PIT_P", "ATC_RAT_PIT_I", "ATC_RAT_PIT_D",
+    "ATC_RAT_YAW_P", "ATC_RAT_YAW_I", "ATC_RAT_YAW_D",
+    "PSC_ACCZ_P", "PSC_ACCZ_I", "PSC_ACCZ_D"
+}
 
 -- Full test sub-phases
 local FULL_SUBTEST = {
@@ -164,7 +173,8 @@ local g_state = {
     last_diag_ms = 0,
     last_throttle = 0,
     full_subtest = 0,  -- For full test mode: tracks which sub-test
-    waiting_for_guided = false  -- For auto LOITER->GUIDED transition
+    waiting_for_guided = false,  -- For auto LOITER->GUIDED transition
+    expected_motor_out = nil  -- Expected motor output at hover after spin_min compensation
 }
 
 -- Data collection bins (10 bins for expo calculation)
@@ -627,6 +637,157 @@ local function complete_test(expo_result)
     g_state.phase = PHASE.DONE
 end
 
+-- Compensate PIDs and hover throttle when spin range changes to maintain identical performance
+-- Scale factor = old_range / new_range
+local function compensate_pids_for_spin_range(old_spin_min, old_spin_max, new_spin_min, new_spin_max)
+    local old_range = old_spin_max - old_spin_min
+    local new_range = new_spin_max - new_spin_min
+
+    -- Sanity check ranges
+    if old_range <= 0 or new_range <= 0 then
+        gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Invalid spin range for PID compensation")
+        return false
+    end
+
+    local scale = old_range / new_range
+
+    -- Adjust MOT_THST_HOVER to maintain same motor output at hover
+    -- Old motor_out = old_spin_min + old_hover * old_range
+    -- New motor_out = new_spin_min + new_hover * new_range
+    -- For same motor_out: new_hover = (old_spin_min + old_hover * old_range - new_spin_min) / new_range
+    local old_hover = MOT_THST_HOVER:get() or 0.5
+    local old_motor_out = old_spin_min + old_hover * old_range
+    local new_hover = (old_motor_out - new_spin_min) / new_range
+
+    -- Clamp to valid range
+    new_hover = math.max(0.01, math.min(0.9, new_hover))
+
+    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Hover %.2f -> %.2f", old_hover, new_hover))
+    MOT_THST_HOVER:set(new_hover)
+
+    -- Store expected motor output for later validation
+    -- After compensation, hover should produce same motor output as before
+    g_state.expected_motor_out = old_motor_out
+
+    -- Only scale PIDs if change is significant (> 1%)
+    if math.abs(scale - 1.0) < 0.01 then
+        gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Spin range change <1%, no PID scaling needed")
+        return true
+    end
+
+    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Scaling PIDs by %.3f", scale))
+
+    local scaled_count = 0
+    for _, name in ipairs(RATE_PID_PARAMS) do
+        local p = bind_param(name)
+        if p then
+            local old_val = p:get()
+            local new_val = old_val * scale
+            p:set(new_val)
+            scaled_count = scaled_count + 1
+        end
+    end
+
+    gcs:send_text(MAV_SEVERITY.NOTICE, string.format("TLIN: Scaled %d PID params", scaled_count))
+
+    -- Reset expo to 0 (linear) when spin_min changes significantly
+    -- Testing showed expo=0 is more stable than partial reductions
+    -- Don't adjust MOT_THST_HOVER for expo change - the motor output
+    -- (spin_min + throttle * range) doesn't depend on expo, and the
+    -- position controller will adapt to find the correct hover throttle
+    local old_expo = MOT_THST_EXPO:get() or 0
+    if old_expo > 0.01 then
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Expo %.2f -> 0 (reset)", old_expo))
+        MOT_THST_EXPO:set(0)
+    end
+
+    return true
+end
+
+-- Validate hover throttle compensation by comparing measured vs expected motor output
+-- Call this after hover test data collection to verify compensation was correct
+local function validate_hover_compensation()
+    if not g_state.expected_motor_out then
+        return  -- No compensation was done, nothing to validate
+    end
+
+    -- Find the bin where acceleration is closest to gravity (9.8 m/s^2)
+    -- This is where the vehicle was actually hovering, regardless of what
+    -- throttle value we predicted for hover
+    local GRAVITY = 9.8
+    local best_bin = 0
+    local best_accel_error = 1000
+    local best_count = 0
+
+    for i = 1, NUM_BINS do
+        if g_bins[i].count > 10 then
+            local avg_accel = g_bins[i].sum_accel / g_bins[i].count
+            local accel_error = math.abs(avg_accel - GRAVITY)
+            if accel_error < best_accel_error then
+                best_accel_error = accel_error
+                best_bin = i
+                best_count = g_bins[i].count
+            end
+        end
+    end
+
+    if best_bin == 0 or best_count < 20 then
+        gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Not enough hover data to validate")
+        g_state.expected_motor_out = nil
+        return
+    end
+
+    -- Use the bin where we were actually hovering
+    local avg_measured_throttle = g_bins[best_bin].sum_throttle / g_bins[best_bin].count
+    local avg_accel = g_bins[best_bin].sum_accel / g_bins[best_bin].count
+
+    -- Convert measured throttle to motor output
+    local spin_min = MOT_SPIN_MIN:get() or 0.15
+    local spin_max = MOT_SPIN_MAX:get() or 0.95
+    local range = spin_max - spin_min
+    local measured_motor_out = spin_min + avg_measured_throttle * range
+
+    -- Compare to expected
+    local error_pct = math.abs(measured_motor_out - g_state.expected_motor_out) / g_state.expected_motor_out * 100
+
+    if error_pct > 10 then
+        gcs:send_text(MAV_SEVERITY.WARNING, string.format("TLIN: Hover validation: %.1f%% error (accel=%.1f)",
+                      error_pct, avg_accel))
+        gcs:send_text(MAV_SEVERITY.WARNING, string.format("TLIN: Expected motor=%.3f, measured=%.3f",
+                      g_state.expected_motor_out, measured_motor_out))
+
+        -- Auto-adjust expo based on the error
+        local current_expo = MOT_THST_EXPO:get() or 0
+        if measured_motor_out < g_state.expected_motor_out and current_expo > 0.01 then
+            -- Hovering at lower throttle = expo too high, reduce it
+            -- Scale expo by the ratio of measured/expected
+            local ratio = measured_motor_out / g_state.expected_motor_out
+            local new_expo = current_expo * ratio
+            new_expo = math.max(0, math.min(0.95, new_expo))
+            gcs:send_text(MAV_SEVERITY.NOTICE, string.format("TLIN: Reducing expo %.2f -> %.2f", current_expo, new_expo))
+            MOT_THST_EXPO:set(new_expo)
+        elseif measured_motor_out > g_state.expected_motor_out then
+            -- Hovering at higher throttle = expo too low, increase it
+            -- But be conservative - only increase by half the error ratio
+            local ratio = measured_motor_out / g_state.expected_motor_out
+            local new_expo = current_expo + (1 - current_expo) * (ratio - 1) * 0.5
+            new_expo = math.max(0, math.min(0.95, new_expo))
+            if new_expo > current_expo + 0.05 then
+                gcs:send_text(MAV_SEVERITY.NOTICE, string.format("TLIN: Increasing expo %.2f -> %.2f", current_expo, new_expo))
+                MOT_THST_EXPO:set(new_expo)
+            end
+        end
+    elseif error_pct > 5 then
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Hover validation: %.1f%% error (marginal)",
+                      error_pct))
+    else
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Hover validation OK (%.1f%% error)", error_pct))
+    end
+
+    -- Clear for next run
+    g_state.expected_motor_out = nil
+end
+
 -- Complete spin-min calibration - analyze and set MOT_SPIN_MIN
 local function complete_spinmin_calibration()
     local current_spin_min = MOT_SPIN_MIN:get() or 0.15
@@ -644,8 +805,14 @@ local function complete_spinmin_calibration()
     gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: SpinMin Result=%.2f", spin_min_result))
     gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Previous MOT_SPIN_MIN=%.2f", current_spin_min))
 
-    -- Set the new spin_min value
+    -- Set the new spin_min value and compensate PIDs
     if math.abs(spin_min_result - current_spin_min) > 0.01 then
+        local current_spin_max = MOT_SPIN_MAX:get() or 0.95
+
+        -- Compensate PIDs before changing spin_min to maintain identical performance
+        compensate_pids_for_spin_range(current_spin_min, current_spin_max,
+                                       spin_min_result, current_spin_max)
+
         MOT_SPIN_MIN:set(spin_min_result)
         gcs:send_text(MAV_SEVERITY.NOTICE, string.format("TLIN: Set MOT_SPIN_MIN=%.2f", spin_min_result))
     else
@@ -656,7 +823,13 @@ local function complete_spinmin_calibration()
     TLIN_RESULT:set(spin_min_result)
     TLIN_STATE:set(STATE.COMPLETE)
 
-    logger:write("TSPN", "SpinMin,OldSpinMin", "ff", spin_min_result, current_spin_min)
+    -- Calculate scale for logging
+    local current_spin_max = MOT_SPIN_MAX:get() or 0.95
+    local old_range = current_spin_max - current_spin_min
+    local new_range = current_spin_max - spin_min_result
+    local scale = (new_range > 0) and (old_range / new_range) or 1.0
+
+    logger:write("TSPN", "SpinMin,OldSpinMin,Scale", "fff", spin_min_result, current_spin_min, scale)
 
     vehicle:set_mode(MODE_LOITER)
     g_state.phase = PHASE.DONE
@@ -925,6 +1098,7 @@ local function run_hover_test()
         step = hover_steps[g_state.hover_step]
         if not step then
             gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Collecting done")
+            validate_hover_compensation()
             return true  -- all steps complete
         end
         -- Show progress: step name, percentage, and current throttle/samples
