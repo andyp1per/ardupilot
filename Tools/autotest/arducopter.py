@@ -15500,14 +15500,12 @@ RTL_ALT 111
         defaults_filepath = self.model_defaults_filepath(model)
         extra_params = 'default_params/realflight-autotest-extra.parm'
         defaults_filepath.append(os.path.join(testdir, extra_params))
-        #home_string = "%s,%s,%s,%s" % (40.059488,-88.551314,206,37)
         self.customise_SITL_commandline(
-            [
-                "--home", home
-            ],
+            [],
             model=f"flightaxis:{self.realflight_address}",
             defaults_filepath=defaults_filepath,
             wipe=True,
+            sitl_home=home,
         )
 
     def RealFlightHover(self, model, home):
@@ -15574,12 +15572,12 @@ RTL_ALT 111
             "SCR_ENABLE": 1,
         })
 
-        self.reboot_sitl(check_position=False)
+        self.reboot_sitl()
 
         # Install the thrust linearization script
         # Rise255 defaults already have SCR_ENABLE=1, script loads on setup_RealFlight reboot
         self.install_applet_script_context('thrust_linearization_core.lua')
-        self.reboot_sitl(check_position=False)
+        self.reboot_sitl()
 
         # Wait for script to initialize (should already be loaded from setup reboot)
         self.wait_statustext("TLIN: Core script loaded", check_context=True, timeout=30)
