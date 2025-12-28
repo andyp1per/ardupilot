@@ -200,9 +200,12 @@ local g_observed_max_thr = 0.0
 -- Get throttle range based on MOT_THST_HOVER
 local function get_throttle_range()
     local hover = MOT_THST_HOVER:get() or 0.5
-    -- Range from 1% (to accept overpowered vehicles) to min(2.5x hover, 1.0)
+    -- Range from 1% (to accept overpowered vehicles)
     local min_thr = 0.01
-    local max_thr = math.min(hover * 2.5, 1.0)
+    -- Upper limit: Allow collecting data up to 95% throttle or at least 0.85
+    -- even for overpowered aircraft, to capture the curve tail if reached.
+    -- However, practically limit based on hover to focus resolution where needed.
+    local max_thr = math.min(math.max(hover * 3.0, 0.85), 0.95)
     return min_thr, max_thr
 end
 
@@ -374,35 +377,51 @@ local function have_sufficient_data()
     end
     gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Bins=%d samples=%d", filled_bins, total_samples))
     -- Need at least 3 bins with data for meaningful expo calculation
-    -- Single bin with lots of samples doesn't help - no throttle variation
     return filled_bins >= 3 and total_samples >= 30
 end
 
 -- Calculate linearity score for a given expo value
+-- Solves for the best slope (thrust scale) dynamically to handle any power-to-weight ratio
 local function calc_linearity_score(expo)
-    local total_error = 0
+    local sum_xy = 0
+    local sum_xx = 0
     local point_count = 0
 
+    -- 1. Calculate sums for linear regression (fitting Accel = m * Throttle_Lin)
     for i = 1, NUM_BINS do
         if g_bins[i].count > 0 then
             local avg_throttle = g_bins[i].sum_throttle / g_bins[i].count
             local avg_accel = g_bins[i].sum_accel / g_bins[i].count
 
-            -- Expected linearized output: u_lin = (1-k)*u + k*u^2
+            -- Calculate linearized throttle for this candidate expo
             local u_lin = (1 - expo) * avg_throttle + expo * avg_throttle * avg_throttle
 
-            -- In ideal case, accel should be proportional to linearized throttle
-            -- Normalize by assuming hover at ~0.5 throttle gives ~9.8 m/s^2
-            local expected_accel = u_lin * 19.6
-
-            local err = avg_accel - expected_accel
-            total_error = total_error + err * err
+            sum_xy = sum_xy + (u_lin * avg_accel)
+            sum_xx = sum_xx + (u_lin * u_lin)
             point_count = point_count + 1
         end
     end
 
-    if point_count < 3 then
+    if point_count < 3 or sum_xx < 0.0001 then
         return 1e10
+    end
+
+    -- 2. Calculate best fit slope 'm' (Scalar between linearized throttle and accel)
+    local slope = sum_xy / sum_xx
+
+    -- 3. Calculate residual error (R-squared-ish)
+    local total_error = 0
+    for i = 1, NUM_BINS do
+        if g_bins[i].count > 0 then
+            local avg_throttle = g_bins[i].sum_throttle / g_bins[i].count
+            local avg_accel = g_bins[i].sum_accel / g_bins[i].count
+
+            local u_lin = (1 - expo) * avg_throttle + expo * avg_throttle * avg_throttle
+            local expected_accel = u_lin * slope
+
+            local err = avg_accel - expected_accel
+            total_error = total_error + (err * err)
+        end
     end
 
     return total_error / point_count
@@ -679,16 +698,13 @@ local function compensate_pids_for_spin_range(old_spin_min, old_spin_max, new_sp
 
     gcs:send_text(MAV_SEVERITY.NOTICE, string.format("TLIN: Scaled %d PID params", scaled_count))
 
-    -- Reset expo to 0 (linear) when spin_min changes significantly
-    -- Testing showed expo=0 is more stable than partial reductions
-    -- Don't adjust MOT_THST_HOVER for expo change - the motor output
-    -- (spin_min + throttle * range) doesn't depend on expo, and the
-    -- position controller will adapt to find the correct hover throttle
-    local old_expo = MOT_THST_EXPO:get() or 0
-    if old_expo > 0.01 then
-        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Expo %.2f -> 0 (reset)", old_expo))
-        MOT_THST_EXPO:set(0)
-    end
+    -- CRITIQUE FIX: Do NOT auto-reset EXPO to 0. 
+    -- We assume the user wants to keep their (potentially just calibrated) result.
+    -- local old_expo = MOT_THST_EXPO:get() or 0
+    -- if old_expo > 0.01 then
+    --     gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Expo %.2f -> 0 (reset)", old_expo))
+    --     MOT_THST_EXPO:set(0)
+    -- end
 
     return true
 end
