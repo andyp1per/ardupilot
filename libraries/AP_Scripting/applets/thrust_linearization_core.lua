@@ -192,7 +192,7 @@ for i = 1, NUM_SPIN_BINS do
 end
 
 -- Raw data storage for dynamic binning (overpowered aircraft support)
-local MAX_RAW_SAMPLES = 2000
+local MAX_RAW_SAMPLES = 1000  -- Reduced for memory efficiency
 local g_raw_data = {}
 local g_observed_min_thr = 1.0
 local g_observed_max_thr = 0.0
@@ -1163,19 +1163,32 @@ local function run_forward_test()
         dist = pos:get_distance(g_state.start_loc)
     end
 
+    -- Get current velocity for diagnostics
+    local cur_vel = ahrs:get_velocity_NED()
+    local hspd = 0
+    if cur_vel then
+        hspd = math.sqrt(cur_vel:x() * cur_vel:x() + cur_vel:y() * cur_vel:y())
+    end
+
+    -- Periodic diagnostic (every 5 seconds)
+    if now_ms - g_state.last_diag_ms > 5000 then
+        g_state.last_diag_ms = now_ms
+        local phase_names = {"ACCEL", "WAVE", "TURN"}
+        local phase_name = phase_names[g_state.fwd_phase + 1] or "?"
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Fwd %s spd=%.1f dist=%.0f",
+                      phase_name, hspd, dist))
+    end
+
     if g_state.fwd_phase == FWD_PHASE.ACCEL then
         -- Accelerate to cruise speed
         vel:x(test_spd * math.cos(g_state.fwd_heading_rad))
         vel:y(test_spd * math.sin(g_state.fwd_heading_rad))
         vel:z(0)
 
-        local cur_vel = ahrs:get_velocity_NED()
-        if cur_vel then
-            local hspd = math.sqrt(cur_vel:x() * cur_vel:x() + cur_vel:y() * cur_vel:y())
-            if hspd > test_spd * 0.9 then
-                g_state.fwd_phase = FWD_PHASE.WAVE
-                g_state.hover_step_start_ms = now_ms
-            end
+        if hspd > test_spd * 0.9 then
+            gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Cruise at %.1f m/s", hspd))
+            g_state.fwd_phase = FWD_PHASE.WAVE
+            g_state.hover_step_start_ms = now_ms
         end
 
     elseif g_state.fwd_phase == FWD_PHASE.WAVE then
@@ -1189,8 +1202,10 @@ local function run_forward_test()
         local vz = 1.5 * math.sin(wave_phase * 2 * math.pi)
         vel:z(vz)
 
-        -- Check for turnaround
-        if dist > TLIN_DIST:get() * 0.8 then
+        -- Check for turnaround (use 50% to leave room for braking)
+        if dist > TLIN_DIST:get() * 0.5 then
+            gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Turnaround %d at %.0fm",
+                          g_state.turnaround_count + 1, dist))
             g_state.fwd_phase = FWD_PHASE.TURN
             g_state.turnaround_count = g_state.turnaround_count + 1
         end
@@ -1201,18 +1216,16 @@ local function run_forward_test()
         vel:y(0)
         vel:z(0)
 
-        local cur_vel = ahrs:get_velocity_NED()
-        if cur_vel then
-            local hspd = math.sqrt(cur_vel:x() * cur_vel:x() + cur_vel:y() * cur_vel:y())
-            if hspd < 1.0 then
-                -- Reverse heading
-                g_state.fwd_heading_rad = g_state.fwd_heading_rad + math.pi
-                g_state.fwd_phase = FWD_PHASE.ACCEL
+        if hspd < 1.0 then
+            -- Reverse heading
+            gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Reversed, pass %d",
+                          g_state.turnaround_count))
+            g_state.fwd_heading_rad = g_state.fwd_heading_rad + math.pi
+            g_state.fwd_phase = FWD_PHASE.ACCEL
 
-                -- Check if we've done enough passes
-                if g_state.turnaround_count >= 2 and have_sufficient_data() then
-                    return true  -- test complete
-                end
+            -- Check if we've done enough passes
+            if g_state.turnaround_count >= 2 and have_sufficient_data() then
+                return true  -- test complete
             end
         end
     end
