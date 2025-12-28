@@ -128,7 +128,7 @@ local TLIN_RESULT = bind_add_param("RESULT", 8, 0)
 --[[
   // @Param: TLIN_ACCEL
   // @DisplayName: Test Acceleration
-  // @Description: Horizontal acceleration for forward flight maneuvers.
+  // @Description: Aggressiveness for test maneuvers. Controls vertical velocities in hover test and horizontal acceleration in forward flight. 5=baseline, 10=2x aggressive.
   // @Units: m/s/s
   // @Range: 1 15
   // @User: Standard
@@ -1057,6 +1057,10 @@ local function run_hover_test()
     local now_ms = millis():tofloat()
     local hover_steps = get_hover_steps()
 
+    -- Aggressiveness scaling: TLIN_ACCEL=5 is baseline (1.0x), TLIN_ACCEL=10 is 2x
+    local accel_param = TLIN_ACCEL:get() or 5.0
+    local aggr_scale = accel_param / 5.0
+
     if g_state.hover_step == 0 then
         g_state.hover_step = 1
         g_state.hover_step_start_ms = now_ms
@@ -1066,11 +1070,11 @@ local function run_hover_test()
         local hover = MOT_THST_HOVER:get() or 0.5
         gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Starting hover test")
         if hover < 0.25 then
-            gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: hover=%.2f (gentle mode)",
-                          hover))
+            gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: hover=%.2f (gentle) accel=%.1f",
+                          hover, accel_param))
         else
-            gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: hover=%.2f range=%.2f-%.2f",
-                          hover, min_thr, max_thr))
+            gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: hover=%.2f accel=%.1f",
+                          hover, accel_param))
         end
     end
 
@@ -1096,20 +1100,30 @@ local function run_hover_test()
                       step.name, pct, g_state.last_throttle, g_state.sample_count))
     end
 
-    -- Command velocity (NED: positive Z is down)
+    -- Scale velocity by aggressiveness factor
+    local scaled_vz = step.vz * aggr_scale
+
+    -- Command velocity with explicit acceleration for better response
     local vel = Vector3f()
     vel:x(0)
     vel:y(0)
-    vel:z(step.vz)
-    if not vehicle:set_target_velocity_NED(vel) then
+    vel:z(scaled_vz)
+
+    local accel = Vector3f()
+    accel:x(0)
+    accel:y(0)
+    -- Vertical acceleration proportional to velocity change needed
+    accel:z(accel_param * (scaled_vz > 0 and 1 or (scaled_vz < 0 and -1 or 0)))
+
+    if not vehicle:set_target_velaccel_NED(vel, accel, false, 0, false, 0, false) then
         gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Velocity cmd failed")
     end
 
     -- Collect data
     local throttle = motors:get_throttle()
-    local accel = ins:get_accel(0)
-    if throttle and accel then
-        add_data_point(throttle, accel:z())
+    local imu_accel = ins:get_accel(0)
+    if throttle and imu_accel then
+        add_data_point(throttle, imu_accel:z())
         g_state.last_throttle = throttle
     end
 
