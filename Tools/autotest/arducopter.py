@@ -15588,7 +15588,6 @@ RTL_ALT 111
             "TLIN_ENABLE": 1,
             "TLIN_MODE": 2,     # Spin-min calibration mode first
             "TLIN_DIST": 100,   # Max distance 100m
-            "TLIN_LEAN": 45,    # Max lean angle
         })
 
         self.wait_ready_to_arm()
@@ -15661,11 +15660,7 @@ RTL_ALT 111
         self.set_parameter("TLIN_MODE", 1)  # Switch to forward flight test mode
         self.set_parameter("TLIN_DIST", 300)  # Forward flight needs more room for turnarounds
         self.set_parameter("TLIN_SPD", 12)  # Faster forward flight speed
-        # Increase acceleration limits for snappier response (units are cm/s^2)
-        self.set_parameter("WPNAV_ACCEL", 3000)  # 30 m/s^2 horizontal accel
-        self.set_parameter("WPNAV_JERK", 60)  # Higher jerk for faster response
-        self.set_parameter("LOIT_ACC_MAX", 1500)  # 15 m/s^2 for position hold
-        self.set_parameter("LOIT_BRK_ACCEL", 1000)  # 10 m/s^2 braking
+        self.set_parameter("TLIN_ACCEL", 5)  # 5 m/s^2 horizontal accel
 
         # Switch back to GUIDED (hover test switched to LOITER on completion)
         self.change_mode("GUIDED")
@@ -15691,8 +15686,8 @@ RTL_ALT 111
         # Switch back RC
         self.set_rc(7, 1000)
 
-        # Land
-        self.change_mode("LAND")
+        # RTL and land
+        self.change_mode("RTL")
         self.wait_disarmed(timeout=120)
 
         self.context_pop()
