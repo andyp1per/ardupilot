@@ -15570,6 +15570,7 @@ RTL_ALT 111
 
         self.set_parameters({
             "SCR_ENABLE": 1,
+            "SCR_HEAP_SIZE": 300000,  # Script needs extra heap for data storage
         })
 
         self.reboot_sitl()
@@ -15648,8 +15649,44 @@ RTL_ALT 111
             raise NotAchievedException("TLIN_STATE should be 2 (Complete), got %d" % state)
 
         # Verify we got a result
-        result = self.get_parameter("TLIN_RESULT")
-        self.progress("Thrust linearization result: Expo=%.2f" % result)
+        hover_expo = self.get_parameter("TLIN_RESULT")
+        self.progress("Hover test result: Expo=%.2f" % hover_expo)
+
+        # Switch off and reset for forward flight test
+        self.set_rc(7, 1000)
+        self.delay_sim_time(2)
+
+        # ===== Phase 3: Forward flight test for expo =====
+        self.progress("Phase 3: Running forward flight test for expo")
+        self.set_parameter("TLIN_MODE", 1)  # Switch to forward flight test mode
+        self.set_parameter("TLIN_DIST", 300)  # Forward flight needs more room for turnarounds
+        self.set_parameter("TLIN_SPD", 12)  # Faster forward flight speed
+        # Increase acceleration limits for snappier response (units are cm/s^2)
+        self.set_parameter("WPNAV_ACCEL", 3000)  # 30 m/s^2 horizontal accel
+        self.set_parameter("WPNAV_JERK", 60)  # Higher jerk for faster response
+        self.set_parameter("LOIT_ACC_MAX", 1500)  # 15 m/s^2 for position hold
+        self.set_parameter("LOIT_BRK_ACCEL", 1000)  # 10 m/s^2 braking
+
+        # Switch back to GUIDED (hover test switched to LOITER on completion)
+        self.change_mode("GUIDED")
+        self.delay_sim_time(1)
+
+        self.set_rc(7, 2000)
+        self.wait_statustext("TLIN: Starting test", check_context=True, timeout=10)
+        self.wait_statustext("TLIN: Starting forward test", check_context=True, timeout=10)
+
+        # Wait for test to complete (forward test takes ~60-90 seconds with turnarounds)
+        # Don't use check_context - we need a fresh result, not the hover test's result
+        self.wait_statustext("TLIN: Result: Expo=", timeout=150, regex=True)
+
+        # Verify state is complete
+        state = self.get_parameter("TLIN_STATE")
+        if state != 2:
+            raise NotAchievedException("TLIN_STATE should be 2 (Complete), got %d" % state)
+
+        # Verify we got a result
+        fwd_expo = self.get_parameter("TLIN_RESULT")
+        self.progress("Forward flight test result: Expo=%.2f" % fwd_expo)
 
         # Switch back RC
         self.set_rc(7, 1000)
