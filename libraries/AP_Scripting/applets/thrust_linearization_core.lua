@@ -671,27 +671,52 @@ local function compensate_pids_for_spin_range(old_spin_min, old_spin_max, new_sp
     local old_motor_out
 
     if g_state.measured_hover_count > 10 then
-        -- Use measured hover output directly
-        old_motor_out = g_state.measured_hover_sum / g_state.measured_hover_count
-        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Measured Hover Out: %.3f", old_motor_out))
+        -- CRITIQUE FIX: Apply current EXPO to measured throttle before calculating linear output
+        -- Measured throttle is the mixer INPUT. Physical output is (1-k)*u + k*u^2
+        local avg_thr = g_state.measured_hover_sum / g_state.measured_hover_count
+        local cur_expo = MOT_THST_EXPO:get() or 0
+        local lin_thr = (1 - cur_expo) * avg_thr + cur_expo * avg_thr * avg_thr
+
+        -- Calculate total linear motor output (0-1 range)
+        -- Linear Motor Output = SpinMin + LinearThrottle * Range
+        local s_min = MOT_SPIN_MIN:get() or 0.15
+        local s_max = MOT_SPIN_MAX:get() or 0.95
+        old_motor_out = s_min + lin_thr * (s_max - s_min)
+
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Meas Thr: %.3f (Expo: %.2f) Out: %.3f", avg_thr, cur_expo, old_motor_out))
     else
-        -- Fallback to existing parameter
+        -- Fallback to existing parameter (assumes parameter is linear target)
         old_motor_out = old_spin_min + old_hover_param * old_range
     end
 
-    -- Calculate new hover throttle parameter
-    -- New motor_out = new_spin_min + new_hover * new_range
-    -- We want New motor_out == Old motor_out (physical thrust same)
-    local new_hover = (old_motor_out - new_spin_min) / new_range
+    -- Check if spin_min dropped significantly (indicating previous floor limiting)
+    local diff = old_spin_min - new_spin_min
+    local spin_min_dropped = diff > 0.03 -- Thres: 0.03
 
-    -- Clamp to valid range
-    new_hover = math.max(0.01, math.min(0.9, new_hover))
+    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Spin Check: Old=%.2f New=%.2f Diff=%.2f",
+                  old_spin_min, new_spin_min, diff))
 
-    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Hover %.2f -> %.2f", old_hover_param, new_hover))
-    MOT_THST_HOVER:set(new_hover)
+    if spin_min_dropped then
+        gcs:send_text(MAV_SEVERITY.INFO, "TLIN: SpinMin dropped significantly, forcing safe Hover")
+        g_state.expected_motor_out = nil
 
-    -- Store expected motor output for later validation
-    g_state.expected_motor_out = old_motor_out
+        local safe_hover = 0.20
+        gcs:send_text(MAV_SEVERITY.NOTICE, string.format("TLIN: Force Hover %.2f -> %.2f", old_hover_param, safe_hover))
+        MOT_THST_HOVER:set(safe_hover)
+    else
+        -- Calculate new hover throttle parameter to maintain physical thrust
+        -- New motor_out = new_spin_min + new_hover * new_range
+        local new_hover = (old_motor_out - new_spin_min) / new_range
+
+        -- Clamp to valid range
+        new_hover = math.max(0.01, math.min(0.9, new_hover))
+
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Hover %.2f -> %.2f", old_hover_param, new_hover))
+        MOT_THST_HOVER:set(new_hover)
+
+        -- Store expected motor output for later validation
+        g_state.expected_motor_out = old_motor_out
+    end
 
     -- Only scale PIDs if change is significant (> 1%)
     if math.abs(scale - 1.0) < 0.01 then
@@ -755,10 +780,14 @@ local function validate_hover_compensation()
     local avg_accel = g_bins[best_bin].sum_accel / g_bins[best_bin].count
 
     -- Convert measured throttle to motor output
+    -- CRITIQUE FIX: Apply current EXPO here too
+    local cur_expo = MOT_THST_EXPO:get() or 0
+    local lin_thr = (1 - cur_expo) * avg_measured_throttle + cur_expo * avg_measured_throttle * avg_measured_throttle
+
     local spin_min = MOT_SPIN_MIN:get() or 0.15
     local spin_max = MOT_SPIN_MAX:get() or 0.95
     local range = spin_max - spin_min
-    local measured_motor_out = spin_min + avg_measured_throttle * range
+    local measured_motor_out = spin_min + lin_thr * range
 
     -- Compare to expected
     local error_pct = math.abs(measured_motor_out - g_state.expected_motor_out) / g_state.expected_motor_out * 100
@@ -944,13 +973,9 @@ local function run_spinmin_calibration()
         -- Measure true hover output during "Hold" and "Settle" phases
         -- This ensures we know the real thrust required to hover, regardless of parameters
         if (step.name:find("Hold") or step.name:find("Settle")) and step_elapsed > 500 then
-            -- Calculate total motor output (PWM-equivalent 0-1)
-            -- Current output = spin_min + throttle * (spin_max - spin_min)
-            local s_min = MOT_SPIN_MIN:get() or 0.15
-            local s_max = MOT_SPIN_MAX:get() or 0.95
-            local total_out = s_min + throttle * (s_max - s_min)
-
-            g_state.measured_hover_sum = g_state.measured_hover_sum + total_out
+            -- Collect throttle values (Mixer input)
+            -- We just sum these up, we will linearize later in the compensation step
+            g_state.measured_hover_sum = g_state.measured_hover_sum + throttle
             g_state.measured_hover_count = g_state.measured_hover_count + 1
         end
     end
