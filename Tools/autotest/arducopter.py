@@ -15630,6 +15630,7 @@ RTL_ALT 111
         # ===== Phase 2: Hover test for expo =====
         self.progress("Phase 2: Running hover test for expo")
         self.set_parameter("TLIN_MODE", 0)  # Switch to hover test mode
+        self.set_parameter("TLIN_ACCEL", 10)  # 2x aggressiveness
 
         # Switch back to GUIDED (spin-min test switched to LOITER on completion)
         self.change_mode("GUIDED")
@@ -15660,7 +15661,7 @@ RTL_ALT 111
         self.set_parameter("TLIN_MODE", 1)  # Switch to forward flight test mode
         self.set_parameter("TLIN_DIST", 300)  # Forward flight needs more room for turnarounds
         self.set_parameter("TLIN_SPD", 12)  # Faster forward flight speed
-        self.set_parameter("TLIN_ACCEL", 5)  # 5 m/s^2 horizontal accel
+        # TLIN_ACCEL already set to 10 from hover test (2x aggressiveness)
 
         # Switch back to GUIDED (hover test switched to LOITER on completion)
         self.change_mode("GUIDED")
