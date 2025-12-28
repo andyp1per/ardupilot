@@ -99,16 +99,6 @@ local TLIN_SPD = bind_add_param("SPD", 3, 8)
 local TLIN_DIST = bind_add_param("DIST", 4, 300)
 
 --[[
-  // @Param: TLIN_LEAN
-  // @DisplayName: Maximum Lean Angle
-  // @Description: Abort test if lean angle exceeds this value.
-  // @Units: deg
-  // @Range: 10 60
-  // @User: Standard
---]]
-local TLIN_LEAN = bind_add_param("LEAN", 5, 45)
-
---[[
   // @Param: TLIN_START
   // @DisplayName: Start Command
   // @Description: Set to 1 to start test (auto-resets to 0).
@@ -134,6 +124,16 @@ local TLIN_STATE = bind_add_param("STATE", 7, 0)
   // @User: Standard
 --]]
 local TLIN_RESULT = bind_add_param("RESULT", 8, 0)
+
+--[[
+  // @Param: TLIN_ACCEL
+  // @DisplayName: Test Acceleration
+  // @Description: Horizontal acceleration for forward flight maneuvers.
+  // @Units: m/s/s
+  // @Range: 1 15
+  // @User: Standard
+--]]
+local TLIN_ACCEL = bind_add_param("ACCEL", 9, 5.0)
 
 -- Bind to existing ArduPilot parameters
 local MOT_THST_EXPO = bind_param("MOT_THST_EXPO")
@@ -545,17 +545,6 @@ end
 
 -- Check safety limits during test
 local function check_safety()
-    -- Check lean angle
-    local roll_rad = ahrs:get_roll_rad()
-    local pitch_rad = ahrs:get_pitch_rad()
-    if roll_rad and pitch_rad then
-        local lean_deg = math.deg(math.sqrt(roll_rad * roll_rad + pitch_rad * pitch_rad))
-        if lean_deg > TLIN_LEAN:get() then
-            gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Lean angle exceeded")
-            return false
-        end
-    end
-
     -- Check altitude limits (relative to start)
     -- Allow 15m below start (for descent maneuvers) and 25m above
     local alt = baro:get_altitude()
@@ -1179,11 +1168,21 @@ local function run_forward_test()
                       phase_name, hspd, dist))
     end
 
+    -- Acceleration vector for velaccel control
+    local accel = Vector3f()
+    local fwd_accel = TLIN_ACCEL:get() or 5.0
+    -- Vertical wave amplitude proportional to acceleration
+    local wave_amp = fwd_accel * 0.3  -- ~1.5 m/s at 5 m/s^2 accel
+
     if g_state.fwd_phase == FWD_PHASE.ACCEL then
-        -- Accelerate to cruise speed
+        -- Accelerate to cruise speed with explicit acceleration
         vel:x(test_spd * math.cos(g_state.fwd_heading_rad))
         vel:y(test_spd * math.sin(g_state.fwd_heading_rad))
         vel:z(0)
+        -- Command acceleration in flight direction
+        accel:x(fwd_accel * math.cos(g_state.fwd_heading_rad))
+        accel:y(fwd_accel * math.sin(g_state.fwd_heading_rad))
+        accel:z(0)
 
         if hspd > test_spd * 0.9 then
             gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Cruise at %.1f m/s", hspd))
@@ -1199,8 +1198,12 @@ local function run_forward_test()
         -- Sine wave vertical motion
         local wave_period_ms = 4000
         local wave_phase = ((now_ms - g_state.hover_step_start_ms) % wave_period_ms) / wave_period_ms
-        local vz = 1.5 * math.sin(wave_phase * 2 * math.pi)
+        local vz = wave_amp * math.sin(wave_phase * 2 * math.pi)
         vel:z(vz)
+        -- Zero horizontal accel during cruise, vertical accel for wave
+        accel:x(0)
+        accel:y(0)
+        accel:z(wave_amp * 2 * math.pi / (wave_period_ms / 1000) * math.cos(wave_phase * 2 * math.pi))
 
         -- Check for turnaround (use 50% to leave room for braking)
         if dist > TLIN_DIST:get() * 0.5 then
@@ -1211,10 +1214,17 @@ local function run_forward_test()
         end
 
     elseif g_state.fwd_phase == FWD_PHASE.TURN then
-        -- Brake and reverse direction
+        -- Brake with explicit deceleration opposing current velocity
         vel:x(0)
         vel:y(0)
         vel:z(0)
+        -- Command deceleration opposing current motion
+        if cur_vel and hspd > 0.1 then
+            local brake_scale = fwd_accel / hspd
+            accel:x(-cur_vel:x() * brake_scale)
+            accel:y(-cur_vel:y() * brake_scale)
+        end
+        accel:z(0)
 
         if hspd < 1.0 then
             -- Reverse heading
@@ -1230,7 +1240,7 @@ local function run_forward_test()
         end
     end
 
-    vehicle:set_target_velocity_NED(vel)
+    vehicle:set_target_velaccel_NED(vel, accel, false, 0, false, 0, false)
 
     -- Collect data during wave phase
     if g_state.fwd_phase == FWD_PHASE.WAVE then
