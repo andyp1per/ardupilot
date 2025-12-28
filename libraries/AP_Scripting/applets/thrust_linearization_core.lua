@@ -696,27 +696,27 @@ local function compensate_pids_for_spin_range(old_spin_min, old_spin_max, new_sp
     gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Spin Check: Old=%.2f New=%.2f Diff=%.2f",
                   old_spin_min, new_spin_min, diff))
 
-    if spin_min_dropped then
-        gcs:send_text(MAV_SEVERITY.INFO, "TLIN: SpinMin dropped significantly, forcing safe Hover")
-        g_state.expected_motor_out = nil
+    -- Calculate new hover throttle parameter to maintain physical thrust
+    -- New motor_out = new_spin_min + new_hover * new_range
+    local new_hover = (old_motor_out - new_spin_min) / new_range
 
-        local safe_hover = 0.20
-        gcs:send_text(MAV_SEVERITY.NOTICE, string.format("TLIN: Force Hover %.2f -> %.2f", old_hover_param, safe_hover))
-        MOT_THST_HOVER:set(safe_hover)
-    else
-        -- Calculate new hover throttle parameter to maintain physical thrust
-        -- New motor_out = new_spin_min + new_hover * new_range
-        local new_hover = (old_motor_out - new_spin_min) / new_range
-
-        -- Clamp to valid range
-        new_hover = math.max(0.01, math.min(0.9, new_hover))
-
-        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Hover %.2f -> %.2f", old_hover_param, new_hover))
-        MOT_THST_HOVER:set(new_hover)
-
-        -- Store expected motor output for later validation
-        g_state.expected_motor_out = old_motor_out
+    -- REMOVED: The logic that forced 0.20 hover when spin min drops.
+    -- Instead, we simply clamp the change to be reasonable to prevent runaway gains.
+    -- If new hover is > 200% of old, limit it.
+    if new_hover > old_hover_param * 2.0 then
+        local capped_hover = old_hover_param * 2.0
+        gcs:send_text(MAV_SEVERITY.WARNING, string.format("TLIN: Cap Hover %.2f -> %.2f (Calc: %.2f)", old_hover_param, capped_hover, new_hover))
+        new_hover = capped_hover
     end
+
+    -- Clamp to valid range
+    new_hover = math.max(0.01, math.min(0.9, new_hover))
+
+    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Hover %.2f -> %.2f", old_hover_param, new_hover))
+    MOT_THST_HOVER:set(new_hover)
+
+    -- Store expected motor output for later validation
+    g_state.expected_motor_out = old_motor_out
 
     -- Only scale PIDs if change is significant (> 1%)
     if math.abs(scale - 1.0) < 0.01 then
