@@ -3,6 +3,18 @@
   Calculates optimal MOT_THST_EXPO parameter in-flight via dynamic system identification.
   Uses body-frame vertical acceleration vs motor output to characterize thrust curve.
 
+  Compensation Math:
+  When MOT_SPIN_MIN changes, we preserve physical thrust and control loop gain using:
+  1. Alpha shift factor based on PWM floor change:
+     alpha = (pwm_min_old - pwm_min_new) / (pwm_max - pwm_min_old)
+  2. New Expo to preserve curve shape:
+     expo_new = (expo_old * (1 + alpha)) / ((1 - expo_old) + expo_old * (1 - alpha))
+  3. New Hover Thrust:
+     hover_new = (hover_old + alpha) / (1 + alpha)
+  4. Gain Scaling based on local slope at hover:
+     slope = (1 - expo) + 2 * expo * hover_thrust
+     gain_scale = slope_old / slope_new
+
   Communication with menu script via TLIN_ parameters.
   Activation via RC switch (aux func 300) or TLIN_CMD_START parameter.
 --]]
@@ -140,6 +152,8 @@ local MOT_THST_EXPO = bind_param("MOT_THST_EXPO")
 local MOT_THST_HOVER = bind_param("MOT_THST_HOVER")
 local MOT_SPIN_MIN = bind_param("MOT_SPIN_MIN")
 local MOT_SPIN_MAX = bind_param("MOT_SPIN_MAX")
+local MOT_PWM_MIN = bind_param("MOT_PWM_MIN")
+local MOT_PWM_MAX = bind_param("MOT_PWM_MAX")
 
 -- Rate PID parameters for compensation when spin range changes
 local RATE_PID_PARAMS = {
@@ -652,92 +666,101 @@ local function complete_test(expo_result)
 end
 
 -- Compensate PIDs and hover throttle when spin range changes to maintain identical performance
--- Scale factor = old_range / new_range
+-- Implements improved equations for expo/hover shifting and gain scaling based on local slope
 local function compensate_pids_for_spin_range(old_spin_min, old_spin_max, new_spin_min, new_spin_max)
-    local old_range = old_spin_max - old_spin_min
-    local new_range = new_spin_max - new_spin_min
 
-    -- Sanity check ranges
-    if old_range <= 0 or new_range <= 0 then
-        gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Invalid spin range for PID compensation")
-        return false
+    -- Ensure we have PWM parameters (assuming 1000-2000 standard if not set)
+    local pwm_min = MOT_PWM_MIN:get() or 1000
+    local pwm_max = MOT_PWM_MAX:get() or 2000
+    local pwm_range = pwm_max - pwm_min
+
+    -- Note: MOT_SPIN_MIN is a fraction of the PWM range, offset from PWM_MIN
+    -- We calculate the physical PWM duration shift relative to the full range
+    -- alpha = (pwm_min_old - pwm_min_new) / (pwm_max - pwm_min_old)
+
+    local pwm_spin_min_old = pwm_range * old_spin_min
+    local pwm_spin_min_new = pwm_range * new_spin_min
+
+    -- Denominator is the "working range" of PWM available above the old floor
+    local denom = pwm_range - pwm_spin_min_old
+    if denom <= 0.1 then 
+        gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Invalid PWM range for calc")
+        return false 
     end
 
-    local scale = old_range / new_range
+    local alpha = (pwm_spin_min_old - pwm_spin_min_new) / denom
 
-    -- Calculate new MOT_THST_HOVER based on measured hover output
-    -- If we have measurement, use it. Otherwise use previous parameter
-    local old_hover_param = MOT_THST_HOVER:get() or 0.5
-    local old_motor_out
+    -- Get current state
+    local old_hover_thrust = MOT_THST_HOVER:get() or 0.5
+    local old_expo = MOT_THST_EXPO:get() or 0
 
+    -- Measurement Override: If we have good measurement data, trust it over the old parameter
     if g_state.measured_hover_count > 10 then
-        -- CRITIQUE FIX: Apply current EXPO to measured throttle before calculating linear output
-        -- Measured throttle is the mixer INPUT. Physical output is (1-k)*u + k*u^2
         local avg_thr = g_state.measured_hover_sum / g_state.measured_hover_count
-        local cur_expo = MOT_THST_EXPO:get() or 0
-        local lin_thr = (1 - cur_expo) * avg_thr + cur_expo * avg_thr * avg_thr
 
-        -- Calculate total linear motor output (0-1 range)
-        -- Linear Motor Output = SpinMin + LinearThrottle * Range
-        local s_min = MOT_SPIN_MIN:get() or 0.15
-        local s_max = MOT_SPIN_MAX:get() or 0.95
-        old_motor_out = s_min + lin_thr * (s_max - s_min)
+        -- Linearize the measured throttle (mixer input) using current expo
+        -- u_lin = (1-k)*u + k*u^2
+        local lin_thr = (1.0 - old_expo) * avg_thr + old_expo * avg_thr * avg_thr
 
-        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Meas Thr: %.3f (Expo: %.2f) Out: %.3f", avg_thr, cur_expo, old_motor_out))
-    else
-        -- Fallback to existing parameter (assumes parameter is linear target)
-        old_motor_out = old_spin_min + old_hover_param * old_range
+        old_hover_thrust = lin_thr
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Meas Hover Thrust: %.3f", old_hover_thrust))
     end
 
-    -- Check if spin_min dropped significantly (indicating previous floor limiting)
-    local diff = old_spin_min - new_spin_min
-    local spin_min_dropped = diff > 0.03 -- Thres: 0.03
+    -- 2. Calculate New Hover Thrust
+    -- hover_thrust_new = (hover_thrust_old + alpha) / (1.0f + alpha)
+    local new_hover_thrust = (old_hover_thrust + alpha) / (1.0 + alpha)
 
-    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Spin Check: Old=%.2f New=%.2f Diff=%.2f",
-                  old_spin_min, new_spin_min, diff))
+    -- 3. Calculate New Expo
+    -- expo_new = (expo_old * (1.0f + alpha)) / ((1.0f - expo_old) + expo_old * (1.0f - alpha))
+    local term1 = old_expo * (1.0 + alpha)
+    local term2 = (1.0 - old_expo) + old_expo * (1.0 - alpha)
+    -- Protect against division by zero
+    if math.abs(term2) < 0.0001 then term2 = 0.0001 end
+    local new_expo = term1 / term2
 
-    -- Calculate new hover throttle parameter to maintain physical thrust
-    -- New motor_out = new_spin_min + new_hover * new_range
-    local new_hover = (old_motor_out - new_spin_min) / new_range
+    -- 4. Calculate Gain Scaling based on slope at hover point
+    -- slope = (1.0f - expo) + 2.0f * expo * hover_thrust;
+    -- gain_scale = slope_old / slope_new;
 
-    -- REMOVED: The logic that forced 0.20 hover when spin min drops.
-    -- Instead, we simply clamp the change to be reasonable to prevent runaway gains.
-    -- If new hover is > 200% of old, limit it.
-    if new_hover > old_hover_param * 2.0 then
-        local capped_hover = old_hover_param * 2.0
-        gcs:send_text(MAV_SEVERITY.WARNING, string.format("TLIN: Cap Hover %.2f -> %.2f (Calc: %.2f)", old_hover_param, capped_hover, new_hover))
-        new_hover = capped_hover
-    end
+    local slope_old = (1.0 - old_expo) + 2.0 * old_expo * old_hover_thrust
+    local slope_new = (1.0 - new_expo) + 2.0 * new_expo * new_hover_thrust
 
-    -- Clamp to valid range
-    new_hover = math.max(0.01, math.min(0.9, new_hover))
+    -- Protect against invalid slope (should represent physical thrust curve slope > 0)
+    if slope_new < 0.001 then slope_new = 0.001 end
 
-    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Hover %.2f -> %.2f", old_hover_param, new_hover))
-    MOT_THST_HOVER:set(new_hover)
+    local gain_scale = slope_old / slope_new
 
-    -- Store expected motor output for later validation
-    g_state.expected_motor_out = old_motor_out
+    -- Apply Safety Clamps
+    new_hover_thrust = math.max(0.01, math.min(0.9, new_hover_thrust))
+    new_expo = math.max(0.0, math.min(1.0, new_expo))
 
-    -- Only scale PIDs if change is significant (> 1%)
-    if math.abs(scale - 1.0) < 0.01 then
-        gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Spin range change <1%, no PID scaling needed")
-        return true
-    end
+    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Alpha: %.3f", alpha))
+    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Hover %.3f -> %.3f", old_hover_thrust, new_hover_thrust))
+    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Expo %.3f -> %.3f", old_expo, new_expo))
+    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Scale PIDs: %.3f", gain_scale))
 
-    gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Scaling PIDs by %.3f", scale))
+    -- Update Parameters
+    MOT_THST_HOVER:set(new_hover_thrust)
+    MOT_THST_EXPO:set(new_expo)
+    MOT_SPIN_MIN:set(new_spin_min)
 
-    local scaled_count = 0
-    for _, name in ipairs(RATE_PID_PARAMS) do
-        local p = bind_param(name)
-        if p then
-            local old_val = p:get()
-            local new_val = old_val * scale
-            p:set(new_val)
-            scaled_count = scaled_count + 1
+    -- Scale PIDs
+    if math.abs(gain_scale - 1.0) > 0.01 then
+        local scaled_count = 0
+        for _, name in ipairs(RATE_PID_PARAMS) do
+            local p = bind_param(name)
+            if p then
+                local old_val = p:get()
+                local new_val = old_val * gain_scale
+                p:set(new_val)
+                scaled_count = scaled_count + 1
+            end
         end
+        gcs:send_text(MAV_SEVERITY.NOTICE, string.format("TLIN: Scaled %d PID params", scaled_count))
     end
 
-    gcs:send_text(MAV_SEVERITY.NOTICE, string.format("TLIN: Scaled %d PID params", scaled_count))
+    -- Clear expected for next run
+    g_state.expected_motor_out = nil
 
     return true
 end
@@ -855,8 +878,6 @@ local function complete_spinmin_calibration()
         compensate_pids_for_spin_range(current_spin_min, current_spin_max,
                                        spin_min_result, current_spin_max)
 
-        MOT_SPIN_MIN:set(spin_min_result)
-        gcs:send_text(MAV_SEVERITY.NOTICE, string.format("TLIN: Set MOT_SPIN_MIN=%.2f", spin_min_result))
     else
         gcs:send_text(MAV_SEVERITY.INFO, "TLIN: MOT_SPIN_MIN unchanged")
     end
