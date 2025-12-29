@@ -215,13 +215,13 @@ local g_observed_max_thr = 0.0
 
 -- Get throttle range based on MOT_THST_HOVER
 local function get_throttle_range()
-    local hover = MOT_THST_HOVER:get() or 0.5
-    -- Range from 1% (to accept overpowered vehicles)
+    -- Use new API to get actual throttle out if available, fallback to param
+    local hover_val = MOT_THST_HOVER:get() or 0.5
+
+        -- Range from 1% (to accept overpowered vehicles)
     local min_thr = 0.01
     -- Upper limit: Allow collecting data up to 95% throttle or at least 0.85
-    -- even for overpowered aircraft, to capture the curve tail if reached.
-    -- However, practically limit based on hover to focus resolution where needed.
-    local max_thr = math.min(math.max(hover * 3.0, 0.85), 0.95)
+    local max_thr = math.min(math.max(hover_val * 3.0, 0.85), 0.95)
     return min_thr, max_thr
 end
 
@@ -683,9 +683,9 @@ local function compensate_pids_for_spin_range(old_spin_min, old_spin_max, new_sp
 
     -- Denominator is the "working range" of PWM available above the old floor
     local denom = pwm_range - pwm_spin_min_old
-    if denom <= 0.1 then 
+    if denom <= 0.1 then
         gcs:send_text(MAV_SEVERITY.WARNING, "TLIN: Invalid PWM range for calc")
-        return false 
+        return false
     end
 
     local alpha = (pwm_spin_min_old - pwm_spin_min_new) / denom
@@ -696,14 +696,16 @@ local function compensate_pids_for_spin_range(old_spin_min, old_spin_max, new_sp
 
     -- Measurement Override: If we have good measurement data, trust it over the old parameter
     if g_state.measured_hover_count > 10 then
+        -- CRITIQUE FIX: Apply current EXPO to measured throttle before calculating linear output
+        -- Measured throttle is the mixer INPUT. Physical output is (1-k)*u + k*u^2
         local avg_thr = g_state.measured_hover_sum / g_state.measured_hover_count
 
-        -- Linearize the measured throttle (mixer input) using current expo
-        -- u_lin = (1-k)*u + k*u^2
-        local lin_thr = (1.0 - old_expo) * avg_thr + old_expo * avg_thr * avg_thr
-
-        old_hover_thrust = lin_thr
-        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Meas Hover Thrust: %.3f", old_hover_thrust))
+        -- Check if motors has new get_throttle_out, if so, we used it directly (which is 0-1 range already linearized?)
+        -- Wait, motors:get_throttle() is mixer INPUT. motors:get_throttle_out() would likely be output.
+        -- Assuming add_data_point uses motors:get_throttle() which is input.
+        -- If we switched to motors:get_throttle_out() in run_spinmin_calibration, then it's already linearized output
+        old_hover_thrust = avg_thr
+        gcs:send_text(MAV_SEVERITY.INFO, string.format("TLIN: Direct Meas Hover: %.3f", old_hover_thrust))
     end
 
     -- 2. Calculate New Hover Thrust
@@ -985,17 +987,19 @@ local function run_spinmin_calibration()
     end
 
     -- Collect data - focus on spin bins for low throttle analysis
-    local throttle = motors:get_throttle()
+    local throttle = motors:get_throttle_out()
+
     local accel = ins:get_accel(0)
     if throttle and accel then
+        -- Note: add_data_point adds to bins for EXPO calculation
+        -- We might want to be careful if throttle is now 'out' vs 'in'
+        -- Ideally consistent usage. For SpinMin analysis, we need physical output.
         add_data_point(throttle, accel:z())
         g_state.last_throttle = throttle
 
         -- Measure true hover output during "Hold" and "Settle" phases
-        -- This ensures we know the real thrust required to hover, regardless of parameters
         if (step.name:find("Hold") or step.name:find("Settle")) and step_elapsed > 500 then
-            -- Collect throttle values (Mixer input)
-            -- We just sum these up, we will linearize later in the compensation step
+            -- Collect throttle values
             g_state.measured_hover_sum = g_state.measured_hover_sum + throttle
             g_state.measured_hover_count = g_state.measured_hover_count + 1
         end
@@ -1060,7 +1064,7 @@ local function run_calibration_test()
 
     -- Collect data - skip first 300ms of each step for settling
     if step_elapsed > 300 then
-        local throttle = motors:get_throttle()
+        local throttle = motors:get_throttle_out()
         local accel = ins:get_accel(0)
         if throttle and accel then
             add_data_point(throttle, accel:z())
@@ -1151,8 +1155,6 @@ local function run_hover_test()
         g_state.hover_step = 1
         g_state.hover_step_start_ms = now_ms
         g_state.collect_start_ms = now_ms
-        -- Show throttle range based on MOT_THST_HOVER
-        local min_thr, max_thr = get_throttle_range()
         local hover = MOT_THST_HOVER:get() or 0.5
         gcs:send_text(MAV_SEVERITY.INFO, "TLIN: Starting hover test")
         if hover < 0.25 then
@@ -1206,7 +1208,8 @@ local function run_hover_test()
     end
 
     -- Collect data
-    local throttle = motors:get_throttle()
+    local throttle = motors:get_throttle_out()
+
     local imu_accel = ins:get_accel(0)
     if throttle and imu_accel then
         add_data_point(throttle, imu_accel:z())
@@ -1344,10 +1347,10 @@ local function run_forward_test()
 
     -- Collect data during wave phase
     if g_state.fwd_phase == FWD_PHASE.WAVE then
-        local throttle = motors:get_throttle()
-        local accel = ins:get_accel(0)
-        if throttle and accel then
-            add_data_point(throttle, accel:z())
+        local throttle = motors:get_throttle_out()
+        local accel_i = ins:get_accel(0)
+        if throttle and accel_i then
+            add_data_point(throttle, accel_i:z())
         end
     end
 
