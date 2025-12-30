@@ -15549,6 +15549,83 @@ RTL_ALT 111
         self.change_mode("LAND")
         self.wait_disarmed(timeout=120)
 
+    def RealFlightThrustLinearization(self, model, home):
+        '''
+        Run thrust linearization test in RealFlight. Uses the overpowered
+        Rise255 model to test the script on challenging aircraft.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+
+        self.context_push()
+        self.context_collect('STATUSTEXT')
+
+        # Log fullrate attitude for analysis
+        self.set_parameters({
+            "LOG_BITMASK": 0x10FFFF,
+        })
+
+        # Setup RealFlight connection - this reconfigures SITL
+        self.setup_RealFlight_vehicle(model, home)
+
+        # Install the thrust linearization script
+        # Rise255 defaults already have SCR_ENABLE=1, script loads on setup_RealFlight reboot
+        self.install_applet_script_context('thrust_linearization_core.lua')
+
+        # Wait for script to initialize (should already be loaded from setup reboot)
+        self.wait_statustext("TLIN: Core script loaded", check_context=True, timeout=30)
+
+        # Configure for hover test mode (mode 0)
+        # Rise255 already has RC7_OPTION=300 (Scripting1)
+        self.set_parameters({
+            "TLIN_ENABLE": 1,
+            "TLIN_MODE": 0,     # Hover test mode
+            "TLIN_DIST": 100,   # Max distance 100m
+            "TLIN_LEAN": 45,    # Max lean angle
+        })
+
+        self.wait_ready_to_arm()
+
+        # Take off in LOITER mode
+        self.change_mode("LOITER")
+        self.arm_vehicle()
+        self.set_rc(3, 2000)
+        self.wait_altitude(8, 12, relative=True)
+        self.set_rc(3, 1500)
+
+        # Wait for stable hover
+        self.delay_sim_time(3)
+
+        # Switch to GUIDED for the test
+        self.change_mode("GUIDED")
+
+        # Trigger test via RC7 switch (Scripting1)
+        self.progress("Triggering thrust linearization test via RC7")
+        self.set_rc(7, 2000)
+        self.wait_statustext("TLIN: Starting test", check_context=True, timeout=10)
+        self.wait_statustext("TLIN: Starting hover test", check_context=True, timeout=10)
+
+        # Wait for test to complete (hover test takes ~25-30 seconds)
+        self.wait_statustext("TLIN: Result: Expo=", check_context=True, timeout=90, regex=True)
+
+        # Verify state is complete
+        state = self.get_parameter("TLIN_STATE")
+        if state != 2:
+            raise NotAchievedException("TLIN_STATE should be 2 (Complete), got %d" % state)
+
+        # Verify we got a result
+        result = self.get_parameter("TLIN_RESULT")
+        self.progress("Thrust linearization result: Expo=%.2f" % result)
+
+        # Switch back RC
+        self.set_rc(7, 1000)
+
+        # Land
+        self.change_mode("LAND")
+        self.wait_disarmed(timeout=120)
+
+        self.context_pop()
+
     def LUAConfigProfile(self):
         '''test the config_profiles.lua example script'''
         self.customise_SITL_commandline(
@@ -15937,6 +16014,10 @@ return update, 1000
             self.SafetySwitch,
             self.RCProtocolFailsafe,
             Test(self.RealFlightHover, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
+            Test(self.RealFlightThrustLinearization, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
