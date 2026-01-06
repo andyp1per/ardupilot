@@ -153,7 +153,7 @@ void AP_CRSF_Out::crsf_out_thread()
         uint32_t interval_us = frame_interval_us;
 
         // if we have not negotiated a faster baudrate do not go above the default output rate
-        if (get_configured_update_rate() > DEFAULT_CRSF_OUTPUT_RATE && uart->get_baud_rate() == CRSF_BAUDRATE) {
+        if (get_configured_update_rate() > DEFAULT_CRSF_OUTPUT_RATE && uart.get_baud_rate() == CRSF_BAUDRATE) {
             interval_us = 1000000UL / DEFAULT_CRSF_OUTPUT_RATE;
         }
 
