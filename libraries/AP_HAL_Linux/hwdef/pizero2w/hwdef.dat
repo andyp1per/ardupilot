@@ -1,7 +1,7 @@
 # Raspberry Pi Zero 2W board definition
 # Minimal configuration for CRSF External AHRS testing
 
-define CONFIG_HAL_BOARD_SUBTYPE HAL_BOARD_SUBTYPE_LINUX_NONE
+define CONFIG_HAL_BOARD_SUBTYPE HAL_BOARD_SUBTYPE_LINUX_RPI
 
 # Toolchain - 64-bit ARM for Pi Zero 2W (BCM2710/Cortex-A53)
 env TOOLCHAIN aarch64-linux-gnu
@@ -9,8 +9,8 @@ env TOOLCHAIN aarch64-linux-gnu
 # Optimizations for Cortex-A53 (64-bit)
 env OPTIMIZE -mcpu=cortex-a53 -fomit-frame-pointer -ftree-vectorize
 
-# GPIO support - not needed for basic CRSF serial testing
-# define HAL_LINUX_GPIO_RPI_ENABLED 1
+# GPIO support - enables DMA-based GPIO sampling for SBUS
+define HAL_LINUX_GPIO_RPI_ENABLED 1
 
 # Enable CRSF output - key feature for this branch
 define AP_CRSF_OUT_ENABLED 1
