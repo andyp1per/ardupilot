@@ -18,7 +18,6 @@
 #include <skybrush/skybrush.h>
 
 #include "DroneShow_Constants.h"
-#include "DroneShow_CustomPackets.h"
 #include "DroneShowLEDFactory.h"
 #include "DroneShowPyroDeviceFactory.h"
 
