@@ -30,6 +30,10 @@
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 #include <AP_HAL/I2CDevice.h>
 
+#if AP_BARO_EXTERNALAHRS_ENABLED
+#include <AP_ExternalAHRS/AP_ExternalAHRS.h>
+#endif
+
 #include "AP_Baro_SITL.h"
 #include "AP_Baro_BMP085.h"
 #include "AP_Baro_BMP280.h"
@@ -310,7 +314,22 @@ void AP_Baro::calibrate(bool save)
             return;
     }
     #endif
-    
+
+#if AP_BARO_EXTERNALAHRS_ENABLED
+    // if external AHRS is providing baro, wait for it to be ready
+    // CRSF and other external AHRS may take time to establish communication
+    const int8_t serial_port = AP::externalAHRS().get_port(AP_ExternalAHRS::AvailableSensor::BARO);
+    if (serial_port >= 0) {
+        const uint32_t start_ms = AP_HAL::millis();
+        while (!AP::externalAHRS().initialised() && (AP_HAL::millis() - start_ms < 5000)) {
+            hal.scheduler->delay(10);
+        }
+        if (!AP::externalAHRS().initialised()) {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Baro: external AHRS not ready, continuing anyway");
+        }
+    }
+#endif
+
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Calibrating barometer");
 
     // reset the altitude offset when we calibrate. The altitude
