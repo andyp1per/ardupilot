@@ -7,6 +7,7 @@
 #include <sys/ioctl.h>
 #include <asm/ioctls.h>
 #include <asm/termbits.h>
+#include <linux/serial.h>
 #include <unistd.h>
 
 #include <AP_HAL/AP_HAL.h>
@@ -44,6 +45,13 @@ bool UARTDevice::open()
     }
 
     _disable_crlf();
+
+    // enable low-latency mode to reduce kernel buffering delays
+    struct serial_struct serial;
+    if (ioctl(_fd, TIOCGSERIAL, &serial) == 0) {
+        serial.flags |= ASYNC_LOW_LATENCY;
+        ioctl(_fd, TIOCSSERIAL, &serial);
+    }
 
     return true;
 }
