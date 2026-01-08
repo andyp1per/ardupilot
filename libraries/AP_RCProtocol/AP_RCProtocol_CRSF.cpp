@@ -656,7 +656,7 @@ bool AP_RCProtocol_CRSF::change_baud_rate(uint32_t baudrate)
     if (uart == nullptr) {
         return false;
     }
-#if !defined(STM32H7) && CONFIG_HAL_BOARD != HAL_BOARD_SITL
+#if !defined(STM32H7) && CONFIG_HAL_BOARD != HAL_BOARD_SITL && CONFIG_HAL_BOARD != HAL_BOARD_LINUX
     if (baudrate > get_bootstrap_baud_rate() && !uart->is_dma_enabled()) {
         return false;
     }
