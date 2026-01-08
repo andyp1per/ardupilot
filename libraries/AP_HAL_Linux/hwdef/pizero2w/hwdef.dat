@@ -26,3 +26,5 @@ define HAL_BOARD_TERRAIN_DIRECTORY "/var/lib/ardupilot/terrain"
 # Serial port configuration
 # UART0 (GPIO14/15) available on Pi Zero 2W GPIO header
 # UART configuration handled at runtime via SERIALn parameters
+
+define HAL_BARO_ALLOW_INIT_NO_BARO 1
