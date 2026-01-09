@@ -29,6 +29,7 @@
 #include "RCInput_Multi.h"
 #include "RCInput_ZYNQ.h"
 #include "RCInput_RCProtocol.h"
+#include "RCInput_Gpiod.h"
 #include "RCOutput_AioPRU.h"
 #include "RCOutput_Bebop.h"
 #include "RCOutput_Disco.h"
@@ -161,9 +162,16 @@ static RCInput_Multi rcinDriver{2, NEW_NOTHROW RCInput_AioPRU, NEW_NOTHROW RCInp
       CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_DARK || \
       CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_PXFMINI || \
       CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_OBAL_V1 || \
-      CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_CANZERO || \
-      CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_RPI
+      CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_CANZERO
 static RCInput_RPI rcinDriver;
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_RPI
+  #if defined(HAVE_LIBGPIOD)
+// Use libgpiod edge detection for precise pulse timing (SBUS, DSM, PPM)
+// GPIO4 (pin 7) is the default RC input pin on Raspberry Pi
+static RCInput_Gpiod rcinDriver{"/dev/gpiochip0", 4};
+  #else
+static RCInput_RPI rcinDriver;
+  #endif
 #elif AP_RCPROTOCOL_ZYNQ_ENABLED
 static RCInput_ZYNQ rcinDriver;
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BEBOP

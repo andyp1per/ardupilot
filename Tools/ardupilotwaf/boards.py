@@ -1559,6 +1559,7 @@ class LinuxBoard(Board):
         cfg.check_lttng(env)
         cfg.check_libdl(env)
         cfg.check_libiio(env)
+        cfg.check_libgpiod(env)
 
         env.LINKFLAGS += ['-pthread',]
         env.AP_LIBRARIES += [

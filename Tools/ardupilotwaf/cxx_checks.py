@@ -280,6 +280,38 @@ def check_SFML(cfg, env):
 
 
 @conf
+def check_libgpiod(cfg, env):
+    if cfg.env.STATIC_LINKING:
+        cfg.msg("Checking for 'libgpiod':", 'disabled for static build', color='YELLOW')
+        return False
+
+    # Check for libgpiod v2 via pkg-config
+    if not check_package(cfg, env, 'libgpiod'):
+        return False
+
+    # Verify we have libgpiod v2 API (gpiod_chip_open instead of gpiod_chip_open_by_name)
+    ret = cfg.check(
+        compiler='cxx',
+        fragment='''
+        #include <gpiod.h>
+        int main() {
+            struct gpiod_chip *chip = gpiod_chip_open("/dev/gpiochip0");
+            if (chip) gpiod_chip_close(chip);
+            return 0;
+        }''',
+        msg='Checking for libgpiod v2 API',
+        mandatory=False,
+        use='LIBGPIOD',
+    )
+
+    if ret:
+        cfg.define('HAVE_LIBGPIOD', 1)
+        return True
+
+    cfg.msg("libgpiod", 'v1 detected, need v2', color='YELLOW')
+    return False
+
+@conf
 def check_SFML_Audio(cfg, env):
     if not cfg.options.enable_sfml_audio:
         cfg.msg("Checking for SFML audio:", 'disabled', color='YELLOW')
