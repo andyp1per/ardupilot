@@ -23,7 +23,7 @@ enum DroneShowModeStage {
 // Enum representing the flags in the control mode bitmap
 enum DroneShowControlModeFlag {
     DroneShowControl_VelocityControlEnabled = 1,
-    DroneShowControl_AccelerationControlEnabled = 2,
+    DroneShowControl_AccelerationControlEnabledNotImplementedAnyMore = 2,
 };
 
 // Enum representing the authorization scopes for the start of the show

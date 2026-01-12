@@ -235,11 +235,6 @@ public:
     // cooordinate system, using centimeters per seconds as units.
     void get_desired_velocity_neu_in_cms_per_seconds_at_seconds(float time, Vector3f& vel);
 
-    // Returns the desired acceleration of the drone during the drone show the
-    // given number of seconds after the start time, in the global NEU
-    // cooordinate system, using centimeters per seconds squared as units.
-    void get_desired_acceleration_neu_in_cms_per_seconds_squared_at_seconds(float time, Vector3f& acc);
-
     // Returns the desired yaw of the drone during the drone show the
     // given number of seconds after the start time, in centidegrees 
     // relative to North.
@@ -411,12 +406,6 @@ public:
     // valid results only if the drone is in the "waiting for start time" stage;
     // otherwise it returns false unconditionally.
     bool is_prepared_to_take_off() const;
-
-    // Returns whether we are feeding desired acceleration information into the
-    // lower-level position controller of ArduPilot
-    bool is_acceleration_control_enabled() const {
-        return _params.control_mode_flags & DroneShowControl_AccelerationControlEnabled;
-    }
 
     // Returns whether we are feeding desired velocity information into the
     // lower-level position controller of ArduPilot
