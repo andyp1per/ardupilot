@@ -472,11 +472,20 @@ void AP_CRSF_Out::send_aux_rc_frame()
 void AP_CRSF_Out::send_rc_frame(uint8_t start_chan, uint8_t nchan)
 {
     uint16_t channels[CRSF_MAX_CHANNELS] {};
+    const bool armed = hal.util->get_soft_armed();
+
     for (uint8_t i = start_chan; i < start_chan + nchan; ++i) {
         SRV_Channel *c = SRV_Channels::srv_channel(i);
 
         if (c == nullptr) { // Default to neutral if channel is null
             channels[i] = 1500;
+            continue;
+        }
+
+        // When disarmed, output trim values for AETR channels (0-3) to prevent
+        // feedback loops with external flight controllers like BetaFlight
+        if (!armed && i < 4) {
+            channels[i] = c->get_trim();
             continue;
         }
 
@@ -486,7 +495,7 @@ void AP_CRSF_Out::send_rc_frame(uint8_t start_chan, uint8_t nchan)
             RC_Channels* rc = RC_Channels::get_singleton();
             if (rc != nullptr) {
                 RC_Channel *chan = rc->channel(func - SRV_Channel::Function::k_rcin1);
-                if (!hal.util->get_soft_armed()
+                if (!armed
                     && (chan->option.get() == int16_t(RC_Channel::AUX_FUNC::ARMDISARM)
                         || chan->option.get() == int16_t(RC_Channel::AUX_FUNC::ARMDISARM_AIRMODE))) {
                     channels[i] = 1000;
