@@ -82,7 +82,8 @@ private:
     uint32_t last_loop_check_ms;
     uint16_t current_loop_rate;
     uint32_t imu_pkts_received;
-    uint64_t sample_base_us;
+    uint64_t sample_base_us;   // BetaFlight timestamp at sync
+    uint64_t local_base_us;    // ArduPilot timestamp at sync
 
     // The CRSF index (0, 1, 2...) that this AHRS is configured to listen to.
     uint8_t _instance_idx;
