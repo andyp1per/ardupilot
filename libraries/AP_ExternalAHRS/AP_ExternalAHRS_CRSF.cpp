@@ -100,11 +100,16 @@ void AP_ExternalAHRS_CRSF::handle_acc_gyro_frame(uint8_t instance_idx, const Vec
     state.accel = accel;
     state.gyro = gyro;
 
+    // Synchronize BetaFlight's 32-bit clock to ArduPilot's 64-bit clock.
+    // Store both initial values and compute timestamps relative to them.
     if (sample_base_us == 0) {
-        sample_base_us = sample_us - AP_HAL::micros64();
+        sample_base_us = sample_us;
+        local_base_us = AP_HAL::micros64();
     }
 
-    uint64_t sample_time = sample_us - sample_base_us;
+    // Handle 32-bit wraparound of BetaFlight timestamp
+    uint32_t delta_us = sample_us - static_cast<uint32_t>(sample_base_us);
+    uint64_t sample_time = local_base_us + delta_us;
 
     last_imu_pkt_us = AP_HAL::micros();
     imu_pkts_received++;
@@ -196,6 +201,7 @@ void AP_ExternalAHRS_CRSF::update()
 {
     if (!healthy()) {
         sample_base_us = 0;
+        local_base_us = 0;
     }
 
     const uint32_t now_ms = AP_HAL::millis();
