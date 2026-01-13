@@ -315,17 +315,25 @@ void AP_Baro::calibrate(bool save)
     }
     #endif
 
+    // Check if external AHRS is providing baro - needs special handling
+    bool eahrs_baro = false;
 #if AP_BARO_EXTERNALAHRS_ENABLED
-    // if external AHRS is providing baro, wait for it to be ready
-    // CRSF and other external AHRS may take time to establish communication
-    const int8_t serial_port = AP::externalAHRS().get_port(AP_ExternalAHRS::AvailableSensor::BARO);
-    if (serial_port >= 0) {
+    // External AHRS may take time to establish communication
+    // (CRSF baud negotiation can take 1.5+ seconds, then baro frames at ~10Hz)
+    const int8_t eahrs_port = AP::externalAHRS().get_port(AP_ExternalAHRS::AvailableSensor::BARO);
+    if (eahrs_port >= 0) {
+        eahrs_baro = true;
         const uint32_t start_ms = AP_HAL::millis();
-        while (!AP::externalAHRS().initialised() && (AP_HAL::millis() - start_ms < 5000)) {
+        // Wait for AHRS to initialize (receives first packet)
+        while (!AP::externalAHRS().initialised() && (AP_HAL::millis() - start_ms < 10000)) {
             hal.scheduler->delay(10);
         }
-        if (!AP::externalAHRS().initialised()) {
-            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Baro: external AHRS not ready, continuing anyway");
+        if (AP::externalAHRS().initialised()) {
+            // Wait for baro to become healthy (receives baro frames)
+            while (!healthy() && (AP_HAL::millis() - start_ms < 15000)) {
+                update();
+                hal.scheduler->delay(100);
+            }
         }
     }
 #endif
@@ -344,7 +352,12 @@ void AP_Baro::calibrate(bool save)
         do {
             update();
             if (AP_HAL::millis() - tstart > 500) {
-                AP_BoardConfig::config_error("Baro: unable to calibrate");
+                if (!eahrs_baro) {
+                    // Internal sensors should always be ready - fail fast
+                    AP_BoardConfig::config_error("Baro: unable to calibrate");
+                }
+                // External AHRS baro may have gaps - continue to next iteration
+                break;
             }
             hal.scheduler->delay(10);
         } while (!healthy());
@@ -361,8 +374,12 @@ void AP_Baro::calibrate(bool save)
         do {
             update();
             if (AP_HAL::millis() - tstart > 500) {
-                AP_BoardConfig::config_error("Baro: unable to calibrate");
+                if (!eahrs_baro) {
+                    AP_BoardConfig::config_error("Baro: unable to calibrate");
+                }
+                break;
             }
+            hal.scheduler->delay(10);
         } while (!healthy());
         for (uint8_t i=0; i<_num_sensors; i++) {
             if (healthy(i)) {
@@ -396,7 +413,12 @@ void AP_Baro::calibrate(bool save)
     if (num_calibrated) {
         return;
     }
-    AP_BoardConfig::config_error("Baro: all sensors uncalibrated");
+    if (eahrs_baro) {
+        // External AHRS baro may recover later - warn but don't halt
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Baro: EAHRS baro not calibrated");
+    } else {
+        AP_BoardConfig::config_error("Baro: all sensors uncalibrated");
+    }
 }
 
 /*
