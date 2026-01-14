@@ -221,9 +221,10 @@ void AP_CRSF_Out::run_state_machine()
 {
     const uint32_t now = AP_HAL::micros();
 
-    const uint32_t BAUD_NEG_TIMEOUT_US = 1500000; // 1.5 second timeout for a response
-    const uint32_t BAUD_NEG_INTERVAL_US = 500000; // send proposal every 500ms
-    const uint32_t LIVENESS_CHECK_TIMEOUT_US = 500000; // timeout for health check 500ms
+    const uint32_t BAUD_NEG_TIMEOUT_US = 300000; // 300ms timeout for a response
+    const uint32_t BAUD_NEG_INTERVAL_US = 100000; // send proposal every 100ms
+    const uint32_t LIVENESS_CHECK_TIMEOUT_US = 200000; // 200ms timeout for health check (TBS downgrade threshold)
+    const uint8_t BAUD_NEG_MAX_RETRIES = 1; // retry same baud rate once before falling back
 
     switch (_state) {
     case State::WAITING_FOR_PORT:
@@ -250,11 +251,22 @@ void AP_CRSF_Out::run_state_machine()
         send_ping_frame();
 
         if (version.major > 0 && _crsf_port->is_rx_active()) {
-            _state = State::NEGOTIATING_2M;
-            _target_baudrate = 2000000;
+            // Start at highest rate not rejected this session
+            _target_baudrate = _max_allowed_baudrate;
+            if (_target_baudrate >= 2000000) {
+                _state = State::NEGOTIATING_2M;
+            } else if (_target_baudrate >= 1000000) {
+                _state = State::NEGOTIATING_1M;
+            } else {
+                // Both rates were rejected, skip negotiation
+                _state = State::RUNNING;
+                debug_rcout("Initialised, using 416kBd (higher rates rejected)");
+                break;
+            }
             _crsf_port->reset_bootstrap_baudrate();
             _baud_negotiation_result = BaudNegotiationResult::PENDING;
-            debug_rcout("Initialised, negotiating baudrate");
+            _baud_neg_retries = 0;
+            debug_rcout("Initialised, negotiating %ukBd", unsigned(_target_baudrate/1000));
         }
         break;
 
@@ -277,15 +289,18 @@ void AP_CRSF_Out::run_state_machine()
         // Check for explicit failure (rejection)
         if (_baud_negotiation_result == BaudNegotiationResult::FAILED) {
             if (_state == State::NEGOTIATING_2M) {
-                debug_rcout("2M baud negotiation rejected, trying 1M");
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO, "CRSFOut: 2MBd rejected, trying 1MBd");
+                _max_allowed_baudrate = 1000000;  // Remember rejection for this session
                 _state = State::NEGOTIATING_1M;
                 _target_baudrate = 1000000;
                 _crsf_port->reset_bootstrap_baudrate();
                 _baud_negotiation_result = BaudNegotiationResult::PENDING;
                 _last_baud_neg_us = 0; // force immediate send
                 _baud_neg_start_us = 0;
+                _baud_neg_retries = 0;
             } else { // NEGOTIATING_1M
-                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "CRSFOut: baud negotiation failed, using 416kBd");
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "CRSFOut: 1MBd rejected, using 416kBd");
+                _max_allowed_baudrate = 416000;  // Remember rejection for this session
                 _scheduler.set_loop_rate(DEFAULT_CRSF_OUTPUT_RATE);
                 _state = State::RUNNING;
             }
@@ -294,16 +309,26 @@ void AP_CRSF_Out::run_state_machine()
 
         // Check for timeout
         if (now - _baud_neg_start_us > BAUD_NEG_TIMEOUT_US) {
-            if (_state == State::NEGOTIATING_2M) {
-                debug_rcout("2M baud negotiation timed out, trying 1M");
+            _baud_neg_retries++;
+            if (_baud_neg_retries <= BAUD_NEG_MAX_RETRIES) {
+                // Retry same baud rate
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO, "CRSFOut: %uMBd timeout, retry %u/%u",
+                              unsigned(_target_baudrate/1000000), _baud_neg_retries, BAUD_NEG_MAX_RETRIES);
+                _crsf_port->reset_bootstrap_baudrate();
+                _baud_negotiation_result = BaudNegotiationResult::PENDING;
+                _last_baud_neg_us = 0; // force immediate send
+                _baud_neg_start_us = 0;
+            } else if (_state == State::NEGOTIATING_2M) {
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO, "CRSFOut: 2MBd failed, trying 1MBd");
                 _state = State::NEGOTIATING_1M;
                 _target_baudrate = 1000000;
                 _crsf_port->reset_bootstrap_baudrate();
                 _baud_negotiation_result = BaudNegotiationResult::PENDING;
                 _last_baud_neg_us = 0; // force immediate send
                 _baud_neg_start_us = 0;
+                _baud_neg_retries = 0;
             } else { // NEGOTIATING_1M
-                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "CRSFOut: baud negotiation timed out, using 416kBd");
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "CRSFOut: 1MBd failed, using 416kBd");
                 _state = State::RUNNING;
             }
             break;
