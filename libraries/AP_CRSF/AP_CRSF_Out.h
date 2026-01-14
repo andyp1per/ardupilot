@@ -128,6 +128,8 @@ private:
     uint32_t last_baud_neg_us;
     uint32_t baud_neg_start_us;
     uint32_t frame_interval_us;
+    uint8_t baud_neg_retries;
+    uint32_t max_allowed_baudrate = 2000000;  // highest rate not rejected this session
     uint8_t heartbeat_to_frame_ratio;
     uint32_t target_baudrate;
     uint32_t last_liveness_check_us;
