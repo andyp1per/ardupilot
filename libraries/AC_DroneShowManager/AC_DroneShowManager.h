@@ -16,23 +16,10 @@
 
 #include <GCS_MAVLink/ap_message.h>
 
-#include <skybrush/colors.h>
-#include <skybrush/stats.h>
+#include <skybrush/skybrush.h>
 
 #include "DroneShow_Enums.h"
 #include "DroneShow_FenceConfig.h"
-
-struct sb_trajectory_s;
-struct sb_trajectory_player_s;
-
-struct sb_light_program_s;
-struct sb_light_player_s;
-
-struct sb_yaw_control_s;
-struct sb_yaw_player_s;
-
-struct sb_event_list_s;
-struct sb_event_list_player_s;
 
 class DroneShowLEDFactory;
 class DroneShowLED;
@@ -73,11 +60,11 @@ private:
 
         // Converts a coordinate given in the global GPS coordinate system to
         // the show coordinate system, in millimeters
-        void convert_global_to_show_coordinate(const Location& loc, sb_vector3_with_yaw_t& vec) const;
+        void convert_global_to_show_coordinate(const Location& loc, sb_vector3_t& vec) const;
 
         // Converts a coordinate given in the show coordinate system, in millimeters, to
         // the global GPS coordinate system
-        void convert_show_to_global_coordinate(sb_vector3_with_yaw_t vec, Location& loc) const;
+        void convert_show_to_global_coordinate(sb_vector3_t vec, Location& loc) const;
 
         // Converts a yaw angle given in the show coordinate system, in degrees, to
         // centidegrees relative to north
@@ -228,21 +215,17 @@ public:
     // Returns the desired position of the drone during the drone show the
     // given number of seconds after the start time, in the global coordinate
     // system, using centimeters as units.
-    void get_desired_global_position_at_seconds(float time, Location& loc);
+    bool get_desired_global_position_at_seconds(float time, Location& loc) WARN_IF_UNUSED;
 
     // Returns the desired velocity of the drone during the drone show the
     // given number of seconds after the start time, in the global NEU
     // cooordinate system, using centimeters per seconds as units.
-    void get_desired_velocity_neu_in_cms_per_seconds_at_seconds(float time, Vector3f& vel);
+    bool get_desired_velocity_neu_in_cms_per_seconds_at_seconds(float time, Vector3f& vel) WARN_IF_UNUSED;
 
-    // Returns the desired yaw of the drone during the drone show the
-    // given number of seconds after the start time, in centidegrees 
-    // relative to North.
-    float get_desired_yaw_cd_at_seconds(float time);
-
-    // Returns the desired yaw rate of the drone during the drone show the
-    // given number of seconds after the start time, in centidegrees/seconds.
-    float get_desired_yaw_rate_cds_at_seconds(float time);
+    // Returns the desired yaw and yaw rate of the drone during the drone show the
+    // given number of seconds after the start time. Yaw is returned in centidegrees
+    // relative to North; yaw rate is returned in centidegrees/seconds.
+    bool get_desired_yaw_cd_and_yaw_rate_cd_s_at_seconds(float time, float& yaw_cd, float& yaw_rate_cd_s) WARN_IF_UNUSED;
 
     // Returns the distance of the drone from its desired position during the
     // "Performing" stage of the show. Returns zero distance when not doing a show.
@@ -416,16 +399,16 @@ public:
     // Returns whether a show file was identified and loaded at boot time
     bool loaded_show_data_successfully() const;
 
-    // Returns whether yaw control was loaded from the show file at boot time
-    bool loaded_yaw_control_data_successfully() const;
-
     // Returns whether the drone matches the given group mask
     bool matches_group_mask(uint8_t mask) const {
         return mask == 0 || mask & (1 << _params.group_index);
     }
     
     // Notifies the drone show manager that the drone show mode was initialized
-    void notify_drone_show_mode_initialized();
+    // 
+    // Returns true if the initialization was successful and false if there was
+    // an error that prevents the drone show mode from entering drone show mode.
+    bool notify_drone_show_mode_initialized();
 
     // Notifies the drone show manager that the drone show mode exited
     void notify_drone_show_mode_exited();
@@ -648,25 +631,25 @@ private:
     bool _sock_rgb_open;
 #endif
 
+    // Whether the drone show manager was initialized successfully
+    bool _init_ok;
+
     // Memory area holding the entire show file loaded from the storage
     uint8_t* _show_data;
+    
+    // Screenplay of the show.
+    // 
+    // In normal conditions, the screenplay has a single chapter, which holds
+    // references to the trajectory, light program, yaw program and event list.
+    // However, the screenplay may be extended with an additional return-to-launch
+    // chapter if a collective RTL maneuver is scheduled during the show.
+    sb_screenplay_t _screenplay;
 
-    struct sb_trajectory_s* _trajectory;
-    struct sb_trajectory_player_s* _trajectory_player;
+    // Controller that manages the trajectory player, the light program player,
+    // the yaw player, the event list and the time axis.
+    sb_show_controller_t _show_controller;
+
     sb_trajectory_stats_t* _trajectory_stats;
-    bool _trajectory_valid;
-
-    struct sb_light_program_s* _light_program;
-    struct sb_light_player_s* _light_player;
-    bool _light_program_valid;
-
-    struct sb_yaw_control_s* _yaw_control;
-    struct sb_yaw_player_s* _yaw_player;
-    bool _yaw_control_valid;
-
-    struct sb_event_list_s* _event_list;
-    struct sb_event_list_player_s* _event_list_player;
-    bool _event_list_valid;
 
     // Result of the drone show specific preflight checks. Updated periodically
     // from _update_preflight_check_result(). See the values from the
@@ -844,7 +827,24 @@ private:
     // light signals. The timestamp is synced to GPS seconds when the drone has
     // a good GPS fix.
     uint32_t _get_gps_synced_timestamp_in_millis_for_lights() const;
-
+    
+    // Returns the raw control output from the show controller at the given number of
+    // seconds after show start. Units and vectors returned in the control output are
+    // not transformed to the show coordinate system.
+    // 
+    // May return null if the show controller fails to switch to the given timestamp.
+    // This is unlikely and probably indicates bigger problems, but we need to handle
+    // it anyway.
+    const sb_control_output_t* _get_raw_show_control_output_at_seconds(float time);
+    
+    // Returns a borrowed reference to the trajectory being flown at the given
+    // timestamp, or \c nullptr if the timestamp is out of range or there is no
+    // associated trajectory at the given time.
+    // 
+    // The reference is borrowed; you need to increase its reference count with
+    // \c SB_INCREF if you want to hold on to it.
+    sb_trajectory_t* _get_trajectory_at_seconds(float time);
+    
     // Handles a generic MAVLink DATA* message from the ground station.
     bool _handle_custom_data_message(mavlink_channel_t chan, uint8_t type, void* data, uint8_t length);
 
@@ -904,11 +904,7 @@ private:
     virtual void _request_switch_to_show_mode() {};
 
     bool _load_show_file_from_storage();
-    void _set_event_list_and_take_ownership(struct sb_event_list_s *value);
-    void _set_light_program_and_take_ownership(struct sb_light_program_s *value);
-    void _set_trajectory_and_take_ownership(struct sb_trajectory_s *value);
     void _set_show_data_and_take_ownership(uint8_t *value);
-    void _set_yaw_control_and_take_ownership(struct sb_yaw_control_s *value);
 
     // Triggers pending events from the event list of the show
     void _trigger_show_events();

@@ -35,10 +35,8 @@ AC_DroneShowManager::AC_DroneShowManager() :
     _sock_rgb(true),
     _sock_rgb_open(false),
 #endif
+    _init_ok(false),
     _show_data(0),
-    _trajectory_valid(false),
-    _light_program_valid(false),
-    _yaw_control_valid(false),
     _stage_in_drone_show_mode(DroneShow_Off),
     _start_time_requested_by(StartTimeSource::NONE),
     _start_time_on_internal_clock_usec(0),
@@ -52,34 +50,18 @@ AC_DroneShowManager::AC_DroneShowManager() :
     _rc_switches_blocked_until(0),
     _boot_count(0)
 {
+    bool ok = true;
+
     AP_Param::setup_object_defaults(this, var_info);
-
-    _trajectory = new sb_trajectory_t;
-    sb_trajectory_init_empty(_trajectory);
-
-    _trajectory_player = new sb_trajectory_player_t;
-    sb_trajectory_player_init(_trajectory_player, _trajectory);
-
-    _trajectory_stats = new sb_trajectory_stats_t;
-    sb_trajectory_stats_init(_trajectory_stats);
     
-    _light_program = new sb_light_program_t;
-    sb_light_program_init_empty(_light_program);
+    _trajectory_stats = new sb_trajectory_stats_t;
 
-    _light_player = new sb_light_player_t;
-    sb_light_player_init(_light_player, _light_program);
+    ok &= _trajectory_stats != nullptr;
+    ok &= (sb_trajectory_stats_init(_trajectory_stats) == SB_SUCCESS);
+    ok &= (sb_screenplay_init(&_screenplay) == SB_SUCCESS);
+    ok &= (sb_show_controller_init(&_show_controller, &_screenplay) == SB_SUCCESS);
 
-    _yaw_control = new sb_yaw_control_t;
-    sb_yaw_control_init_empty(_yaw_control);
-
-    _yaw_player = new sb_yaw_player_t;
-    sb_yaw_player_init(_yaw_player, _yaw_control);
-
-    _event_list = new sb_event_list_t;
-    sb_event_list_init(_event_list, 0);
-
-    _event_list_player = new sb_event_list_player_t;
-    sb_event_list_player_init(_event_list_player, _event_list);
+    _init_ok = ok;
 
     // Don't call _update_rgb_led_instance() or _update_pyro_device_instance()
     // here, servo framework is not set up yet
@@ -87,37 +69,16 @@ AC_DroneShowManager::AC_DroneShowManager() :
 
 AC_DroneShowManager::~AC_DroneShowManager()
 {
-    sb_event_list_player_destroy(_event_list_player);
-    delete _event_list_player;
-
-    sb_event_list_destroy(_event_list);
-    delete _event_list;
-
-    sb_yaw_player_destroy(_yaw_player);
-    delete _yaw_player;
-
-    sb_yaw_control_destroy(_yaw_control);
-    delete _yaw_control;
-
-    sb_light_player_destroy(_light_player);
-    delete _light_player;
-
-    sb_light_program_destroy(_light_program);
-    delete _light_program;
-
     sb_trajectory_stats_destroy(_trajectory_stats);
     delete _trajectory_stats;
 
-    sb_trajectory_player_destroy(_trajectory_player);
-    delete _trajectory_player;
-
-    sb_trajectory_destroy(_trajectory);
-    delete _trajectory;
+    sb_show_controller_destroy(&_show_controller);
+    sb_screenplay_destroy(&_screenplay);
 }
 
 void AC_DroneShowManager::early_init()
 {
-    _create_show_directory();
+    _init_ok = _init_ok && _create_show_directory();
 }
 
 void AC_DroneShowManager::init(const AC_WPNav* wp_nav)
@@ -228,53 +189,39 @@ bool AC_DroneShowManager::get_current_guided_mode_command_to_send(
 
     static uint8_t invalid_velocity_warning_sent = 0;
     static uint8_t invalid_yaw_warning_sent = 0;
-    static uint8_t invalid_yaw_rate_warning_sent = 0;
     // static uint8_t counter = 0;
 
     float elapsed = get_elapsed_time_since_start_sec();
     float yaw_cd = default_yaw_cd;
-    float yaw_rate_cds = 0;
+    float yaw_rate_cd_s = 0;
     
-    get_desired_global_position_at_seconds(elapsed, loc);
+    if (!get_desired_global_position_at_seconds(elapsed, loc))
+    {
+        // unable to get desired position, this should not have happened
+        return false;
+    }
 
     command.clear();
     command.yaw_cd = default_yaw_cd;
 
-    if (loaded_yaw_control_data_successfully())
+    if (get_desired_yaw_cd_and_yaw_rate_cd_s_at_seconds(elapsed, yaw_cd, yaw_rate_cd_s))
     {
         // TODO(vasarhelyi): handle auto yaw mode as well
 
-        yaw_cd = get_desired_yaw_cd_at_seconds(elapsed);
-
         // Prevent invalid yaw information from leaking into the guided
         // mode controller
-        if (isnan(yaw_cd) || isinf(yaw_cd))
+        if (isnan(yaw_cd) || isinf(yaw_cd) || isnan(yaw_rate_cd_s) || isinf(yaw_rate_cd_s))
         {
             if (!invalid_yaw_warning_sent)
             {
-                gcs().send_text(MAV_SEVERITY_WARNING, "Invalid yaw command; not using yaw control");
+                gcs().send_text(MAV_SEVERITY_WARNING, "Invalid yaw or yaw rate command; not using yaw control");
                 invalid_yaw_warning_sent = true;
             }
         }
         else
         {
-            yaw_rate_cds = get_desired_yaw_rate_cds_at_seconds(elapsed);
-
-            // Prevent invalid yaw rate information from leaking into the guided
-            // mode controller
-            if (isnan(yaw_rate_cds) || isinf(yaw_rate_cds))
-            {
-                if (!invalid_yaw_rate_warning_sent)
-                {
-                    gcs().send_text(MAV_SEVERITY_WARNING, "Invalid yaw rate command; not using yaw control");
-                    invalid_yaw_rate_warning_sent = true;
-                }
-            }
-            else
-            {
-                command.yaw_cd = yaw_cd;
-                command.yaw_rate_cds = yaw_rate_cds;
-            }
+            command.yaw_cd = yaw_cd;
+            command.yaw_rate_cds = yaw_rate_cd_s;
         }
     }
 
@@ -293,7 +240,13 @@ bool AC_DroneShowManager::get_current_guided_mode_command_to_send(
 
             if (gain > 0)
             {
-                get_desired_velocity_neu_in_cms_per_seconds_at_seconds(elapsed, command.vel);
+                if (!get_desired_velocity_neu_in_cms_per_seconds_at_seconds(elapsed, command.vel))
+                {
+                    // This should not happen, but let's pretend that we received
+                    // a zero velocity command instead of bailing out here
+                    command.vel.zero();
+                }
+                
                 command.vel *= gain;
             }
 
@@ -358,21 +311,58 @@ bool AC_DroneShowManager::get_current_guided_mode_command_to_send(
     }
 }
 
-void AC_DroneShowManager::get_desired_global_position_at_seconds(float time, Location& loc)
+const sb_control_output_t* AC_DroneShowManager::_get_raw_show_control_output_at_seconds(float time)
 {
-    sb_vector3_with_yaw_t vec;
-    sb_trajectory_player_get_position_at(_trajectory_player, time, &vec);
-    _show_coordinate_system.convert_show_to_global_coordinate(vec, loc);
+    uint32_t time_msec = static_cast<uint32_t>(time * 1000.0f);
+    
+    if (sb_show_controller_update_time_msec(&_show_controller, time_msec))
+    {
+        return nullptr;
+    }
+    
+    return sb_show_controller_get_current_output(&_show_controller);
 }
 
-void AC_DroneShowManager::get_desired_velocity_neu_in_cms_per_seconds_at_seconds(float time, Vector3f& vel)
+sb_trajectory_t* AC_DroneShowManager::_get_trajectory_at_seconds(float time)
 {
-    sb_vector3_with_yaw_t vec;
+    uint32_t time_msec = static_cast<uint32_t>(time * 1000.0f);
+    sb_screenplay_chapter_t* chapter;
+    
+    if (sb_show_controller_update_time_msec(&_show_controller, time_msec))
+    {
+        return nullptr;
+    }
+    
+    chapter = sb_show_controller_get_current_chapter(&_show_controller);
+    return chapter ? chapter->trajectory : nullptr;
+}
+
+bool AC_DroneShowManager::get_desired_global_position_at_seconds(float time, Location& loc)
+{
+    const sb_control_output_t* output = _get_raw_show_control_output_at_seconds(time);
+    sb_vector3_t position;
+
+    if (!output || !sb_control_output_get_position_if_set(output, &position))
+    {
+        return false;
+    }
+
+    _show_coordinate_system.convert_show_to_global_coordinate(position, loc);
+    return true;
+}
+
+bool AC_DroneShowManager::get_desired_velocity_neu_in_cms_per_seconds_at_seconds(float time, Vector3f& vel)
+{
+    const sb_control_output_t* output = _get_raw_show_control_output_at_seconds(time);
+    sb_vector3_t vec;
     float vel_north, vel_east;
     float orientation_rad = _show_coordinate_system.orientation_rad;
 
-    sb_trajectory_player_get_velocity_at(_trajectory_player, time, &vec);
-
+    if (!output || !sb_control_output_get_velocity_if_set(output, &vec))
+    {
+        return false;
+    }
+    
     // We need to rotate the X axis by -_orientation_rad degrees so it
     // points North. At the same time, we also flip the Y axis so it points
     // East and not West.
@@ -383,22 +373,29 @@ void AC_DroneShowManager::get_desired_velocity_neu_in_cms_per_seconds_at_seconds
     vel.x = vel_north / 10.0f;
     vel.y = vel_east / 10.0f;
     vel.z = vec.z / 10.0f;
+    
+    return true;
 }
 
-float AC_DroneShowManager::get_desired_yaw_cd_at_seconds(float time)
+bool AC_DroneShowManager::get_desired_yaw_cd_and_yaw_rate_cd_s_at_seconds(float time, float& yaw_cd, float& yaw_rate_cd_s)
 {
-    float value;
-    sb_yaw_player_get_yaw_at(_yaw_player, time, &value);
+    const sb_control_output_t* output = _get_raw_show_control_output_at_seconds(time);
+    float yaw_deg;
+    float yaw_rate_deg_s;
+    
+    if (
+        !output ||
+        !sb_control_output_get_yaw_if_set(output, &yaw_deg) ||
+        !sb_control_output_get_yaw_rate_if_set(output, &yaw_rate_deg_s)
+    )
+    {
+        return false;
+    }
 
-    return _show_coordinate_system.convert_show_to_global_yaw_and_scale_to_cd(value);
-}
+    yaw_cd = _show_coordinate_system.convert_show_to_global_yaw_and_scale_to_cd(yaw_deg);
+    yaw_rate_cd_s = yaw_rate_deg_s * 100.0f; /* [deg] -> [cdeg] */
 
-float AC_DroneShowManager::get_desired_yaw_rate_cds_at_seconds(float time)
-{
-    float value;
-    sb_yaw_player_get_yaw_rate_at(_yaw_player, time, &value);
-
-    return value * 100.0f; /* [deg] -> [cdeg] */
+    return true;
 }
 
 void AC_DroneShowManager::get_distance_from_desired_position(Vector3f& vec) const
@@ -419,12 +416,16 @@ void AC_DroneShowManager::get_distance_from_desired_position(Vector3f& vec) cons
     }
 }
 
-void AC_DroneShowManager::notify_drone_show_mode_initialized()
+bool AC_DroneShowManager::notify_drone_show_mode_initialized()
 {
     _cancel_requested = false;
     _update_pyro_device_instance();
     _update_rgb_led_instance();
     _clear_start_time_if_set_by_switch();
+    
+    // If an error happened during initialization (in the constructor, where we cannot
+    // sensibly return an error code), or in early_init() or init(), we return false here
+    return _init_ok;
 }
 
 void AC_DroneShowManager::notify_drone_show_mode_entered_stage(DroneShowModeStage stage)
@@ -672,7 +673,7 @@ float AC_DroneShowManager::ShowCoordinateSystem::convert_show_to_global_yaw_and_
 }
 
 void AC_DroneShowManager::ShowCoordinateSystem::convert_global_to_show_coordinate(
-    const Location& loc, sb_vector3_with_yaw_t& vec
+    const Location& loc, sb_vector3_t& vec
 ) const {
     Location origin;
     Vector3f diff;
@@ -709,7 +710,7 @@ void AC_DroneShowManager::ShowCoordinateSystem::convert_global_to_show_coordinat
 }
 
 void AC_DroneShowManager::ShowCoordinateSystem::convert_show_to_global_coordinate(
-    sb_vector3_with_yaw_t vec, Location& loc
+    sb_vector3_t vec, Location& loc
 ) const {
     float offset_north, offset_east, altitude;
     

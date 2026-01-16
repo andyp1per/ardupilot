@@ -1,7 +1,5 @@
 #include "AC_DroneShowManager.h"
 
-#include <skybrush/skybrush.h>
-
 #include <GCS_MAVLink/GCS.h>
 
 bool AC_DroneShowManager::get_global_takeoff_position(Location& loc) const
@@ -9,7 +7,7 @@ bool AC_DroneShowManager::get_global_takeoff_position(Location& loc) const
     // This function may be called any time, not only during the show, so we
     // need to take the parameters provided by the user, convert them into a
     // ShowCoordinateSystem object, and then use that to get the GPS coordinates
-    sb_vector3_with_yaw_t vec;
+    sb_vector3_t vec;
 
     if (!_tentative_show_coordinate_system.is_valid())
     {
@@ -80,7 +78,8 @@ bool AC_DroneShowManager::notify_takeoff_attempt()
         _trajectory_is_circular && !_trajectory_modified_for_landing
     ) {
         Location takeoff_location;
-        sb_vector3_with_yaw_t end;
+        sb_trajectory_t* trajectory;
+        sb_vector3_t end;
         float land_speed_mm_s;
 
         if (!get_current_location(takeoff_location))
@@ -89,14 +88,20 @@ bool AC_DroneShowManager::notify_takeoff_attempt()
         }
 
         _show_coordinate_system.convert_global_to_show_coordinate(takeoff_location, end);
+        
+        // Get a handle to the current trajectory from the show controller so we can
+        // modify its end point
+        trajectory = _get_trajectory_at_seconds(get_elapsed_time_since_start_sec());
+        if (trajectory != nullptr)
+        {
+            // TODO: query landing velocity from parameters
+            land_speed_mm_s = get_landing_speed_m_sec() * 1000.0f;   /* [mm/s] */
+            if (sb_trajectory_replace_end_to_land_at(trajectory, _trajectory_stats, end, land_speed_mm_s)) {
+                goto exit;
+            }
 
-        // TODO: query landing velocity from parameters
-        land_speed_mm_s = get_landing_speed_m_sec() * 1000.0f;   /* [mm/s] */
-        if (sb_trajectory_replace_end_to_land_at(_trajectory, _trajectory_stats, end, land_speed_mm_s)) {
-            goto exit;
+            _trajectory_modified_for_landing = true;
         }
-
-        _trajectory_modified_for_landing = true;
     }
 
 exit:

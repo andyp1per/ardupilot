@@ -4,22 +4,19 @@
 #include "DroneShowPyroDevice.h"
 #include "LogStructure.h"
 
-#include <skybrush/events.h>
-
 void AC_DroneShowManager::_trigger_show_events()
 {
     const sb_event_t* event;
     DroneShowEventResult result;
     uint8_t events_left = 10;
 
-    if (!_event_list_valid) {
+    int32_t elapsed_time_msec = get_elapsed_time_since_start_msec();
+    if (elapsed_time_msec < 0) {
         return;
     }
 
-    float elapsed_time_sec = get_elapsed_time_since_start_sec();
-    if (elapsed_time_sec < 0) {
-        return;
-    }
+    // No need to update the show controller with the timestamp; it has been done
+    // earlier before this function was called.
 
     // We are guarding this loop with a limit of 10 events to prevent
     // infinite loops in case the event list is corrupted or contains
@@ -27,9 +24,7 @@ void AC_DroneShowManager::_trigger_show_events()
     // to ensure that we do not lock the main loop of the flight controller.
 
     while (events_left > 0) {
-        event = sb_event_list_player_get_next_event_not_later_than(
-            _event_list_player, elapsed_time_sec
-        );
+        event = sb_show_controller_get_next_event(&_show_controller);
         if (!event) {
             // No more pending events
             break;
@@ -44,7 +39,7 @@ void AC_DroneShowManager::_trigger_show_events()
                     result = _pyro_device->off(event->subtype);
                 } else if (!_is_pyro_safe_to_fire()) {
                     result = DroneShowEventResult_Unsafe;
-                } else if (event->time_msec < (elapsed_time_sec - 3) * 1000.0f) {
+                } else if (event->time_msec < (elapsed_time_msec - 3) * 1000.0f) {
                     result = DroneShowEventResult_TimeMissed;
                 } else {
                     result = _pyro_device->fire(event->subtype);
@@ -60,7 +55,7 @@ void AC_DroneShowManager::_trigger_show_events()
         const struct log_DroneShowEvent pkt {
             LOG_PACKET_HEADER_INIT(LOG_DRONE_SHOW_EVENT_MSG),
             time_us         : AP_HAL::micros64(),
-            show_clock_ms   : static_cast<int32_t>(elapsed_time_sec * 1000.0f),
+            show_clock_ms   : static_cast<int32_t>(elapsed_time_msec * 1000.0f),
             type            : static_cast<uint8_t>(event->type),
             subtype         : event->subtype,
             payload         : event->payload.as_uint32,

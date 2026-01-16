@@ -12,12 +12,7 @@ extern const AP_HAL::HAL &hal;
 
 bool AC_DroneShowManager::loaded_show_data_successfully() const
 {
-    return _trajectory_valid;
-}
-
-bool AC_DroneShowManager::loaded_yaw_control_data_successfully() const
-{
-    return _yaw_control_valid;
+    return !sb_screenplay_is_empty(&_screenplay);
 }
 
 bool AC_DroneShowManager::reload_or_clear_show(bool do_clear)
@@ -70,19 +65,22 @@ bool AC_DroneShowManager::_create_show_directory()
 
 bool AC_DroneShowManager::_load_show_file_from_storage()
 {
-    int fd;
+    int fd = -1;
     int retval;
     struct stat stat_data;
     uint8_t *show_data, *write_ptr, *end_ptr;
     ssize_t to_read, actually_read;
     bool success = false;
-
-    // Clear any previously loaded show
-    _set_event_list_and_take_ownership(0);
-    _set_light_program_and_take_ownership(0);
-    _set_trajectory_and_take_ownership(0);
-    _set_yaw_control_and_take_ownership(0);
-    _set_show_data_and_take_ownership(0);
+    
+    // Clear any previously loaded show, rewind the clock to zero and free up
+    // any memory used by the previously loaded show
+    sb_screenplay_clear(&_screenplay);
+    sb_show_controller_update_time_msec(&_show_controller, 0);
+    if (_show_data)
+    {
+        free(_show_data);
+        _show_data = nullptr;
+    }
 
     // Check whether the show file exists
     retval = AP::FS().stat(SHOW_FILE, &stat_data);
@@ -100,17 +98,8 @@ bool AC_DroneShowManager::_load_show_file_from_storage()
         stat_data.st_blksize = 4096;
     }
 
-    // Allocate memory for the whole content of the file and a few extra bytes
-    // at the end to make sure that we have enough space to extend the trajectory
-    // with a smooth landing segment if needed.
-    //
-    // The landing segment will be a single cubic Bezier spline. In the worst
-    // case, we need X, Y and Z coordinates for two control points and the
-    // final point where the landing is triggered, plus the duration of the
-    // segment and a header byte. 2 bytes per coordinate, 3 coordinates per
-    // point, 3 points, plus 2 bytes for the duration and 1 byte for the header
-    // yields a total of 21 extra bytes. We allocate 32 to be on the safe side.
-    show_data = static_cast<uint8_t *>(calloc(stat_data.st_size + 32, sizeof(uint8_t)));
+    // Allocate memory for the whole content of the file
+    show_data = static_cast<uint8_t *>(calloc(stat_data.st_size, sizeof(uint8_t)));
     if (show_data == 0)
     {
         hal.console->printf(
@@ -118,19 +107,20 @@ bool AC_DroneShowManager::_load_show_file_from_storage()
             static_cast<long int>(stat_data.st_size));
         return false;
     }
+    
+    // From this point onwards, show_data is owned by us and must be freed
+    // so do not return from the function without freeing it. If you need an
+    // early return, jump to the "exit" label.
 
     // Read the entire show file into memory
     fd = AP::FS().open(SHOW_FILE, O_RDONLY);
     if (fd < 0)
     {
-        free(show_data);
-        show_data = write_ptr = end_ptr = 0;
+        goto exit;
     }
-    else
-    {
-        write_ptr = show_data;
-        end_ptr = show_data + stat_data.st_size;
-    }
+    
+    write_ptr = show_data;
+    end_ptr = show_data + stat_data.st_size;
 
     while (write_ptr < end_ptr)
     {
@@ -154,9 +144,7 @@ bool AC_DroneShowManager::_load_show_file_from_storage()
                 static_cast<long int>(write_ptr - show_data),
                 static_cast<int>(errno)
             );
-            free(show_data);
-            show_data = 0;
-            break;
+            goto exit;
         }
         else if (actually_read == 0)
         {
@@ -169,139 +157,100 @@ bool AC_DroneShowManager::_load_show_file_from_storage()
         }
     }
 
-    if (fd > 0)
+    // Parse the show file and find the trajectory, light program and yaw control data in it.
+    retval = static_cast<int>(
+        sb_screenplay_update_from_binary_file_in_memory(&_screenplay, show_data, stat_data.st_size)
+    );
+    success = retval == SB_SUCCESS;
+    
+    if (success)
+    {
+        // Since the screenplay was updated, we need to let the show controller know
+        // that any cached outputs are now invalid
+        sb_show_controller_invalidate_output(&_show_controller);
+
+        if (!_recalculate_trajectory_properties())
+        {
+            hal.console->printf("Error while calculating trajectory properties\n");
+            success = false;
+        }
+        else if (!has_valid_takeoff_time())
+        {
+            hal.console->printf("Takeoff or landing time is invalid\n");
+            success = false;
+        }
+        else
+        {
+            hal.console->printf(
+                "Loaded show: %.1fs, takeoff at %.1fs, landing at %.1fs\n",
+                _trajectory_stats->duration_sec, 
+                _trajectory_stats->takeoff_time_sec, 
+                _trajectory_stats->landing_time_sec
+            );
+        }
+    }
+    else
+    {
+        hal.console->printf("Error while parsing show file, code: %d\n", retval);
+    }
+    
+    if (success)
+    {
+        // Adjust the timestamps of pyro events if needed
+        size_t i, num_chapters = sb_screenplay_size(&_screenplay);
+        for (i = 0; i < num_chapters; i++)
+        {
+            sb_screenplay_chapter_t* chapter = sb_screenplay_get_chapter_ptr(&_screenplay, i);
+            sb_event_list_t* event_list = chapter ? sb_screenplay_chapter_get_events(chapter) : nullptr;
+            if (event_list && _params.pyro_spec.time_compensation_msec != 0)
+            {
+                sb_event_list_adjust_timestamps_by_type(
+                    event_list, SB_EVENT_TYPE_PYRO,
+                    -_params.pyro_spec.time_compensation_msec
+                );
+            }
+        }
+    }
+    
+    if (success)
+    {
+        // move ownership of the show data to the class member
+        _show_data = show_data;
+        show_data = nullptr;
+    }
+    else
+    {
+        sb_screenplay_clear(&_screenplay);
+    }
+
+exit:
+    // if we still have the show data here and its ownership was not moved to the
+    // class member, free it now
+    if (show_data)
+    {
+        free(show_data);
+    }
+    
+    // Also clean up any open file descriptors
+    if (fd >= 0)
     {
         AP::FS().close(fd);
     }
-
-    // Parse the show file and find the trajectory, light program and yaw control data in it
-    if (show_data)
-    {
-        sb_trajectory_t loaded_trajectory;
-        sb_light_program_t loaded_light_program;
-        sb_yaw_control_t loaded_yaw_control;
-        sb_event_list_t loaded_event_list;
-
-        _set_show_data_and_take_ownership(show_data);
-
-        retval = sb_trajectory_init_from_binary_file_in_memory(&loaded_trajectory, show_data, stat_data.st_size);
-        if (retval)
-        {
-            hal.console->printf("Error while parsing show file: %d\n", (int) retval);
-        }
-        else
-        {
-            _set_trajectory_and_take_ownership(&loaded_trajectory);
-
-            if (has_valid_takeoff_time())
-            {
-                hal.console->printf(
-                    "Loaded show: %.1fs, takeoff at %.1fs, landing at %.1fs\n",
-                    _trajectory_stats->duration_sec, 
-                    _trajectory_stats->takeoff_time_sec, 
-                    _trajectory_stats->landing_time_sec
-                );
-                success = true;
-            }
-            else
-            {
-                hal.console->printf("Takeoff or landing time is invalid!\n");
-            }
-        }
-
-        retval = sb_light_program_init_from_binary_file_in_memory(&loaded_light_program, show_data, stat_data.st_size);
-        if (retval == SB_ENOENT)
-        {
-            // No light program in show file, this is okay, we just create an
-            // empty one
-            retval = sb_light_program_init_empty(&loaded_light_program);
-        }
-
-        if (retval)
-        {
-            hal.console->printf("Error while loading light program: %d\n", (int) retval);
-        }
-        else
-        {
-            _set_light_program_and_take_ownership(&loaded_light_program);
-        }
-
-        retval = sb_yaw_control_init_from_binary_file_in_memory(&loaded_yaw_control, show_data, stat_data.st_size);
-        if (retval == SB_ENOENT)
-        {
-            // No yaw control in show file, this is okay, we just create an
-            // empty one
-            _set_yaw_control_and_take_ownership(0);
-        }
-        else if (retval)
-        {
-            hal.console->printf("Error while loading yaw data: %d\n", (int) retval);
-        }
-        else
-        {
-            _set_yaw_control_and_take_ownership(&loaded_yaw_control);
-        }
-
-        retval = sb_event_list_init(&loaded_event_list, 4);
-        if (retval == ENOMEM)
-        {
-            hal.console->printf("Error while loading events: %d\n", (int) retval);
-        }
-        else
-        {
-            retval = sb_event_list_update_from_binary_file_in_memory(&loaded_event_list, show_data, stat_data.st_size);
-            if (retval == SB_ENOENT)
-            {
-                // No event list in show file, this is okay
-                retval = SB_SUCCESS;
-            }
-            else if (retval)
-            {
-                hal.console->printf("Error while loading events: %d\n", (int) retval);
-            }
-            else
-            {
-                // Adjust the timestamps of pyro events if needed
-                if (_params.pyro_spec.time_compensation_msec != 0) {
-                    sb_event_list_adjust_timestamps_by_type(
-                        &loaded_event_list, SB_EVENT_TYPE_PYRO,
-                        -_params.pyro_spec.time_compensation_msec
-                    );
-                }
-            }
-
-            if (retval == SB_SUCCESS) {
-                _set_event_list_and_take_ownership(&loaded_event_list);
-            }
-            else {
-                sb_event_list_destroy(&loaded_event_list);
-            }
-        }
-    }
-
+    
     return success;
 }
 
 bool AC_DroneShowManager::_recalculate_trajectory_properties()
 {
     sb_trajectory_stats_calculator_t stats_calculator;
-    sb_vector3_with_yaw_t vec;
+    sb_screenplay_chapter_t* chapter;
+    sb_trajectory_t* trajectory;
     bool success = false;
 
     if (sb_trajectory_stats_calculator_init(&stats_calculator, 1000.0f /* [mm] */) != SB_SUCCESS)
     {
         return false;
     }
-
-    if (sb_trajectory_player_get_position_at(_trajectory_player, 0, &vec) != SB_SUCCESS)
-    {
-        // Error while retrieving the first position
-        vec.x = vec.y = vec.z = 0;
-    }
-
-    _takeoff_position_mm.x = vec.x;
-    _takeoff_position_mm.y = vec.y;
-    _takeoff_position_mm.z = vec.z;
 
     _trajectory_stats->duration_sec = 0;
     _trajectory_stats->takeoff_time_sec = _trajectory_stats->landing_time_sec = -1;
@@ -311,8 +260,22 @@ bool AC_DroneShowManager::_recalculate_trajectory_properties()
     stats_calculator.preferred_descent = stats_calculator.min_ascent;
     stats_calculator.takeoff_speed = get_takeoff_speed_m_sec() * 1000.0f; /* [mm/s] */
     stats_calculator.acceleration = get_takeoff_acceleration_m_ss() * 1000.0f; /* [mm/s/s] */
+    
+    // Rewind the show controller to the start of the show
+    if (sb_show_controller_update_time_msec(&_show_controller, 0) != SB_SUCCESS)
+    {
+        return false;
+    }
+    
+    // Get the trajectory from the show controller
+    chapter = sb_show_controller_get_current_chapter(&_show_controller);
+    trajectory = chapter ? sb_screenplay_chapter_get_trajectory(chapter) : nullptr;
+    if (trajectory == nullptr)
+    {
+        return false;
+    }
 
-    if (sb_trajectory_stats_calculator_run(&stats_calculator, _trajectory, _trajectory_stats) == SB_SUCCESS)
+    if (sb_trajectory_stats_calculator_run(&stats_calculator, trajectory, _trajectory_stats) == SB_SUCCESS)
     {
         success = true;
     }
@@ -321,6 +284,11 @@ bool AC_DroneShowManager::_recalculate_trajectory_properties()
 
     if (success)
     {
+        // Copy the first coordinate from the stats result
+        _takeoff_position_mm.x = _trajectory_stats->initial_pos.x;
+        _takeoff_position_mm.y = _trajectory_stats->initial_pos.y;
+        _takeoff_position_mm.z = _trajectory_stats->initial_pos.z;
+    
         // The trajectory is circular if the takeoff and landing positions are
         // sufficiently close in the XY plane
         _trajectory_is_circular = (
@@ -352,49 +320,17 @@ bool AC_DroneShowManager::_recalculate_trajectory_properties()
 
     if (!success)
     {
+        // Clear the takeoff position
+        // Copy the first coordinate from the stats result
+        _takeoff_position_mm.x = 0;
+        _takeoff_position_mm.y = 0;
+        _takeoff_position_mm.z = 0;
+    
         // This should ensure that has_valid_takeoff_time() returns false
         _trajectory_stats->landing_time_sec = _trajectory_stats->takeoff_time_sec = -1;
     }
 
     return true;
-}
-
-void AC_DroneShowManager::_set_event_list_and_take_ownership(sb_event_list_t *value)
-{
-    sb_event_list_player_destroy(_event_list_player);
-    sb_event_list_destroy(_event_list);
-
-    if (value)
-    {
-        *_event_list = *value;
-        _event_list_valid = true;
-    }
-    else
-    {
-        sb_event_list_init(_event_list, 0);
-        _event_list_valid = false;
-    }
-
-    sb_event_list_player_init(_event_list_player, _event_list);
-}
-
-void AC_DroneShowManager::_set_light_program_and_take_ownership(sb_light_program_t *value)
-{
-    sb_light_player_destroy(_light_player);
-    sb_light_program_destroy(_light_program);
-
-    if (value)
-    {
-        *_light_program = *value;
-        _light_program_valid = true;
-    }
-    else
-    {
-        sb_light_program_init_empty(_light_program);
-        _light_program_valid = false;
-    }
-
-    sb_light_player_init(_light_player, _light_program);
 }
 
 void AC_DroneShowManager::_set_show_data_and_take_ownership(uint8_t *value)
@@ -410,46 +346,4 @@ void AC_DroneShowManager::_set_show_data_and_take_ownership(uint8_t *value)
     }
 
     _show_data = value;
-}
-
-void AC_DroneShowManager::_set_trajectory_and_take_ownership(sb_trajectory_t *value)
-{
-    sb_trajectory_player_destroy(_trajectory_player);
-    sb_trajectory_destroy(_trajectory);
-
-    if (value)
-    {
-        *_trajectory = *value;
-        _trajectory_valid = true;
-    }
-    else
-    {
-        sb_trajectory_init_empty(_trajectory);
-        _trajectory_valid = false;
-    }
-
-    sb_trajectory_player_init(_trajectory_player, _trajectory);
-
-    if (!_recalculate_trajectory_properties()) {
-        _trajectory_valid = false;
-    }
-}
-
-void AC_DroneShowManager::_set_yaw_control_and_take_ownership(sb_yaw_control_t *value)
-{
-    sb_yaw_player_destroy(_yaw_player);
-    sb_yaw_control_destroy(_yaw_control);
-
-    if (value)
-    {
-        *_yaw_control = *value;
-        _yaw_control_valid = true;
-    }
-    else
-    {
-        sb_yaw_control_init_empty(_yaw_control);
-        _yaw_control_valid = false;
-    }
-
-    sb_yaw_player_init(_yaw_player, _yaw_control);
 }

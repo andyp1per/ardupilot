@@ -62,15 +62,13 @@ bool AC_DroneShowManager::configure_fences(DroneShow_FenceConfig& config)
             return false;
         }
 
-        // TODO(ntamas): coordinate conversion!
-        sb_vector3_with_yaw_t vec;
+        sb_vector3_t vec;
         Location loc;
 
         for (uint8_t i = 0; i < config.num_points; i++) {
             vec.x = config.points[i].x_dm * 100.0f; // [dm] --> [mm]
             vec.y = config.points[i].y_dm * 100.0f; // [dm] --> [mm]
             vec.z = 0; // Altitude is not used in polygon fences
-            vec.yaw = 0; // Yaw is not used in polygon fences
 
             // Use the tentative show coordinate system to convert the point
             // from the show coordinate system to the global GPS coordinate system.

@@ -47,7 +47,16 @@ sb_rgb_color_t AC_DroneShowManager::get_desired_color_of_rgb_light() {
 
 sb_rgb_color_t AC_DroneShowManager::get_desired_color_of_rgb_light_at_seconds(float time)
 {
-    return sb_light_player_get_color_at(_light_player, time < 0 || time > 86400000 ? 0 : time * 1000);
+    const sb_control_output_t* output = _get_raw_show_control_output_at_seconds(time);
+    sb_rgb_color_t result;
+
+    if (output && sb_control_output_get_color_if_set(output, &result)) {
+        return result;
+    } else {
+        result = Colors::BLACK;
+    }
+    
+    return result;
 }
 
 void AC_DroneShowManager::_flash_leds_after_failure()
@@ -683,4 +692,3 @@ static float get_modulation_factor_for_light_effect(
             return 0.0;
     }
 }
-

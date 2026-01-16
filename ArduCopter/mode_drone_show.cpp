@@ -336,7 +336,10 @@ void ModeDroneShow::initialization_start()
     notify_start_time_changed();
 
     // Notify the drone show manager that the drone show mode was initialized
-    copter.g2.drone_show_manager.notify_drone_show_mode_initialized();
+    if (!copter.g2.drone_show_manager.notify_drone_show_mode_initialized()) {
+        // Something went wrong during initialization; move to error state
+        error_start();
+    }
 }
 
 // initializes the drone show mode after it has been activated the first time
@@ -647,8 +650,12 @@ bool ModeDroneShow::takeoff_completed() const
                     // Altitude above home seems high enough, but is the trajectory
                     // already ahead of us?
                     float elapsed = show_manager->get_elapsed_time_since_start_sec();
-                    show_manager->get_desired_global_position_at_seconds(elapsed, loc);
-                    if (loc.get_alt_cm(Location::AltFrame::ABOVE_HOME, desired_altitude_above_home_cm))
+                    if (!show_manager->get_desired_global_position_at_seconds(elapsed, loc))
+                    {
+                        // Unable to get desired position, this should not happen
+                        return false;
+                    }
+                    else if (loc.get_alt_cm(Location::AltFrame::ABOVE_HOME, desired_altitude_above_home_cm))
                     {
                         // If the desired target is above our current altitude,
                         // we can go to the next stage, otherwise we wait until
