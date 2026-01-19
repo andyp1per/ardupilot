@@ -155,3 +155,113 @@ ps -L -p $PID -o tid,psr,cls,rtprio,comm
 - Library threads (e.g., pigpio) may show `TS` (normal scheduling) - this is correct
 
 If ArduPilot threads show `TS` instead of `FF`, the real-time configuration failed.
+
+## 7. RC Input (SBUS) Setup
+
+The pizero2w board uses the pigpio library for reliable RC input via DMA-based edge detection. This provides accurate pulse timing for SBUS and other RC protocols without requiring a dedicated UART.
+
+### Hardware Connection
+
+| Pi Zero 2W | RC Receiver |
+|------------|-------------|
+| GPIO4 (Pin 7) | SBUS Output |
+| GND (Pin 6, 9, 14, 20, 25, 30, 34, 39) | GND |
+
+**Note:** SBUS is an inverted serial protocol. The pigpio driver is configured to handle inverted SBUS signals directly - no external inverter is needed.
+
+### How It Works
+
+- The pigpio library uses the Pi's DMA controller to sample GPIO edges with microsecond precision
+- Edge timestamps are fed to ArduPilot's `AP_RCProtocol` soft-serial decoder
+- This approach is more reliable than using the Mini UART for SBUS
+
+### Important: pigpiod Daemon
+
+The pigpiod daemon must **NOT** be running, as ArduPilot uses direct library access:
+
+```bash
+# Check if pigpiod is running
+sudo systemctl status pigpiod
+
+# If running, stop and disable it
+sudo systemctl stop pigpiod
+sudo systemctl disable pigpiod
+```
+
+### Supported Protocols
+
+The RC input supports any protocol that `AP_RCProtocol` can decode via pulse timing:
+- SBUS (inverted, 100kbaud) - **default configuration**
+- DSM/DSM2/DSMX
+- SUMD
+- ST24
+- SRXL
+- PPM
+
+### Troubleshooting
+
+- **No RC input detected:** Verify GPIO4 wiring, check that pigpiod is not running, ensure receiver is powered and bound.
+- **Intermittent or glitchy input:** Check for loose connections, ensure good ground between Pi and receiver.
+- **"gpioInitialise failed" error:** Another process is using pigpio, or you don't have root permissions. Check `sudo systemctl status pigpiod`.
+
+## 8. Serial LED (NeoPixel/WS2812) Setup
+
+The pizero2w board supports driving NeoPixel/WS2812 LEDs via SPI. This provides visual notifications without requiring additional hardware.
+
+### Hardware Connection
+
+| Pi Zero 2W | NeoPixel Strip |
+|------------|----------------|
+| GPIO10 (Pin 19) - SPI0 MOSI | DIN (Data In) |
+| GND (Pin 6, 9, 14, 20, 25, 30, 34, 39) | GND |
+| 5V (Pin 2, 4) | VCC |
+
+**Note:** Most WS2812 LEDs work reliably with 3.3V logic from the Pi, but for long strips or reliability issues, a level shifter (3.3V to 5V) may be needed on the data line.
+
+### Enable SPI on the Raspberry Pi
+
+1. Edit the boot config:
+   ```bash
+   sudo nano /boot/firmware/config.txt
+   ```
+
+2. Add or uncomment:
+   ```
+   dtparam=spi=on
+   ```
+
+3. Optionally, for more stable SPI clock timing, add:
+   ```
+   core_freq=250
+   core_freq_min=250
+   ```
+
+4. Reboot:
+   ```bash
+   sudo reboot
+   ```
+
+5. Verify SPI is enabled:
+   ```bash
+   ls -l /dev/spidev0.0
+   ```
+   You should see the device file listed.
+
+### ArduPilot Configuration
+
+Set the following parameters:
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `NTF_LED_TYPE` | 1 | NeoPixel (GRB color order) |
+| | 128 | NeoPixelRGB (RGB color order) |
+| `NTF_LED_LEN` | 8 | Number of LEDs in your strip |
+
+**Note:** Unlike other platforms, no `SERVOx_FUNCTION` assignment is needed. The Linux serial LED driver automatically uses SPI channel 0 when enabled in the hwdef.
+
+### Troubleshooting
+
+- **No LEDs light up:** Check SPI is enabled (`ls /dev/spidev0.0`), verify wiring, ensure adequate power supply for the LED strip.
+- **Wrong colors:** Try switching between `NTF_LED_TYPE=1` (GRB) and `NTF_LED_TYPE=128` (RGB).
+- **Flickering or corrupted patterns:** Ensure good ground connection between Pi and LED strip. Long wires can cause signal integrity issues.
+- **Only first few LEDs work:** Power supply may be insufficient. Each WS2812 LED can draw up to 60mA at full white.
