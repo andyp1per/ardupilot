@@ -50,6 +50,14 @@ uint16_t NeoPixel::init_ports()
         mask |= SRV_Channels::get_output_channel_mask(fn);
     }
 
+#if HAL_LINUX_SERIALLED_ENABLED
+    // On Linux with dedicated SPI-based serial LED driver, automatically
+    // enable channel 0 without requiring servo function assignment
+    if (mask == 0) {
+        mask = 1;  // Enable channel 0
+    }
+#endif
+
     if (mask == 0) {
         return 0;
     }
