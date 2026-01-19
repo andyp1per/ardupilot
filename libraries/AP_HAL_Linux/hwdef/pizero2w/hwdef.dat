@@ -28,3 +28,9 @@ define HAL_BOARD_TERRAIN_DIRECTORY "/var/lib/ardupilot/terrain"
 # UART configuration handled at runtime via SERIALn parameters
 
 define HAL_BARO_ALLOW_INIT_NO_BARO 1
+
+# Enable Serial LED (NeoPixel/WS2812) support via SPI
+define HAL_LINUX_SERIALLED_ENABLED 1
+
+# Default NeoPixel channel mask - enables channel 0 without servo function assignment
+define AP_NOTIFY_NEOPIXEL_MASK 1
