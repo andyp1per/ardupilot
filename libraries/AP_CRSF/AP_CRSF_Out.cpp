@@ -100,6 +100,7 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver& _uart)
     const uint16_t rate = get_configured_update_rate();
 
     if (rate > 0) {
+<<<<<<< HEAD
         frame_interval_us = 1000000UL / rate;
     } else {
         frame_interval_us = 1000000UL / DEFAULT_CRSF_OUTPUT_RATE;
@@ -108,6 +109,18 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver& _uart)
     scheduler.init(tasks, rate);
     state = State::WAITING_FOR_RC_LOCK;
     scheduler.set_task_rate(REPORTING, frontend.reporting_rate_hz);
+=======
+        _loop_rate_hz = rate;
+        _frame_interval_us = 1000000UL / rate;
+    } else {
+        _loop_rate_hz = DEFAULT_CRSF_OUTPUT_RATE;
+        _frame_interval_us = 1000000UL / DEFAULT_CRSF_OUTPUT_RATE;
+    }
+
+    _scheduler.init(_tasks, uint16_t(_loop_rate_hz));
+    _state = State::WAITING_FOR_RC_LOCK;
+    _scheduler.set_task_rate(REPORTING, _frontend._reporting_rate_hz);
+>>>>>>> 276eb0a1dd (AP_CRSF: add IMU rate calibration for external AHRS)
 
 
     if (!hal.scheduler->thread_create(FUNCTOR_BIND_MEMBER(&AP_CRSF_Out::crsf_out_thread, void), "crsf", 2048, AP_HAL::Scheduler::PRIORITY_RCOUT, 1)) {
@@ -132,6 +145,138 @@ void AP_CRSF_Out::update_rates_status()
                     int16_t(rate_rc_counter*report_rate), latency_us / 1000.0f);
     rate_imu_counter = rate_gps_counter = rate_baro_counter = rate_mag_counter = rate_rc_counter = 0;
 }
+
+/*
+  Calibrate loop rate to achieve target IMU rate.
+
+  The CRSF link carries multiple sensor types (IMU, GPS, Baro, Mag) which share
+  bandwidth. To achieve a target IMU rate, we need to run the loop faster to
+  compensate for the bandwidth used by other sensors.
+
+  This uses adaptive filtering similar to AP_InertialSensor_Backend::_update_sensor_rate():
+  - First 30s: fast convergence (filter=0.8, limits ±50%)
+  - After 30s: slow convergence (filter=0.98, limits ±5%)
+  - No adjustment when armed
+*/
+void AP_CRSF_Out::update_imu_rate_calibration()
+{
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+    const uint32_t now_us = AP_HAL::micros();
+
+    // Initialize measurement window on first call
+    if (_imu_cal_start_us == 0) {
+        _imu_cal_start_us = now_us;
+        _imu_cal_count = 0;
+        _calibration_start_ms = AP_HAL::millis();
+        return;
+    }
+
+    // Check if 1 second has elapsed
+    if (now_us - _imu_cal_start_us < 1000000UL) {
+        return;
+    }
+
+    // Don't adjust when armed - maintain stable rate
+    if (hal.util->get_soft_armed()) {
+        _imu_cal_start_us = now_us;
+        _imu_cal_count = 0;
+        return;
+    }
+
+    const float target_rate = get_configured_update_rate();
+    if (target_rate <= 0) {
+        _imu_cal_start_us = now_us;
+        _imu_cal_count = 0;
+        return;
+    }
+
+    // Calculate observed IMU rate over the measurement window
+    const float elapsed_s = (now_us - _imu_cal_start_us) * 1.0e-6f;
+    const float observed_imu_rate = _imu_cal_count / elapsed_s;
+
+    // Determine convergence parameters based on time since start
+    const uint32_t elapsed_ms = AP_HAL::millis() - _calibration_start_ms;
+    const bool converging = elapsed_ms < 30000;
+
+    float filter_constant;
+    float upper_limit;
+    float lower_limit;
+
+    if (converging) {
+        // Fast convergence for first 30s
+        filter_constant = 0.8f;
+        upper_limit = 1.5f;
+        lower_limit = 0.5f;
+    } else {
+        // Slow convergence after 30s
+        filter_constant = 0.98f;
+        upper_limit = 1.05f;
+        lower_limit = 0.95f;
+
+        // Print convergence message once
+        if (!_calibration_converged) {
+            _calibration_converged = true;
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "CRSFOut: IMU rate converged, loop=%.0fHz", _loop_rate_hz);
+        }
+    }
+
+    // Calculate the required loop rate to achieve target IMU rate
+    // If observed < target, we need to increase loop rate
+    // new_loop_rate = current_loop_rate * (target / observed)
+    float rate_ratio = 1.0f;
+    if (observed_imu_rate > 0) {
+        rate_ratio = target_rate / observed_imu_rate;
+    }
+
+    // Constrain the ratio to prevent wild swings
+    rate_ratio = constrain_float(rate_ratio, lower_limit, upper_limit);
+
+    // Calculate new loop rate
+    float new_loop_rate = _loop_rate_hz * rate_ratio;
+
+    // Apply low-pass filter to smooth the adjustment
+    _loop_rate_hz = filter_constant * _loop_rate_hz + (1 - filter_constant) * new_loop_rate;
+
+    // Clamp to reasonable bounds (±20% of target rate)
+    _loop_rate_hz = constrain_float(_loop_rate_hz, target_rate * 0.8f, target_rate * 1.2f);
+
+    // Update the frame interval and scheduler
+    _frame_interval_us = 1000000UL / uint32_t(_loop_rate_hz);
+    _scheduler.set_loop_rate(uint16_t(_loop_rate_hz));
+
+    debug_rcout("IMU rate cal: observed=%.0f target=%.0f loop=%.0f",
+                observed_imu_rate, target_rate, _loop_rate_hz);
+
+    // Reset for next measurement window
+    _imu_cal_start_us = now_us;
+    _imu_cal_count = 0;
+#endif
+}
+
+/*
+  Reset IMU rate calibration state.
+  Call this when link conditions change (e.g., baud rate negotiation completes)
+  to restart the fast convergence period.
+*/
+void AP_CRSF_Out::reset_imu_rate_calibration()
+{
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+    const uint16_t target_rate = get_configured_update_rate();
+
+    // Reset to target rate and restart convergence
+    _loop_rate_hz = target_rate > 0 ? target_rate : DEFAULT_CRSF_OUTPUT_RATE;
+    _frame_interval_us = 1000000UL / uint32_t(_loop_rate_hz);
+    _scheduler.set_loop_rate(uint16_t(_loop_rate_hz));
+
+    _imu_cal_start_us = 0;
+    _imu_cal_count = 0;
+    _calibration_start_ms = AP_HAL::millis();
+    _calibration_converged = false;
+
+    debug_rcout("IMU rate calibration reset, loop_rate=%.0f", _loop_rate_hz);
+#endif
+}
+
 
 void AP_CRSF_Out::crsf_out_thread()
 {
@@ -185,6 +330,9 @@ void AP_CRSF_Out::crsf_out_thread()
             if (!scheduler.update() && !send_rc_frame) {
                 send_heartbeat();
             }
+
+            // Calibrate loop rate to achieve target IMU rate
+            update_imu_rate_calibration();
         } else {
             run_state_machine();
         }
@@ -253,6 +401,10 @@ void AP_CRSF_Out::run_state_machine()
                 // Both rates were rejected, skip negotiation
                 state = State::RUNNING;
                 debug_rcout("Initialised, using 416kBd (higher rates rejected)");
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "CRSFOut: 416kBd may limit EAHRS IMU rate");
+                reset_imu_rate_calibration();
+#endif
                 break;
             }
             crsf_port->reset_bootstrap_baudrate();
@@ -271,6 +423,12 @@ void AP_CRSF_Out::run_state_machine()
         if (baud_negotiation_result == BaudNegotiationResult::SUCCESS) {
             GCS_SEND_TEXT(MAV_SEVERITY_INFO, "CRSFOut: negotiated %uMBd", unsigned(target_baudrate/1000000));
             state = State::RUNNING;
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+            if (target_baudrate < 2000000) {
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "CRSFOut: 1MBd may limit EAHRS IMU rate");
+            }
+            reset_imu_rate_calibration();
+#endif
             break;
         }
 
@@ -295,6 +453,10 @@ void AP_CRSF_Out::run_state_machine()
                 max_allowed_baudrate = 416000;  // Remember rejection for this session
                 scheduler.set_loop_rate(DEFAULT_CRSF_OUTPUT_RATE);
                 state = State::RUNNING;
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "CRSFOut: 416kBd may limit EAHRS IMU rate");
+                reset_imu_rate_calibration();
+#endif
             }
             break;
         }
@@ -322,6 +484,10 @@ void AP_CRSF_Out::run_state_machine()
             } else { // NEGOTIATING_1M
                 GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "CRSFOut: 1MBd failed, using 416kBd");
                 state = State::RUNNING;
+#if AP_EXTERNAL_AHRS_CRSF_ENABLED
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "CRSFOut: 416kBd may limit EAHRS IMU rate");
+                reset_imu_rate_calibration();
+#endif
             }
             break;
         }
@@ -406,6 +572,7 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
             uint32_t sample_us;
             if (AP_CRSF_Protocol::process_accgyro_frame((AP_CRSF_Protocol::AccGyroFrame*)_frame.payload, acc, gyro, gyro_temp, sample_us)) {
                 rate_imu_counter++;
+                imu_cal_count++;
                 // Pass the decoded IMU data to the external AHRS CRSF module
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
                 AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();

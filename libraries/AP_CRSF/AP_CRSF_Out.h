@@ -98,6 +98,10 @@ private:
     // main loop for the CRSF output thread
     void run_state_machine();
     void update_rates_status();
+    // calibrate loop rate to achieve target IMU rate
+    void update_imu_rate_calibration();
+    // reset IMU rate calibration (call when link conditions change)
+    void reset_imu_rate_calibration();
 
     // sends RC frames at the configured rate
     void send_rc_frame(uint8_t start_chan, uint8_t nchan);
@@ -135,7 +139,7 @@ private:
     uint32_t last_liveness_check_us;
     uint32_t last_ping_frame_ms;
     uint8_t instance_idx = 0; // Instance index (0, 1, 2...) for multi-instance use
-    // rate counters
+    // rate counters for status reporting
     uint32_t last_rate_update_ms;
     // latch for PWM push
     volatile bool pwm_is_fresh;
@@ -146,6 +150,13 @@ private:
     uint16_t rate_rc_counter;
     uint32_t last_latency_ping_us;
     uint32_t latency_us;
+
+    // IMU rate calibration state
+    float _loop_rate_hz;                    // current filtered loop rate
+    uint32_t _imu_cal_start_us;             // start of 1-second measurement window
+    uint16_t _imu_cal_count;                // IMU samples in current window
+    uint32_t _calibration_start_ms;         // time when calibration started (for convergence)
+    bool _calibration_converged;            // true once convergence message has been sent
 
     AP_CRSF_Protocol::VersionInfo version;
     AP_GPS::GPS_State gps_state;
