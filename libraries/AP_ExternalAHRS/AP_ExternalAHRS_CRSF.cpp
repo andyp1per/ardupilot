@@ -233,8 +233,11 @@ bool AP_ExternalAHRS_CRSF::pre_arm_check(char *failure_msg, uint8_t failure_msg_
         return false;
     }
 
-    if (current_loop_rate < get_rate() * 9 / 10) {
-        hal.util->snprintf(failure_msg, failure_msg_len, "CRSF-IMU unhealthy: (sample rate %u < %u)", current_loop_rate, get_rate());
+    const uint16_t target_rate = get_rate();
+    const uint16_t min_rate = target_rate * 95 / 100;
+    const uint16_t max_rate = target_rate * 105 / 100;
+    if (current_loop_rate < min_rate || current_loop_rate > max_rate) {
+        hal.util->snprintf(failure_msg, failure_msg_len, "CRSF-IMU rate %u outside %u-%uHz", current_loop_rate, min_rate, max_rate);
         return false;
     }
 
