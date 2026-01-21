@@ -25,6 +25,7 @@
 #include <GCS_MAVLink/GCS.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_SerialManager/AP_SerialManager.h>
+#include <AP_Logger/AP_Logger.h>
 
 extern const AP_HAL::HAL &hal;
 
@@ -209,6 +210,29 @@ void AP_ExternalAHRS_CRSF::update()
         current_loop_rate = imu_pkts_received;
         imu_pkts_received = 0;
         last_loop_check_ms = now_ms;
+
+        // Log CRSF External AHRS health status
+        // @LoggerMessage: CRSH
+        // @Description: CRSF External AHRS health status
+        // @Field: TimeUS: Time since system startup
+        // @Field: Hlth: Healthy flag
+        // @Field: Rate: Current IMU packet rate in Hz
+        // @Field: Tgt: Target rate in Hz
+        // @Field: Age: Age of last IMU packet in microseconds
+        // @Field: Arm: Armed state
+#if HAL_LOGGING_ENABLED
+        const uint32_t now_us = AP_HAL::micros();
+        const uint32_t imu_age_us = (last_imu_pkt_us != 0) ? (now_us - last_imu_pkt_us) : UINT32_MAX;
+        const uint16_t target_rate = get_rate();
+
+        AP::logger().WriteStreaming("CRSH", "TimeUS,Hlth,Rate,Tgt,Age,Arm", "s-----", "F-----", "QBHHIB",
+                                    AP_HAL::micros64(),
+                                    uint8_t(healthy()),
+                                    current_loop_rate,
+                                    target_rate,
+                                    imu_age_us,
+                                    uint8_t(hal.util->get_soft_armed()));
+#endif
     }
 }
 
@@ -230,6 +254,17 @@ bool AP_ExternalAHRS_CRSF::pre_arm_check(char *failure_msg, uint8_t failure_msg_
 {
     if (!healthy()) {
         hal.util->snprintf(failure_msg, failure_msg_len, "CRSF-IMU unhealthy (no recent data)");
+#if HAL_LOGGING_ENABLED
+        // Log pre-arm failure for debugging
+        const uint32_t now_us = AP_HAL::micros();
+        const uint32_t imu_age_us = (last_imu_pkt_us != 0) ? (now_us - last_imu_pkt_us) : UINT32_MAX;
+        AP::logger().Write("CRSF", "TimeUS,Fail,Rate,Tgt,Age", "s----", "F----", "QBHHI",
+                           AP_HAL::micros64(),
+                           uint8_t(1),  // Fail reason: unhealthy
+                           current_loop_rate,
+                           get_rate(),
+                           imu_age_us);
+#endif
         return false;
     }
 
@@ -238,6 +273,17 @@ bool AP_ExternalAHRS_CRSF::pre_arm_check(char *failure_msg, uint8_t failure_msg_
     const uint16_t max_rate = target_rate * 105 / 100;
     if (current_loop_rate < min_rate || current_loop_rate > max_rate) {
         hal.util->snprintf(failure_msg, failure_msg_len, "CRSF-IMU rate %u outside %u-%uHz", current_loop_rate, min_rate, max_rate);
+#if HAL_LOGGING_ENABLED
+        // Log pre-arm failure for debugging
+        const uint32_t now_us = AP_HAL::micros();
+        const uint32_t imu_age_us = (last_imu_pkt_us != 0) ? (now_us - last_imu_pkt_us) : UINT32_MAX;
+        AP::logger().Write("CRSF", "TimeUS,Fail,Rate,Tgt,Age", "s----", "F----", "QBHHI",
+                           AP_HAL::micros64(),
+                           uint8_t(2),  // Fail reason: rate out of range
+                           current_loop_rate,
+                           target_rate,
+                           imu_age_us);
+#endif
         return false;
     }
 
