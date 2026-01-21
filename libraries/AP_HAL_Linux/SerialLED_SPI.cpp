@@ -33,6 +33,10 @@ extern const AP_HAL::HAL &hal;
 
 namespace Linux {
 
+// Out-of-class definitions required for ODR-use of static constexpr members in C++14
+constexpr uint8_t SerialLED_SPI::MAX_CHANNELS;
+constexpr uint8_t SerialLED_SPI::MAX_LEDS_PER_CHANNEL;
+
 SerialLED_SPI::SerialLED_SPI(const char *spi_device, uint8_t num_channels)
     : _spi_device(spi_device)
     , _num_channels(MIN(num_channels, MAX_CHANNELS))
