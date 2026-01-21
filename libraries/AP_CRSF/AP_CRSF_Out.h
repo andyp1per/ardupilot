@@ -98,6 +98,11 @@ private:
     // main loop for the CRSF output thread
     void run_state_machine();
     void update_rates_status();
+    // logging functions for debugging
+    void write_log_state();
+    void write_log_rates();
+    void write_log_aetr(const uint16_t* channels, bool armed);
+    void write_log_aux(const uint16_t* channels, uint8_t nchan, bool armed);
     // calibrate loop rate to achieve target IMU rate
     void update_imu_rate_calibration();
     // reset IMU rate calibration (call when link conditions change)
@@ -150,6 +155,7 @@ private:
     uint16_t rate_rc_counter;
     uint32_t last_latency_ping_us;
     uint32_t latency_us;
+
 
     // IMU rate calibration state
     float _loop_rate_hz;                    // current filtered loop rate

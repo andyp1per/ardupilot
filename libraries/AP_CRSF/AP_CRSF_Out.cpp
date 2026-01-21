@@ -34,6 +34,7 @@
 #include <AP_RCProtocol/AP_RCProtocol_CRSF.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Scheduler/AP_Scheduler.h>
+#include <AP_Logger/AP_Logger.h>
 
 // Include the external AHRS CRSF header if it is enabled to allow data passing
 #if AP_EXTERNAL_AHRS_CRSF_ENABLED
@@ -100,27 +101,16 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver& _uart)
     const uint16_t rate = get_configured_update_rate();
 
     if (rate > 0) {
-<<<<<<< HEAD
+        loop_rate_hz = rate;
         frame_interval_us = 1000000UL / rate;
     } else {
+        loop_rate_hz = DEFAULT_CRSF_OUTPUT_RATE;
         frame_interval_us = 1000000UL / DEFAULT_CRSF_OUTPUT_RATE;
     }
 
-    scheduler.init(tasks, rate);
+    scheduler.init(_tasks, uint16_t(loop_rate_hz));
     state = State::WAITING_FOR_RC_LOCK;
     scheduler.set_task_rate(REPORTING, frontend.reporting_rate_hz);
-=======
-        _loop_rate_hz = rate;
-        _frame_interval_us = 1000000UL / rate;
-    } else {
-        _loop_rate_hz = DEFAULT_CRSF_OUTPUT_RATE;
-        _frame_interval_us = 1000000UL / DEFAULT_CRSF_OUTPUT_RATE;
-    }
-
-    _scheduler.init(_tasks, uint16_t(_loop_rate_hz));
-    _state = State::WAITING_FOR_RC_LOCK;
-    _scheduler.set_task_rate(REPORTING, _frontend._reporting_rate_hz);
->>>>>>> 276eb0a1dd (AP_CRSF: add IMU rate calibration for external AHRS)
 
 
     if (!hal.scheduler->thread_create(FUNCTOR_BIND_MEMBER(&AP_CRSF_Out::crsf_out_thread, void), "crsf", 2048, AP_HAL::Scheduler::PRIORITY_RCOUT, 1)) {
@@ -143,7 +133,128 @@ void AP_CRSF_Out::update_rates_status()
                     int16_t(rate_baro_counter*report_rate),
                     int16_t(rate_mag_counter*report_rate),
                     int16_t(rate_rc_counter*report_rate), latency_us / 1000.0f);
+
+    // Write state and rate logs before resetting counters
+    write_log_state();
+    write_log_rates();
+
     rate_imu_counter = rate_gps_counter = rate_baro_counter = rate_mag_counter = rate_rc_counter = 0;
+}
+
+// Write CRSF output state log for debugging connection issues
+// @LoggerMessage: CRSO
+// @Description: CRSF Output connection state
+// @Field: TimeUS: Time since system startup
+// @Field: State: Connection state machine state
+// @Field: RxAct: Receiver active flag
+// @Field: Baud: Current baud rate in kBaud
+// @Field: Loop: Current loop rate in Hz
+// @Field: Arm: Armed state
+void AP_CRSF_Out::write_log_state()
+{
+#if HAL_LOGGING_ENABLED
+    const bool rx_active = _crsf_port != nullptr && _crsf_port->is_rx_active();
+    const uint32_t baud_kbaud = _uart.get_baud_rate() / 1000;
+
+    AP::logger().WriteStreaming("CRSO", "TimeUS,State,RxAct,Baud,Loop,Arm", "s-----", "F-----", "QBBHHB",
+                                AP_HAL::micros64(),
+                                uint8_t(_state),
+                                uint8_t(rx_active),
+                                uint16_t(baud_kbaud),
+                                uint16_t(_loop_rate_hz),
+                                uint8_t(hal.util->get_soft_armed()));
+#endif
+}
+
+// Write CRSF sensor rate log for debugging rate issues
+// @LoggerMessage: CRSR
+// @Description: CRSF Output sensor rates
+// @Field: TimeUS: Time since system startup
+// @Field: IMU: IMU frame rate in Hz
+// @Field: GPS: GPS frame rate in Hz
+// @Field: Baro: Barometer frame rate in Hz
+// @Field: Mag: Magnetometer frame rate in Hz
+// @Field: RC: RC output frame rate in Hz
+// @Field: Tgt: Target loop rate in Hz
+// @Field: Lat: Link latency in microseconds
+void AP_CRSF_Out::write_log_rates()
+{
+#if HAL_LOGGING_ENABLED
+    const float report_rate = _frontend._reporting_rate_hz.get();
+
+    AP::logger().WriteStreaming("CRSR", "TimeUS,IMU,GPS,Baro,Mag,RC,Tgt,Lat", "s-------", "F-------", "QHHHHHHH",
+                                AP_HAL::micros64(),
+                                uint16_t(_rate_imu_counter * report_rate),
+                                uint16_t(_rate_gps_counter * report_rate),
+                                uint16_t(_rate_baro_counter * report_rate),
+                                uint16_t(_rate_mag_counter * report_rate),
+                                uint16_t(_rate_rc_counter * report_rate),
+                                uint16_t(get_configured_update_rate()),
+                                uint16_t(_latency_us));
+#endif
+}
+
+// Write CRSF AETR channel log (channels 1-4: Aileron, Elevator, Throttle, Rudder)
+// @LoggerMessage: CRAE
+// @Description: CRSF Output AETR channel values (sent at loop rate)
+// @Field: TimeUS: Time since system startup
+// @Field: Arm: Armed state
+// @Field: C1: Channel 1 (Aileron) PWM value
+// @Field: C2: Channel 2 (Elevator) PWM value
+// @Field: C3: Channel 3 (Throttle) PWM value
+// @Field: C4: Channel 4 (Rudder) PWM value
+void AP_CRSF_Out::write_log_aetr(const uint16_t* channels, bool armed)
+{
+#if HAL_LOGGING_ENABLED
+    // Rate limit to 50Hz to avoid impacting IMU throughput
+    const uint32_t now_ms = AP_HAL::millis();
+    static uint32_t last_log_ms;
+    if (now_ms - last_log_ms < 20) {
+        return;
+    }
+    last_log_ms = now_ms;
+
+    AP::logger().WriteStreaming("CRAE", "TimeUS,Arm,C1,C2,C3,C4",
+                                "s------", "F------", "QBHHHH",
+                                AP_HAL::micros64(),
+                                uint8_t(armed),
+                                channels[0],
+                                channels[1],
+                                channels[2],
+                                channels[3]);
+#endif
+}
+
+// Write CRSF AUX channel log (channels 5-12: auxiliary functions)
+// @LoggerMessage: CRAX
+// @Description: CRSF Output AUX channel values (sent at 50Hz)
+// @Field: TimeUS: Time since system startup
+// @Field: Arm: Armed state
+// @Field: C5-C12: Channel 5-12 PWM values
+void AP_CRSF_Out::write_log_aux(const uint16_t* channels, uint8_t nchan, bool armed)
+{
+#if HAL_LOGGING_ENABLED
+    // Rate limit to 50Hz to avoid impacting IMU throughput
+    const uint32_t now_ms = AP_HAL::millis();
+    static uint32_t last_log_ms;
+    if (now_ms - last_log_ms < 20) {
+        return;
+    }
+    last_log_ms = now_ms;
+
+    AP::logger().WriteStreaming("CRAX", "TimeUS,Arm,C5,C6,C7,C8,C9,C10,C11,C12",
+                                "s----------", "F----------", "QBHHHHHHHH",
+                                AP_HAL::micros64(),
+                                uint8_t(armed),
+                                channels[4],
+                                nchan > 5 ? channels[5] : uint16_t(0),
+                                nchan > 6 ? channels[6] : uint16_t(0),
+                                nchan > 7 ? channels[7] : uint16_t(0),
+                                nchan > 8 ? channels[8] : uint16_t(0),
+                                nchan > 9 ? channels[9] : uint16_t(0),
+                                nchan > 10 ? channels[10] : uint16_t(0),
+                                nchan > 11 ? channels[11] : uint16_t(0));
+#endif
 }
 
 /*
@@ -384,6 +495,7 @@ void AP_CRSF_Out::run_state_machine()
         if (crsf_port->is_rx_active()) {
             state = State::WAITING_FOR_DEVICE_INFO;
             debug_rcout("Telemetry active, requesting device information");
+            write_log_state();
         }
         break;
 
@@ -405,12 +517,14 @@ void AP_CRSF_Out::run_state_machine()
                 GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "CRSFOut: 416kBd may limit EAHRS IMU rate");
                 reset_imu_rate_calibration();
 #endif
+                write_log_state();
                 break;
             }
             crsf_port->reset_bootstrap_baudrate();
             baud_negotiation_result = BaudNegotiationResult::PENDING;
             baud_neg_retries = 0;
             debug_rcout("Initialised, negotiating %ukBd", unsigned(target_baudrate/1000));
+            write_log_state();
         }
         break;
 
@@ -429,6 +543,7 @@ void AP_CRSF_Out::run_state_machine()
             }
             reset_imu_rate_calibration();
 #endif
+            write_log_state();
             break;
         }
 
@@ -507,17 +622,20 @@ void AP_CRSF_Out::run_state_machine()
             last_liveness_check_us = now;
             state = State::HEALTH_CHECK_PING;
             send_ping_frame(true);
+            write_log_state();
         }
         break;
 
     case State::HEALTH_CHECK_PING:
         if (crsf_port->is_rx_active()) {
             state = State::RUNNING;
+            write_log_state();
         } else if (now - last_liveness_check_us > LIVENESS_CHECK_TIMEOUT_US) {
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "CRSFOut: connection lost");
             crsf_port->reset_bootstrap_baudrate();
             baud_negotiation_result = BaudNegotiationResult::PENDING;
             state = State::WAITING_FOR_RC_LOCK;
+            write_log_state();
         }
         break;
     }
@@ -665,12 +783,14 @@ void AP_CRSF_Out::send_rc_frame(uint8_t start_chan, uint8_t nchan)
 {
     uint16_t channels[CRSF_MAX_CHANNELS] {};
     const bool armed = hal.util->get_soft_armed();
+    bool has_valid_data = false;
 
     for (uint8_t i = start_chan; i < start_chan + nchan; ++i) {
         SRV_Channel *c = SRV_Channels::srv_channel(i);
 
         if (c == nullptr) { // Default to neutral if channel is null
             channels[i] = 1500;
+            has_valid_data = true;  // Default neutral is valid data
             continue;
         }
 
@@ -678,7 +798,13 @@ void AP_CRSF_Out::send_rc_frame(uint8_t start_chan, uint8_t nchan)
         // feedback loops with external flight controllers like BetaFlight
         if (!armed && i < 4) {
             channels[i] = c->get_trim();
+            has_valid_data = true;  // Trim values are valid data
             continue;
+        }
+
+        // Check if we have valid output data (non-zero PWM indicates data has been set)
+        if (c->get_output_pwm() != 0) {
+            has_valid_data = true;
         }
 
         // don't pass on the arming on a switch channel when disarmed in case the other end is also using this for arming
@@ -691,12 +817,25 @@ void AP_CRSF_Out::send_rc_frame(uint8_t start_chan, uint8_t nchan)
                     && (chan->option.get() == int16_t(RC_Channel::AUX_FUNC::ARMDISARM)
                         || chan->option.get() == int16_t(RC_Channel::AUX_FUNC::ARMDISARM_AIRMODE))) {
                     channels[i] = 1000;
+                    has_valid_data = true;  // Override value is valid data
                     continue;
                 }
             }
         }
 
         channels[i] = c->get_output_pwm();
+    }
+
+    // Skip sending if no valid PWM data (avoids sending zeros when servo outputs not yet updated)
+    if (!has_valid_data) {
+        return;
+    }
+
+    // Log channel values based on frame type
+    if (start_chan == 0) {
+        write_log_aetr(channels, armed);
+    } else {
+        write_log_aux(channels, start_chan + nchan, armed);
     }
 
     AP_CRSF_Protocol::Frame frame {};
