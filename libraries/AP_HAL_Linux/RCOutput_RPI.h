@@ -21,6 +21,8 @@
 
 #include "AP_HAL_Linux.h"
 #include <AP_HAL/RCOutput.h>
+#include <AP_HAL_Empty/AP_HAL_Empty.h>
+#include <AP_HAL_Empty/AP_HAL_Empty_Private.h>
 
 #if HAL_LINUX_SERIALLED_ENABLED
 #include "SerialLED_SPI.h"
@@ -35,24 +37,13 @@ namespace Linux {
  * have dedicated PWM outputs for motor control. Serial LED support
  * is provided via SPI when HAL_LINUX_SERIALLED_ENABLED is set.
  */
-class RCOutput_RPI : public AP_HAL::RCOutput {
+class RCOutput_RPI : public Empty::RCOutput {
 public:
     RCOutput_RPI();
     ~RCOutput_RPI();
 
     // Initialize the driver
     void init() override;
-
-    // PWM functions - no-ops for this driver
-    void set_freq(uint32_t chmask, uint16_t freq_hz) override {}
-    uint16_t get_freq(uint8_t chan) override { return 50; }
-    void enable_ch(uint8_t ch) override {}
-    void disable_ch(uint8_t ch) override {}
-    void write(uint8_t ch, uint16_t period_us) override {}
-    uint16_t read(uint8_t ch) override { return 0; }
-    void read(uint16_t *period_us, uint8_t len) override;
-    void cork() override {}
-    void push() override {}
 
     // Serial LED functions
     bool set_serial_led_num_LEDs(const uint16_t chan, uint8_t num_leds, output_mode mode = MODE_PWM_NONE, uint32_t clock_mask = 0) override;

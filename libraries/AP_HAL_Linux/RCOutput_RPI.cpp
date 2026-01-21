@@ -50,13 +50,6 @@ void RCOutput_RPI::init()
 #endif
 }
 
-void RCOutput_RPI::read(uint16_t *period_us, uint8_t len)
-{
-    for (uint8_t i = 0; i < len; i++) {
-        period_us[i] = 0;
-    }
-}
-
 bool RCOutput_RPI::set_serial_led_num_LEDs(const uint16_t chan, uint8_t num_leds, output_mode mode, uint32_t clock_mask)
 {
 #if HAL_LINUX_SERIALLED_ENABLED
