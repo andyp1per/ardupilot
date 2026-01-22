@@ -48,8 +48,16 @@ void Copter::update_ground_effect_detector(void)
 
     // if we are in takeoff_expected and we meet the conditions for having taken off
     // end the takeoff_expected state
-    if (gndeffect_state.takeoff_expected && (tnow_ms-gndeffect_state.takeoff_time_ms > 5000 || inertial_nav.get_position_z_up_cm()-gndeffect_state.takeoff_alt_cm > 50.0f)) {
+    const float gndeff_alt_cm = g2.tkoff_gndeff_alt * 100.0f;
+    const float height_above_takeoff_cm = inertial_nav.get_position_z_up_cm() - gndeffect_state.takeoff_alt_cm;
+    if (gndeffect_state.takeoff_expected && (tnow_ms-gndeffect_state.takeoff_time_ms > 5000 || height_above_takeoff_cm > gndeff_alt_cm)) {
         gndeffect_state.takeoff_expected = false;
+    }
+
+    // re-enable ground effect compensation when descending back below threshold
+    if (!ap.land_complete && !gndeffect_state.takeoff_expected &&
+        is_positive(g2.tkoff_gndeff_alt) && height_above_takeoff_cm < gndeff_alt_cm) {
+        gndeffect_state.takeoff_expected = true;
     }
 
     // landing logic
