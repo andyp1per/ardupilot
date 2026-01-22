@@ -287,8 +287,10 @@ uint32_t UARTDriver::_available()
         return 0;
     }
     // pull any pending data from device for low-latency reads
-    if (!_in_timer) {
+    // use semaphore for thread safety on multi-core systems
+    if (!_in_timer && _device_sem.take_nonblocking()) {
         _fill_read_buffer();
+        _device_sem.give();
     }
     return _readbuf.available();
 }
@@ -426,17 +428,19 @@ void UARTDriver::_timer_tick(void)
 
     _in_timer = true;
 
-    // write pending bytes if flush isn't active
+    // use semaphore for mutual exclusion with _flush() and _available()
     if (_device_sem.take_nonblocking()) {
+        // write pending bytes
         uint8_t num_send = 10;
         while (num_send != 0 && _write_pending_bytes()) {
             num_send--;
         }
+
+        // try to fill the read buffer
+        _fill_read_buffer();
+
         _device_sem.give();
     }
-
-    // try to fill the read buffer
-    _fill_read_buffer();
 
     _in_timer = false;
 }
