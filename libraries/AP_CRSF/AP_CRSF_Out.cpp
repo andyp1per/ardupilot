@@ -662,8 +662,7 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
                 if (success) {
                     debug_rcout("CRSF Speed Response Received: SUCCESS");
                     baud_negotiation_result = BaudNegotiationResult::SUCCESS;
-                    // change baud on our end now
-                    crsf_port->change_baud_rate(target_baudrate);
+                    // baud rate was already changed in send_speed_proposal()
                 } else {
                     debug_rcout("CRSF Speed Response Received: FAILED");
                     baud_negotiation_result = BaudNegotiationResult::FAILED;
@@ -876,12 +875,18 @@ void AP_CRSF_Out::send_speed_proposal(uint32_t baudrate)
 {
     debug_rcout("send_speed_proposal(%u)", (unsigned)baudrate);
 
+    // set up the pending baud rate change
     crsf_port->change_baud_rate(baudrate);
 
     AP_CRSF_Protocol::Frame frame;
     AP_CRSF_Protocol::encode_speed_proposal(baudrate, frame, DeviceAddress::CRSF_ADDRESS_FLIGHT_CONTROLLER, DeviceAddress::CRSF_ADDRESS_CRSF_RECEIVER);
 
+    // send the proposal at the current baud rate
     crsf_port->write_frame(&frame);
+
+    // switch to the proposed rate immediately after TX completes
+    // the remote will send its ACK at the new rate
+    crsf_port->apply_pending_baud_change();
 }
 
 void AP_CRSF_Out::send_device_info()
