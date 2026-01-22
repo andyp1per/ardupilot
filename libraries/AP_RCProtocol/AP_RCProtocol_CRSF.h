@@ -92,6 +92,8 @@ public:
 
 #if AP_CRSF_OUT_ENABLED
     void reset_bootstrap_baudrate();
+    // apply pending baud rate change immediately (waits for TX complete)
+    void apply_pending_baud_change();
 #endif
 
     // import enums from AP_CRSF_Protocol for convenience

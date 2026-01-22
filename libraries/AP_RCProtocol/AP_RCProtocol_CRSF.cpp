@@ -525,6 +525,28 @@ void AP_RCProtocol_CRSF::reset_bootstrap_baudrate()
     }
 }
 
+// apply pending baud rate change immediately, waiting for TX to complete
+void AP_RCProtocol_CRSF::apply_pending_baud_change()
+{
+    if (_new_baud_rate == 0) {
+        return;
+    }
+
+    AP_HAL::UARTDriver *uart = get_current_UART();
+    if (uart) {
+        // wait for all the pending data to be sent
+        while (uart->tx_pending()) {
+            hal.scheduler->delay_microseconds(10);
+        }
+        // brief delay for kernel to transmit the frame (~30 bytes at 420k = <1ms)
+        // then switch immediately so we're ready to receive ACK at new rate
+        hal.scheduler->delay(1);
+        // change the baud rate
+        uart->begin(_new_baud_rate);
+    }
+    _new_baud_rate = 0;
+}
+
 #endif
 
 // send out telemetry
