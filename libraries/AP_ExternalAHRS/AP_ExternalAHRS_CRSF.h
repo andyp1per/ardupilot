@@ -87,6 +87,10 @@ private:
 
     // The CRSF index (0, 1, 2...) that this AHRS is configured to listen to.
     uint8_t _instance_idx;
+
+    // GPS state tracking for filter status
+    AP_GPS::GPS_Status _gps_status;
+    uint32_t _last_gps_pkt_us;
 };
 
 namespace AP {

@@ -178,6 +178,16 @@ void AP_ExternalAHRS_CRSF::handle_gps_frame(uint8_t instance_idx, const AP_GPS::
     state.have_velocity = true;
     state.last_location_update_us = AP_HAL::micros();
 
+    // Track GPS status for filter status reporting
+    _gps_status = gps_state.status;
+    _last_gps_pkt_us = AP_HAL::micros();
+
+    // Set the EKF origin on first valid 3D fix (required for home location)
+    if (gps_state.status >= AP_GPS::GPS_OK_FIX_3D && !state.have_origin) {
+        state.origin = gps_state.location;
+        state.have_origin = true;
+    }
+
     AP_ExternalAHRS::gps_data_message_t gps {
         gps_week: gps_state.time_week,
         ms_tow: gps_state.time_week_ms,
@@ -290,7 +300,7 @@ bool AP_ExternalAHRS_CRSF::pre_arm_check(char *failure_msg, uint8_t failure_msg_
     return true;
 }
 
-// Since this is only an IMU feed, we can only confirm attitude, not position or velocity.
+// Report filter status based on available sensor data
 void AP_ExternalAHRS_CRSF::get_filter_status(nav_filter_status &status) const
 {
     memset(&status, 0, sizeof(status));
@@ -300,6 +310,24 @@ void AP_ExternalAHRS_CRSF::get_filter_status(nav_filter_status &status) const
     if (healthy()) {
         // If we are healthy, we have attitude information from the IMU
         status.flags.attitude = true;
+
+        // Check if GPS data is valid: have origin, at least 3D fix, and data is recent (< 2s)
+        const uint32_t gps_age_us = AP_HAL::micros() - _last_gps_pkt_us;
+        const bool gps_valid = state.have_origin &&
+                               _gps_status >= AP_GPS::GPS_OK_FIX_3D &&
+                               gps_age_us < 2000000;
+
+        // Report position/velocity flags if we have valid GPS data
+        if (gps_valid) {
+            status.flags.horiz_vel = true;
+            status.flags.vert_vel = true;
+            status.flags.horiz_pos_rel = true;
+            status.flags.horiz_pos_abs = true;
+            status.flags.vert_pos = true;
+            status.flags.pred_horiz_pos_rel = true;
+            status.flags.pred_horiz_pos_abs = true;
+            status.flags.using_gps = true;
+        }
     }
 }
 
