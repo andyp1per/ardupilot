@@ -196,6 +196,13 @@ const AP_Param::GroupInfo AP_Arming::var_info[] = {
     AP_GROUPINFO("NEED_LOC", 12, AP_Arming, require_location, float(AP_ARMING_NEED_LOC_DEFAULT)),
 #endif  // AP_ARMING_NEED_LOC_PARAMETER_ENABLED
 
+    // @Param: IMU_TIM
+    // @DisplayName: IMU Consistency Check Time
+    // @Description: Time in seconds for which all Accel/Gyro have to be consistent. Set to 0 to disable.
+    // @Range: 0 10
+    // @User: Advanced
+    AP_GROUPINFO("IMU_TIM", 14, AP_Arming, _imu_consistency_time_s, 10),
+
     AP_GROUPEND
 };
 
@@ -428,8 +435,8 @@ bool AP_Arming::ins_accels_consistent(const AP_InertialSensor &ins)
     }
 
     // if accels can in theory be inconsistent,
-    // must pass for at least 10 seconds before we're considered consistent:
-    if (ins.get_accel_count() > 1 && now - last_accel_pass_ms < 10000) {
+    // must pass for at least _imu_consistency_time_s seconds before we're considered consistent:
+    if (ins.get_accel_count() > 1 && now - last_accel_pass_ms < (uint32_t)(_imu_consistency_time_s * 1000.0f)) {
         return false;
     }
 
@@ -453,8 +460,8 @@ bool AP_Arming::ins_gyros_consistent(const AP_InertialSensor &ins)
     }
 
     // if gyros can in theory be inconsistent,
-    // must pass for at least 10 seconds before we're considered consistent:
-    if (ins.get_gyro_count() > 1 && now - last_gyro_pass_ms < 10000) {
+    // must pass for at least _imu_consistency_time_s seconds before we're considered consistent:
+    if (ins.get_gyro_count() > 1 && now - last_gyro_pass_ms <  (uint32_t)(_imu_consistency_time_s * 1000.0f)) {
         return false;
     }
 
@@ -504,15 +511,25 @@ bool AP_Arming::ins_checks(bool report)
         }
 #endif
 
-        if (run_imu_consistency_check) {
+        if (run_imu_consistency_check && !is_zero(_imu_consistency_time_s)) {
             // check all accelerometers point in roughly same direction
-            if (!ins_accels_consistent(ins)) {
+            bool accel_consistent = false;
+            if (ins_accels_consistent(ins)) {
+                accel_consistent = true;
+            }
+
+            // check all gyros are giving consistent readings
+            bool gyro_consistent = false;
+            if (ins_gyros_consistent(ins)) {
+                gyro_consistent = true;
+            }
+
+            if ( !accel_consistent ) {
                 check_failed(ARMING_CHECK_INS, report, "Accels inconsistent");
                 return false;
             }
 
-            // check all gyros are giving consistent readings
-            if (!ins_gyros_consistent(ins)) {
+            if ( !gyro_consistent ) {
                 check_failed(ARMING_CHECK_INS, report, "Gyros inconsistent");
                 return false;
             }
