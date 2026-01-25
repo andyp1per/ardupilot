@@ -271,6 +271,7 @@ void NavEKF3_core::InitialiseVariables()
     inFlight = false;
     prevInFlight = false;
     manoeuvring = false;
+    fusingStationaryZeroVel = false;
     inhibitWindStates = true;
     windStateIsObservable = false;
     treatWindStatesAsTruth = false;
