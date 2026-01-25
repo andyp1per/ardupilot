@@ -638,6 +638,7 @@ void NavEKF3_core::SelectVelPosFusion()
     // If we are operating without any aiding, fuse in constant position of constant
     // velocity measurements to constrain tilt drift. This assumes a non-manoeuvring
     // vehicle. Do this to coincide with the height fusion.
+    fusingStationaryZeroVel = false;
     if (fuseHgtData && PV_AidingMode == AID_NONE) {
         if (assume_zero_sideslip() && tiltAlignComplete && motorsArmed) {
             // handle special case where we are launching a FW aircraft without magnetometer
@@ -666,6 +667,31 @@ void NavEKF3_core::SelectVelPosFusion()
             fuseVelData = false;
             velPosObs[3] = lastKnownPositionNE.x;
             velPosObs[4] = lastKnownPositionNE.y;
+        }
+    }
+
+    // When in AID_RELATIVE or AID_ABSOLUTE mode but stationary on ground without velocity
+    // aiding, fuse synthetic zero velocity to make accel bias observable. This handles the
+    // case where optical flow is configured but provides no data when stationary.
+    if (fuseHgtData && PV_AidingMode != AID_NONE && onGround && !motorsArmed) {
+        // Check if we have recent velocity aiding from any source
+        const uint32_t velAidTimeout_ms = 1000;
+        const bool haveRecentGpsVel = (imuSampleTime_ms - lastVelPassTime_ms < velAidTimeout_ms);
+#if EK3_FEATURE_OPTFLOW_FUSION
+        const bool haveRecentFlowVel = (imuSampleTime_ms - prevFlowFuseTime_ms < velAidTimeout_ms);
+#else
+        const bool haveRecentFlowVel = false;
+#endif
+        const bool haveRecentBodyVel = (imuSampleTime_ms - prevBodyVelFuseTime_ms < velAidTimeout_ms);
+
+        if (!haveRecentGpsVel && !haveRecentFlowVel && !haveRecentBodyVel) {
+            // No velocity aiding available while stationary - fuse synthetic zero velocity
+            // to make accelerometer bias observable
+            fuseVelData = true;
+            fusingStationaryZeroVel = true;
+            velPosObs[0] = 0.0f;
+            velPosObs[1] = 0.0f;
+            velPosObs[2] = 0.0f;
         }
     }
 
@@ -724,6 +750,16 @@ void NavEKF3_core::FuseVelPosNED()
             R_OBS[3] = R_OBS[0];
             R_OBS[4] = R_OBS[0];
             for (uint8_t i=0; i<=2; i++) R_OBS_DATA_CHECKS[i] = R_OBS[i];
+        } else if (fusingStationaryZeroVel) {
+            // Fusing synthetic zero velocity while stationary on ground - use small noise
+            // since we are confident velocity is zero when disarmed and on ground
+            R_OBS[0] = sq(0.5f);
+            R_OBS[1] = R_OBS[0];
+            R_OBS[2] = R_OBS[0];
+            for (uint8_t i=0; i<=2; i++) R_OBS_DATA_CHECKS[i] = R_OBS[i];
+            // Position noise still uses normal sensor values since position may be fused from actual sensors
+            R_OBS[3] = sq(constrain_ftype(frontend->_gpsHorizPosNoise, 0.1f, 10.0f));
+            R_OBS[4] = R_OBS[3];
         } else {
             if (gpsSpdAccuracy > 0.0f) {
                 // use GPS receivers reported speed accuracy if available and floor at value set by GPS velocity noise parameter
@@ -1070,8 +1106,9 @@ void NavEKF3_core::FuseVelPosNED()
                 // causes a DC offset in AccZ that is not present in normal flight
                 const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_expected();
                 // Inhibit Z-axis accel bias learning when there is no Z velocity source because
-                // the bias is unobservable with only position (baro) measurements
-                const bool noZVelSource = !frontend->sources.haveVelZSource();
+                // the bias is unobservable with only position (baro) measurements.
+                // Exception: when fusing stationary zero velocity, bias IS observable
+                const bool noZVelSource = !frontend->sources.haveVelZSource() && !fusingStationaryZeroVel;
                 if (!horizInhibit && !inhibitDelVelBiasStates && !badIMUdata) {
                     for (uint8_t i = 13; i<=15; i++) {
                         const bool zAxisInhibit = (i == 15) && (gndEffectActive || noZVelSource);
