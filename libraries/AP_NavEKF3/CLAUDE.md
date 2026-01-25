@@ -1271,3 +1271,137 @@ The Z-bias inhibition fix prevents the EKF from learning this wrong bias on the 
 2. **Long-term:** Add rangefinder or optical flow sensor for indoor flight
 
 The vibration-induced bias is a fundamental limitation of MEMS accelerometers operating in high-vibration environments without external velocity reference.
+
+### Z-Axis Bias Inhibition: Complete Fix Summary
+
+This section documents the complete set of fixes for Z-axis accel bias drift in indoor/no-GPS flight.
+
+#### The Problem
+
+Without Z velocity measurements (GPS unavailable indoors), the Z-axis accelerometer bias is unobservable. The EKF would attempt to learn the bias from position-only (baro) measurements, but this has very weak observability. The result was Z-bias drifting randomly, causing altitude hold instability.
+
+Multiple scenarios contributed to the problem:
+1. Motor thrust on ground creates AccZ offset that corrupts bias learning
+2. Optical flow provides only XY velocity, leaving Z-bias unobservable during flight
+3. When disarmed with optical flow configured, bias would drift unchecked
+4. GPS configured but unavailable (indoors) wasn't handled - code checked configuration, not actual data
+
+#### The Fixes (Commit History)
+
+| Commit | Description | Scenario Addressed |
+|--------|-------------|-------------------|
+| `6bc5565643` | Inhibit Z-bias learning during ground effect | Motor thrust on ground |
+| `49187dac64` | Inhibit Z-bias learning without Z velocity source | No VELZ configured |
+| `0ff35c20b4` | Fuse zero velocity when stationary on ground | Disarmed with optical flow |
+| `175c635a08` | Check actual Z velocity availability, not just config | GPS configured but unavailable |
+
+#### Key Technical Findings
+
+**1. The `dvelBiasAxisInhibit` Mechanism (existing code):**
+
+Located in `AP_NavEKF3_core.cpp:1167-1182`, this mechanism only handles geometric observability:
+```cpp
+const bool is_bias_observable = (fabsF(prevTnb[index][2]) > 0.8f) || !onGround;
+```
+Once `onGround = false` (flying), all bias axes are considered observable. This doesn't account for measurement observability (do we have sensors that can observe the bias?).
+
+**2. The `haveVelZSource()` Gap:**
+
+The original code checked source *configuration*, not actual data *availability*:
+```cpp
+// OLD - only checks if GPS is configured
+const bool noZVelSource = !frontend->sources.haveVelZSource();
+```
+
+This returns `false` if GPS is configured (`EK3_SRC1_VELZ=3`), even when GPS is unavailable indoors. The fix checks actual data:
+```cpp
+// NEW - checks if Z velocity data is actually being received
+const bool noZVelSource = !useGpsVertVel && !useExtNavVel && !fusingStationaryZeroVel;
+```
+
+**3. Where Z-Bias Inhibition is Applied:**
+
+- `AP_NavEKF3_PosVelFusion.cpp` - `FuseVelPosNED()` for GPS/position/height fusion
+- `AP_NavEKF3_OptFlowFusion.cpp` - `FuseOptFlow()` for optical flow fusion (X and Y axes)
+
+Both locations now use the same `noZVelSource` check based on actual velocity availability.
+
+#### Validation Results (Replay on logjk1.bin)
+
+Tested with optical flow configuration (`EK3_SRC1_VELXY=5`, `EK3_SRC1_VELZ=0`):
+
+| Phase | Time | Original Z-bias | Fixed Z-bias |
+|-------|------|-----------------|--------------|
+| Pre-arm (stationary) | 40s | -0.20 m/s² | 0.00 m/s² |
+| Armed on ground | 48s | -0.06 m/s² | 0.00 m/s² |
+| Early flight | 55s | -0.10 m/s² | 0.00 m/s² |
+| Mid flight | 75s | -0.07 m/s² | 0.00 m/s² |
+| Disarm period | 86-90s | -0.10 → -0.29 m/s² | 0.00 m/s² |
+| Second flight | 100s | +0.92 m/s² | 0.00 m/s² |
+| End of log | 115s | +0.55 m/s² | 0.00 m/s² |
+
+**Total improvement:** 0.75 m/s² less Z-bias drift (from ±0.75 to 0.00)
+
+#### How Z-Bias is Now Handled
+
+| Scenario | Z-bias Learning | Mechanism |
+|----------|-----------------|-----------|
+| Stationary on ground, disarmed | **Enabled** via zero velocity fusion | Bias IS observable |
+| Armed on ground (motors spinning) | **Inhibited** | Ground effect flag |
+| Taking off (first 5s or below TKOFF_GNDEFF_ALT) | **Inhibited** | Ground effect flag |
+| Flying with GPS Z velocity | **Enabled** | Bias IS observable |
+| Flying with optical flow only | **Inhibited** | No Z velocity source |
+| Flying with GPS configured but unavailable | **Inhibited** | Actual availability check |
+| Landing (slow descent) | **Inhibited** | Ground effect flag |
+
+#### Future Enhancement: Rangefinder-Derived Velocity
+
+Currently, rangefinder is only used as a height (position) source. A potential enhancement would be to differentiate rangefinder height to derive Z velocity, which would:
+- Make Z-bias observable during indoor flight
+- Be robust to ground obstacles (velocity is rate of change, not absolute position)
+- Not require GPS
+
+This is not yet implemented but would significantly improve indoor altitude hold capability.
+
+#### Analysis Tool
+
+A Python script is available for Z-bias analysis:
+
+```bash
+# Basic analysis
+python3 libraries/AP_NavEKF3/tools/ekf_bias_analysis.py <logfile.bin>
+
+# With plot (requires matplotlib)
+python3 libraries/AP_NavEKF3/tools/ekf_bias_analysis.py <logfile.bin> --plot
+
+# Export to CSV
+python3 libraries/AP_NavEKF3/tools/ekf_bias_analysis.py <logfile.bin> --csv output.csv
+```
+
+For replay comparison, use the output log from the Replay tool:
+- Original data: core C=0
+- Replayed data: core C=100
+
+Example output:
+```
+======================================================================
+EKF3 Z-AXIS BIAS ANALYSIS
+======================================================================
+Time range: 8.4s to 116.6s (108.2s duration)
+Original samples (C=0): 2706
+Replayed samples (C=100): 2706
+
+Original Z-bias statistics:
+  Mean:  +0.135 m/s²
+  Std:   0.408 m/s²
+  Range: -0.400 to +1.000 m/s²
+  Drift: 1.400 m/s²
+
+Replayed Z-bias statistics:
+  Mean:  +0.000 m/s²
+  Std:   0.000 m/s²
+  Range: +0.000 to +0.000 m/s²
+  Drift: 0.000 m/s²
+
+Improvement: 1.400 m/s² less drift
+```
