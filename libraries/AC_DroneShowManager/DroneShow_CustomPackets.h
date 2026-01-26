@@ -17,7 +17,7 @@
 
 namespace CustomPackets {
     static const uint8_t START_CONFIG = 1;
-    static const uint8_t CRTL_TRIGGER = 2;
+    static const uint8_t DEPRECATED_CRTL_TRIGGER = 2;
     static const uint8_t SIMPLE_GEOFENCE_SETUP = 3;
     static const uint8_t ACKNOWLEDGMENT = 4;
     static const uint8_t TIME_AXIS_CONFIG = 5;
@@ -66,14 +66,6 @@ namespace CustomPackets {
             int32_t countdown_msec;
         } optional_part;
     } start_config_t;
-
-    typedef struct PACKED {
-        // Timestamp to trigger collective RTL at, relative to the show start,
-        // in seconds. Zero is a special value, it clears any scheduled
-        // collective RTL for the future if the drone has not started the
-        // CRTL trajectory yet.
-        uint16_t start_time;
-    } crtl_trigger_t;
 
     typedef struct PACKED {
         // Number of points in the polygon geofence; zero means that the polygon

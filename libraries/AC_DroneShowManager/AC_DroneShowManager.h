@@ -154,13 +154,6 @@ public:
     // mode_drone_show.cpp
     bool cancel_requested() const { return _cancel_requested; }
 
-    // Clears the scheduled time for a collective RTL maneuver. Returns whether
-    // the request was processed.
-    //
-    // This function is a no-op if the drone show is not in the "performing"
-    // phase and 'force' is set to false.
-    bool clear_scheduled_collective_rtl(bool force = false);
-
     // Clears the scheduled start time of the show (but does not cancel the
     // show if it is already running). Returns whether the request was
     // processed.
@@ -687,10 +680,6 @@ private:
     // Takeoff position, in local coordinates, relative to the show coordinate system.
     // Zero if no show data is loaded. Units are in millimeters.
     Vector3f _takeoff_position_mm;
-    
-    // Time when we need to start a coordinated RTL trajectory, relative to the
-    // start of the show, in seconds. Zero if unscheduled.
-    float _crtl_start_time_sec;
 
     // Structure storing the details of a light signal requested by the user,
     // including its start time, duration, color, priority etc.

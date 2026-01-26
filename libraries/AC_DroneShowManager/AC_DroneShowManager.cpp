@@ -41,7 +41,6 @@ AC_DroneShowManager::AC_DroneShowManager() :
     _start_time_requested_by(StartTimeSource::NONE),
     _start_time_on_internal_clock_usec(0),
     _start_time_unix_usec(0),
-    _crtl_start_time_sec(0),
     _trajectory_is_circular(false),
     _cancel_requested(false),
     _controller_update_delta_msec(1000 / DEFAULT_UPDATE_RATE_HZ),
@@ -435,10 +434,6 @@ void AC_DroneShowManager::notify_drone_show_mode_entered_stage(DroneShowModeStag
     }
 
     _stage_in_drone_show_mode = stage;
-
-    // Whenever we change the state, we clear the scheduled start time of a
-    // collective RTL trajectory
-    clear_scheduled_collective_rtl(/* force = */ true);
 
     // Force-update preflight checks so we see the errors immediately if we
     // switched to the "waiting for start time" stage

@@ -212,21 +212,9 @@ bool AC_DroneShowManager::_handle_custom_data_message(mavlink_channel_t chan, ui
             }
             break;
 
-        // Schedule collective RTL
-        case CustomPackets::CRTL_TRIGGER:
-            if (length >= sizeof(CustomPackets::crtl_trigger_t)) {
-                CustomPackets::crtl_trigger_t* crtl_trigger = static_cast<CustomPackets::crtl_trigger_t*>(data);
-                if (crtl_trigger->start_time == 0) {
-                    clear_scheduled_collective_rtl();
-                } else if (crtl_trigger->start_time > 0) {
-                    schedule_collective_rtl_at_show_timestamp_msec(
-                        crtl_trigger->start_time * 1000 /* [s] --> [msec] */
-                    );
-                }
-
-                return true;
-            }
-            break;
+        // Schedule collective RTL; obsolete, does nothing, kept for backward compatibility
+        case CustomPackets::DEPRECATED_CRTL_TRIGGER:
+            return true;
 
         // Configure geofences with a single call
         case CustomPackets::SIMPLE_GEOFENCE_SETUP:
