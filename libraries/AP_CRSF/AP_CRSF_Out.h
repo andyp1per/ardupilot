@@ -25,7 +25,7 @@
 #if AP_CRSF_OUT_ENABLED
 
 #include <AP_HAL/AP_HAL.h>
-#include <AP_HAL/utility/MinimalScheduler.h>
+#include <AP_HAL/utility/MinimalTickScheduler.h>
 #include <AP_Param/AP_Param.h>
 #include <GCS_MAVLink/GCS.h>
 #include "AP_CRSF_Protocol.h"
