@@ -184,7 +184,6 @@ public:
     };
 
     // protocol pure virtual base class
-    virtual ~AP_CRSF_Protocol() = 0;
     virtual void update(void) = 0;
 
     static const char* get_frame_type_name(uint8_t byte, uint8_t subtype = 0);
@@ -215,7 +214,5 @@ public:
 
     static void encode_heartbeat_frame(Frame& frame, DeviceAddress origin);
 };
-
-inline AP_CRSF_Protocol::~AP_CRSF_Protocol() {};
 
 #endif // AP_RCPROTOCOL_CRSF_ENABLED

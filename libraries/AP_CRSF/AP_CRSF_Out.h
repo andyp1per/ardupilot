@@ -43,9 +43,7 @@ class AP_CRSF_OutManager;
 class AP_CRSF_Out : public AP_CRSF_Protocol {
 public:
     // constructor for serial interaction
-    AP_CRSF_Out(AP_HAL::UARTDriver& uart, uint8_t instance, AP_CRSF_OutManager& frontend);
-
-    ~AP_CRSF_Out() override {}
+    AP_CRSF_Out(AP_HAL::UARTDriver& _uart, uint8_t instance, AP_CRSF_OutManager& _frontend);
 
     /* Do not allow copies */
     CLASS_NO_COPY(AP_CRSF_Out);
@@ -65,7 +63,7 @@ public:
     bool decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame);
 
     static const struct AP_Param::GroupInfo var_info[];
-    static AP_CRSF_Out* get_singleton() { return _singleton; }
+    static AP_CRSF_Out* get_singleton() { return singleton; }
 
 private:
     enum class State : uint8_t {
@@ -117,7 +115,7 @@ private:
     static AP_CRSF_Out* singleton;
     static uint8_t num_instances;
 
-    State _state = State::WAITING_FOR_PORT;
+    State state = State::WAITING_FOR_PORT;
     uint32_t last_frame_us;
     uint32_t last_status_update_ms;
     uint32_t last_baud_neg_us;
