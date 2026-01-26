@@ -52,38 +52,38 @@ AP_CRSF_Out* AP_CRSF_Out::_singleton;
 
 extern const AP_HAL::HAL& hal;
 
-AP_CRSF_Out::AP_CRSF_Out(AP_HAL::UARTDriver& uart, uint8_t instance, AP_CRSF_OutManager& frontend) :
-    _instance_idx(instance), _uart(uart), _frontend(frontend)
+AP_CRSF_Out::AP_CRSF_Out(AP_HAL::UARTDriver& _uart, uint8_t instance, AP_CRSF_OutManager& _frontend) :
+    instance_idx(instance), uart(_uart), frontend(_frontend)
 {
     // in the future we could consider supporting multiple output handlers
-    if (_singleton != nullptr) {
+    if (singleton != nullptr) {
         AP_HAL::panic("Duplicate CRSF_Out handler");
     }
 
-    _singleton = this;
+    singleton = this;
 
     init(uart);
 }
 
 // Initialise the CRSF output driver
-bool AP_CRSF_Out::init(AP_HAL::UARTDriver& uart)
+bool AP_CRSF_Out::init(AP_HAL::UARTDriver& _uart)
 {
-    if (_state != State::WAITING_FOR_PORT) {
+    if (state != State::WAITING_FOR_PORT) {
         return false;
     }
 
-    _crsf_port = NEW_NOTHROW AP_RCProtocol_CRSF(AP::RC(), AP_RCProtocol_CRSF::PortMode::DIRECT_RCOUT, &uart);
+    crsf_port = NEW_NOTHROW AP_RCProtocol_CRSF(AP::RC(), AP_RCProtocol_CRSF::PortMode::DIRECT_RCOUT, &_uart);
 
-    if (_crsf_port == nullptr) {
+    if (crsf_port == nullptr) {
         debug_rcout("Init failed: could not create CRSF output port");
         return false;
     }
 
-    const uint16_t rate = _frontend._rate_hz.get();
+    const uint16_t rate = frontend.rate_hz.get();
     if (rate > 0) {
-        _frame_interval_us = 1000000UL / rate;
+        frame_interval_us = 1000000UL / rate;
     } else {
-        _frame_interval_us = 1000000UL / DEFAULT_CRSF_OUTPUT_RATE;
+        frame_interval_us = 1000000UL / DEFAULT_CRSF_OUTPUT_RATE;
     }
 
     _scheduler.init(_tasks, rate);
@@ -99,17 +99,6 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver& uart)
     }
 
     return true;
-}
-
-bool AP_CRSF_Out::should_do_status_update()
-{
-    const uint32_t now_ms = AP_HAL::millis();
-    if (AP_HAL::timeout_expired(_last_status_update_ms, now_ms, 1000UL)) {
-        _last_status_update_ms = now_ms;
-        return true;
-    }
-
-    return false;
 }
 
 void AP_CRSF_Out::update_rates_status()
@@ -198,6 +187,7 @@ void AP_CRSF_Out::push()
 void AP_CRSF_Out::run_state_machine()
 {
     const uint32_t now = AP_HAL::micros();
+    const uint32_t now_ms = AP_HAL::millis();
 
     const uint32_t BAUD_NEG_TIMEOUT_US = 1500000; // 1.5 second timeout for a response
     const uint32_t BAUD_NEG_INTERVAL_US = 500000; // send proposal every 500ms
@@ -214,7 +204,8 @@ void AP_CRSF_Out::run_state_machine()
         // because we received something back
         send_aetr_rc_frame();
 
-        if (should_do_status_update()) {
+        if (AP_HAL::timeout_expired(_last_status_update_ms, now_ms, 1000UL)) {
+            _last_status_update_ms = now_ms;
             GCS_SEND_TEXT(MAV_SEVERITY_INFO, "CRSFOut: waiting for RC lock");
         }
 
@@ -414,8 +405,8 @@ void AP_CRSF_Out::send_latency_ping_frame()
 void AP_CRSF_Out::send_ping_frame(bool force)
 {
     // only send pings at 50Hz max
-    uint32_t now_ms = AP_HAL::millis();
-    if (now_ms - _last_ping_frame_ms < 20 && !force) {
+    const uint32_t now_ms = AP_HAL::millis();
+    if (!AP_HAL::timeout_expired(_last_ping_frame_ms, now_ms, 20UL) && !force) {
         return;
     }
     _last_ping_frame_ms = now_ms;

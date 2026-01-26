@@ -187,7 +187,7 @@ public:
     virtual ~AP_CRSF_Protocol() = 0;
     virtual void update(void) = 0;
 
-    static const char* get_frame_type(uint8_t byte, uint8_t subtype = 0);
+    static const char* get_frame_type_name(uint8_t byte, uint8_t subtype = 0);
 
     // decode channels from the standard 11bit format (CRSFv2)
     static void decode_11bit_channels(const uint8_t* payload, uint8_t nchannels, uint16_t *values);

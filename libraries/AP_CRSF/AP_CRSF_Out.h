@@ -114,40 +114,40 @@ private:
     void send_heartbeat();
     bool should_do_status_update();
 
-    static AP_CRSF_Out* _singleton;
-    static uint8_t _num_instances;
+    static AP_CRSF_Out* singleton;
+    static uint8_t num_instances;
 
     State _state = State::WAITING_FOR_PORT;
-    uint32_t _last_frame_us;
-    uint32_t _last_status_update_ms;
-    uint32_t _last_baud_neg_us;
-    uint32_t _baud_neg_start_us;
-    uint32_t _frame_interval_us;
-    uint8_t _heartbeat_to_frame_ratio;
-    uint32_t _target_baudrate;
-    uint32_t _last_liveness_check_us;
-    uint32_t _last_ping_frame_ms;
-    uint8_t _instance_idx = 0; // Instance index (0, 1, 2...) for multi-instance use
+    uint32_t last_frame_us;
+    uint32_t last_status_update_ms;
+    uint32_t last_baud_neg_us;
+    uint32_t baud_neg_start_us;
+    uint32_t frame_interval_us;
+    uint8_t heartbeat_to_frame_ratio;
+    uint32_t target_baudrate;
+    uint32_t last_liveness_check_us;
+    uint32_t last_ping_frame_ms;
+    uint8_t instance_idx = 0; // Instance index (0, 1, 2...) for multi-instance use
     // rate counters
-    uint32_t _last_rate_update_ms;
-    uint16_t _rate_rc_counter;
-    uint32_t _last_latency_ping_us;
-    uint32_t _latency_us;
+    uint32_t last_rate_update_ms;
+    uint16_t rate_rc_counter;
+    uint32_t last_latency_ping_us;
+    uint32_t latency_us;
     // latch for PWM push
-    volatile bool _pwm_is_fresh;
+    volatile bool pwm_is_fresh;
 
     AP_CRSF_Protocol::VersionInfo version;
-    BaudNegotiationResult _baud_negotiation_result;
+    BaudNegotiationResult baud_negotiation_result;
     // check baudrate negotiation status
-    BaudNegotiationResult get_baud_negotiation_result() const { return _baud_negotiation_result; }
+    BaudNegotiationResult get_baud_negotiation_result() const { return baud_negotiation_result; }
     void reset_baud_negotiation();
 
     // pointer to the CRSF protocol engine instance for our assigned UART
-    AP_RCProtocol_CRSF* _crsf_port;
-    AP_HAL::UARTDriver& _uart;
-    AP_CRSF_OutManager& _frontend;
+    AP_RCProtocol_CRSF* crsf_port;
+    AP_HAL::UARTDriver& uart;
+    AP_CRSF_OutManager& frontend;
 
-    TickScheduler _scheduler;
+    TickScheduler scheduler;
 
     enum TaskIds {
         AETR_RC_FRAME,
@@ -158,7 +158,7 @@ private:
         NUM_TASKS
     };
 
-    TickSchedulerTask _tasks[NUM_TASKS]
+    TickSchedulerTask tasks[NUM_TASKS]
     {   // tasks are in priority order
         { FUNCTOR_BIND_MEMBER(&AP_CRSF_Out::send_aetr_rc_frame, void), 50, true },  // 50Hz is a fallback rate in case push() does not fire
         { FUNCTOR_BIND_MEMBER(&AP_CRSF_Out::send_aux_rc_frame, void), 50, true },
