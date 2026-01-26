@@ -67,7 +67,7 @@ public:
     static AP_CRSF_Out* get_singleton() { return singleton; }
 
     // Returns the instance index of this CRSF output port (0, 1, 2...)
-    uint8_t get_instance_idx() const { return _instance_idx; }
+    uint8_t get_instance_idx() const { return instance_idx; }
 
     // get the configured output rate
     uint16_t get_configured_update_rate() const;
@@ -158,11 +158,11 @@ private:
 
 
     // IMU rate calibration state
-    float _loop_rate_hz;                    // current filtered loop rate
-    uint32_t _imu_cal_start_us;             // start of 1-second measurement window
-    uint16_t _imu_cal_count;                // IMU samples in current window
-    uint32_t _calibration_start_ms;         // time when calibration started (for convergence)
-    bool _calibration_converged;            // true once convergence message has been sent
+    float loop_rate_hz;                    // current filtered loop rate
+    uint32_t imu_cal_start_us;             // start of 1-second measurement window
+    uint16_t imu_cal_count;                // IMU samples in current window
+    uint32_t calibration_start_ms;         // time when calibration started (for convergence)
+    bool calibration_converged;            // true once convergence message has been sent
 
     AP_CRSF_Protocol::VersionInfo version;
     AP_GPS::GPS_State gps_state;

@@ -91,7 +91,7 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver& _uart)
     }
 
     crsf_port = NEW_NOTHROW AP_RCProtocol_CRSF(AP::RC(), AP_RCProtocol_CRSF::PortMode::DIRECT_RCOUT, &_uart);
-    _instance_idx = 0;
+    instance_idx = 0;
 
     if (crsf_port == nullptr) {
         debug_rcout("Init failed: could not create CRSF output port");
@@ -108,7 +108,7 @@ bool AP_CRSF_Out::init(AP_HAL::UARTDriver& _uart)
         frame_interval_us = 1000000UL / DEFAULT_CRSF_OUTPUT_RATE;
     }
 
-    scheduler.init(_tasks, uint16_t(loop_rate_hz));
+    scheduler.init(tasks, uint16_t(loop_rate_hz));
     state = State::WAITING_FOR_RC_LOCK;
     scheduler.set_task_rate(REPORTING, frontend.reporting_rate_hz);
 
@@ -153,15 +153,15 @@ void AP_CRSF_Out::update_rates_status()
 void AP_CRSF_Out::write_log_state()
 {
 #if HAL_LOGGING_ENABLED
-    const bool rx_active = _crsf_port != nullptr && _crsf_port->is_rx_active();
-    const uint32_t baud_kbaud = _uart.get_baud_rate() / 1000;
+    const bool rx_active = crsf_port != nullptr && crsf_port->is_rx_active();
+    const uint32_t baud_kbaud = uart.get_baud_rate() / 1000;
 
     AP::logger().WriteStreaming("CRSO", "TimeUS,State,RxAct,Baud,Loop,Arm", "s-----", "F-----", "QBBHHB",
                                 AP_HAL::micros64(),
-                                uint8_t(_state),
+                                uint8_t(state),
                                 uint8_t(rx_active),
                                 uint16_t(baud_kbaud),
-                                uint16_t(_loop_rate_hz),
+                                uint16_t(loop_rate_hz),
                                 uint8_t(hal.util->get_soft_armed()));
 #endif
 }
@@ -180,17 +180,17 @@ void AP_CRSF_Out::write_log_state()
 void AP_CRSF_Out::write_log_rates()
 {
 #if HAL_LOGGING_ENABLED
-    const float report_rate = _frontend._reporting_rate_hz.get();
+    const float report_rate = frontend.reporting_rate_hz.get();
 
     AP::logger().WriteStreaming("CRSR", "TimeUS,IMU,GPS,Baro,Mag,RC,Tgt,Lat", "s-------", "F-------", "QHHHHHHH",
                                 AP_HAL::micros64(),
-                                uint16_t(_rate_imu_counter * report_rate),
-                                uint16_t(_rate_gps_counter * report_rate),
-                                uint16_t(_rate_baro_counter * report_rate),
-                                uint16_t(_rate_mag_counter * report_rate),
-                                uint16_t(_rate_rc_counter * report_rate),
+                                uint16_t(rate_imu_counter * report_rate),
+                                uint16_t(rate_gps_counter * report_rate),
+                                uint16_t(rate_baro_counter * report_rate),
+                                uint16_t(rate_mag_counter * report_rate),
+                                uint16_t(rate_rc_counter * report_rate),
                                 uint16_t(get_configured_update_rate()),
-                                uint16_t(_latency_us));
+                                uint16_t(latency_us));
 #endif
 }
 
@@ -275,38 +275,38 @@ void AP_CRSF_Out::update_imu_rate_calibration()
     const uint32_t now_us = AP_HAL::micros();
 
     // Initialize measurement window on first call
-    if (_imu_cal_start_us == 0) {
-        _imu_cal_start_us = now_us;
-        _imu_cal_count = 0;
-        _calibration_start_ms = AP_HAL::millis();
+    if (imu_cal_start_us == 0) {
+        imu_cal_start_us = now_us;
+        imu_cal_count = 0;
+        calibration_start_ms = AP_HAL::millis();
         return;
     }
 
     // Check if 1 second has elapsed
-    if (now_us - _imu_cal_start_us < 1000000UL) {
+    if (now_us - imu_cal_start_us < 1000000UL) {
         return;
     }
 
     // Don't adjust when armed - maintain stable rate
     if (hal.util->get_soft_armed()) {
-        _imu_cal_start_us = now_us;
-        _imu_cal_count = 0;
+        imu_cal_start_us = now_us;
+        imu_cal_count = 0;
         return;
     }
 
     const float target_rate = get_configured_update_rate();
     if (target_rate <= 0) {
-        _imu_cal_start_us = now_us;
-        _imu_cal_count = 0;
+        imu_cal_start_us = now_us;
+        imu_cal_count = 0;
         return;
     }
 
     // Calculate observed IMU rate over the measurement window
-    const float elapsed_s = (now_us - _imu_cal_start_us) * 1.0e-6f;
-    const float observed_imu_rate = _imu_cal_count / elapsed_s;
+    const float elapsed_s = (now_us - imu_cal_start_us) * 1.0e-6f;
+    const float observed_imu_rate = imu_cal_count / elapsed_s;
 
     // Determine convergence parameters based on time since start
-    const uint32_t elapsed_ms = AP_HAL::millis() - _calibration_start_ms;
+    const uint32_t elapsed_ms = AP_HAL::millis() - calibration_start_ms;
     const bool converging = elapsed_ms < 30000;
 
     float filter_constant;
@@ -325,9 +325,9 @@ void AP_CRSF_Out::update_imu_rate_calibration()
         lower_limit = 0.95f;
 
         // Print convergence message once
-        if (!_calibration_converged) {
-            _calibration_converged = true;
-            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "CRSFOut: IMU rate converged, loop=%.0fHz", _loop_rate_hz);
+        if (!calibration_converged) {
+            calibration_converged = true;
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "CRSFOut: IMU rate converged, loop=%.0fHz", loop_rate_hz);
         }
     }
 
@@ -343,24 +343,24 @@ void AP_CRSF_Out::update_imu_rate_calibration()
     rate_ratio = constrain_float(rate_ratio, lower_limit, upper_limit);
 
     // Calculate new loop rate
-    float new_loop_rate = _loop_rate_hz * rate_ratio;
+    float new_loop_rate = loop_rate_hz * rate_ratio;
 
     // Apply low-pass filter to smooth the adjustment
-    _loop_rate_hz = filter_constant * _loop_rate_hz + (1 - filter_constant) * new_loop_rate;
+    loop_rate_hz = filter_constant * loop_rate_hz + (1 - filter_constant) * new_loop_rate;
 
     // Clamp to reasonable bounds (±20% of target rate)
-    _loop_rate_hz = constrain_float(_loop_rate_hz, target_rate * 0.8f, target_rate * 1.2f);
+    loop_rate_hz = constrain_float(loop_rate_hz, target_rate * 0.8f, target_rate * 1.2f);
 
     // Update the frame interval and scheduler
-    _frame_interval_us = 1000000UL / uint32_t(_loop_rate_hz);
-    _scheduler.set_loop_rate(uint16_t(_loop_rate_hz));
+    frame_interval_us = 1000000UL / uint32_t(loop_rate_hz);
+    scheduler.set_loop_rate(uint16_t(loop_rate_hz));
 
     debug_rcout("IMU rate cal: observed=%.0f target=%.0f loop=%.0f",
-                observed_imu_rate, target_rate, _loop_rate_hz);
+                observed_imu_rate, target_rate, loop_rate_hz);
 
     // Reset for next measurement window
-    _imu_cal_start_us = now_us;
-    _imu_cal_count = 0;
+    imu_cal_start_us = now_us;
+    imu_cal_count = 0;
 #endif
 }
 
@@ -375,16 +375,16 @@ void AP_CRSF_Out::reset_imu_rate_calibration()
     const uint16_t target_rate = get_configured_update_rate();
 
     // Reset to target rate and restart convergence
-    _loop_rate_hz = target_rate > 0 ? target_rate : DEFAULT_CRSF_OUTPUT_RATE;
-    _frame_interval_us = 1000000UL / uint32_t(_loop_rate_hz);
-    _scheduler.set_loop_rate(uint16_t(_loop_rate_hz));
+    loop_rate_hz = target_rate > 0 ? target_rate : DEFAULT_CRSF_OUTPUT_RATE;
+    frame_interval_us = 1000000UL / uint32_t(loop_rate_hz);
+    scheduler.set_loop_rate(uint16_t(loop_rate_hz));
 
-    _imu_cal_start_us = 0;
-    _imu_cal_count = 0;
-    _calibration_start_ms = AP_HAL::millis();
-    _calibration_converged = false;
+    imu_cal_start_us = 0;
+    imu_cal_count = 0;
+    calibration_start_ms = AP_HAL::millis();
+    calibration_converged = false;
 
-    debug_rcout("IMU rate calibration reset, loop_rate=%.0f", _loop_rate_hz);
+    debug_rcout("IMU rate calibration reset, loop_rate=%.0f", loop_rate_hz);
 #endif
 }
 
@@ -504,7 +504,7 @@ void AP_CRSF_Out::run_state_machine()
 
         if (version.major > 0 && crsf_port->is_rx_active()) {
             // Start at highest rate not rejected this session
-            target_baudrate = _max_allowed_baudrate;
+            target_baudrate = max_allowed_baudrate;
             if (target_baudrate >= 2000000) {
                 state = State::NEGOTIATING_2M;
             } else if (target_baudrate >= 1000000) {
@@ -695,7 +695,7 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
                 AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
                 if (crsf_ahrs != nullptr) {
                     // Pass this instance's index for filtering in the AHRS backend
-                    crsf_ahrs->handle_acc_gyro_frame(_instance_idx, acc, gyro, gyro_temp, sample_us);
+                    crsf_ahrs->handle_acc_gyro_frame(instance_idx, acc, gyro, gyro_temp, sample_us);
                 }
 #endif
             }
@@ -711,7 +711,7 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
                 AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
                 if (crsf_ahrs != nullptr) {
                     // Pass this instance's index for filtering in the AHRS backend
-                    crsf_ahrs->handle_baro_frame(_instance_idx, pressure, temperature);
+                    crsf_ahrs->handle_baro_frame(instance_idx, pressure, temperature);
                 }
 #endif
             }
@@ -727,7 +727,7 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
                 AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
                 if (crsf_ahrs != nullptr) {
                     // Pass this instance's index for filtering in the AHRS backend
-                    crsf_ahrs->handle_mag_frame(_instance_idx, mag_field);
+                    crsf_ahrs->handle_mag_frame(instance_idx, mag_field);
                 }
 #endif
             }
@@ -751,7 +751,7 @@ bool AP_CRSF_Out::decode_crsf_packet(const AP_CRSF_Protocol::Frame& _frame)
             AP_ExternalAHRS_CRSF* crsf_ahrs = AP::external_ahrs_crsf();
             if (crsf_ahrs != nullptr) {
                 // Pass this instance's index for filtering in the AHRS backend
-                crsf_ahrs->handle_gps_frame(_instance_idx, gps_state);
+                crsf_ahrs->handle_gps_frame(instance_idx, gps_state);
             }
 #endif
             break;
