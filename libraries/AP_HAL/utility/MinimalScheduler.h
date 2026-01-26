@@ -45,7 +45,7 @@ struct TickSchedulerTask {
  */
 class TickScheduler {
 public:
-    TickScheduler();
+    TickScheduler() {}
 
     // Initialize with a fixed table of tasks
     // @Param: tasks - pointer to the array of tasks (must persist)

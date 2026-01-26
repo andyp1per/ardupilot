@@ -21,13 +21,6 @@
 // TickScheduler Implementation
 // ============================================================================
 
-TickScheduler::TickScheduler() :
-    _tasks(nullptr),
-    _num_tasks(0),
-    _loop_rate_hz(0)
-{
-}
-
 void TickScheduler::init(TickSchedulerTask *tasks, uint8_t num_tasks, uint16_t loop_rate_hz)
 {
     if (tasks == nullptr || num_tasks == 0 || loop_rate_hz == 0) {
@@ -411,7 +404,7 @@ void TimeScheduler::spread_tasks()
         }
 
         if (same_period_count > 0) {
-            // Store the offset in _last_run_us temporarily.
+            // Store the offset in _last_run_us temporarilly.
             // The first update() call will convert this to a timestamp.
             uint32_t spacing = target._period_us / same_period_count;
             target._last_run_us = my_index * spacing;
