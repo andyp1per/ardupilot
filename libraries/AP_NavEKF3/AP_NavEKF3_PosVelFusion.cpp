@@ -664,7 +664,17 @@ void NavEKF3_core::SelectVelPosFusion()
             }
         } else {
             fusePosData = true;
-            fuseVelData = false;
+            // When on ground and disarmed, fuse zero velocity to make accel bias observable
+            // This prevents velocity/position drift while stationary
+            if (onGround && !motorsArmed) {
+                fuseVelData = true;
+                fusingStationaryZeroVel = true;
+                velPosObs[0] = 0.0f;
+                velPosObs[1] = 0.0f;
+                velPosObs[2] = 0.0f;
+            } else {
+                fuseVelData = false;
+            }
             velPosObs[3] = lastKnownPositionNE.x;
             velPosObs[4] = lastKnownPositionNE.y;
         }
