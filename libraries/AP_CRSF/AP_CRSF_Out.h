@@ -145,7 +145,7 @@ private:
     AP_HAL::UARTDriver& uart;
     AP_CRSF_OutManager& frontend;
 
-    TickScheduler scheduler;
+    MinimalTickScheduler scheduler;
 
     enum TaskIds {
         AETR_RC_FRAME,
@@ -156,7 +156,7 @@ private:
         NUM_TASKS
     };
 
-    TickSchedulerTask tasks[NUM_TASKS]
+    MinimalTickSchedulerTask tasks[NUM_TASKS]
     {   // tasks are in priority order
         { FUNCTOR_BIND_MEMBER(&AP_CRSF_Out::send_aetr_rc_frame, void), 50, true },  // 50Hz is a fallback rate in case push() does not fire
         { FUNCTOR_BIND_MEMBER(&AP_CRSF_Out::send_aux_rc_frame, void), 50, true },
