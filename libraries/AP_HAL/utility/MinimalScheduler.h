@@ -20,10 +20,10 @@
 #include <AP_HAL/AP_HAL.h>
 
 // ----------------------------------------------------------------------------
-// TickScheduler Types
+// MinimalTickScheduler Types
 // ----------------------------------------------------------------------------
 
-struct TickSchedulerTask {
+struct MinimalTickSchedulerTask {
     // User-defined parameters
     Functor<void> function;     // The functor to call
     float rate_hz;              // Desired rate in Hertz (used if interval_ticks is 0)
@@ -37,25 +37,25 @@ struct TickSchedulerTask {
 
 /*
  * Tick-based Scheduler
- * Best for high-speed, jitter-sensitive loops where the calling thread 
+ * Best for high-speed, jitter-sensitive loops where the calling thread
  * guarantees a fixed frequency (e.g., the main flight loop).
  * - Efficient (simple decrement)
  * - Supports both Hz and Ticks for task intervals
  * - Requires knowing the loop rate in advance
  */
-class TickScheduler {
+class MinimalTickScheduler {
 public:
-    TickScheduler() {}
+    MinimalTickScheduler() {}
 
     // Initialize with a fixed table of tasks
     // @Param: tasks - pointer to the array of tasks (must persist)
     // @Param: num_tasks - number of tasks in the array
     // @Param: loop_rate_hz - the fixed frequency at which update() will be called
-    void init(TickSchedulerTask *tasks, uint8_t num_tasks, uint16_t loop_rate_hz);
+    void init(MinimalTickSchedulerTask *tasks, uint8_t num_tasks, uint16_t loop_rate_hz);
 
     // Template overload to automatically deduce array size
     template <uint8_t N>
-    void init(TickSchedulerTask (&tasks)[N], uint16_t loop_rate_hz) {
+    void init(MinimalTickSchedulerTask (&tasks)[N], uint16_t loop_rate_hz) {
         init(tasks, N, loop_rate_hz);
     }
 
@@ -82,68 +82,9 @@ public:
     void run_task_immediately(uint8_t task_index);
 
 private:
-    TickSchedulerTask *_tasks;
+    MinimalTickSchedulerTask *_tasks;
     uint8_t _num_tasks;
     uint16_t _loop_rate_hz;
-
-    void spread_tasks();
-};
-
-// ----------------------------------------------------------------------------
-// TimeScheduler Types
-// ----------------------------------------------------------------------------
-
-struct TimeSchedulerTask {
-    // User-defined parameters
-    Functor<void> function;     // The functor to call
-    float rate_hz;              // Desired rate in Hertz
-    bool enabled;               // Whether the task is currently active
-
-    // Internal scheduling data
-    uint32_t _period_us;        // The calculated interval in microseconds
-    uint32_t _last_run_us;      // Timestamp of the last execution
-};
-
-/*
- * Time-based Scheduler
- * Best for lower-priority loops or threads where the execution interval 
- * might vary or is not strictly tied to a hardware timer interrupt.
- * - Robust to jitter
- * - Self-correcting over time
- * - Only supports rate_hz
- */
-class TimeScheduler {
-public:
-    TimeScheduler();
-
-    // Initialize with a fixed table of tasks
-    // @Param: tasks - pointer to the array of tasks (must persist)
-    // @Param: num_tasks - number of tasks in the array
-    void init(TimeSchedulerTask *tasks, uint8_t num_tasks);
-
-    // Template overload to automatically deduce array size
-    template <uint8_t N>
-    void init(TimeSchedulerTask (&tasks)[N]) {
-        init(tasks, N);
-    }
-
-    // Call this continuously or at intervals
-    // @Param: now_us - Current system time in microseconds
-    // Returns true if any task was executed, false otherwise
-    bool update(uint32_t now_us);
-
-    // Enable/Disable a task by index
-    void set_task_enabled(uint8_t task_index, bool enabled);
-
-    // Change the rate of a task at runtime
-    // @Param: task_index - index of the task to modify
-    // @Param: rate_hz - new rate in Hertz
-    void set_task_rate(uint8_t task_index, float rate_hz);
-
-private:
-    TimeSchedulerTask *_tasks;
-    uint8_t _num_tasks;
-    bool _initialized_time;
 
     void spread_tasks();
 };
