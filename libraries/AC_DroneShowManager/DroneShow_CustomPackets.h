@@ -20,6 +20,7 @@ namespace CustomPackets {
     static const uint8_t CRTL_TRIGGER = 2;
     static const uint8_t SIMPLE_GEOFENCE_SETUP = 3;
     static const uint8_t ACKNOWLEDGMENT = 4;
+    static const uint8_t TIME_AXIS_CONFIG = 5;
 
     static const uint8_t DRONE_TO_GCS_STATUS = 0x5b;
     static const uint8_t GCS_TO_DRONE = 0x5c;
@@ -116,6 +117,37 @@ namespace CustomPackets {
         // Result of the acknowledgment.
         MAV_RESULT result;
     } acknowledgment_t;
+    
+    typedef struct PACKED {
+        // Sequence number; used to filter duplicates.
+        uint8_t seq_no;
+        
+        // Number of time axis segments included in this packet, minus one.
+        uint8_t num_segments_minus_one;
+        
+        // Reserved byte; must be zero.
+        uint8_t reserved;
+        
+        // Number of milliseconds on the show clock at the start of the time axis.
+        // May be negative.
+        int32_t origin_msec;
+    } time_axis_config_header_t;
+    
+    typedef struct PACKED {
+        // Initial rate of the time axis segment, scaled to the [0; 65535] range.
+        uint16_t initial_rate_scaled;
+
+        // Final rate of the time axis segment, scaled to the [0; 65535] range.
+        uint16_t final_rate_scaled;
+        
+        // Duration of the time axis segment, in milliseconds.
+        uint32_t duration_msec;
+    } time_axis_config_entry_t;
+    
+    typedef struct PACKED {
+        // Initial rate of the last time axis segment, scaled to the [0; 65535] range.
+        uint16_t initial_rate_scaled;
+    } time_axis_config_trailer_t;
 };
 
 static_assert(

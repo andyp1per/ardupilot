@@ -1,22 +1,42 @@
 #include "AC_DroneShowManager.h"
 
 #include <AP_Logger/AP_Logger.h>
-#include <skybrush/events.h>
+#include <skybrush/skybrush.h>
 
 // Write a drone show status log entry
 void AC_DroneShowManager::write_show_status_log_message() const
 {
     sb_rgb_color_t color;
+    sb_control_output_time_t time_info;
     Vector3f dist;
+    ssize_t scene;
+    float show_clock_sec;
 
     get_last_rgb_led_color(color);
     get_distance_from_desired_position(dist);
     
+    time_info = sb_show_controller_get_current_output_time(&_show_controller);
+    scene = time_info.scene;
+    show_clock_sec = time_info.warped_time_in_scene_sec;
+    
+    if (scene < 0) {
+        scene = sb_screenplay_size(&_screenplay);  // out of range value
+    }
+    if (scene >= 255) {
+        scene = 255;  // out of range value or too many chapters
+    }
+
+    if (!isfinite(show_clock_sec)) {
+        show_clock_sec = 0;
+    }
+
     const struct log_DroneShowStatus pkt {
         LOG_PACKET_HEADER_INIT(LOG_DRONE_SHOW_MSG),
         time_us         : AP_HAL::micros64(),
-        show_clock_ms   : get_elapsed_time_since_start_msec(),
+        wall_clock_ms   : get_elapsed_time_since_start_msec(),
         stage           : static_cast<uint8_t>(get_stage_in_drone_show_mode()),
+        scene           : static_cast<uint8_t>(scene),
+        show_clock_ms   : static_cast<int32_t>(show_clock_sec * 1000.0f),
         red             : color.red,
         green           : color.green,
         blue            : color.blue,
@@ -65,4 +85,58 @@ void AC_DroneShowManager::write_show_event_log_message(
     };
 
     AP::logger().WriteBlock(&pkt, sizeof(pkt));
+}
+
+// Write a sequence of log messages representing the state of the current time axis
+void AC_DroneShowManager::write_time_axis_log_messages(uint8_t seq_no)
+{
+    size_t i, j, num_scenes, num_segments;
+    sb_screenplay_scene_t* scene;
+    sb_time_axis_t* time_axis;
+    const sb_time_segment_t* segment;
+    
+    struct log_TimeAxisEntry pkt {
+        LOG_PACKET_HEADER_INIT(LOG_TIME_AXIS_ENTRY_MSG),
+        time_us         : AP_HAL::micros64(),
+        seq_no          : seq_no,
+    };
+    
+    num_scenes = sb_screenplay_size(&_screenplay);
+    for (i = 0; i < num_scenes; i++) {
+        if (i > 255) {
+            break;   // too many scenes
+        }
+
+        pkt.scene = static_cast<uint8_t>(i);
+        
+        scene = sb_screenplay_get_scene_ptr(&_screenplay, i);
+        time_axis = scene ? sb_screenplay_scene_get_time_axis(scene) : nullptr;
+        if (time_axis == nullptr) {
+            break;
+        }
+
+        pkt.origin_ms = time_axis->origin_msec;
+        
+        num_segments = sb_time_axis_num_segments(time_axis);
+        for (j = 0; j < num_segments; j++) {
+            if (j > 255) {
+                break;   // too many segments
+            }
+
+            pkt.index = static_cast<uint8_t>(j);
+            segment = sb_time_axis_get_segment(time_axis, j);
+            if (segment == nullptr) {
+                break;
+            }
+            
+            pkt.duration_ms = segment->duration_msec;
+            pkt.initial_rate = segment->initial_rate;
+            pkt.final_rate = segment->final_rate;
+
+            AP::logger().WriteBlock(&pkt, sizeof(pkt));
+            
+            // we do not repeat the origin from the second entry onwards
+            pkt.origin_ms = 0;
+        }
+    }
 }

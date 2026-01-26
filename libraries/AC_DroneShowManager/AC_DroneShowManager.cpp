@@ -326,15 +326,15 @@ const sb_control_output_t* AC_DroneShowManager::_get_raw_show_control_output_at_
 sb_trajectory_t* AC_DroneShowManager::_get_trajectory_at_seconds(float time)
 {
     uint32_t time_msec = static_cast<uint32_t>(time * 1000.0f);
-    sb_screenplay_chapter_t* chapter;
+    sb_screenplay_scene_t* scene;
     
     if (sb_show_controller_update_time_msec(&_show_controller, time_msec))
     {
         return nullptr;
     }
     
-    chapter = sb_show_controller_get_current_chapter(&_show_controller);
-    return chapter ? chapter->trajectory : nullptr;
+    scene = sb_show_controller_get_current_scene(&_show_controller);
+    return scene ? scene->trajectory : nullptr;
 }
 
 bool AC_DroneShowManager::get_desired_global_position_at_seconds(float time, Location& loc)

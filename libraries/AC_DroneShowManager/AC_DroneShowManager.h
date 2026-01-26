@@ -490,6 +490,10 @@ public:
     // Writes a message logging the execution of an event from the show file into the log
     void write_show_event_log_message(const struct sb_event_s *event, DroneShowEventResult result) const;
 
+    // Writes a sequence of log messages containing a representation of the current time
+    // axis
+    void write_time_axis_log_messages(uint8_t seq_no);
+
     static const struct AP_Param::GroupInfo var_info[];
 
     // Hard fence subsystem. This should really have to be in Copter or some
@@ -642,7 +646,7 @@ private:
     // In normal conditions, the screenplay has a single chapter, which holds
     // references to the trajectory, light program, yaw program and event list.
     // However, the screenplay may be extended with an additional return-to-launch
-    // chapter if a collective RTL maneuver is scheduled during the show.
+    // chapter if a collective RTL operation is scheduled during the show.
     sb_screenplay_t _screenplay;
 
     // Controller that manages the trajectory player, the light program player,
@@ -865,6 +869,9 @@ private:
 
     // Callback that is called when entering the "landed" stage
     void _handle_switch_to_landed_state();
+    
+    // Handles a time axis configuration packet whose length has already been verified
+    bool _handle_time_axis_configuration_packet(void* data, uint8_t length);
 
     // Returns whether the given option flag is set in the SHOW_OPTIONS parameter
     bool _has_option(DroneShowOptionFlag option) const {

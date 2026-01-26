@@ -200,8 +200,8 @@ bool AC_DroneShowManager::_load_show_file_from_storage()
         size_t i, num_chapters = sb_screenplay_size(&_screenplay);
         for (i = 0; i < num_chapters; i++)
         {
-            sb_screenplay_chapter_t* chapter = sb_screenplay_get_chapter_ptr(&_screenplay, i);
-            sb_event_list_t* event_list = chapter ? sb_screenplay_chapter_get_events(chapter) : nullptr;
+            sb_screenplay_scene_t* scene = sb_screenplay_get_scene_ptr(&_screenplay, i);
+            sb_event_list_t* event_list = scene ? sb_screenplay_scene_get_events(scene) : nullptr;
             if (event_list && _params.pyro_spec.time_compensation_msec != 0)
             {
                 sb_event_list_adjust_timestamps_by_type(
@@ -243,7 +243,7 @@ exit:
 bool AC_DroneShowManager::_recalculate_trajectory_properties()
 {
     sb_trajectory_stats_calculator_t stats_calculator;
-    sb_screenplay_chapter_t* chapter;
+    sb_screenplay_scene_t* scene;
     sb_trajectory_t* trajectory;
     bool success = false;
 
@@ -268,8 +268,8 @@ bool AC_DroneShowManager::_recalculate_trajectory_properties()
     }
     
     // Get the trajectory from the show controller
-    chapter = sb_show_controller_get_current_chapter(&_show_controller);
-    trajectory = chapter ? sb_screenplay_chapter_get_trajectory(chapter) : nullptr;
+    scene = sb_show_controller_get_current_scene(&_show_controller);
+    trajectory = scene ? sb_screenplay_scene_get_trajectory(scene) : nullptr;
     if (trajectory == nullptr)
     {
         return false;

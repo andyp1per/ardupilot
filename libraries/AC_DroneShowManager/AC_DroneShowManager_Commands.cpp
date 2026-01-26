@@ -1,4 +1,6 @@
 #include <GCS_MAVLink/GCS.h>
+#include <limits>
+#include <skybrush/skybrush.h>
 
 #include "AC_DroneShowManager.h"
 #include "DroneShow_Constants.h"
@@ -273,6 +275,11 @@ bool AC_DroneShowManager::_handle_custom_data_message(mavlink_channel_t chan, ui
             if (length >= sizeof(CustomPackets::acknowledgment_t)) {
                 return true;
             }
+            break;
+            
+        // Time axis configuration packet, used to implement suspension and resume
+        case CustomPackets::TIME_AXIS_CONFIG:
+            return _handle_time_axis_configuration_packet(data, length);
     }
 
     return false;
@@ -316,4 +323,110 @@ bool AC_DroneShowManager::_handle_data96_message(mavlink_channel_t chan, const m
         return false;
     }
     return _handle_custom_data_message(chan, packet.data[0], packet.data + 1, packet.len - 1);
+}
+
+bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uint8_t length)
+{
+    static uint16_t previous_seq_no = 0xFFFF;   // 0xFFFF is never a valid sequence number
+    CustomPackets::time_axis_config_header_t* header;
+    CustomPackets::time_axis_config_entry_t* entry;
+    CustomPackets::time_axis_config_trailer_t* trailer;
+    uint8_t num_entries, entry_index;
+    sb_error_t retval;
+    sb_screenplay_scene_t* scene;
+    sb_time_axis_t* time_axis;
+    sb_time_axis_t new_time_axis;
+    sb_time_segment_t segment;
+    
+    gcs().send_text(MAV_SEVERITY_ERROR, "Got packet %d", length);
+    if (length < sizeof(CustomPackets::time_axis_config_header_t) + sizeof(CustomPackets::time_axis_config_trailer_t)) {
+        // Packet too short
+        return false;
+    }
+
+    header = static_cast<CustomPackets::time_axis_config_header_t*>(data);
+    num_entries = header->num_segments_minus_one;   // this is correct, last segment is in trailer
+    
+    if (length < (
+        sizeof(CustomPackets::time_axis_config_header_t) +
+        num_entries * sizeof(CustomPackets::time_axis_config_entry_t) +
+        sizeof(CustomPackets::time_axis_config_trailer_t)
+    )) {
+        // Length mismatch
+        return false;
+    }
+    
+    if (header->seq_no == previous_seq_no) {
+        // Duplicate packet
+        return true;
+    }
+    
+    // Remember the sequence number
+    previous_seq_no = header->seq_no;
+
+    // Find the time axis to manipulate
+    scene = sb_screenplay_get_scene_ptr(&_screenplay, 0);
+    time_axis = scene ? sb_screenplay_scene_get_time_axis(scene) : nullptr;
+    if (time_axis == nullptr) {
+        return false;
+    }
+    
+    // We need to be extra careful here; if an error happens while we are seting up the
+    // new time axis, we want to leave the existing time axis intact. Therefore, we first
+    // create a new time axis, and then swap it with the existing one only if everything
+    // went well.
+    if (sb_time_axis_init(&new_time_axis) != SB_SUCCESS) {
+        return false;
+    }
+    
+    // Add finite segments
+    for (entry_index = 0; entry_index < num_entries; entry_index++) {
+        entry = reinterpret_cast<CustomPackets::time_axis_config_entry_t*>(
+            reinterpret_cast<uint8_t*>(data) +
+            sizeof(CustomPackets::time_axis_config_header_t) +
+            entry_index * sizeof(CustomPackets::time_axis_config_entry_t)
+        );
+
+        if (entry->duration_msec == std::numeric_limits<uint32_t>::max()) {
+            // Invalid duration for a finite segment
+            retval = SB_EINVAL;
+        } else {
+            segment = sb_time_segment_make(
+                entry->duration_msec,
+                entry->initial_rate_scaled / 65535.0f,
+                entry->final_rate_scaled / 65535.0f
+            );
+            retval = sb_time_axis_append_segment(&new_time_axis, segment);
+        }
+
+        if (retval != SB_SUCCESS) {
+            goto exit;
+        }
+    }
+    
+    // Add final, infinite segment
+    trailer = reinterpret_cast<CustomPackets::time_axis_config_trailer_t*>(
+        reinterpret_cast<uint8_t*>(data) +
+        sizeof(CustomPackets::time_axis_config_header_t) +
+        num_entries * sizeof(CustomPackets::time_axis_config_entry_t)
+    );
+    segment = sb_time_segment_make_constant_rate(
+        std::numeric_limits<uint32_t>::max(),
+        trailer->initial_rate_scaled / 65535.0f
+    );
+    retval = sb_time_axis_append_segment(&new_time_axis, segment);
+
+exit:
+    if (retval == SB_SUCCESS) {
+        // Swap the new time axis with the existing one
+        sb_time_axis_swap(time_axis, &new_time_axis);
+        
+        // Add log entries containing the current time axis configuration
+        write_time_axis_log_messages(header->seq_no);
+    }
+    
+    // Clean up the time axis that we do not need any more
+    sb_time_axis_destroy(&new_time_axis);
+    
+    return retval == SB_SUCCESS;
 }

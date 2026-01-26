@@ -5,13 +5,16 @@
 #define LOG_IDS_FROM_DRONE_SHOW \
     LOG_DRONE_SHOW_MSG, \
     LOG_FENCE_STATUS_MSG, \
-    LOG_DRONE_SHOW_EVENT_MSG
+    LOG_DRONE_SHOW_EVENT_MSG, \
+    LOG_TIME_AXIS_ENTRY_MSG
 
 // @LoggerMessage: SHOW
 // @Description: Drone show mode information
 // @Field: TimeUS: Time since system startup
-// @Field: ClockMS: Time on the show clock
+// @Field: ClockMS: Time since the start of the show in wall clock time
 // @Field: Stage: Current stage of the show
+// @Field: Scene: Scene index in the current show
+// @Field; ShowClockMS: Time on the show clock in the current scene
 // @Field: R: Red component of current color in show
 // @Field: G: Green component of current color in show
 // @Field: B: Blue component of current color in show
@@ -22,8 +25,10 @@
 struct PACKED log_DroneShowStatus {
     LOG_PACKET_HEADER;
     uint64_t time_us;
-    int32_t show_clock_ms;
+    int32_t wall_clock_ms;
     uint8_t stage;
+    uint8_t scene;
+    int32_t show_clock_ms;
     uint8_t red;
     uint8_t green;
     uint8_t blue;
@@ -73,10 +78,34 @@ struct PACKED log_DroneShowEvent {
     uint8_t result;
 };
 
+// @LoggerMessage: SBTA
+// @Description: Skybrush time axis entry log
+// @Field: TimeUS: Time since system startup
+// @Field: Seq: Sequence number of the time axis configuration
+// @Field: Scene: Index of the scene that this entry refers to
+// @Field: Index: Index of the time axis entry in this scene
+// @Field: Origin: Origin time of the scene in milliseconds; filled only for the first entry of the scene
+// @Field: Duration: Duration of the time axis entry in milliseconds
+// @Field: IR: Initial rate of the time axis entry (1 = real time, 0.5 = half speed, 0 = standstill, etc.)
+// @Field: FR: Final rate of the time axis entry (1 = real time, 0.5 = half speed, 0 = standstill, etc.)
+struct PACKED log_TimeAxisEntry {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint8_t seq_no;
+    uint8_t scene;
+    uint8_t index;
+    int32_t origin_ms;
+    uint32_t duration_ms;
+    float initial_rate;
+    float final_rate;
+};
+
 #define LOG_STRUCTURE_FROM_DRONE_SHOW \
     { LOG_DRONE_SHOW_MSG, sizeof(log_DroneShowStatus),                  \
-      "SHOW", "QiBBBBff", "TimeUS,ClockMS,Stage,R,G,B,HDist,VDist", "ss----mm", "FC----BB" }, \
+      "SHOW", "QiBBiBBBff", "TimeUS,ClockMS,Stage,Scene,SceneMS,R,G,B,HDist,VDist", "ss--s---mm", "FC--C---BB" }, \
     { LOG_FENCE_STATUS_MSG, sizeof(log_FenceStatus),                    \
       "FNCS", "QBBHBBH", "TimeUS,GeoEn,GeoB,GeoCnt,HardB,BubbleB,BubbleCnt", "s------", "F------" }, \
     { LOG_DRONE_SHOW_EVENT_MSG, sizeof(log_DroneShowEvent),              \
-      "SBEV", "QiBBIB", "TimeUS,ClockMS,Type,Subtype,Payload,Result", "ss----", "FC----" }
+      "SBEV", "QiBBIB", "TimeUS,ClockMS,Type,Subtype,Payload,Result", "ss----", "FC----" }, \
+    { LOG_TIME_AXIS_ENTRY_MSG, sizeof(log_TimeAxisEntry),               \
+      "SBTA", "QBBBiIff", "TimeUS,Seq,Scene,Index,Origin,Duration,IR,FR", "s---ss--", "F---CC--" }
