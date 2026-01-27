@@ -737,17 +737,6 @@ void NavEKF3_core::correctDeltaAngle(Vector3F &delAng, ftype delAngDT, uint8_t g
 void NavEKF3_core::correctDeltaVelocity(Vector3F &delVel, ftype delVelDT, uint8_t accel_index)
 {
     delVel -= inactiveBias[accel_index].accel_bias * (delVelDT / dtEkfAvg);
-
-    // Apply learned hover Z-bias correction (vibration rectification compensation)
-    // This is applied at the IMU level so it's immune to EKF resets.
-    // Only apply to the IMU used by the user-selected primary core (EK3_PRIMARY),
-    // since the bias was learned from that specific IMU.
-    // In EKF3, core index equals IMU index.
-    const uint8_t primary_imu = uint8_t(frontend->_primary_core) < frontend->num_cores ?
-                                frontend->_primary_core : 0;
-    if (accel_index == primary_imu) {
-        delVel.z -= frontend->_accelBiasHoverZ * delVelDT;
-    }
 }
 
 /*
