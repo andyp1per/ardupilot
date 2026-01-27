@@ -2130,6 +2130,12 @@ void NavEKF3::update_accel_bias_hover(float dt)
         return;
     }
 
+    // Use the user-selected primary core (EK3_PRIMARY), not the dynamic primary which
+    // can change during lane switching. This ensures we consistently learn from the
+    // same IMU that will be the initial primary on boot. The learned bias is applied
+    // to all cores at initialization, so learning from a consistent source is important.
+    const uint8_t learn_core = uint8_t(_primary_core) < num_cores ? _primary_core : 0;
+
     // check if we're in a state where learning should occur:
     // - not in ground effect (above TKOFF_GNDEFF_ALT)
     // Note: takeoff_expected is true on ground before liftoff,
@@ -2140,42 +2146,26 @@ void NavEKF3::update_accel_bias_hover(float dt)
 
     // Get current vertical velocity from EKF
     Vector3f vel;
-    core[primary].getVelNED(vel);
+    core[learn_core].getVelNED(vel);
     float vd = vel.z;  // positive = descending in NED
 
     // Only learn if velocity is reasonably small (in hover, not maneuvering)
-    // Relaxed to 1.0 m/s to allow learning during slow climbs/descents
     if (fabsf(vd) > 1.0f) {
         return;
     }
 
-    // The key insight: in steady-state hover with baro corrections,
-    // the VD error approximately equals the uncompensated AccZ bias.
-    // This is because uncompensated AccZ integrates into velocity,
-    // and baro position corrections create a ~1 second time constant.
-    //
-    // If VD > 0, EKF thinks descending but we're hovering -> need more positive bias
-    // If VD < 0, EKF thinks climbing but we're hovering -> need more negative bias
-    //
-    // The vibration rectification typically causes AccZ to read ~0.15-0.2 m/s²
-    // less negative, which appears as an upward acceleration error, which
-    // integrates into a positive (downward) velocity error.
-
-    // Get current EKF bias state (this is the bias learned by normal EKF operation)
+    // The EKF learns accel bias through its Kalman filter. With Z velocity (GPS/external nav)
+    // the bias is strongly observable. Without Z velocity, the bias is weakly observable from
+    // baro height corrections during hover. Ground effect inhibition prevents learning of
+    // motor-induced bias when on ground, but allows learning during stable hover.
     Vector3f currentBias;
-    core[primary].getAccelBias(currentBias);
-
-    // Calculate the target bias: current EKF bias + velocity error correction
-    // The velocity error tells us how much additional bias we need.
-    // In steady-state hover with baro corrections, VD error approximately
-    // equals the uncompensated AccZ bias (vibration rectification).
-    float targetBias = currentBias.z + vd;
+    core[learn_core].getAccelBias(currentBias);
 
     // Update the hover bias parameter (filtered for saving)
-    // This parameter will be applied at the NEXT boot/initialization,
-    // not during the current flight, to avoid feedback loops.
+    // This parameter will be applied at the NEXT boot/initialization
+    // to provide a good starting point for the EKF bias state.
     const float alpha = dt / (dt + ABIAS_HOVER_TC);
-    _accelBiasHoverZ.set(_accelBiasHoverZ + alpha * (targetBias - _accelBiasHoverZ));
+    _accelBiasHoverZ.set(_accelBiasHoverZ + alpha * (currentBias.z - _accelBiasHoverZ));
 }
 
 // save the learned hover Z-axis accel bias to EEPROM

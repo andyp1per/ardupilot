@@ -1168,20 +1168,14 @@ void NavEKF3_core::CovariancePrediction(Vector3F *rotVarVecPtr)
     dvxVar = dvyVar = dvzVar = sq(dt*_accNoise);
 
     if (!inhibitDelVelBiasStates) {
-        // Check if we have actual Z velocity measurements (not just configured)
-        // fusingStationaryZeroVel is set when on ground and disarmed
-        const bool haveZVelMeasurements = useGpsVertVel || useExtNavVel || fusingStationaryZeroVel;
-
         for (uint8_t stateIndex = 13; stateIndex <= 15; stateIndex++) {
             const uint8_t index = stateIndex - 13;
 
-            // Don't attempt learning of IMU delta velocty bias if on ground and not aligned with the gravity vector
-            bool is_bias_observable = (fabsF(prevTnb[index][2]) > 0.8f) || !onGround;
-
-            // Additionally, Z-axis bias (index 2) is not observable without Z velocity measurements
-            if (index == 2 && !haveZVelMeasurements) {
-                is_bias_observable = false;
-            }
+            // Don't attempt learning of IMU delta velocity bias if on ground and not aligned with the gravity vector
+            // Z-axis bias is weakly observable from baro height corrections during flight, and strongly
+            // observable when we have Z velocity (GPS/external nav) or are fusing stationary zero velocity.
+            // Ground effect inhibition in FuseVelPosNED() prevents learning of motor-induced bias on ground.
+            const bool is_bias_observable = (fabsF(prevTnb[index][2]) > 0.8f) || !onGround;
 
             if (!is_bias_observable && !dvelBiasAxisInhibit[index]) {
                 // store variances to be reinstated wben learning can commence later
