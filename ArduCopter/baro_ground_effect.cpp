@@ -72,7 +72,11 @@ void Copter::update_ground_effect_detector(void)
     bool z_speed_low = fabsf(inertial_nav.get_velocity_z_up_cms()) <= 60.0f;
     bool slow_descent = (slow_descent_demanded || (z_speed_low && descent_demanded));
 
-    gndeffect_state.touchdown_expected = slow_horizontal && slow_descent;
+    // Only expect touchdown when near ground (below TKOFF_GNDEFF_ALT threshold)
+    // This allows EKF bias learning when hovering at altitude
+    const bool near_ground_for_touchdown = is_positive(g2.tkoff_gndeff_alt) ?
+                                           (height_above_takeoff_cm < gndeff_alt_cm) : true;
+    gndeffect_state.touchdown_expected = slow_horizontal && slow_descent && near_ground_for_touchdown;
 
     // Prepare the EKF for ground effect if either takeoff or touchdown is expected.
     ahrs.set_takeoff_expected(gndeffect_state.takeoff_expected);
