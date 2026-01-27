@@ -164,9 +164,13 @@ void NavEKF3_core::setWindMagStateLearningMode()
         P[14][14] = P[13][13];
         P[15][15] = P[13][13];
 
-        // Note: Learned hover Z-bias (_accelBiasHoverZ) is applied at the IMU level
-        // in correctDeltaVelocity(), not as an EKF state initialization. This makes
-        // the correction immune to EKF resets and lane switches.
+        // Initialize Z-axis accel bias state with the learned hover bias if available.
+        // This gives the EKF a head start on the vibration rectification bias.
+        // The bias is stored in m/s² but the state is in delta-velocity units.
+        const float hoverBias = frontend->_accelBiasHoverZ;
+        if (!is_zero(hoverBias)) {
+            stateStruct.accel_bias.z = hoverBias * dtEkfAvg;
+        }
     }
 
     if (tiltAlignComplete && inhibitDelAngBiasStates) {

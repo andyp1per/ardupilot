@@ -2161,15 +2161,12 @@ void NavEKF3::update_accel_bias_hover(float dt)
     Vector3f currentBias;
     core[learn_core].getAccelBias(currentBias);
 
-    // The hover bias is applied as a correction to IMU data (in correctDeltaVelocity),
-    // so the EKF's learned bias is the residual after that correction.
-    // Update the hover bias parameter using integrating filter.
-    // When EKF residual is zero (correction is correct), no change occurs.
-    // When EKF learns positive residual (correction too small), parameter increases.
-    // When EKF learns negative residual (correction too big), parameter decreases.
+    // Track the EKF's learned Z-axis bias using a low-pass filter.
+    // This captures the vibration rectification bias that the EKF learns during hover.
+    // The learned value is saved to be applied at the next boot via EKF state initialization.
+    // Note: We do NOT apply this correction during flight to avoid feedback instability.
     const float alpha = dt / (dt + ABIAS_HOVER_TC);
-    const float new_bias = _accelBiasHoverZ + alpha * currentBias.z;
-    _accelBiasHoverZ.set(new_bias);
+    _accelBiasHoverZ.set(_accelBiasHoverZ + alpha * (currentBias.z - _accelBiasHoverZ));
 
     // Debug logging (temporary - can be removed after validation)
     static uint32_t last_debug_ms;
