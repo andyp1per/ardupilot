@@ -1129,16 +1129,15 @@ void NavEKF3_core::FuseVelPosNED()
                 // periods of non-aiding to learn bias as these can give incorrect esitmates.
                 const bool horizInhibit = PV_AidingMode == AID_NONE && obsIndex != 2 && obsIndex != 5;
                 // Inhibit Z-axis accel bias learning during ground effect because motor thrust
-                // causes a DC offset in AccZ that is not present in normal flight
+                // causes a DC offset in AccZ that is not present in normal flight.
+                // When out of ground effect (controlled by TKOFF_GNDEFF_ALT on Copter side),
+                // allow bias learning from baro position corrections - this allows the EKF to
+                // adapt to in-flight AccZ offsets (vibration rectification) that differ from
+                // ground conditions.
                 const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_expected();
-                // Inhibit Z-axis accel bias learning when there is no Z velocity actually being
-                // fused because the bias is unobservable with only position (baro) measurements.
-                // This handles both: no source configured, and source configured but unavailable (e.g. GPS indoors)
-                // Exception: when fusing stationary zero velocity, bias IS observable
-                const bool noZVelSource = !useGpsVertVel && !useExtNavVel && !fusingStationaryZeroVel;
                 if (!horizInhibit && !inhibitDelVelBiasStates && !badIMUdata) {
                     for (uint8_t i = 13; i<=15; i++) {
-                        const bool zAxisInhibit = (i == 15) && (gndEffectActive || noZVelSource);
+                        const bool zAxisInhibit = (i == 15) && gndEffectActive;
                         if (!dvelBiasAxisInhibit[i-13] && !zAxisInhibit) {
                             Kfusion[i] = P[i][stateIndex]*SK;
                         } else {
