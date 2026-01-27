@@ -551,6 +551,11 @@ private:
     // origin set by one of the cores
     Location common_EKF_origin;
     bool common_origin_valid;
+
+    // Frozen hover Z-bias correction applied at IMU level.
+    // This is set at boot from the learned parameter and does NOT change during flight.
+    // This breaks the feedback loop between learning and correction.
+    float _accelBiasHoverZ_correction;
     
     // update the yaw reset data to capture changes due to a lane switch
     // new_primary - index of the ekf instance that we are about to switch to as the primary
