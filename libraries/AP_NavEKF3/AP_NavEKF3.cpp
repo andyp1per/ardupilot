@@ -2163,13 +2163,22 @@ void NavEKF3::update_accel_bias_hover(float dt)
 
     // The hover bias is applied as a correction to IMU data (in correctDeltaVelocity),
     // so the EKF's learned bias is the residual after that correction.
-    // To get the total bias, add back what we're already applying.
-    const float totalBiasZ = currentBias.z + _accelBiasHoverZ;
-
-    // Update the hover bias parameter (filtered for saving)
-    // This allows the learned value to adapt if vibration characteristics change.
+    // Update the hover bias parameter using integrating filter.
+    // When EKF residual is zero (correction is correct), no change occurs.
+    // When EKF learns positive residual (correction too small), parameter increases.
+    // When EKF learns negative residual (correction too big), parameter decreases.
     const float alpha = dt / (dt + ABIAS_HOVER_TC);
-    _accelBiasHoverZ.set(_accelBiasHoverZ + alpha * (totalBiasZ - _accelBiasHoverZ));
+    const float new_bias = _accelBiasHoverZ + alpha * currentBias.z;
+    _accelBiasHoverZ.set(new_bias);
+
+    // Debug logging (temporary - can be removed after validation)
+    static uint32_t last_debug_ms;
+    const uint32_t now_debug = dal.millis();
+    if (now_debug - last_debug_ms >= 5000) {  // Log every 5 seconds
+        last_debug_ms = now_debug;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "HvrBias: core%u EKF=%.3f param=%.4f",
+                      learn_core, currentBias.z, _accelBiasHoverZ.get());
+    }
 }
 
 // save the learned hover Z-axis accel bias to EEPROM
