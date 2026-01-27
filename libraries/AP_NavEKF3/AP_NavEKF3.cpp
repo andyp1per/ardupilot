@@ -804,6 +804,32 @@ bool NavEKF3::InitialiseFilter(void)
 #endif
 
     if (core == nullptr) {
+        // Freeze the hover Z-bias correction at boot. This value is applied at the
+        // IMU level and does NOT change during flight, breaking the feedback loop
+        // between learning and correction. The parameter may be updated by learning
+        // during flight, but only the frozen value is used for correction.
+        //
+        // Safety measures:
+        // 1. Only apply if learning is enabled (user can disable with EK3_ABIAS_HVR_LN=0)
+        // 2. Clamp to safe range - vibration rectification shouldn't exceed ±0.3 m/s²
+        // 3. Log the value so user can see what's being applied
+        constexpr float MAX_HOVER_BIAS_CORRECTION = 0.3f;  // m/s²
+        if (_accelBiasHoverLearn > 0) {
+            const float raw_bias = _accelBiasHoverZ;
+            _accelBiasHoverZ_correction = constrain_float(raw_bias,
+                                                          -MAX_HOVER_BIAS_CORRECTION,
+                                                          MAX_HOVER_BIAS_CORRECTION);
+            // Warn if parameter was outside safe range (possible corruption or bad learning)
+            if (fabsf(raw_bias) > MAX_HOVER_BIAS_CORRECTION) {
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF3: Hover Z-bias %.3f clamped to %.3f",
+                              raw_bias, _accelBiasHoverZ_correction);
+            } else if (!is_zero(_accelBiasHoverZ_correction)) {
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO, "EKF3: Hover Z-bias correction %.3f m/s²",
+                              _accelBiasHoverZ_correction);
+            }
+        } else {
+            _accelBiasHoverZ_correction = 0.0f;
+        }
 
         // don't run multiple filters for 1 IMU
         uint8_t mask = (1U<<ins.get_accel_count())-1;
@@ -2161,21 +2187,14 @@ void NavEKF3::update_accel_bias_hover(float dt)
     Vector3f currentBias;
     core[learn_core].getAccelBias(currentBias);
 
-    // Track the EKF's learned Z-axis bias using a low-pass filter.
-    // This captures the vibration rectification bias that the EKF learns during hover.
-    // The learned value is saved to be applied at the next boot via EKF state initialization.
-    // Note: We do NOT apply this correction during flight to avoid feedback instability.
+    // The EKF learns a residual bias on top of the frozen correction we're applying.
+    // The TOTAL bias = EKF residual + frozen correction. This is what we save for
+    // the next boot. If the frozen correction perfectly matches the vibration
+    // rectification, the EKF residual will be ~0 and the total stays the same.
+    // If conditions change, the EKF residual captures the difference.
+    const float totalBias = currentBias.z + _accelBiasHoverZ_correction;
     const float alpha = dt / (dt + ABIAS_HOVER_TC);
-    _accelBiasHoverZ.set(_accelBiasHoverZ + alpha * (currentBias.z - _accelBiasHoverZ));
-
-    // Debug logging (temporary - can be removed after validation)
-    static uint32_t last_debug_ms;
-    const uint32_t now_debug = dal.millis();
-    if (now_debug - last_debug_ms >= 5000) {  // Log every 5 seconds
-        last_debug_ms = now_debug;
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "HvrBias: core%u EKF=%.3f param=%.4f",
-                      learn_core, currentBias.z, _accelBiasHoverZ.get());
-    }
+    _accelBiasHoverZ.set(_accelBiasHoverZ + alpha * (totalBias - _accelBiasHoverZ));
 }
 
 // save the learned hover Z-axis accel bias to EEPROM
