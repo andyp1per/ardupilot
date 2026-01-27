@@ -163,6 +163,13 @@ void NavEKF3_core::setWindMagStateLearningMode()
         P[13][13] = sq(ACCEL_BIAS_LIM_SCALER * frontend->_accBiasLim * dtEkfAvg);
         P[14][14] = P[13][13];
         P[15][15] = P[13][13];
+
+        // Initialize Z-axis accel bias from learned hover value if available
+        // This compensates for vibration rectification that causes AccZ offset in hover
+        const float hoverBias = frontend->_accelBiasHoverZ.get();
+        if (!is_zero(hoverBias)) {
+            stateStruct.accel_bias.z = hoverBias * dtEkfAvg;
+        }
     }
 
     if (tiltAlignComplete && inhibitDelAngBiasStates) {

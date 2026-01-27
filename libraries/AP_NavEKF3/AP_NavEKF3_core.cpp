@@ -535,15 +535,9 @@ bool NavEKF3_core::InitialiseFilterBootstrap(void)
     // initialise static process model states
     stateStruct.gyro_bias.zero();
     stateStruct.accel_bias.zero();
-    // Initialize Z-axis accel bias from learned hover value if available
-    // This accounts for vibration rectification that causes AccZ offset in hover.
-    // The learned value is the steady-state VD error during hover, which
-    // approximately equals the uncompensated AccZ bias in m/s² due to the
-    // ~1 second time constant from baro position corrections.
-    if (!is_zero(frontend->_accelBiasHoverZ)) {
-        // Convert to delta-velocity units (m/s per EKF step)
-        stateStruct.accel_bias.z = frontend->_accelBiasHoverZ * dtEkfAvg;
-    }
+    // Note: Z-axis accel bias initialization from learned hover value (EK3_ABIAS_HVR_Z)
+    // is done in Control.cpp after tilt alignment completes, to ensure it doesn't
+    // get overwritten by covariance maintenance
     stateStruct.wind_vel.zero();
     stateStruct.earth_magfield.zero();
     stateStruct.body_magfield.zero();
@@ -1174,11 +1168,20 @@ void NavEKF3_core::CovariancePrediction(Vector3F *rotVarVecPtr)
     dvxVar = dvyVar = dvzVar = sq(dt*_accNoise);
 
     if (!inhibitDelVelBiasStates) {
+        // Check if we have actual Z velocity measurements (not just configured)
+        // fusingStationaryZeroVel is set when on ground and disarmed
+        const bool haveZVelMeasurements = useGpsVertVel || useExtNavVel || fusingStationaryZeroVel;
+
         for (uint8_t stateIndex = 13; stateIndex <= 15; stateIndex++) {
             const uint8_t index = stateIndex - 13;
 
             // Don't attempt learning of IMU delta velocty bias if on ground and not aligned with the gravity vector
-            const bool is_bias_observable = (fabsF(prevTnb[index][2]) > 0.8f) || !onGround;
+            bool is_bias_observable = (fabsF(prevTnb[index][2]) > 0.8f) || !onGround;
+
+            // Additionally, Z-axis bias (index 2) is not observable without Z velocity measurements
+            if (index == 2 && !haveZVelMeasurements) {
+                is_bias_observable = false;
+            }
 
             if (!is_bias_observable && !dvelBiasAxisInhibit[index]) {
                 // store variances to be reinstated wben learning can commence later
