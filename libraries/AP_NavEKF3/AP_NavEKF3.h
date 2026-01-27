@@ -314,6 +314,14 @@ public:
     // set and save the _baroAltNoise parameter
     void set_baro_alt_noise(float noise) { _baroAltNoise.set_and_save(noise); };
 
+    // update the learned hover Z-axis accel bias during stable hover
+    // should be called at 10Hz or slower
+    void update_accel_bias_hover(float dt);
+
+    // save the learned hover Z-axis accel bias to EEPROM
+    // should be called on disarm
+    void save_accel_bias_hover(void);
+
     // allow the enable flag to be set by Replay
     void set_enable(bool enable) { _enable.set_enable(enable); }
 
@@ -451,6 +459,8 @@ private:
     AP_Enum<LogLevel> _log_level;   // log verbosity level
     AP_Float _gpsVAccThreshold;     // vertical accuracy threshold to use GPS as an altitude source
     AP_Int32 _options;              // bit mask of processing options
+    AP_Float _accelBiasHoverZ;      // learned hover Z-axis accel bias for vibration rectification
+    AP_Int8 _accelBiasHoverLearn;   // hover accel bias learning mode (0=off, 1=learn, 2=learn+save)
 
     // enum for processing options
     enum class Options {

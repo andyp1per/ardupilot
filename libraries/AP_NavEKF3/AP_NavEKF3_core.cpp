@@ -535,6 +535,15 @@ bool NavEKF3_core::InitialiseFilterBootstrap(void)
     // initialise static process model states
     stateStruct.gyro_bias.zero();
     stateStruct.accel_bias.zero();
+    // Initialize Z-axis accel bias from learned hover value if available
+    // This accounts for vibration rectification that causes AccZ offset in hover.
+    // The learned value is the steady-state VD error during hover, which
+    // approximately equals the uncompensated AccZ bias in m/s² due to the
+    // ~1 second time constant from baro position corrections.
+    if (!is_zero(frontend->_accelBiasHoverZ)) {
+        // Convert to delta-velocity units (m/s per EKF step)
+        stateStruct.accel_bias.z = frontend->_accelBiasHoverZ * dtEkfAvg;
+    }
     stateStruct.wind_vel.zero();
     stateStruct.earth_magfield.zero();
     stateStruct.body_magfield.zero();
