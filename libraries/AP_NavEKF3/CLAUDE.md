@@ -256,7 +256,269 @@ It does NOT activate during:
 2. While flying: re-enable ground effect when descending below `TKOFF_GNDEFF_ALT`
 3. Set to 0 to disable the re-activation feature
 
-**Recommended settings for indoor/low-altitude flight:** `TKOFF_GNDEFF_ALT = 1.5` to `2.0`
+**Recommended settings:** See "TKOFF_GNDEFF_ALT Tuning Analysis" below for how to choose the right value.
+
+### TKOFF_GNDEFF_ALT Tuning Analysis (log4.bin Revisited)
+
+**Key Finding:** Setting `TKOFF_GNDEFF_ALT` too high (above your hover altitude) can cause altitude drift even when baro is stable.
+
+#### The Problem
+
+With `TKOFF_GNDEFF_ALT = 1.5m` and hovering at ~0.5m, ground effect compensation was **always active**, even though the baro was stable during hover. This caused:
+1. Innovation clamped at -0.5m max (couldn't correct large errors)
+2. Baro noise scaled 4x (EKF trusted baro less)
+3. EKF altitude drifted from +0.7m to **+4.3m** while baro stayed at ~0.5m
+
+#### Log4.bin Analysis Results
+
+**Takeoff Phase (0-10s after arm):**
+- Baro: min=-7.66m, max=+0.47m, std=1.10m
+- Ground effect compensation **correctly active** - severe spikes handled
+
+**Stable Hover Phase (10-50s after arm):**
+- Baro: min=-0.21m, max=+1.18m, std=0.33m
+- 5-second windows: std=0.10-0.17m (excellent stability)
+- **No ground effect spikes detected**
+- Baro was stable and trustworthy, but compensation remained active
+
+**Baro Stability by Window:**
+| Period | Baro Mean | Baro Std | Ground Effect? |
+|--------|-----------|----------|----------------|
+| t=10-15s | +0.66m | 0.099m | NO - stable |
+| t=15-20s | +0.19m | 0.159m | NO - stable |
+| t=20-25s | +0.27m | 0.165m | NO - stable |
+| t=25-30s | +0.33m | 0.131m | NO - stable |
+| t=30-35s | +0.27m | 0.160m | NO - stable |
+| t=35-40s | +0.72m | 0.120m | NO - stable |
+| t=40-45s | +0.99m | 0.104m | NO - stable |
+| t=45-50s | +0.91m | 0.119m | NO - stable |
+
+**EKF vs Baro During Hover:**
+| Time | Baro | EKF Alt | Offset | Innovation |
+|------|------|---------|--------|------------|
+| 10s | +0.55m | +0.72m | +0.17m | +0.29m |
+| 20s | +0.17m | +2.74m | +2.57m | **-0.50m (clamped)** |
+| 30s | +0.19m | +4.25m | +4.06m | **-0.50m (clamped)** |
+| 40s | +0.92m | +3.36m | +2.44m | -1.80m |
+
+The -0.50m clamped innovations show the ground effect compensation was preventing proper altitude corrections.
+
+#### Tuning Recommendation
+
+**Set `TKOFF_GNDEFF_ALT` BELOW your typical hover altitude:**
+
+| Hover Altitude | Recommended TKOFF_GNDEFF_ALT |
+|----------------|------------------------------|
+| ~0.5m | 0.3m |
+| ~1.0m | 0.5-0.7m |
+| ~1.5m | 1.0m |
+| ~2.0m+ | 1.5m |
+
+**For log4.bin scenario:**
+```
+TKOFF_GNDEFF_ALT = 0.3
+```
+
+This would have:
+- Kept compensation ON during takeoff (first 5s or below 0.3m)
+- Turned compensation OFF during stable hover at 0.5m
+- Allowed full baro corrections (up to -4m if needed)
+- Prevented the +4m altitude drift
+
+#### When to Use Higher Values
+
+Use `TKOFF_GNDEFF_ALT = 1.5-2.0m` when:
+- Your vehicle experiences ground effect up to that altitude
+- Baro is unstable/noisy during low-altitude hover
+- You prefer stable-but-offset altitude over responsive-but-noisy
+
+Use `TKOFF_GNDEFF_ALT = 0.3-0.5m` when:
+- Baro is stable during hover (std < 0.2m)
+- You want EKF to track baro closely
+- Ground effect is only significant very close to ground
+
+#### Diagnostic: Check Your Baro Stability
+
+To determine the right value for your vehicle, analyze a hover log:
+```python
+# Check baro stability in 5-second windows during hover
+# If std < 0.2m, baro is stable - use lower TKOFF_GNDEFF_ALT
+# If std > 0.3m, ground effect present - use higher value
+```
+
+Ground effect threshold (std > 0.3m) indicates active ground effect where compensation is needed.
+
+### Log File: log5.bin (Revised - TKOFF_GNDEFF_ALT=0.8 Test)
+
+**Flight Info:**
+- Indoor flight, no GPS
+- Armed: 46.7s, Disarmed: 110.7s (64s flight)
+- Ended with copter drifting down to floor despite mid-stick throttle
+
+**Parameters:**
+```
+TKOFF_GNDEFF_ALT = 0.8    (reduced from 1.5)
+PILOT_TKOFF_ALT = 1.0
+PILOT_SPEED_DN = 0.0      (no descent from stick)
+```
+
+#### What Worked
+
+1. **Z-bias perfectly stable!**
+   - Range: 0.000 m/s² (no drift at all)
+   - Stayed at -0.050 m/s² throughout flight
+   - The bias inhibition fix is working great
+
+2. **Ground effect compensation correctly OFF during hover**
+   - 74% of hover was above 0.8m threshold
+   - Innovations NOT clamped (ranged -0.21m to +1.91m vs -0.5m clamp before)
+   - Baro stability: std=0.10-0.17m in 5-second windows
+
+3. **EKF tracked baro much better**
+   - EKF-Baro offset: ~0.8m (vs 4.0m in log4.bin with TKOFF_GNDEFF_ALT=1.5)
+
+#### What Still Didn't Work: Velocity Drift
+
+| Time | Baro | EKF Alt | EKF VD | Issue |
+|------|------|---------|--------|-------|
+| 20s | +0.90m | +0.52m | +0.36 m/s | EKF thinks descending |
+| 35s | +1.39m | +0.50m | +0.34 m/s | EKF thinks descending |
+| 45s | +1.27m | +0.54m | +0.37 m/s | EKF thinks descending |
+| 55s | +0.25m | +0.51m | +0.40 m/s | EKF thinks descending |
+
+The EKF consistently showed +0.3-0.4 m/s descent velocity while baro showed stable 1.0-1.4m altitude.
+
+#### Why The Copter Drifted Down
+
+**Controller State (PSCD):**
+| Time | Target Pos | EKF Pos | Target Vel | EKF Vel | Issue |
+|------|------------|---------|------------|---------|-------|
+| 35s | +0.66m | -0.50m | +0.35 m/s | +0.34 m/s | Pos error = -1.16m |
+| 45s | +0.84m | -0.54m | +0.42 m/s | +0.37 m/s | Pos error = -1.38m |
+
+(NED coordinates: positive = down)
+
+**The Cascade:**
+1. EKF velocity shows descent (+0.3-0.4 m/s) when actually hovering
+2. Position error = EKF thinks vehicle is ABOVE target (negative error)
+3. Controller commands descent to reach target
+4. DAlt accumulated from -0.09m to -0.84m despite mid-stick
+5. Eventually vehicle descended to floor
+
+#### Comparison: log4.bin vs log5.bin (Revised)
+
+| Metric | log4.bin (1.5m) | log5.bin (0.8m) | Improvement |
+|--------|-----------------|-----------------|-------------|
+| Z-bias drift | 0.00 m/s² | 0.00 m/s² | ✅ Both stable |
+| Innovation clamping | 100% at -0.5m | 0% clamped | ✅ Fixed |
+| EKF-Baro offset | 4.0m | 0.8m | ✅ 5x better |
+| Velocity drift | +0.6-0.8 m/s | +0.3-0.4 m/s | ⚠️ Better but still present |
+| Flight outcome | Required constant correction | Drifted down slowly | ⚠️ Different failure mode |
+
+#### Conclusion
+
+**The TKOFF_GNDEFF_ALT tuning (0.8m) successfully:**
+- ✅ Eliminated innovation clamping during hover
+- ✅ Reduced EKF-Baro offset from 4m to 0.8m
+- ✅ Kept Z-bias stable
+
+**But cannot fix:**
+- ❌ Velocity drift without velocity sensor
+- ❌ Position-only corrections don't propagate strongly to velocity
+- ❌ Controller follows wrong velocity estimate
+
+#### The Fundamental Indoor No-GPS Limitation
+
+Without Z velocity measurements, the EKF velocity state drifts. This is not a bug - it's a limitation of the available sensors. Position-only corrections (baro) have weak observability for velocity states.
+
+**Options for indoor flight:**
+
+1. **Add velocity sensor** (recommended)
+   - Downward rangefinder (can derive velocity from height changes)
+   - Optical flow (provides XY velocity, improves overall stability)
+
+2. **Use STABILIZE mode**
+   - Direct throttle control, no altitude hold
+   - You manually maintain altitude
+
+3. **Accept the limitation**
+   - Keep flights short
+   - Actively correct with stick input
+   - Don't expect hands-off hover
+
+#### Root Cause: Vibration Rectification (log5.bin Analysis)
+
+**Question:** What actually causes the velocity drift? It's not baro - so is it coming from the IMU?
+
+**Answer:** Yes - specifically **vibration rectification** in the accelerometer.
+
+**Raw Data from log5.bin:**
+
+| Condition | AccZ | Vibration (VibeZ) |
+|-----------|------|-------------------|
+| Pre-arm (motors off) | -9.8606 m/s² | 0.02 m/s² |
+| Hover (motors on) | -9.7050 m/s² | 11.30 m/s² |
+| **Shift** | **+0.1557 m/s²** | |
+
+**The Physics:**
+
+1. **Pre-arm**: Accelerometer reads -9.8606 m/s² (clean, minimal vibration)
+2. **EKF bias learned**: -0.0500 m/s² (frozen by bias inhibition fix)
+3. **In hover**: Accelerometer reads -9.7050 m/s² (+0.156 shift due to vibration)
+4. **EKF applies pre-arm bias**: -9.7050 - (-0.0500) = -9.6550 m/s²
+5. **Expected for hover (gravity)**: -9.8066 m/s²
+6. **Residual error**: -9.6550 - (-9.8066) = **+0.1517 m/s²**
+
+**The Math:**
+```
+Residual acceleration error: +0.152 m/s² (appears as downward accel)
+If integrated for 60s: +9.1 m/s velocity error (uncorrected)
+Actual VD observed: +0.68 m/s (baro corrections reduce it ~13x)
+```
+
+**What is Vibration Rectification?**
+
+A known phenomenon in MEMS accelerometers where high-frequency vibration causes the **mean** reading to shift:
+- Nonlinear spring stiffness in the MEMS proof mass
+- Mechanical/electronic asymmetries in the sensor
+- Anti-aliasing filter effects
+- The shift is consistent (always less negative AccZ with more vibration)
+
+**The Dilemma:**
+
+We inhibited Z-bias learning to prevent corruption from ground motor effects. But now:
+- Bias learned pre-arm (motors off, no vibration)
+- Applied in hover (motors on, high vibration)
+- The bias doesn't account for vibration rectification
+- Residual error (+0.15 m/s²) integrates into velocity drift
+
+**Without velocity measurements, we can't win:**
+| Approach | Problem |
+|----------|---------|
+| Let bias learn on ground | Corrupted by motor thrust effect |
+| Freeze bias pre-arm | Doesn't account for hover vibration |
+| Either way | Uncompensated acceleration error |
+
+**Potential Solutions:**
+
+1. **Add velocity sensor** (best)
+   - Rangefinder or optical flow
+   - EKF can observe and correct velocity directly
+   - Bias becomes observable again
+
+2. **Vibration-dependent bias compensation** (complex)
+   - Measure VibeZ, apply lookup table correction
+   - Similar to temperature calibration (TCAL)
+   - Would need per-vehicle calibration
+
+3. **Reduce vibration** (hardware)
+   - Soft-mount flight controller
+   - Balance props carefully
+   - Reduces rectification magnitude
+
+4. **Accept the limitation**
+   - For indoor no-GPS, some drift is unavoidable
+   - ~0.15 m/s² error → ~0.7 m/s velocity drift (with baro helping)
 
 ### Altitude Hold Issue Analysis (Secondary)
 
@@ -1305,26 +1567,21 @@ const bool is_bias_observable = (fabsF(prevTnb[index][2]) > 0.8f) || !onGround;
 ```
 Once `onGround = false` (flying), all bias axes are considered observable. This doesn't account for measurement observability (do we have sensors that can observe the bias?).
 
-**2. The `haveVelZSource()` Gap:**
+**2. Evolution of Z-Bias Inhibition:**
 
-The original code checked source *configuration*, not actual data *availability*:
-```cpp
-// OLD - only checks if GPS is configured
-const bool noZVelSource = !frontend->sources.haveVelZSource();
-```
+The inhibition strategy evolved through several iterations:
 
-This returns `false` if GPS is configured (`EK3_SRC1_VELZ=3`), even when GPS is unavailable indoors. The fix checks actual data:
-```cpp
-// NEW - checks if Z velocity data is actually being received
-const bool noZVelSource = !useGpsVertVel && !useExtNavVel && !fusingStationaryZeroVel;
-```
+1. **Original problem:** Z-bias drifted randomly without Z velocity (logjk1.bin showed +0.92 m/s² drift)
+2. **Initial fix:** Added `noZVelSource` check to inhibit Z-bias learning without Z velocity
+3. **Final fix:** Removed `noZVelSource` inhibition during flight, keeping only ground effect inhibition
 
-**3. Where Z-Bias Inhibition is Applied:**
+The rationale: Z-bias IS weakly observable from baro height corrections during hover. Inhibiting learning entirely prevented capturing vibration rectification effects. The ground effect inhibition is sufficient to prevent learning motor thrust offset on ground.
 
-- `AP_NavEKF3_PosVelFusion.cpp` - `FuseVelPosNED()` for GPS/position/height fusion
-- `AP_NavEKF3_OptFlowFusion.cpp` - `FuseOptFlow()` for optical flow fusion (X and Y axes)
+**3. Where Z-Bias Inhibition is Now Applied:**
 
-Both locations now use the same `noZVelSource` check based on actual velocity availability.
+- `AP_NavEKF3_PosVelFusion.cpp` - Ground effect inhibition only (`gndEffectActive`)
+- `AP_NavEKF3_OptFlowFusion.cpp` - No Z-bias inhibition (removed `noZVelSource` check)
+- `AP_NavEKF3_core.cpp` - Geometric observability check only (removed `haveZVelMeasurements` check)
 
 #### Validation Results (Replay on logjk1.bin)
 
@@ -1342,17 +1599,72 @@ Tested with optical flow configuration (`EK3_SRC1_VELXY=5`, `EK3_SRC1_VELZ=0`):
 
 **Total improvement:** 0.75 m/s² less Z-bias drift (from ±0.75 to 0.00)
 
-#### How Z-Bias is Now Handled
+#### How Z-Bias is Now Handled (Updated)
+
+The Z-bias inhibition strategy was revised to allow weak learning from baro during hover. The EKF can slowly learn the Z-bias from height corrections even without Z velocity - this is important for capturing vibration rectification effects that only exist when motors are running.
 
 | Scenario | Z-bias Learning | Mechanism |
 |----------|-----------------|-----------|
-| Stationary on ground, disarmed | **Enabled** via zero velocity fusion | Bias IS observable |
+| Stationary on ground, disarmed | **Enabled** via zero velocity fusion | Bias IS observable (strongly) |
 | Armed on ground (motors spinning) | **Inhibited** | Ground effect flag |
-| Taking off (first 5s or below TKOFF_GNDEFF_ALT) | **Inhibited** | Ground effect flag |
-| Flying with GPS Z velocity | **Enabled** | Bias IS observable |
-| Flying with optical flow only | **Inhibited** | No Z velocity source |
-| Flying with GPS configured but unavailable | **Inhibited** | Actual availability check |
+| Taking off (below TKOFF_GNDEFF_ALT) | **Inhibited** | Ground effect flag |
+| **Hover (above TKOFF_GNDEFF_ALT)** | **Enabled** | Weakly observable from baro |
+| Flying with GPS Z velocity | **Enabled** | Bias IS observable (strongly) |
+| Flying with optical flow only | **Enabled** | Weakly observable from baro |
+| Flying with GPS configured but unavailable | **Enabled** | Weakly observable from baro |
 | Landing (slow descent) | **Inhibited** | Ground effect flag |
+
+**Key change:** Removed the "no Z velocity source" inhibition during flight. The ground effect inhibition (controlled by `TKOFF_GNDEFF_ALT`) is now the only flight-phase inhibition. This allows the EKF to learn vibration rectification bias during hover.
+
+### Log File: log1.bin (AID_NONE Mode Fix)
+
+**Problem:** Vehicle on ground with GPS unavailable (indoor) experienced altitude drift before arm. EKF altitude drifted from 0 to +0.8m over 80 seconds while baro stayed near 0.
+
+**Root Cause:** In `AID_NONE` mode (no GPS, no optical flow, no external nav), the original code only fused position, not velocity, for copters:
+
+```cpp
+// Original code at line 665-670
+} else {
+    fusePosData = true;
+    fuseVelData = false;  // <-- NO VELOCITY FUSION for copters!
+    velPosObs[3] = lastKnownPositionNE.x;
+    velPosObs[4] = lastKnownPositionNE.y;
+}
+```
+
+Without velocity fusion, the EKF velocity would drift based on small accelerometer errors, and this velocity error would integrate into position drift.
+
+**Fix:** Extended the AID_NONE code path to also fuse zero velocity when `onGround && !motorsArmed`:
+
+```cpp
+} else {
+    fusePosData = true;
+    if (onGround && !motorsArmed) {
+        fuseVelData = true;
+        fusingStationaryZeroVel = true;
+        velPosObs[0] = 0.0f;
+        velPosObs[1] = 0.0f;
+        velPosObs[2] = 0.0f;
+    } else {
+        fuseVelData = false;
+    }
+    velPosObs[3] = lastKnownPositionNE.x;
+    velPosObs[4] = lastKnownPositionNE.y;
+}
+```
+
+**Replay Validation Results:**
+
+| Metric | Original | With Fix | Improvement |
+|--------|----------|----------|-------------|
+| Velocity drift (VD) | -0.12 m/s | ±0.01 m/s | **~10x reduction** |
+| Z-bias learned | 0.000 (stuck) | -0.05 m/s² | **Now observable** |
+| Alt at t=40s | +0.38m | +0.23m | 40% less |
+| Alt at t=94s | +0.81m | +0.67m | 17% less |
+
+**Key Insight:** The fix now allows Z-bias to be learned during pre-arm (bias changes from 0 to -0.05 m/s²). The remaining position drift is due to baro sensor drift (0.43 m/min in this log), which is a separate hardware limitation, not an EKF bug.
+
+**Note:** This complements the existing fix for `PV_AidingMode != AID_NONE` cases. The EKF now fuses zero velocity when stationary in ALL aiding modes.
 
 #### Future Enhancement: Rangefinder-Derived Velocity
 
@@ -1405,3 +1717,75 @@ Replayed Z-bias statistics:
 
 Improvement: 1.400 m/s² less drift
 ```
+
+### Hover Z-Bias Learning (EK3_ABIAS_HVR_Z)
+
+The hover Z-bias learning captures the EKF's learned accel bias during stable hover and saves it for use on subsequent flights. This compensates for vibration rectification - a DC offset in AccZ caused by motor vibration that only exists when motors are running.
+
+#### How It Works
+
+The EKF learns accel bias through its Kalman filter:
+- **With Z velocity (GPS/external nav):** Bias is strongly observable, converges quickly
+- **Without Z velocity (indoor):** Bias is weakly observable from baro height corrections, converges slowly
+
+The hover learning captures the EKF's learned bias from the user-selected primary core (EK3_PRIMARY):
+```cpp
+const uint8_t learn_core = uint8_t(_primary_core) < num_cores ? _primary_core : 0;
+core[learn_core].getAccelBias(currentBias);
+_accelBiasHoverZ.set(_accelBiasHoverZ + alpha * (currentBias.z - _accelBiasHoverZ));
+```
+
+#### When Learning Occurs
+
+| Phase | Z-bias EKF Learning | Hover Param Capture | Reason |
+|-------|---------------------|---------------------|--------|
+| Pre-arm stationary | ✅ Enabled | ❌ No (not in hover) | Zero velocity fusion makes bias observable |
+| Armed on ground | ❌ **Inhibited** | ❌ No (ground effect) | Motor thrust corrupts bias reading |
+| Takeoff (below TKOFF_GNDEFF_ALT) | ❌ **Inhibited** | ❌ No (ground effect) | Ground effect active |
+| Hover (above TKOFF_GNDEFF_ALT) | ✅ **Enabled** | ✅ **Yes** | Weakly observable from baro |
+| Landing descent | ❌ **Inhibited** | ❌ No (ground effect) | Ground effect active |
+
+#### Indoor vs Outdoor Operation
+
+| Scenario | Bias Learning | Notes |
+|----------|---------------|-------|
+| Outdoor with GPS | Fast, accurate | Strongly observable from GPS velocity |
+| Indoor no GPS | Slow but works | Weakly observable from baro height corrections |
+
+For indoor flights, the EKF slowly learns the Z-bias during hover from baro corrections. This includes the vibration rectification effect that only exists when motors are running. The learned bias is captured and saved for subsequent flights.
+
+#### Why Previous Approach Failed (log1/log2)
+
+The original algorithm used `targetBias = currentBias.z + vd`, adding VD error to infer additional bias. Without Z velocity, VD was noise-dominated, causing random values (+0.238 m/s²) to be saved. When applied in log2, this incorrect bias caused massive EKF divergence (5.7m EKF vs 1.1m baro).
+
+The fix was to simply capture the EKF's own learned bias directly, trusting the EKF's Kalman filter learning.
+
+#### Ground Effect Inhibition
+
+Z-bias learning is inhibited during ground effect (`takeoff_expected` or `touchdown_expected`) to prevent learning the motor thrust offset as bias. This is controlled by `TKOFF_GNDEFF_ALT` on the Copter side. Once above this altitude, bias learning is enabled.
+
+Key code in `AP_NavEKF3_PosVelFusion.cpp`:
+```cpp
+const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_expected();
+// ...
+const bool zAxisInhibit = (i == 15) && gndEffectActive;
+```
+
+#### Core Selection
+
+Learning uses the user-selected primary core (EK3_PRIMARY), not the dynamic primary which can change during lane switching. This ensures consistent learning from the same IMU that will be initial primary on boot.
+
+#### Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `EK3_ABIAS_HVR_Z` | Learned hover Z-axis accel bias (m/s²) |
+| `EK3_ABIAS_HVR_LN` | Learning mode: 0=Disabled, 1=Learn, 2=Learn+Save |
+| `TKOFF_GNDEFF_ALT` | Altitude threshold for ground effect (controls when learning is allowed) |
+
+#### Data Flow
+
+1. **During hover**: EKF learns Z-bias from baro (slow) or GPS (fast)
+2. **`update_accel_bias_hover()`**: Captures bias into `_accelBiasHoverZ` with 2s time constant filter
+3. **On disarm**: `save_accel_bias_hover()` saves to EEPROM (if `EK3_ABIAS_HVR_LN=2`)
+4. **On next boot**: `CovarianceInit()` applies saved bias to initialize EKF state
