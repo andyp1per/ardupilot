@@ -57,6 +57,10 @@ void Copter::update_throttle_hover()
 #if HAL_GYROFFT_ENABLED
         gyro_fft.update_freq_hover(0.01f, motors->get_throttle_out());
 #endif
+        // update learned hover accel bias (EKF checks ground effect flags internally)
+#if HAL_NAVEKF3_AVAILABLE
+        ahrs.EKF3.update_accel_bias_hover(0.01f);
+#endif
     }
 }
 

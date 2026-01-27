@@ -743,6 +743,22 @@ const AP_Param::GroupInfo NavEKF3::var_info2[] = {
     // @User: Advanced
     AP_GROUPINFO("OPTIONS",  11, NavEKF3, _options, 0),
 
+    // @Param: ABIAS_HVR_Z
+    // @DisplayName: Learned hover Z-axis accel bias
+    // @Description: Z-axis accelerometer bias learned during hover to compensate for vibration rectification - a phenomenon where motor vibration causes a DC offset in AccZ readings. Learned from vertical velocity error during stable level hover above TKOFF_GNDEFF_ALT. Applied as initial Z-bias on subsequent flights. Set to 0 to disable. Typical values are 0.1 to 0.3 for small multirotors.
+    // @Range: -0.5 0.5
+    // @Increment: 0.01
+    // @User: Advanced
+    // @Units: m/s/s
+    AP_GROUPINFO("ABIAS_HVR_Z", 12, NavEKF3, _accelBiasHoverZ, 0.0f),
+
+    // @Param: ABIAS_HVR_LN
+    // @DisplayName: Hover Z-axis accel bias learning
+    // @Description: Controls learning and saving of the hover Z-axis accelerometer bias. 0=Disabled, 1=Learn but don't save, 2=Learn and save on disarm. Learning occurs during stable hover above TKOFF_GNDEFF_ALT altitude.
+    // @Values: 0:Disabled,1:Learn,2:LearnAndSave
+    // @User: Advanced
+    AP_GROUPINFO("ABIAS_HVR_LN", 13, NavEKF3, _accelBiasHoverLearn, 2),
+
     AP_GROUPEND
 };
 
@@ -2089,4 +2105,69 @@ const EKFGSF_yaw *NavEKF3::get_yawEstimator(void) const
         return core[primary].get_yawEstimator();
     }
     return nullptr;
+}
+
+// Time constant for hover bias learning filter (seconds)
+#define ABIAS_HOVER_TC 2.0f
+
+// update the learned hover Z-axis accel bias during stable hover
+// should be called at 10Hz or slower when in stable level hover
+void NavEKF3::update_accel_bias_hover(float dt)
+{
+    // check if learning is enabled
+    if (_accelBiasHoverLearn <= 0 || !core) {
+        return;
+    }
+
+    // check if we're in a state where learning should occur:
+    // - ground effect not active (above TKOFF_GNDEFF_ALT)
+    // - not in takeoff or landing phase
+    if (dal.get_takeoff_expected() || dal.get_touchdown_expected()) {
+        return;
+    }
+
+    // Get current vertical velocity from EKF
+    // During stable hover, this should be near zero
+    Vector3f vel;
+    core[primary].getVelNED(vel);
+    float vd = vel.z;  // positive = descending in NED
+
+    // Only learn if velocity is reasonably small (actually hovering)
+    // Large velocities indicate maneuvering, not stable hover
+    if (fabsf(vd) > 0.5f) {
+        return;
+    }
+
+    // The key insight: in steady-state hover with baro corrections,
+    // the VD error approximately equals the uncompensated AccZ bias.
+    // This is because uncompensated AccZ integrates into velocity,
+    // and baro position corrections create a ~1 second time constant.
+    //
+    // If VD > 0, EKF thinks descending but we're hovering -> need more positive bias
+    // If VD < 0, EKF thinks climbing but we're hovering -> need more negative bias
+    //
+    // The vibration rectification typically causes AccZ to read ~0.15-0.2 m/s²
+    // less negative, which appears as an upward acceleration error, which
+    // integrates into a positive (downward) velocity error.
+
+    // Update the hover bias using the velocity error as the correction
+    const float alpha = dt / (dt + ABIAS_HOVER_TC);
+    _accelBiasHoverZ.set(_accelBiasHoverZ + alpha * (vd - _accelBiasHoverZ));
+}
+
+// save the learned hover Z-axis accel bias to EEPROM
+// should be called on disarm
+void NavEKF3::save_accel_bias_hover(void)
+{
+    // only save if learning mode is set to "learn and save"
+    if (_accelBiasHoverLearn != 2) {
+        return;
+    }
+
+    // only save if the value has changed significantly (>0.01 m/s²)
+    // to avoid excessive EEPROM writes
+    float current_saved = _accelBiasHoverZ.get();
+    if (fabsf(_accelBiasHoverZ - current_saved) > 0.01f) {
+        _accelBiasHoverZ.save();
+    }
 }
