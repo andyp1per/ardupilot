@@ -1029,6 +1029,17 @@ void NavEKF3::UpdateFilter(void)
 
     // align position of inactive sources to ahrs
     sources.align_inactive_sources();
+
+    // Update hover Z-axis accel bias learning at ~10Hz when conditions are suitable
+    // Conditions: armed, not in ground effect, stable hover (checked in the function)
+    if (armed && _accelBiasHoverLearn > 0) {
+        static uint32_t last_hover_update_ms;
+        const uint32_t now_ms = dal.millis();
+        if (now_ms - last_hover_update_ms >= 100) {
+            last_hover_update_ms = now_ms;
+            update_accel_bias_hover(0.1f);
+        }
+    }
 }
 
 /*
@@ -2120,21 +2131,21 @@ void NavEKF3::update_accel_bias_hover(float dt)
     }
 
     // check if we're in a state where learning should occur:
-    // - ground effect not active (above TKOFF_GNDEFF_ALT)
-    // - not in takeoff or landing phase
+    // - not in ground effect (above TKOFF_GNDEFF_ALT)
+    // Note: takeoff_expected is true on ground before liftoff,
+    // touchdown_expected is true when descending below TKOFF_GNDEFF_ALT
     if (dal.get_takeoff_expected() || dal.get_touchdown_expected()) {
         return;
     }
 
     // Get current vertical velocity from EKF
-    // During stable hover, this should be near zero
     Vector3f vel;
     core[primary].getVelNED(vel);
     float vd = vel.z;  // positive = descending in NED
 
-    // Only learn if velocity is reasonably small (actually hovering)
-    // Large velocities indicate maneuvering, not stable hover
-    if (fabsf(vd) > 0.5f) {
+    // Only learn if velocity is reasonably small (in hover, not maneuvering)
+    // Relaxed to 1.0 m/s to allow learning during slow climbs/descents
+    if (fabsf(vd) > 1.0f) {
         return;
     }
 
@@ -2150,9 +2161,21 @@ void NavEKF3::update_accel_bias_hover(float dt)
     // less negative, which appears as an upward acceleration error, which
     // integrates into a positive (downward) velocity error.
 
-    // Update the hover bias using the velocity error as the correction
+    // Get current EKF bias state (this is the bias learned by normal EKF operation)
+    Vector3f currentBias;
+    core[primary].getAccelBias(currentBias);
+
+    // Calculate the target bias: current EKF bias + velocity error correction
+    // The velocity error tells us how much additional bias we need.
+    // In steady-state hover with baro corrections, VD error approximately
+    // equals the uncompensated AccZ bias (vibration rectification).
+    float targetBias = currentBias.z + vd;
+
+    // Update the hover bias parameter (filtered for saving)
+    // This parameter will be applied at the NEXT boot/initialization,
+    // not during the current flight, to avoid feedback loops.
     const float alpha = dt / (dt + ABIAS_HOVER_TC);
-    _accelBiasHoverZ.set(_accelBiasHoverZ + alpha * (vd - _accelBiasHoverZ));
+    _accelBiasHoverZ.set(_accelBiasHoverZ + alpha * (targetBias - _accelBiasHoverZ));
 }
 
 // save the learned hover Z-axis accel bias to EEPROM
@@ -2164,10 +2187,6 @@ void NavEKF3::save_accel_bias_hover(void)
         return;
     }
 
-    // only save if the value has changed significantly (>0.01 m/s²)
-    // to avoid excessive EEPROM writes
-    float current_saved = _accelBiasHoverZ.get();
-    if (fabsf(_accelBiasHoverZ - current_saved) > 0.01f) {
-        _accelBiasHoverZ.save();
-    }
+    // AP_Param::save() only writes to EEPROM if value changed
+    _accelBiasHoverZ.save();
 }

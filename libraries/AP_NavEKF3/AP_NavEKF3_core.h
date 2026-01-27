@@ -183,6 +183,9 @@ public:
     // return accelerometer bias in m/s/s
     void getAccelBias(Vector3f &accelBias) const;
 
+    // set Z-axis accelerometer bias in m/s/s (for hover bias learning)
+    void setAccelBiasZ(float bias);
+
     // reset body axis gyro bias estimates
     void resetGyroBias(void);
 

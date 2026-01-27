@@ -141,6 +141,16 @@ void NavEKF3_core::getAccelBias(Vector3f &accelBias) const
     accelBias = (stateStruct.accel_bias / dtEkfAvg).tofloat();
 }
 
+// set Z-axis accelerometer bias in m/s/s (for hover bias learning)
+void NavEKF3_core::setAccelBiasZ(float bias)
+{
+    if (!statesInitialised) {
+        return;
+    }
+    // Convert from m/s/s to delta-velocity units (state uses m/s per dt)
+    stateStruct.accel_bias.z = bias * dtEkfAvg;
+}
+
 // return the transformation matrix from XYZ (body) to NED axes
 void NavEKF3_core::getRotationBodyToNED(Matrix3f &mat) const
 {
