@@ -3621,6 +3621,16 @@ bool AP_AHRS::get_accel_bias_z_for_imu(uint8_t imu_index, float &bias_z) const
     return false;
 }
 
+// inhibit all accel bias learning (for high-G maneuvers like acro)
+void AP_AHRS::set_inhibit_accel_bias_learning(bool inhibit)
+{
+#if HAL_NAVEKF3_AVAILABLE
+    if (active_EKF_type() == EKFType::THREE) {
+        EKF3.setInhibitAccelBiasLearning(inhibit);
+    }
+#endif
+}
+
 // get current location estimate
 bool AP_AHRS::get_location(Location &loc) const
 {
