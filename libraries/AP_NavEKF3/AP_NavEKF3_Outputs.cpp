@@ -151,6 +151,13 @@ void NavEKF3_core::setAccelBiasZ(float bias)
     stateStruct.accel_bias.z = bias * dtEkfAvg;
 }
 
+// check if accel bias learning should be inhibited
+// combines internal state inhibition with vehicle-requested inhibition
+bool NavEKF3_core::accelBiasLearningInhibited() const
+{
+    return inhibitDelVelBiasStates || frontend->getInhibitAccelBiasLearning();
+}
+
 // return the transformation matrix from XYZ (body) to NED axes
 void NavEKF3_core::getRotationBodyToNED(Matrix3f &mat) const
 {

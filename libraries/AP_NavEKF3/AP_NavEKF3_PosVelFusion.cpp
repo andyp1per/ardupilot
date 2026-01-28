@@ -1135,7 +1135,7 @@ void NavEKF3_core::FuseVelPosNED()
                 // adapt to in-flight AccZ offsets (vibration rectification) that differ from
                 // ground conditions.
                 const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_expected();
-                if (!horizInhibit && !inhibitDelVelBiasStates && !badIMUdata) {
+                if (!horizInhibit && !accelBiasLearningInhibited() && !badIMUdata) {
                     for (uint8_t i = 13; i<=15; i++) {
                         const bool zAxisInhibit = (i == 15) && gndEffectActive;
                         if (!dvelBiasAxisInhibit[i-13] && !zAxisInhibit) {
@@ -1655,7 +1655,7 @@ void NavEKF3_core::FuseBodyVel()
                 zero_range(&Kfusion[0], 10, 12);
             }
 
-            if (!inhibitDelVelBiasStates && !badIMUdata) {
+            if (!accelBiasLearningInhibited() && !badIMUdata) {
                 for (uint8_t index = 0; index < 3; index++) {
                     const uint8_t stateIndex = index + 13;
                     if (!dvelBiasAxisInhibit[index]) {
@@ -1832,7 +1832,7 @@ void NavEKF3_core::FuseBodyVel()
                 zero_range(&Kfusion[0], 10, 12);
             }
 
-            if (!inhibitDelVelBiasStates && !badIMUdata) {
+            if (!accelBiasLearningInhibited() && !badIMUdata) {
                 for (uint8_t index = 0; index < 3; index++) {
                     const uint8_t stateIndex = index + 13;
                     if (!dvelBiasAxisInhibit[index]) {
@@ -2010,7 +2010,7 @@ void NavEKF3_core::FuseBodyVel()
 
             }
 
-            if (!inhibitDelVelBiasStates && !badIMUdata) {
+            if (!accelBiasLearningInhibited() && !badIMUdata) {
                 for (uint8_t index = 0; index < 3; index++) {
                     const uint8_t stateIndex = index + 13;
                     if (!dvelBiasAxisInhibit[index]) {

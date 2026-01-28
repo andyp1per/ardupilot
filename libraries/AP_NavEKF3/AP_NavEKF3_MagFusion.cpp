@@ -627,7 +627,7 @@ void NavEKF3_core::FuseMagnetometer()
                 zero_range(&Kfusion[0], 10, 12);
             }
 
-            if (!inhibitDelVelBiasStates) {
+            if (!accelBiasLearningInhibited()) {
                 for (uint8_t index = 0; index < 3; index++) {
                     const uint8_t stateIndex = index + 13;
                     if (!dvelBiasAxisInhibit[index]) {
@@ -709,7 +709,7 @@ void NavEKF3_core::FuseMagnetometer()
                 zero_range(&Kfusion[0], 10, 12);
             }
 
-            if (!inhibitDelVelBiasStates) {
+            if (!accelBiasLearningInhibited()) {
                 for (uint8_t index = 0; index < 3; index++) {
                     const uint8_t stateIndex = index + 13;
                     if (!dvelBiasAxisInhibit[index]) {
@@ -793,7 +793,7 @@ void NavEKF3_core::FuseMagnetometer()
                 zero_range(&Kfusion[0], 10, 12);
             }
 
-            if (!inhibitDelVelBiasStates) {
+            if (!accelBiasLearningInhibited()) {
                 for (uint8_t index = 0; index < 3; index++) {
                     const uint8_t stateIndex = index + 13;
                     if (!dvelBiasAxisInhibit[index]) {
@@ -1331,7 +1331,7 @@ void NavEKF3_core::FuseDeclination(ftype declErr)
         zero_range(&Kfusion[0], 10, 12);
     }
 
-    if (!inhibitDelVelBiasStates) {
+    if (!accelBiasLearningInhibited()) {
         for (uint8_t index = 0; index < 3; index++) {
             const uint8_t stateIndex = index + 13;
             if (!dvelBiasAxisInhibit[index]) {
