@@ -721,12 +721,10 @@ void Copter::one_hz_loop()
     }
 #endif
 
-#if HAL_NAVEKF3_AVAILABLE
-    // Set hover Z-bias corrections in EKF once it's active
-    set_hover_bias_correction_in_ekf();
-#endif
-
     if (!motors->armed()) {
+        // Set hover Z-bias corrections in EKF once it's active
+        set_hover_z_bias_correction();
+
         update_using_interlock();
 
         // check the user hasn't updated the frame class or type
