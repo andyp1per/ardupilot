@@ -216,16 +216,16 @@ void Copter::startup_INS_ground()
     ahrs.init();
     ahrs.set_vehicle_class(AP_AHRS::VehicleClass::COPTER);
 
-#if HAL_NAVEKF3_AVAILABLE
-    // Load saved hover Z-bias corrections into EKF
-    init_hover_bias_correction();
-#endif
-
     // Warm up and calibrate gyro offsets
     ins.init(scheduler.get_loop_rate_hz());
 
     // reset ahrs including gyro bias
     ahrs.reset();
+
+#if HAL_NAVEKF3_AVAILABLE
+    // Load saved hover Z-bias corrections into EKF (must be after ahrs.reset())
+    init_hover_bias_correction();
+#endif
 }
 
 // position_ok - returns true if the horizontal absolute position is ok and home position is set
