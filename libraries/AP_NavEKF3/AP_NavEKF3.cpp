@@ -743,21 +743,7 @@ const AP_Param::GroupInfo NavEKF3::var_info2[] = {
     // @User: Advanced
     AP_GROUPINFO("OPTIONS",  11, NavEKF3, _options, 0),
 
-    // @Param: ABIAS_HVR_Z
-    // @DisplayName: Learned hover Z-axis accel bias
-    // @Description: Z-axis accelerometer bias learned during hover to compensate for vibration rectification - a phenomenon where motor vibration causes a DC offset in AccZ readings. Learned from vertical velocity error during stable level hover above TKOFF_GNDEFF_ALT. Applied as initial Z-bias on subsequent flights. Set to 0 to disable. Typical values are 0.1 to 0.3 for small multirotors.
-    // @Range: -0.5 0.5
-    // @Increment: 0.01
-    // @User: Advanced
-    // @Units: m/s/s
-    AP_GROUPINFO("ABIAS_HVR_Z", 12, NavEKF3, _accelBiasHoverZ, 0.0f),
-
-    // @Param: ABIAS_HVR_LN
-    // @DisplayName: Hover Z-axis accel bias learning
-    // @Description: Controls learning and saving of the hover Z-axis accelerometer bias. 0=Disabled, 1=Learn but don't save, 2=Learn and save on disarm. Learning occurs during stable hover above TKOFF_GNDEFF_ALT altitude.
-    // @Values: 0:Disabled,1:Learn,2:LearnAndSave
-    // @User: Advanced
-    AP_GROUPINFO("ABIAS_HVR_LN", 13, NavEKF3, _accelBiasHoverLearn, 2),
+    // index 12 was ABIAS_HVR_Z, moved to INS_ACC_VRFB_Z
 
     AP_GROUPEND
 };
@@ -804,33 +790,6 @@ bool NavEKF3::InitialiseFilter(void)
 #endif
 
     if (core == nullptr) {
-        // Freeze the hover Z-bias correction at boot. This value is applied at the
-        // IMU level and does NOT change during flight, breaking the feedback loop
-        // between learning and correction. The parameter may be updated by learning
-        // during flight, but only the frozen value is used for correction.
-        //
-        // Safety measures:
-        // 1. Only apply if learning is enabled (user can disable with EK3_ABIAS_HVR_LN=0)
-        // 2. Clamp to safe range - vibration rectification shouldn't exceed ±0.3 m/s²
-        // 3. Log the value so user can see what's being applied
-        constexpr float MAX_HOVER_BIAS_CORRECTION = 0.3f;  // m/s²
-        if (_accelBiasHoverLearn > 0) {
-            const float raw_bias = _accelBiasHoverZ;
-            _accelBiasHoverZ_correction = constrain_float(raw_bias,
-                                                          -MAX_HOVER_BIAS_CORRECTION,
-                                                          MAX_HOVER_BIAS_CORRECTION);
-            // Warn if parameter was outside safe range (possible corruption or bad learning)
-            if (fabsf(raw_bias) > MAX_HOVER_BIAS_CORRECTION) {
-                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF3: Hover Z-bias %.3f clamped to %.3f",
-                              raw_bias, _accelBiasHoverZ_correction);
-            } else if (!is_zero(_accelBiasHoverZ_correction)) {
-                GCS_SEND_TEXT(MAV_SEVERITY_INFO, "EKF3: Hover Z-bias correction %.3f m/s²",
-                              _accelBiasHoverZ_correction);
-            }
-        } else {
-            _accelBiasHoverZ_correction = 0.0f;
-        }
-
         // don't run multiple filters for 1 IMU
         uint8_t mask = (1U<<ins.get_accel_count())-1;
         _imuMask.set_and_default(_imuMask.get() & mask);
@@ -849,6 +808,17 @@ bool NavEKF3::InitialiseFilter(void)
                 coreImuIndex[num_cores] = i;
                 num_cores++;
             }
+        }
+
+        // Freeze the hover Z-bias correction at boot for each IMU used by a core.
+        // This value is applied at the IMU level and does NOT change during flight,
+        // breaking the feedback loop between learning and correction. The INS parameter
+        // may be updated by learning during flight, but only the frozen value is used
+        // for correction.
+        // Initialize all IMU corrections to zero
+        // Vehicle code will set actual corrections via setHoverZBiasCorrection()
+        for (uint8_t i = 0; i < INS_MAX_INSTANCES; i++) {
+            _accelBiasHoverZ_correction[i] = 0.0f;
         }
 
         // check if there is enough memory to create the EKF cores
@@ -1056,16 +1026,8 @@ void NavEKF3::UpdateFilter(void)
     // align position of inactive sources to ahrs
     sources.align_inactive_sources();
 
-    // Update hover Z-axis accel bias learning at ~10Hz when conditions are suitable
-    // Conditions: armed, not in ground effect, stable hover (checked in the function)
-    if (armed && _accelBiasHoverLearn > 0) {
-        static uint32_t last_hover_update_ms;
-        const uint32_t now_ms = dal.millis();
-        if (now_ms - last_hover_update_ms >= 100) {
-            last_hover_update_ms = now_ms;
-            update_accel_bias_hover(0.1f);
-        }
-    }
+    // Note: Hover Z-axis accel bias learning has been moved to ArduCopter
+    // (Copter::update_hover_bias_learning() in Attitude.cpp, called from update_throttle_hover())
 }
 
 /*
@@ -1312,6 +1274,53 @@ void NavEKF3::getAccelBias(int8_t instance, Vector3f &accelBias) const
     if (core) {
         core[instance].getAccelBias(accelBias);
     }
+}
+
+// get the IMU index used by a specific EKF core
+int8_t NavEKF3::getCoreIMUIndex(uint8_t core_index) const
+{
+    if (!core || core_index >= num_cores) {
+        return -1;
+    }
+    return coreImuIndex[core_index];
+}
+
+// get accel bias for a specific IMU by finding the core that uses it
+bool NavEKF3::getAccelBiasForIMU(uint8_t imu_index, Vector3f &accelBias) const
+{
+    if (!core || imu_index >= INS_MAX_INSTANCES) {
+        return false;
+    }
+    // Find the core that uses this IMU
+    for (uint8_t i = 0; i < num_cores; i++) {
+        if (coreImuIndex[i] == imu_index) {
+            core[i].getAccelBias(accelBias);
+            return true;
+        }
+    }
+    return false;
+}
+
+// get the frozen hover Z-bias correction for a specific IMU
+float NavEKF3::getHoverZBiasCorrection(uint8_t imu_index) const
+{
+    if (imu_index >= INS_MAX_INSTANCES) {
+        return 0.0f;
+    }
+    return _accelBiasHoverZ_correction[imu_index];
+}
+
+// set the frozen hover Z-bias correction for a specific IMU
+void NavEKF3::setHoverZBiasCorrection(uint8_t imu_index, float correction)
+{
+    if (imu_index >= INS_MAX_INSTANCES) {
+        return;
+    }
+    // Clamp to safe range - vibration rectification shouldn't exceed ±0.3 m/s²
+    constexpr float MAX_HOVER_BIAS_CORRECTION = 0.3f;
+    _accelBiasHoverZ_correction[imu_index] = constrain_float(correction,
+                                                              -MAX_HOVER_BIAS_CORRECTION,
+                                                              MAX_HOVER_BIAS_CORRECTION);
 }
 
 // returns active source set used by EKF3
@@ -2144,68 +2153,5 @@ const EKFGSF_yaw *NavEKF3::get_yawEstimator(void) const
     return nullptr;
 }
 
-// Time constant for hover bias learning filter (seconds)
-#define ABIAS_HOVER_TC 2.0f
-
-// update the learned hover Z-axis accel bias during stable hover
-// should be called at 10Hz or slower when in stable level hover
-void NavEKF3::update_accel_bias_hover(float dt)
-{
-    // check if learning is enabled
-    if (_accelBiasHoverLearn <= 0 || !core) {
-        return;
-    }
-
-    // Use the user-selected primary core (EK3_PRIMARY), not the dynamic primary which
-    // can change during lane switching. This ensures we consistently learn from the
-    // same IMU that will be the initial primary on boot. The learned bias is applied
-    // to all cores at initialization, so learning from a consistent source is important.
-    const uint8_t learn_core = uint8_t(_primary_core) < num_cores ? _primary_core : 0;
-
-    // check if we're in a state where learning should occur:
-    // - not in ground effect (above TKOFF_GNDEFF_ALT)
-    // Note: takeoff_expected is true on ground before liftoff,
-    // touchdown_expected is true when descending below TKOFF_GNDEFF_ALT
-    if (dal.get_takeoff_expected() || dal.get_touchdown_expected()) {
-        return;
-    }
-
-    // Get current vertical velocity from EKF
-    Vector3f vel;
-    core[learn_core].getVelNED(vel);
-    float vd = vel.z;  // positive = descending in NED
-
-    // Only learn if velocity is reasonably small (in hover, not maneuvering)
-    if (fabsf(vd) > 1.0f) {
-        return;
-    }
-
-    // The EKF learns accel bias through its Kalman filter. With Z velocity (GPS/external nav)
-    // the bias is strongly observable. Without Z velocity, the bias is weakly observable from
-    // baro height corrections during hover. Ground effect inhibition prevents learning of
-    // motor-induced bias when on ground, but allows learning during stable hover.
-    Vector3f currentBias;
-    core[learn_core].getAccelBias(currentBias);
-
-    // The EKF learns a residual bias on top of the frozen correction we're applying.
-    // The TOTAL bias = EKF residual + frozen correction. This is what we save for
-    // the next boot. If the frozen correction perfectly matches the vibration
-    // rectification, the EKF residual will be ~0 and the total stays the same.
-    // If conditions change, the EKF residual captures the difference.
-    const float totalBias = currentBias.z + _accelBiasHoverZ_correction;
-    const float alpha = dt / (dt + ABIAS_HOVER_TC);
-    _accelBiasHoverZ.set(_accelBiasHoverZ + alpha * (totalBias - _accelBiasHoverZ));
-}
-
-// save the learned hover Z-axis accel bias to EEPROM
-// should be called on disarm
-void NavEKF3::save_accel_bias_hover(void)
-{
-    // only save if learning mode is set to "learn and save"
-    if (_accelBiasHoverLearn != 2) {
-        return;
-    }
-
-    // AP_Param::save() only writes to EEPROM if value changed
-    _accelBiasHoverZ.save();
-}
+// Note: Hover Z-bias learning has been moved to ArduCopter (Attitude.cpp)
+// The frozen correction (_accelBiasHoverZ_correction) is still loaded and applied here

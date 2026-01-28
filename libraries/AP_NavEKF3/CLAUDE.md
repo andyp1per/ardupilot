@@ -1718,32 +1718,59 @@ Replayed Z-bias statistics:
 Improvement: 1.400 m/s² less drift
 ```
 
-### Hover Z-Bias Learning (EK3_ABIAS_HVR_Z)
+### Hover Z-Bias Learning (INS_ACCx_VRFB_Z)
 
 The hover Z-bias learning captures the EKF's learned accel bias during stable hover and saves it for use on subsequent flights. This compensates for vibration rectification - a DC offset in AccZ caused by motor vibration that only exists when motors are running.
 
-#### How It Works
+**Note:** The bias parameter was moved from EKF level (`EK3_ABIAS_HVR_Z`) to INS level (`INS_ACC_VRFB_Z`) so it can be per-IMU. Each EKF core learns and records the bias for its own IMU independently.
 
-The EKF learns accel bias through its Kalman filter:
-- **With Z velocity (GPS/external nav):** Bias is strongly observable, converges quickly
-- **Without Z velocity (indoor):** Bias is weakly observable from baro height corrections, converges slowly
+#### How It Works - Frozen Correction Approach
 
-The hover learning captures the EKF's learned bias from the user-selected primary core (EK3_PRIMARY):
+The system uses a "frozen correction" approach to avoid feedback instability:
+
+1. **At boot**: For each IMU used by an EKF core, the INS parameter value is frozen into `_accelBiasHoverZ_correction[imu]`
+2. **When armed**: Each core applies its IMU's frozen correction at the IMU level in `correctDeltaVelocity()`
+3. **During hover**: Each core learns the TOTAL bias = EKF_residual + frozen_correction for its IMU in `_accelBiasHoverZ_learning[imu]`
+4. **On disarm**: The total bias is saved for each IMU to its per-IMU INS parameter
+
+This approach solves two problems:
+- **EKF reset immunity**: IMU-level correction is applied before EKF processing
+- **Feedback stability**: The frozen value doesn't change during flight
+
+Each EKF core learns independently for its IMU. If the frozen correction perfectly matches the vibration rectification, the EKF residual will be ~0. If conditions change, the EKF residual captures the difference.
+
 ```cpp
-const uint8_t learn_core = uint8_t(_primary_core) < num_cores ? _primary_core : 0;
-core[learn_core].getAccelBias(currentBias);
-_accelBiasHoverZ.set(_accelBiasHoverZ + alpha * (currentBias.z - _accelBiasHoverZ));
+// Frozen correction applied at IMU level (in correctDeltaVelocity)
+if (motorsArmed) {
+    delVel.z -= frontend->_accelBiasHoverZ_correction[accel_index] * delVelDT;
+}
+
+// Learning captures TOTAL bias for each core's IMU (in update_accel_bias_hover)
+for (uint8_t i = 0; i < num_cores; i++) {
+    const uint8_t imu = coreImuIndex[i];
+    const float totalBias = currentBias.z + _accelBiasHoverZ_correction[imu];
+    _accelBiasHoverZ_learning[imu] += alpha * (totalBias - _accelBiasHoverZ_learning[imu]);
+    AP::ins().set_accel_vrf_bias_z(imu, _accelBiasHoverZ_learning[imu]);
+}
 ```
 
-#### When Learning Occurs
+#### Safety Measures
 
-| Phase | Z-bias EKF Learning | Hover Param Capture | Reason |
-|-------|---------------------|---------------------|--------|
-| Pre-arm stationary | ✅ Enabled | ❌ No (not in hover) | Zero velocity fusion makes bias observable |
-| Armed on ground | ❌ **Inhibited** | ❌ No (ground effect) | Motor thrust corrupts bias reading |
-| Takeoff (below TKOFF_GNDEFF_ALT) | ❌ **Inhibited** | ❌ No (ground effect) | Ground effect active |
-| Hover (above TKOFF_GNDEFF_ALT) | ✅ **Enabled** | ✅ **Yes** | Weakly observable from baro |
-| Landing descent | ❌ **Inhibited** | ❌ No (ground effect) | Ground effect active |
+- **Disable check**: If `EK3_ABIAS_HVR_LN=0`, correction is set to 0 (no effect)
+- **Clamp to ±0.3 m/s²**: Limits effect even if parameter is corrupted
+- **Startup logging**: Logs the correction value on boot (WARNING if clamped)
+
+#### When Correction and Learning Occur
+
+| Phase | Correction Applied | EKF Z-bias Learning | Param Capture | Reason |
+|-------|-------------------|---------------------|---------------|--------|
+| Pre-arm (disarmed) | ❌ No | ✅ Enabled | ❌ No | No vibration; zero-vel fusion would counter correction |
+| Armed on ground | ✅ **Yes** | ❌ Inhibited | ❌ No | Vibration exists; EKF inhibited so won't counter correction |
+| Takeoff (below threshold) | ✅ **Yes** | ❌ Inhibited | ❌ No | Ground effect inhibits EKF learning |
+| Hover (above threshold) | ✅ **Yes** | ✅ Enabled | ✅ **Yes** | Normal flight, learning tracks total bias |
+| Landing (below threshold) | ✅ **Yes** | ❌ Inhibited | ❌ No | Ground effect inhibits EKF learning |
+
+The correction is applied immediately on arm (not just above ground effect altitude) to avoid a sudden shift in flight. This is safe because Z-bias learning is already inhibited during ground effect, preventing the EKF from learning to compensate for the correction.
 
 #### Indoor vs Outdoor Operation
 
@@ -1771,21 +1798,44 @@ const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_exp
 const bool zAxisInhibit = (i == 15) && gndEffectActive;
 ```
 
-#### Core Selection
+#### Per-IMU Learning
 
-Learning uses the user-selected primary core (EK3_PRIMARY), not the dynamic primary which can change during lane switching. This ensures consistent learning from the same IMU that will be initial primary on boot.
+Each EKF core learns and records the bias for its own IMU independently. This means:
+- IMU0 bias is learned by the core using IMU0
+- IMU1 bias is learned by the core using IMU1
+- etc.
+
+All cores contribute to learning during stable hover, each updating its own IMU's parameter.
 
 #### Parameters
 
 | Parameter | Description |
 |-----------|-------------|
-| `EK3_ABIAS_HVR_Z` | Learned hover Z-axis accel bias (m/s²) |
+| `INS_ACC_VRFB_Z` | Learned hover Z-axis accel bias for IMU0 (m/s²) |
+| `INS_ACC2_VRFB_Z` | Learned hover Z-axis accel bias for IMU1 (m/s²) |
+| `INS_ACC3_VRFB_Z` | Learned hover Z-axis accel bias for IMU2 (m/s²) |
 | `EK3_ABIAS_HVR_LN` | Learning mode: 0=Disabled, 1=Learn, 2=Learn+Save |
 | `TKOFF_GNDEFF_ALT` | Altitude threshold for ground effect (controls when learning is allowed) |
 
+The bias parameter is stored per-IMU in the InertialSensor, allowing each IMU to have its own correction value. Learning applies to the primary core's IMU (determined by `EK3_PRIMARY`).
+
 #### Data Flow
 
-1. **During hover**: EKF learns Z-bias from baro (slow) or GPS (fast)
-2. **`update_accel_bias_hover()`**: Captures bias into `_accelBiasHoverZ` with 2s time constant filter
-3. **On disarm**: `save_accel_bias_hover()` saves to EEPROM (if `EK3_ABIAS_HVR_LN=2`)
-4. **On next boot**: `CovarianceInit()` applies saved bias to initialize EKF state
+1. **Boot**: `InitialiseFilter()` reads INS parameter for each IMU used by a core, freezes into `_accelBiasHoverZ_correction[imu]`, logs values
+2. **Arm**: Each core's frozen correction starts being applied at IMU level in `correctDeltaVelocity()`
+3. **During hover**: Each EKF core learns residual bias for its IMU; `update_accel_bias_hover()` captures total (residual + frozen) with 2s time constant filter into `_accelBiasHoverZ_learning[imu]`
+4. **On disarm**: `save_accel_bias_hover()` saves total bias for all IMUs that have cores via `AP::ins().save_accel_vrf_bias_z()` (if `EK3_ABIAS_HVR_LN=2`)
+5. **Next boot**: Cycle repeats with updated frozen corrections per IMU
+
+#### Key Files
+
+- **AP_NavEKF3.cpp**: `InitialiseFilter()` freezes correction per IMU, `update_accel_bias_hover()` learns per core/IMU
+- **AP_NavEKF3_core.cpp**: `correctDeltaVelocity()` applies per-IMU frozen correction when armed
+- **AP_NavEKF3.h**: `_accelBiasHoverZ_correction[INS_MAX_INSTANCES]`, `_accelBiasHoverZ_learning[INS_MAX_INSTANCES]` arrays
+- **AP_InertialSensor.cpp**: Parameter definitions for all IMUs:
+  - `INS_ACC_VRFB_Z` (IMU 0)
+  - `INS_ACC2_VRFB_Z` (IMU 1)
+  - `INS_ACC3_VRFB_Z` (IMU 2)
+  - `INS_ACC4_VRFB_Z` (IMU 3, if supported)
+  - `INS_ACC5_VRFB_Z` (IMU 4, if supported)
+- **AP_InertialSensor.h**: `_accel_vrf_bias_z[INS_MAX_INSTANCES]` array and accessor functions
