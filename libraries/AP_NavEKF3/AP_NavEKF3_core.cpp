@@ -1067,7 +1067,7 @@ void NavEKF3_core::CovariancePrediction(Vector3F *rotVarVecPtr)
         for (uint8_t i=0; i<=2; i++) processNoiseVariance[i] = dAngBiasVar;
     }
 
-    if (!inhibitDelVelBiasStates) {
+    if (!accelBiasLearningInhibited()) {
         // default process noise (m/s)^2
         ftype dVelBiasVar = sq(sq(dt) * constrain_ftype(frontend->_accelBiasProcessNoise, 0.0, 1.0));
         for (uint8_t i=3; i<=5; i++) {
@@ -1180,7 +1180,7 @@ void NavEKF3_core::CovariancePrediction(Vector3F *rotVarVecPtr)
     ftype _accNoise = badIMUdata ? BAD_IMU_DATA_ACC_P_NSE : constrain_ftype(frontend->_accNoise, 0.0f, BAD_IMU_DATA_ACC_P_NSE);
     dvxVar = dvyVar = dvzVar = sq(dt*_accNoise);
 
-    if (!inhibitDelVelBiasStates) {
+    if (!accelBiasLearningInhibited()) {
         for (uint8_t stateIndex = 13; stateIndex <= 15; stateIndex++) {
             const uint8_t index = stateIndex - 13;
 
@@ -1767,7 +1767,7 @@ void NavEKF3_core::CovariancePrediction(Vector3F *rotVarVecPtr)
 
     // inactive delta velocity bias states have all covariances zeroed to prevent
     // interacton with other states
-    if (!inhibitDelVelBiasStates) {
+    if (!accelBiasLearningInhibited()) {
         for (uint8_t index=0; index<3; index++) {
             const uint8_t stateIndex = index + 13;
             if (dvelBiasAxisInhibit[index]) {
@@ -1935,7 +1935,7 @@ void NavEKF3_core::ConstrainVariances()
     }
 
     const ftype minSafeStateVar = 5E-9;
-    if (!inhibitDelVelBiasStates) {
+    if (!accelBiasLearningInhibited()) {
 
         // Find the maximum delta velocity bias state variance and request a covariance reset if any variance is below the safe minimum
         ftype maxStateVar = 0.0F;

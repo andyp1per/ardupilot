@@ -116,6 +116,10 @@ public:
     // value is clamped to ±0.3 m/s² for safety
     void setHoverZBiasCorrection(uint8_t imu_index, float correction);
 
+    // inhibit all accel bias learning (e.g. during high-G maneuvers)
+    void setInhibitAccelBiasLearning(bool inhibit) { _inhibitAccelBiasLearning = inhibit; }
+    bool getInhibitAccelBiasLearning() const { return _inhibitAccelBiasLearning; }
+
     //returns index of the active source set used
     uint8_t get_active_source_set() const;
 
@@ -567,7 +571,10 @@ private:
     // This breaks the feedback loop between learning and correction.
     // Note: Learning is now done in ArduCopter, but the correction is still applied here.
     float _accelBiasHoverZ_correction[INS_MAX_INSTANCES];  // frozen correction per IMU
-    
+
+    // flag to inhibit all accel bias learning (set by vehicle code during high-G maneuvers)
+    bool _inhibitAccelBiasLearning = false;
+
     // update the yaw reset data to capture changes due to a lane switch
     // new_primary - index of the ekf instance that we are about to switch to as the primary
     // old_primary - index of the ekf instance that we are currently using as the primary
