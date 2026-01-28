@@ -740,6 +740,7 @@ private:
     void update_throttle_hover();
 #if HAL_NAVEKF3_AVAILABLE
     void init_hover_bias_correction(void);
+    void set_hover_bias_correction_in_ekf(void);
     void update_hover_bias_learning(float dt);
     void save_hover_bias_learning(void);
 #endif

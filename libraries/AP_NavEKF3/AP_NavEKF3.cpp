@@ -1311,16 +1311,18 @@ float NavEKF3::getHoverZBiasCorrection(uint8_t imu_index) const
 }
 
 // set the frozen hover Z-bias correction for a specific IMU
-void NavEKF3::setHoverZBiasCorrection(uint8_t imu_index, float correction)
+// returns true if set successfully, false if invalid index or EKF not initialized
+bool NavEKF3::setHoverZBiasCorrection(uint8_t imu_index, float correction)
 {
-    if (imu_index >= INS_MAX_INSTANCES) {
-        return;
+    if (imu_index >= INS_MAX_INSTANCES || !core) {
+        return false;
     }
     // Clamp to safe range - vibration rectification shouldn't exceed ±0.3 m/s²
     constexpr float MAX_HOVER_BIAS_CORRECTION = 0.3f;
     _accelBiasHoverZ_correction[imu_index] = constrain_float(correction,
                                                               -MAX_HOVER_BIAS_CORRECTION,
                                                               MAX_HOVER_BIAS_CORRECTION);
+    return true;
 }
 
 // returns active source set used by EKF3

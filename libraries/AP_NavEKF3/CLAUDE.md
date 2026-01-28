@@ -30,6 +30,7 @@ This file tracks our EKF3 analysis work, including notes, plans, and rules disco
 - [x] **Inhibit Z-axis bias learning during ground effect** - Implemented in AP_NavEKF3_PosVelFusion.cpp (see Ground Effect Bias Inhibition)
 - [x] **Flight test (log8.bin)** - Z-bias inhibition dramatically improved altitude hold (see log8.bin section)
 - [x] **Stationary zero velocity fusion** - Fuse synthetic zero velocity when on ground and disarmed to make bias observable (see logjk1.bin section)
+- [ ] **Fix post-landing EKF divergence** - After landing with ground effect, EKF accumulates error that causes velocity/position drift after disarm (see Post-Landing EKF Issue below)
 - [ ] Investigate velocity sensor options (optical flow, rangefinder)
 - [ ] Map out sensor fusion flow
 - [ ] Document key algorithms and their purposes
@@ -1839,3 +1840,47 @@ The bias parameter is stored per-IMU in the InertialSensor, allowing each IMU to
   - `INS_ACC4_VRFB_Z` (IMU 3, if supported)
   - `INS_ACC5_VRFB_Z` (IMU 4, if supported)
 - **AP_InertialSensor.h**: `_accel_vrf_bias_z[INS_MAX_INSTANCES]` array and accessor functions
+
+### Post-Landing EKF Divergence Issue (TODO)
+
+**Problem:** After landing with ground effect, the EKF accumulates position/velocity errors that cause divergence after disarm.
+
+**Observed in:** log11.bin (indoor no-GPS flight)
+
+**Symptoms:**
+- During landing (t=89-90s): Ground effect causes massive baro spike (-2m to -4m innovation)
+- `touchdown_detected` is set, so innovation is floored at -0.5m (ground effect protection)
+- EKF accumulates position error while innovation is clamped
+- At disarm (t=94.6s): `touchdown_detected` clears, innovation clamping stops
+- After disarm: EKF velocity drifts (-0.15 → -0.52 m/s) despite vehicle being stationary
+- Position drifts with velocity (-0.24m → -1.7m)
+- Height innovation grows unbounded (-0.5 → -2.2m)
+
+**Analysis:**
+
+1. Ground effect protection correctly prevents EKF from chasing bad baro during landing
+2. But this accumulates an error (EKF position diverges from baro by ~2m)
+3. At disarm, protection is removed and EKF sees huge innovation
+4. Zero velocity fusion IS happening (`onGround = true` after disarm)
+5. But the large height innovation drives EKF to "correct" by descending
+6. This corrupts the velocity state, which persists and makes things worse
+
+**Root Cause:** The ground effect protection accumulates error that can't be safely unwound after landing. The transition from "landing with ground effect" to "stationary on ground" needs better handling.
+
+**Potential Solutions:**
+
+1. **Gradual innovation limit release**: After `touchdown_detected` clears, gradually increase the innovation limit rather than removing it instantly
+
+2. **Position reset on landing**: When transitioning from flight to ground, reset EKF position to match baro
+
+3. **Stronger zero velocity fusion**: Increase Kalman gain for zero velocity fusion when stationary to more aggressively correct velocity errors
+
+4. **Extended ground effect protection**: Keep `touchdown_expected` active for longer after landing, or use a separate "just_landed" state
+
+5. **Baro trust increase on ground**: When `onGround && !motorsArmed`, increase trust in baro to correct accumulated position error faster
+
+**Key Code Locations:**
+- `AP_NavEKF3_VehicleStatus.cpp:375-384` - `onGround` detection for copters
+- `AP_NavEKF3_PosVelFusion.cpp:674-695` - Zero velocity fusion in AID_NONE mode
+- `AP_NavEKF3_PosVelFusion.cpp:1014-1028` - Ground effect innovation flooring
+- `ArduCopter/baro_ground_effect.cpp` - `touchdown_expected` flag control
