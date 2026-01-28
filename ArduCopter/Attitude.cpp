@@ -163,16 +163,11 @@ void Copter::init_hover_bias_correction(void)
     }
 }
 
-// set_hover_bias_correction_in_ekf - sets the frozen hover Z-bias correction in EKF
+// set_hover_z_bias_correction - sets the frozen hover Z-bias correction in EKF
 // called from one_hz_loop while disarmed until values match
-void Copter::set_hover_bias_correction_in_ekf(void)
+void Copter::set_hover_z_bias_correction(void)
 {
     if (g2.accel_zbias_learn <= 0) {
-        return;
-    }
-
-    // Only try while disarmed - once armed, stop trying
-    if (motors->armed()) {
         return;
     }
 
@@ -187,7 +182,7 @@ void Copter::set_hover_bias_correction_in_ekf(void)
 
         // Try to set the correction
         if (ahrs.set_hover_z_bias_correction(imu, saved_bias)) {
-            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Hover Z-bias IMU%u: %.3f m/s²", imu, saved_bias);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Hover Z-bias IMU%u: %.3f m/s", imu, saved_bias);
         }
     }
 }
