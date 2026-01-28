@@ -326,7 +326,6 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     sb_time_axis_t new_time_axis;
     sb_time_segment_t segment;
     
-    gcs().send_text(MAV_SEVERITY_ERROR, "Got packet %d", length);
     if (length < sizeof(CustomPackets::time_axis_config_header_t) + sizeof(CustomPackets::time_axis_config_trailer_t)) {
         // Packet too short
         return false;
