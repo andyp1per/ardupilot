@@ -3595,14 +3595,15 @@ float AP_AHRS::get_hover_z_bias_correction(uint8_t imu_index) const
 }
 
 // set the frozen hover Z-bias correction for a specific IMU
-// no-op if not using EKF3
-void AP_AHRS::set_hover_z_bias_correction(uint8_t imu_index, float correction)
+// returns true if set successfully, false if not using EKF3 or EKF not initialized
+bool AP_AHRS::set_hover_z_bias_correction(uint8_t imu_index, float correction)
 {
 #if HAL_NAVEKF3_AVAILABLE
     if (active_EKF_type() == EKFType::THREE) {
-        EKF3.setHoverZBiasCorrection(imu_index, correction);
+        return EKF3.setHoverZBiasCorrection(imu_index, correction);
     }
 #endif
+    return false;
 }
 
 // get accel bias Z component for a specific IMU

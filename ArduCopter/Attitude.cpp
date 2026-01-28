@@ -146,7 +146,8 @@ uint16_t Copter::get_pilot_speed_dn() const
 #define HOVER_BIAS_TC 2.0f
 
 // init_hover_bias_correction - loads saved hover Z-bias from INS parameters
-// and sets them in the EKF via AHRS
+// into _hover_bias_learning array. The frozen correction in EKF is set later
+// from one_hz_loop once EKF3 is active.
 // called once from startup_INS_ground() after ahrs.reset()
 void Copter::init_hover_bias_correction(void)
 {
@@ -154,13 +155,39 @@ void Copter::init_hover_bias_correction(void)
         return;
     }
 
+    // Initialize learning state from INS parameters
+    // The actual EKF correction will be set later once EKF3 is active
     for (uint8_t imu = 0; imu < INS_MAX_INSTANCES; imu++) {
         const float raw_bias = AP::ins().get_accel_vrf_bias_z(imu);
-        if (!is_zero(raw_bias)) {
-            ahrs.set_hover_z_bias_correction(imu, raw_bias);
-            // Initialize learning state with the loaded value
-            _hover_bias_learning[imu] = raw_bias;
-            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Hover Z-bias IMU%u: %.3f m/s²", imu, raw_bias);
+        _hover_bias_learning[imu] = raw_bias;
+    }
+}
+
+// set_hover_bias_correction_in_ekf - sets the frozen hover Z-bias correction in EKF
+// called from one_hz_loop while disarmed until values match
+void Copter::set_hover_bias_correction_in_ekf(void)
+{
+    if (g2.accel_zbias_learn <= 0) {
+        return;
+    }
+
+    // Only try while disarmed - once armed, stop trying
+    if (motors->armed()) {
+        return;
+    }
+
+    for (uint8_t imu = 0; imu < INS_MAX_INSTANCES; imu++) {
+        const float saved_bias = _hover_bias_learning[imu];
+        const float current_correction = ahrs.get_hover_z_bias_correction(imu);
+
+        // Skip if already set correctly or nothing to set
+        if (is_equal(saved_bias, current_correction)) {
+            continue;
+        }
+
+        // Try to set the correction
+        if (ahrs.set_hover_z_bias_correction(imu, saved_bias)) {
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Hover Z-bias IMU%u: %.3f m/s²", imu, saved_bias);
         }
     }
 }

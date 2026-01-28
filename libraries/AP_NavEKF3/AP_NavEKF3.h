@@ -114,7 +114,8 @@ public:
 
     // set the frozen hover Z-bias correction for a specific IMU
     // value is clamped to ±0.3 m/s² for safety
-    void setHoverZBiasCorrection(uint8_t imu_index, float correction);
+    // returns true if set successfully, false if EKF not initialized
+    bool setHoverZBiasCorrection(uint8_t imu_index, float correction);
 
     // inhibit all accel bias learning (e.g. during high-G maneuvers)
     void setInhibitAccelBiasLearning(bool inhibit) { _inhibitAccelBiasLearning = inhibit; }
