@@ -216,6 +216,11 @@ void Copter::startup_INS_ground()
     ahrs.init();
     ahrs.set_vehicle_class(AP_AHRS::VehicleClass::COPTER);
 
+#if HAL_NAVEKF3_AVAILABLE
+    // Load saved hover Z-bias corrections into EKF
+    init_hover_bias_correction();
+#endif
+
     // Warm up and calibrate gyro offsets
     ins.init(scheduler.get_loop_rate_hz());
 

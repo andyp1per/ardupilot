@@ -818,9 +818,9 @@ bool AP_Arming_Copter::disarm(const AP_Arming::Method method, bool do_disarm_che
         }
     }
 
-    // save hover accel bias learned by the EKF if enabled
+    // save hover accel bias learned by Copter if enabled
 #if HAL_NAVEKF3_AVAILABLE
-    ahrs.EKF3.save_accel_bias_hover();
+    copter.save_hover_bias_learning();
 #endif
 
     // we are not in the air
