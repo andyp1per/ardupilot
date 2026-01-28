@@ -58,9 +58,7 @@ void Copter::update_throttle_hover()
         gyro_fft.update_freq_hover(0.01f, motors->get_throttle_out());
 #endif
         // update learned hover accel bias (checks ground effect flags internally)
-#if HAL_NAVEKF3_AVAILABLE
         update_hover_bias_learning(0.01f);
-#endif
     }
 }
 
@@ -141,7 +139,6 @@ uint16_t Copter::get_pilot_speed_dn() const
     }
 }
 
-#if HAL_NAVEKF3_AVAILABLE
 // Time constant for hover bias learning filter (seconds)
 #define HOVER_BIAS_TC 2.0f
 
@@ -182,7 +179,7 @@ void Copter::set_hover_z_bias_correction(void)
 
         // Try to set the correction
         if (ahrs.set_hover_z_bias_correction(imu, saved_bias)) {
-            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Hover Z-bias IMU%u: %.3f m/s", imu, saved_bias);
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Hover Z-bias IMU%u: %.3f m/s^2", imu, saved_bias);
         }
     }
 }
@@ -241,4 +238,3 @@ void Copter::save_hover_bias_learning(void)
         }
     }
 }
-#endif  // HAL_NAVEKF3_AVAILABLE
