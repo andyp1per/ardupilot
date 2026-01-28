@@ -100,6 +100,22 @@ public:
     // An out of range instance (eg -1) returns data for the primary instance
     void getAccelBias(int8_t instance, Vector3f &accelBias) const;
 
+    // get the IMU index used by a specific EKF core
+    // returns -1 if core_index is invalid
+    int8_t getCoreIMUIndex(uint8_t core_index) const;
+
+    // get accel bias for a specific IMU by finding the core that uses it
+    // returns false if no core uses this IMU
+    bool getAccelBiasForIMU(uint8_t imu_index, Vector3f &accelBias) const;
+
+    // get the frozen hover Z-bias correction for a specific IMU
+    // returns 0.0f if imu_index is invalid
+    float getHoverZBiasCorrection(uint8_t imu_index) const;
+
+    // set the frozen hover Z-bias correction for a specific IMU
+    // value is clamped to ±0.3 m/s² for safety
+    void setHoverZBiasCorrection(uint8_t imu_index, float correction);
+
     //returns index of the active source set used
     uint8_t get_active_source_set() const;
 
@@ -314,13 +330,9 @@ public:
     // set and save the _baroAltNoise parameter
     void set_baro_alt_noise(float noise) { _baroAltNoise.set_and_save(noise); };
 
-    // update the learned hover Z-axis accel bias during stable hover
-    // should be called at 10Hz or slower
-    void update_accel_bias_hover(float dt);
-
-    // save the learned hover Z-axis accel bias to EEPROM
-    // should be called on disarm
-    void save_accel_bias_hover(void);
+    // Note: Hover Z-bias learning (update_accel_bias_hover, save_accel_bias_hover)
+    // has been moved to ArduCopter (Attitude.cpp). The frozen correction is still
+    // loaded here and applied in correctDeltaVelocity().
 
     // allow the enable flag to be set by Replay
     void set_enable(bool enable) { _enable.set_enable(enable); }
@@ -459,8 +471,6 @@ private:
     AP_Enum<LogLevel> _log_level;   // log verbosity level
     AP_Float _gpsVAccThreshold;     // vertical accuracy threshold to use GPS as an altitude source
     AP_Int32 _options;              // bit mask of processing options
-    AP_Float _accelBiasHoverZ;      // learned hover Z-axis accel bias for vibration rectification
-    AP_Int8 _accelBiasHoverLearn;   // hover accel bias learning mode (0=off, 1=learn, 2=learn+save)
 
     // enum for processing options
     enum class Options {
@@ -552,10 +562,11 @@ private:
     Location common_EKF_origin;
     bool common_origin_valid;
 
-    // Frozen hover Z-bias correction applied at IMU level.
-    // This is set at boot from the learned parameter and does NOT change during flight.
+    // Frozen hover Z-bias correction applied at IMU level (per-IMU).
+    // This is set at boot from the learned INS parameter and does NOT change during flight.
     // This breaks the feedback loop between learning and correction.
-    float _accelBiasHoverZ_correction;
+    // Note: Learning is now done in ArduCopter, but the correction is still applied here.
+    float _accelBiasHoverZ_correction[INS_MAX_INSTANCES];  // frozen correction per IMU
     
     // update the yaw reset data to capture changes due to a lane switch
     // new_primary - index of the ekf instance that we are about to switch to as the primary

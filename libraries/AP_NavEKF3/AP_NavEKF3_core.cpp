@@ -740,8 +740,7 @@ void NavEKF3_core::correctDeltaVelocity(Vector3F &delVel, ftype delVelDT, uint8_
 
     // Apply hover Z-bias correction for vibration rectification compensation.
     // Uses a value FROZEN at boot (not the learning parameter) to avoid feedback
-    // instability. Only apply to the IMU used by the user-selected primary core.
-    // Note: _primary_core is a core index, coreImuIndex[] translates to IMU index.
+    // instability. Each IMU has its own learned correction value.
     //
     // Apply when motors are armed - this is when vibration rectification exists.
     // Z-bias learning is already inhibited during ground effect (takeoff_expected
@@ -749,12 +748,7 @@ void NavEKF3_core::correctDeltaVelocity(Vector3F &delVel, ftype delVelDT, uint8_
     // correction while on the ground. Applying immediately on arm avoids a
     // sudden shift when transitioning above ground effect altitude.
     if (motorsArmed) {
-        const uint8_t primary_core = uint8_t(frontend->_primary_core) < frontend->num_cores ?
-                                     frontend->_primary_core : 0;
-        const uint8_t primary_imu = frontend->coreImuIndex[primary_core];
-        if (accel_index == primary_imu) {
-            delVel.z -= frontend->_accelBiasHoverZ_correction * delVelDT;
-        }
+        delVel.z -= frontend->_accelBiasHoverZ_correction[accel_index] * delVelDT;
     }
 }
 
