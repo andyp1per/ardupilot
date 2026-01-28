@@ -147,7 +147,7 @@ uint16_t Copter::get_pilot_speed_dn() const
 
 // init_hover_bias_correction - loads saved hover Z-bias from INS parameters
 // and sets them in the EKF via AHRS
-// called once during startup after AHRS is initialized
+// called once from startup_INS_ground() after ahrs.reset()
 void Copter::init_hover_bias_correction(void)
 {
     if (g2.accel_zbias_learn <= 0) {
