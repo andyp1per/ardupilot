@@ -1244,10 +1244,10 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
 #if HAL_NAVEKF3_AVAILABLE
     // @Param: ACC_ZBIAS_LEARN
     // @DisplayName: Accel Z-axis Bias Learning
-    // @Description: Controls learning of accelerometer Z-axis bias during hover to compensate for vibration rectification. Learned bias is saved to INS parameters on disarm. 0=Disabled, 1=Learn during hover (RAM only), 2=Learn and save to EEPROM on disarm.
-    // @Values: 0:Disabled,1:Learn Only,2:Learn and Save
+    // @Description: Bitmask controlling accelerometer Z-axis bias learning during hover to compensate for vibration rectification. Bit 0: Learn bias during hover and save to EEPROM on disarm. Bit 1: Use saved bias values (apply correction to EKF). Bit 2: Disable EKF bias learning while disarmed (don't use zero velocity assumption on ground).
+    // @Bitmask: 0:Learn and Save,1:Use Saved Values,2:Disable Ground Learning
     // @User: Advanced
-    AP_GROUPINFO("ACC_ZBIAS_LEARN", 12, ParametersG2, accel_zbias_learn, 2),
+    AP_GROUPINFO("ACC_ZBIAS_LEARN", 12, ParametersG2, accel_zbias_learn, 3),
 #endif
 
     // @Param: FS_EKF_FILT

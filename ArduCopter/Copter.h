@@ -740,6 +740,7 @@ private:
     void set_hover_z_bias_correction(void);
     void update_hover_bias_learning(float dt);
     void save_hover_bias_learning(void);
+    void update_accel_bias_inhibit(void);
     float get_pilot_desired_climb_rate(float throttle_control);
     float get_non_takeoff_throttle();
     void set_accel_throttle_I_from_pilot_throttle();
