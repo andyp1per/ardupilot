@@ -1233,6 +1233,14 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @User: Advanced
     AP_GROUPINFO("TKOFF_GNDEFF_ALT", 11, ParametersG2, tkoff_gndeff_alt, 0.5),
 
+    // @Param: TKOFF_GNDEFF_TMO
+    // @DisplayName: Ground Effect Timeout
+    // @Description: Time after throttle up before ground effect compensation can be disabled. When set, ground effect will only be disabled after BOTH this timeout has elapsed AND altitude exceeds TKOFF_GNDEFF_ALT. This prevents premature ground effect disabling when baro noise causes false altitude readings. Set to zero to disable (uses altitude threshold only). Maximum timeout is always 5 seconds regardless of this setting.
+    // @Range: 0 5
+    // @Units: s
+    // @User: Advanced
+    AP_GROUPINFO("TKOFF_GNDEFF_TMO", 13, ParametersG2, tkoff_gndeff_tmo, 0),
+
 #if HAL_NAVEKF3_AVAILABLE
     // @Param: ACC_ZBIAS_LEARN
     // @DisplayName: Accel Z-axis Bias Learning
