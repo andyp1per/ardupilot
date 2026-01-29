@@ -38,6 +38,57 @@ This file tracks our EKF3 analysis work, including notes, plans, and rules disco
 - [ ] Map out sensor fusion flow
 - [ ] Document key algorithms and their purposes
 
+## EKF Analysis Methodology — MUST READ
+
+**Rule 1: No theories without data.** Do not speculate about EKF behavior based on code reading alone. The EKF is a complex dynamic system where multiple states interact. Theories MUST be validated against actual log data before being presented as explanations.
+
+**Rule 2: Always cross-check with multiple sensors.** When analyzing altitude/position issues, compare ALL available sources:
+- EKF estimate (XKF1 PD/VD)
+- Barometer (BARO.Alt)
+- Rangefinder (RFND.Dist)
+- GPS altitude (GPS.Alt)
+- Raw IMU (IMU.AccZ)
+
+If your theory predicts the vehicle is at 2.5m but the rangefinder shows 17cm, your theory is wrong. The rangefinder is measuring physical reality.
+
+**Rule 3: Extract data first, theorize second.** Before forming hypotheses:
+1. Extract the relevant log messages (XKF1, XKF2, XKF4, CTUN, BARO, RFND, IMU, etc.)
+2. Align timestamps and create comparison tables
+3. Identify anomalies in the DATA, not in your mental model
+4. Only then form hypotheses that explain ALL the observations
+
+**Rule 4: Use Replay for controlled experiments.** To test whether a specific parameter or code change affects EKF behavior:
+1. Run the original log through Replay to establish baseline
+2. Modify the parameter/code
+3. Run Replay again and compare XKF outputs
+4. The difference (or lack thereof) is objective evidence
+
+**Rule 5: Check ground truth.** When something looks wrong in the EKF:
+- What does the rangefinder say? (direct distance measurement)
+- What does the pilot report? (actual vehicle behavior)
+- What does video show? (if available)
+- Does the CTUN throttle output make sense for the claimed altitude?
+
+**Example of methodology failure (logjk4.bin analysis):**
+
+Initial (wrong) approach: Spent time theorizing about the frozen correction being applied before arm based on VD drift patterns in data that was misread due to sampling intervals.
+
+Correct approach would have been: Immediately check baro vs rangefinder:
+```
+t=9.76  Baro=+2.95m  EKF=0.74m  RFND=0.16m  ← Baro is wildly wrong
+t=10.26 Baro=+1.69m  EKF=2.10m  RFND=0.14m  ← EKF following bad baro
+```
+
+This instantly shows the primary problem is baro ground effect, not correction gating. The rangefinder (0.14-0.17m) is ground truth; the baro (+2.95m) and EKF (2.10m) are wrong.
+
+**Log analysis checklist:**
+- [ ] Extract PARM values for relevant parameters
+- [ ] Extract ARM/DISARM events and flight mode changes
+- [ ] Extract multiple altitude sources (BARO, RFND, XKF1.PD, GPS if available)
+- [ ] Extract XKF4 status flags (takeoff_expected, touchdown_expected)
+- [ ] Cross-check all sources before forming theories
+- [ ] Identify which sensor is likely correct (rangefinder > GPS > baro in ground effect)
+
 ## Notes
 
 ### Log File: log4.bin
@@ -1771,12 +1822,12 @@ for (uint8_t imu = 0; imu < INS_MAX_INSTANCES; imu++) {
 | Phase | Correction Applied | EKF Z-bias Learning | Param Capture | Reason |
 |-------|-------------------|---------------------|---------------|--------|
 | Pre-arm (disarmed) | ❌ No | ✅ Enabled | ❌ No | No vibration; zero-vel fusion would counter correction |
-| Armed on ground | ✅ **Yes** | ❌ Inhibited | ❌ No | Vibration exists; EKF inhibited so won't counter correction |
-| Takeoff (below threshold) | ✅ **Yes** | ❌ Inhibited | ❌ No | Ground effect inhibits EKF learning |
+| Armed on ground | ✅ **Yes** ⚠️ BUG | ❌ Inhibited | ❌ No | See bug analysis below — correction applied but vibrations don't match hover level |
+| Takeoff (below threshold) | ✅ **Yes** ⚠️ BUG | ❌ Inhibited | ❌ No | Same issue — correction wrong during ground effect |
 | Hover (above threshold) | ✅ **Yes** | ✅ Enabled | ✅ **Yes** | Normal flight, learning tracks total bias |
-| Landing (below threshold) | ✅ **Yes** | ❌ Inhibited | ❌ No | Ground effect inhibits EKF learning |
+| Landing (below threshold) | ✅ **Yes** ⚠️ BUG | ❌ Inhibited | ❌ No | Same issue — correction wrong during ground effect |
 
-The correction is applied immediately on arm (not just above ground effect altitude) to avoid a sudden shift in flight. This is safe because Z-bias learning is already inhibited during ground effect, preventing the EKF from learning to compensate for the correction.
+**⚠️ BUG (logjk4.bin analysis):** The correction is applied immediately on arm to avoid a sudden shift in flight. However, this causes a conflict: the correction assumes hover-level vibrations but Z-bias learning is inhibited during ground effect, so the EKF cannot compensate for the incorrect correction. See "Ground Effect + Frozen Correction Conflict" section below.
 
 #### Indoor vs Outdoor Operation
 
@@ -1932,3 +1983,169 @@ The bias parameter is stored per-IMU in the InertialSensor, allowing each IMU to
 - `AP_NavEKF3_PosVelFusion.cpp:674-695` - Zero velocity fusion in AID_NONE mode
 - `AP_NavEKF3_PosVelFusion.cpp:1014-1028` - Ground effect innovation flooring
 - `ArduCopter/baro_ground_effect.cpp` - `touchdown_expected` flag control
+
+### Ground Effect + Frozen Correction Conflict (BUG — logjk4.bin)
+
+**Status:** Identified, fix not yet implemented.
+
+**Problem:** On a small drone with significant baro ground effect, the frozen correction prevents takeoff in AltHold. The EKF overestimates altitude by ~2m (reports 2.5m, actual ~0.5m from rangefinder), causing the altitude controller to cut throttle.
+
+**Vehicle configuration (from log):**
+- Small fast drone, no GPS (`EK3_SRC1_POSXY=0`, `EK3_SRC1_VELXY=5` optical flow)
+- `EK3_SRC1_POSZ=1` (baro only), `EK3_SRC1_VELZ=0` (no Z velocity source)
+- `RNGFND1_TYPE=24` (rangefinder present, max reading ~17cm during flight)
+- `INS_ACC_VRFB_Z=-0.199` (learned from previous flights)
+- `TKOFF_GNDEFF_ALT=0.8`
+- `ACC_ZBIAS_LEARN=2`
+
+**Root Cause — Two interacting problems:**
+
+#### 1. Frozen correction creates phantom acceleration during ground effect
+
+When the vehicle arms, the frozen correction immediately applies +0.199 m/s² downward (body Z). But on the ground and during low-altitude takeoff, vibrations don't yet match the hover level the correction was learned at. The Z-bias learning in the EKF is inhibited during ground effect (`takeoff_expected=true`), so the EKF **cannot** absorb this error into its AZ state.
+
+**Log evidence (logjk4.bin) — VD acceleration from arm to throttle-up:**
+
+| Time (s) | VD (m/s) | AZ bias | Note |
+|----------|----------|---------|------|
+| 7.50 | +0.032 | 0.01 | ARM — correction starts |
+| 7.70 | +0.077 | 0.01 | +0.22 m/s² rate (matches correction) |
+| 7.90 | +0.120 | 0.01 | AZ stuck at 0.01 — learning inhibited |
+| 8.10 | +0.170 | 0.01 | VD growing unchecked |
+| 8.30 | +0.221 | 0.01 | +0.25 m/s downward before pilot even adds throttle |
+
+The ~0.22 m/s² acceleration rate matches the frozen correction value (0.199 m/s²). The EKF AZ bias stays at 0.01 because Z-axis Kalman gain is zeroed during `takeoff_expected` (line 1139 in `PosVelFusion.cpp`).
+
+#### 2. Motor-induced baro noise (PRIMARY ISSUE)
+
+**Updated analysis (all logjk1-5 logs):** The baro sensor is NOT broken. When motors are off, pressure noise is ±0.25-0.44m (normal). When motors run, noise explodes to ±1.0-2.7m.
+
+| Log | Motors OFF std | Motors ON std | Ratio |
+|-----|----------------|---------------|-------|
+| logjk1 | 0.28m | 2.64m | 9.4x |
+| logjk2 | 0.87m | 1.69m | 1.9x |
+| logjk3 | 0.34m | 2.71m | 8.0x |
+| logjk4 | 0.25m | 2.20m | 8.8x |
+| logjk5 | 0.44m | 1.01m | 2.3x |
+
+Maximum pressure change rates: 400-800 Pa/s (equivalent to 30-65 m/s altitude rate — physically impossible). This is motor-induced pressure effects at the baro static port (prop wash, acoustic resonance), NOT a broken sensor.
+
+**Mitigations:**
+1. **Hardware fix:** Relocate baro away from prop wash, add foam isolation
+2. **BARO_FLTR_RNG=1:** Enable baro filtering (was 0 in these logs)
+3. **Extend TKOFF_GNDEFF_ALT:** Keep ground effect protection longer
+
+Small drones create massive prop wash that distorts the barometer:
+
+| Time (s) | Baro Alt (m) | EKF Alt (m) | Rangefinder (m) | Note |
+|----------|-------------|-------------|-----------------|------|
+| 8.76 | **-2.935** | -0.358 | 0.000 | Baro reads 3m below! |
+| 9.06 | +0.949 | -0.134 | 0.090 | Baro swings +4m in 0.3s |
+| 9.56 | +2.745 | 0.356 | 0.140 | Baro reads 2.7m high |
+| 9.76 | **+2.951** | 0.736 | 0.160 | Peak: baro 3m high, vehicle at 16cm |
+| 10.06 | +2.787 | 1.634 | 0.170 | EKF follows baro |
+| 10.26 | +1.690 | **2.096** | 0.140 | EKF at 2.1m, vehicle at 14cm |
+| 10.56 | -1.718 | **2.534** | 0.000 | EKF peaks at 2.5m, vehicle back on ground |
+
+The baro swings **-3m to +3m** while the rangefinder shows the vehicle only reached 9-17cm off the ground.
+
+#### Sequence of failure
+
+1. **t=7.5s ARM**: Frozen correction applies +0.199 m/s² downward. `takeoff_expected=true`, Z-bias learning inhibited.
+2. **t=7.5-8.5s**: VD drifts to +0.25 m/s (phantom sinking). EKF can't compensate.
+3. **t=8.5s Throttle up**: Vehicle lifts off. Baro explodes from prop wash (-3m to +3m swings).
+4. **t=17.0s**: Ground effect flags clear even though vehicle is at 0.17m (per rangefinder). EKF altitude crossed `TKOFF_GNDEFF_ALT=0.8m` due to following bad baro — a feedback loop!
+5. **t=17.0-17.8s**: Without ground effect protection, EKF trusts wild baro. Altitude estimate runs to 2.5m.
+6. **t=10.5s**: Altitude controller sees vehicle 2.5m above target, cuts throttle to 0.056.
+7. **Vehicle falls back to ground**. Pilot cannot take off.
+
+#### Post-disarm confirmation
+
+After disarm (t>11.7s), VD converges to -0.199 m/s (upward) — exactly the frozen correction value. This proves the correction is embedded in the EKF state but the EKF can't unwind it (AZ bias is only -0.01, not -0.199):
+
+```
+t=13.68  VD=-0.200  AZ=-0.01
+t=14.06  VD=-0.194  AZ=-0.01
+t=14.54  VD=-0.199  AZ=-0.01
+```
+
+#### The fundamental conflict
+
+The frozen correction and Z-bias learning inhibition have contradictory requirements during ground effect:
+
+- **Frozen correction assumes**: Vibrations match hover level → apply full correction
+- **Z-bias inhibition assumes**: Ground conditions are different from flight → don't let EKF learn bias
+- **Conflict**: The correction is wrong (vibrations don't match hover) AND the EKF can't compensate (learning inhibited)
+
+#### Proposed fix
+
+Gate the frozen correction on ground effect state, same as Z-bias learning:
+
+```cpp
+// In correctDeltaVelocity():
+// Current (buggy):
+if (motorsArmed) {
+    delVel.z -= frontend->_accelBiasHoverZ_correction[accel_index] * delVelDT;
+}
+
+// Proposed fix:
+const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_expected();
+if (motorsArmed && !gndEffectActive) {
+    delVel.z -= frontend->_accelBiasHoverZ_correction[accel_index] * delVelDT;
+}
+```
+
+**Tradeoff**: This introduces a step change in acceleration when transitioning from ground effect to normal flight (at `TKOFF_GNDEFF_ALT`). For INS_ACC_VRFB_Z=-0.199, this is a 0.2 m/s² step — small enough that the EKF (with Z-bias learning now enabled above threshold) can absorb it quickly. This is far better than the current behavior of 0.2 m/s² of uncorrectable phantom acceleration during the entire ground effect phase.
+
+**Alternative**: Apply the correction proportionally based on throttle level (ramp from 0 at idle to full at hover throttle). This avoids the step change but adds complexity.
+
+#### Ground effect flags clear too early
+
+**Problem:** `takeoff_expected` clears when EKF altitude crosses `TKOFF_GNDEFF_ALT`. But when baro noise is severe, EKF altitude is wrong — creating a feedback loop where bad baro → wrong altitude → ground effect clears → EKF trusts bad baro.
+
+**In logjk4.bin:** Ground effect flags cleared at t=17.0 when EKF reported 0.8m altitude, but rangefinder showed vehicle was at 0.17m!
+
+**Code path:** `ArduCopter/baro_ground_effect.cpp:53`
+```cpp
+if (gndeffect_state.takeoff_expected && (tnow_ms-gndeffect_state.takeoff_time_ms > 5000 || height_above_takeoff_cm > gndeff_alt_cm)) {
+    gndeffect_state.takeoff_expected = false;
+}
+```
+
+**Potential fixes:**
+1. Use rangefinder when available for ground effect threshold check
+2. Add minimum time before allowing ground effect to clear (not just 5s timeout OR altitude)
+3. Require consistent altitude readings before clearing (not just crossing threshold once)
+
+### Baro Thrust Compensation Analysis (BARO1_THST_SCALE)
+
+**Feature:** `BARO1_THST_SCALE` subtracts a thrust-proportional pressure offset to compensate for prop wash effects.
+
+**Analysis of logjk1-5 logs:**
+
+| Log | Flight | Correlation | THST_SCALE | Raw Error | After Comp | Improvement |
+|-----|--------|-------------|------------|-----------|------------|-------------|
+| logjk1 | Success | -0.89 | -551 Pa | 2.70m | 1.21m | 55% |
+| logjk2 | Success | -0.64 | -556 Pa | 1.72m | 1.32m | 23% |
+| logjk3 | Partial | -0.55 | -280 Pa | 2.69m | 2.24m | 17% |
+| logjk4 | **Failed** | -0.37 | -155 Pa | 2.16m | 2.00m | 7% |
+| logjk5 | Partial | -0.45 | -230 Pa | 1.03m | 0.92m | 11% |
+
+**Critical finding — correlation varies by flight phase:**
+
+| Phase | Airflow Pattern | Correlation | Thrust Comp Helps? |
+|-------|-----------------|-------------|-------------------|
+| Takeoff (0-5s) | Chaotic recirculation | -0.4 | No |
+| Stable hover | Steady downwash | -0.9 | Yes, 55% |
+| Landing | Chaotic again | Weak | No |
+
+**Why?** Hovering at altitude creates a predictable low-pressure zone from steady downwash (Bernoulli effect). Near ground, airflow recirculates chaotically and the linear thrust-pressure relationship breaks down.
+
+**Vehicle-specific THST_SCALE:** The optimal value varies by airframe. logjk1/logjk2 consistently show -550 Pa for this small fast drone.
+
+**Recommendation for this vehicle:** Enable `BARO1_THST_SCALE = -550` for ~50% improvement during stable flight. But this will NOT fix the takeoff failure — that requires hardware fixes (relocate baro) or extended ground effect protection.
+
+**Key code locations for fix:**
+- `AP_NavEKF3_core.cpp:750` — Current `if (motorsArmed)` gate to modify
+- `AP_NavEKF3_PosVelFusion.cpp:1136-1144` — Reference for how ground effect gating works
+- `AP_NavEKF3_core.h` — May need to add `dal` include or accessor for ground effect flags
