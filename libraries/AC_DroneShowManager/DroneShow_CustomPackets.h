@@ -120,9 +120,10 @@ namespace CustomPackets {
         // Reserved byte; must be zero.
         uint8_t reserved;
         
-        // Number of milliseconds on the show clock at the start of the time axis.
-        // May be negative.
-        int32_t origin_msec;
+        // Number of milliseconds since the UNIX epoch at the time when the show
+        // clock is at 00:00, assuming that it runs in real-time until the start
+        // of the first segment.
+        uint64_t origin_msec;
     } time_axis_config_header_t;
     
     typedef struct PACKED {

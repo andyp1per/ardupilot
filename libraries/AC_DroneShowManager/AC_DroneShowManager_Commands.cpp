@@ -319,6 +319,7 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     CustomPackets::time_axis_config_header_t* header;
     CustomPackets::time_axis_config_entry_t* entry;
     CustomPackets::time_axis_config_trailer_t* trailer;
+    int32_t origin_msec;
     uint8_t num_entries, entry_index;
     sb_error_t retval;
     sb_screenplay_scene_t* scene;
@@ -358,13 +359,50 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
         return false;
     }
     
-    // We need to be extra careful here; if an error happens while we are seting up the
+    // We need to be extra careful here; if an error happens while we are setting up the
     // new time axis, we want to leave the existing time axis intact. Therefore, we first
     // create a new time axis, and then swap it with the existing one only if everything
     // went well.
     if (sb_time_axis_init(&new_time_axis) != SB_SUCCESS) {
         return false;
     }
+    
+    // First, we set the origin of the new time axis. This is a delicate process as we
+    // need to watch out for all sorts of overflows.
+    {
+        uint64_t epoch_msec;
+        uint64_t diff;
+        int sign;
+
+        if (uses_gps_time_for_show_start()) {
+            // When using GPS time for show start, the origin is assumed to be an absolute
+            // time in milliseconds since the UNIX epoch
+            epoch_msec = _start_time_unix_usec / 1000;
+        } else {
+            // When using the internal clock for show start, the origin is assumed to be
+            // relative to the show start time. This is not really recommended but we need
+            // to handle it nevertheless.
+            epoch_msec = 0;
+        }
+
+        if (header->origin_msec >= epoch_msec) {
+            diff = header->origin_msec - epoch_msec;
+            sign = 1;
+        } else {
+            diff = epoch_msec - header->origin_msec;
+            sign = -1;
+        }
+
+        if (diff <= std::numeric_limits<int32_t>::max()) {
+            origin_msec = sign * static_cast<int32_t>(diff);
+        } else {
+            // Overflow
+            retval = SB_EINVAL;
+            goto exit;
+        }
+    }
+
+    sb_time_axis_set_origin_msec(&new_time_axis, origin_msec);
     
     // Add finite segments
     for (entry_index = 0; entry_index < num_entries; entry_index++) {
@@ -409,7 +447,7 @@ exit:
         sb_time_axis_swap(time_axis, &new_time_axis);
         
         // Add log entries containing the current time axis configuration
-        write_time_axis_log_messages(header->seq_no);
+        write_time_axis_log_messages(header->seq_no, header->origin_msec);
     }
     
     // Clean up the time axis that we do not need any more

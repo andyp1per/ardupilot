@@ -485,7 +485,7 @@ public:
 
     // Writes a sequence of log messages containing a representation of the current time
     // axis
-    void write_time_axis_log_messages(uint8_t seq_no);
+    void write_time_axis_log_messages(uint8_t seq_no, uint64_t origin_msec);
 
     static const struct AP_Param::GroupInfo var_info[];
 

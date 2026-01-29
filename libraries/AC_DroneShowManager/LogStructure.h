@@ -84,7 +84,7 @@ struct PACKED log_DroneShowEvent {
 // @Field: Seq: Sequence number of the time axis configuration
 // @Field: Scene: Index of the scene that this entry refers to
 // @Field: Index: Index of the time axis entry in this scene
-// @Field: Origin: Origin time of the scene in milliseconds; filled only for the first entry of the scene
+// @Field: Origin: Number of milliseconds elapsed since the UNIX epoch at the time when the show clock is at 00:00,
 // @Field: Duration: Duration of the time axis entry in milliseconds
 // @Field: IR: Initial rate of the time axis entry (1 = real time, 0.5 = half speed, 0 = standstill, etc.)
 // @Field: FR: Final rate of the time axis entry (1 = real time, 0.5 = half speed, 0 = standstill, etc.)
@@ -94,7 +94,7 @@ struct PACKED log_TimeAxisEntry {
     uint8_t seq_no;
     uint8_t scene;
     uint8_t index;
-    int32_t origin_ms;
+    uint64_t origin_ms;
     uint32_t duration_ms;
     float initial_rate;
     float final_rate;
@@ -108,4 +108,4 @@ struct PACKED log_TimeAxisEntry {
     { LOG_DRONE_SHOW_EVENT_MSG, sizeof(log_DroneShowEvent),              \
       "SBEV", "QiBBIB", "TimeUS,ClockMS,Type,Subtype,Payload,Result", "ss----", "FC----" }, \
     { LOG_TIME_AXIS_ENTRY_MSG, sizeof(log_TimeAxisEntry),               \
-      "SBTA", "QBBBiIff", "TimeUS,Seq,Scene,Index,Origin,Duration,IR,FR", "s---ss--", "F---CC--" }
+      "SBTA", "QBBBQIff", "TimeUS,Seq,Scene,Index,Origin,Duration,IR,FR", "s---ss--", "F---CC--" }

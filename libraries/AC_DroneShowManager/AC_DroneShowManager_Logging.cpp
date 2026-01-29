@@ -88,7 +88,7 @@ void AC_DroneShowManager::write_show_event_log_message(
 }
 
 // Write a sequence of log messages representing the state of the current time axis
-void AC_DroneShowManager::write_time_axis_log_messages(uint8_t seq_no)
+void AC_DroneShowManager::write_time_axis_log_messages(uint8_t seq_no, uint64_t origin_msec)
 {
     size_t i, j, num_scenes, num_segments;
     sb_screenplay_scene_t* scene;
@@ -114,8 +114,9 @@ void AC_DroneShowManager::write_time_axis_log_messages(uint8_t seq_no)
         if (time_axis == nullptr) {
             break;
         }
-
-        pkt.origin_ms = time_axis->origin_msec;
+        
+        // time_axis->origin_msec was transformed; we need the original value
+        pkt.origin_ms = origin_msec;
         
         num_segments = sb_time_axis_num_segments(time_axis);
         for (j = 0; j < num_segments; j++) {
