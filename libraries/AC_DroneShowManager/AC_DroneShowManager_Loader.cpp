@@ -75,6 +75,7 @@ bool AC_DroneShowManager::_load_show_file_from_storage()
     // Clear any previously loaded show, rewind the clock to zero and free up
     // any memory used by the previously loaded show
     sb_screenplay_clear(&_screenplay);
+    sb_screenplay_scene_clear_contents(&_main_show_scene);
     sb_show_controller_update_time_msec(&_show_controller, 0);
     if (_show_data)
     {
@@ -217,6 +218,13 @@ bool AC_DroneShowManager::_load_show_file_from_storage()
         // move ownership of the show data to the class member
         _show_data = show_data;
         show_data = nullptr;
+        
+        // Update the main show scene from the first (and only) scene of the screenplay
+        sb_screenplay_scene_t* first_scene = sb_screenplay_get_scene_ptr(&_screenplay, 0);
+        if (first_scene)
+        {
+            sb_screenplay_scene_update_contents_from(&_main_show_scene, first_scene);
+        }
     }
     else
     {

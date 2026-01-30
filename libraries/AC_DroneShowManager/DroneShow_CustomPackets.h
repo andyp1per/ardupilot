@@ -114,17 +114,22 @@ namespace CustomPackets {
         // Sequence number; used to filter duplicates.
         uint8_t seq_no;
         
-        // Number of time axis segments included in this packet, minus one.
-        uint8_t num_segments_minus_one;
-        
-        // Reserved byte; must be zero.
-        uint8_t reserved;
+        // Number of scenes in the time axia configuration.
+        uint8_t num_scenes;
+    } time_axis_config_header_t;
+    
+    typedef struct PACKED {
+        // Number of finite time axis segments in the scene.
+        uint8_t num_entries;
         
         // Number of milliseconds since the UNIX epoch at the time when the show
-        // clock is at 00:00, assuming that it runs in real-time until the start
-        // of the first segment.
+        // clock of this scene is at 00:00.
         uint64_t origin_msec;
-    } time_axis_config_header_t;
+        
+        // Scene identifier; specifies whether the scene is the main show or a
+        // coordinated return-to-home scene.
+        uint16_t scene_id;
+    } time_axis_config_scene_header_t;
     
     typedef struct PACKED {
         // Initial rate of the time axis segment, scaled to the [0; 65535] range.
@@ -135,7 +140,7 @@ namespace CustomPackets {
         
         // Duration of the time axis segment, in milliseconds.
         uint32_t duration_msec;
-    } time_axis_config_entry_t;
+    } time_axis_config_scene_entry_t;
     
     typedef struct PACKED {
         // Initial rate of the last time axis segment, scaled to the [0; 65535] range.

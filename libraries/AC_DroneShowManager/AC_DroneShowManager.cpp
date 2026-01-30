@@ -20,6 +20,7 @@
 #include "DroneShow_Constants.h"
 #include "DroneShowLEDFactory.h"
 #include "DroneShowPyroDeviceFactory.h"
+#include "skybrush/refcount.h"
 
 extern const AP_HAL::HAL &hal;
 
@@ -58,8 +59,9 @@ AC_DroneShowManager::AC_DroneShowManager() :
     ok &= _trajectory_stats != nullptr;
     ok &= (sb_trajectory_stats_init(_trajectory_stats) == SB_SUCCESS);
     ok &= (sb_screenplay_init(&_screenplay) == SB_SUCCESS);
+    ok &= (sb_screenplay_scene_init(&_main_show_scene) == SB_SUCCESS);
     ok &= (sb_show_controller_init(&_show_controller, &_screenplay) == SB_SUCCESS);
-
+    
     _init_ok = ok;
 
     // Don't call _update_rgb_led_instance() or _update_pyro_device_instance()
@@ -73,6 +75,7 @@ AC_DroneShowManager::~AC_DroneShowManager()
 
     sb_show_controller_destroy(&_show_controller);
     sb_screenplay_destroy(&_screenplay);
+    SB_DECREF_STATIC(&_main_show_scene);
 }
 
 void AC_DroneShowManager::early_init()
@@ -194,6 +197,8 @@ bool AC_DroneShowManager::get_current_guided_mode_command_to_send(
     float yaw_cd = default_yaw_cd;
     float yaw_rate_cd_s = 0;
     
+    return false;
+
     if (!get_desired_global_position_at_seconds(elapsed, loc))
     {
         // unable to get desired position, this should not have happened

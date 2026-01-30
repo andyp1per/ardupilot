@@ -87,21 +87,25 @@ void AC_DroneShowManager::write_show_event_log_message(
     AP::logger().WriteBlock(&pkt, sizeof(pkt));
 }
 
-// Write a sequence of log messages representing the state of the current time axis
-void AC_DroneShowManager::write_time_axis_log_messages(uint8_t seq_no, uint64_t origin_msec)
+// Write a sequence of log messages representing the state of the screenplay
+void AC_DroneShowManager::write_screenplay_log_messages(uint8_t seq_no, sb_screenplay_t* screenplay)
 {
     size_t i, j, num_scenes, num_segments;
     sb_screenplay_scene_t* scene;
     sb_time_axis_t* time_axis;
     const sb_time_segment_t* segment;
     
-    struct log_TimeAxisEntry pkt {
-        LOG_PACKET_HEADER_INIT(LOG_TIME_AXIS_ENTRY_MSG),
+    struct log_ScreenplayEntry pkt {
+        LOG_PACKET_HEADER_INIT(LOG_SCREENPLAY_ENTRY_MSG),
         time_us         : AP_HAL::micros64(),
         seq_no          : seq_no,
     };
     
-    num_scenes = sb_screenplay_size(&_screenplay);
+    if (screenplay == NULL) {
+        screenplay = &_screenplay;
+    }
+
+    num_scenes = sb_screenplay_size(screenplay);
     for (i = 0; i < num_scenes; i++) {
         if (i > 255) {
             break;   // too many scenes
@@ -109,14 +113,13 @@ void AC_DroneShowManager::write_time_axis_log_messages(uint8_t seq_no, uint64_t 
 
         pkt.scene = static_cast<uint8_t>(i);
         
-        scene = sb_screenplay_get_scene_ptr(&_screenplay, i);
+        scene = sb_screenplay_get_scene_ptr(screenplay, i);
         time_axis = scene ? sb_screenplay_scene_get_time_axis(scene) : nullptr;
         if (time_axis == nullptr) {
             break;
         }
         
-        // time_axis->origin_msec was transformed; we need the original value
-        pkt.origin_ms = origin_msec;
+        pkt.origin_ms = time_axis->origin_msec;
         
         num_segments = sb_time_axis_num_segments(time_axis);
         for (j = 0; j < num_segments; j++) {

@@ -6,7 +6,7 @@
     LOG_DRONE_SHOW_MSG, \
     LOG_FENCE_STATUS_MSG, \
     LOG_DRONE_SHOW_EVENT_MSG, \
-    LOG_TIME_AXIS_ENTRY_MSG
+    LOG_SCREENPLAY_ENTRY_MSG
 
 // @LoggerMessage: SHOW
 // @Description: Drone show mode information
@@ -78,8 +78,8 @@ struct PACKED log_DroneShowEvent {
     uint8_t result;
 };
 
-// @LoggerMessage: SBTA
-// @Description: Skybrush time axis entry log
+// @LoggerMessage: SBSP
+// @Description: Skybrush screenplay log
 // @Field: TimeUS: Time since system startup
 // @Field: Seq: Sequence number of the time axis configuration
 // @Field: Scene: Index of the scene that this entry refers to
@@ -88,7 +88,7 @@ struct PACKED log_DroneShowEvent {
 // @Field: Duration: Duration of the time axis entry in milliseconds
 // @Field: IR: Initial rate of the time axis entry (1 = real time, 0.5 = half speed, 0 = standstill, etc.)
 // @Field: FR: Final rate of the time axis entry (1 = real time, 0.5 = half speed, 0 = standstill, etc.)
-struct PACKED log_TimeAxisEntry {
+struct PACKED log_ScreenplayEntry {
     LOG_PACKET_HEADER;
     uint64_t time_us;
     uint8_t seq_no;
@@ -107,5 +107,5 @@ struct PACKED log_TimeAxisEntry {
       "FNCS", "QBBHBBH", "TimeUS,GeoEn,GeoB,GeoCnt,HardB,BubbleB,BubbleCnt", "s------", "F------" }, \
     { LOG_DRONE_SHOW_EVENT_MSG, sizeof(log_DroneShowEvent),              \
       "SBEV", "QiBBIB", "TimeUS,ClockMS,Type,Subtype,Payload,Result", "ss----", "FC----" }, \
-    { LOG_TIME_AXIS_ENTRY_MSG, sizeof(log_TimeAxisEntry),               \
-      "SBTA", "QBBBQIff", "TimeUS,Seq,Scene,Index,Origin,Duration,IR,FR", "s---ss--", "F---CC--" }
+    { LOG_SCREENPLAY_ENTRY_MSG, sizeof(log_ScreenplayEntry),             \
+      "SBSP", "QBBBQIff", "TimeUS,Seq,Scene,Index,Origin,Duration,IR,FR", "s---ss--", "F---CC--" }

@@ -6,6 +6,10 @@
 #include "DroneShow_Constants.h"
 #include "DroneShow_CustomPackets.h"
 #include "DroneShowPyroDevice.h"
+#include "include/mavlink/v2.0/all/mavlink.h"
+#include "skybrush/screenplay.h"
+
+static bool uint64_sub_safe(uint64_t a, uint64_t b, int32_t* result);
 
 MAV_RESULT AC_DroneShowManager::handle_command_int_packet(const mavlink_command_int_t &packet)
 {
@@ -317,30 +321,34 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
 {
     static uint16_t previous_seq_no = 0xFFFF;   // 0xFFFF is never a valid sequence number
     CustomPackets::time_axis_config_header_t* header;
-    CustomPackets::time_axis_config_entry_t* entry;
+    CustomPackets::time_axis_config_scene_header_t* scene_header;
+    CustomPackets::time_axis_config_scene_entry_t* entry;
     CustomPackets::time_axis_config_trailer_t* trailer;
     int32_t origin_msec;
-    uint8_t num_entries, entry_index;
+    uint8_t num_scenes, num_entries, scene_index, entry_index;
+    uint8_t *ptr, *end;
     sb_error_t retval;
+    sb_screenplay_t new_screenplay;
     sb_screenplay_scene_t* scene;
     sb_time_axis_t* time_axis;
-    sb_time_axis_t new_time_axis;
     sb_time_segment_t segment;
-    
+    bool success;
+
     if (length < sizeof(CustomPackets::time_axis_config_header_t) + sizeof(CustomPackets::time_axis_config_trailer_t)) {
-        // Packet too short
+        // Packet too short - even with no scenes the packet must be at least this long
         return false;
     }
 
     header = static_cast<CustomPackets::time_axis_config_header_t*>(data);
-    num_entries = header->num_segments_minus_one;   // this is correct, last segment is in trailer
+    num_scenes = header->num_scenes;
     
     if (length < (
         sizeof(CustomPackets::time_axis_config_header_t) +
-        num_entries * sizeof(CustomPackets::time_axis_config_entry_t) +
+        num_scenes * sizeof(CustomPackets::time_axis_config_scene_header_t) +
         sizeof(CustomPackets::time_axis_config_trailer_t)
     )) {
-        // Length mismatch
+        // Packet too short - even with no segments in each of the scenes the packet
+        // must be at least this long
         return false;
     }
     
@@ -351,107 +359,192 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     
     // Remember the sequence number
     previous_seq_no = header->seq_no;
-
-    // Find the time axis to manipulate
-    scene = sb_screenplay_get_scene_ptr(&_screenplay, 0);
-    time_axis = scene ? sb_screenplay_scene_get_time_axis(scene) : nullptr;
-    if (time_axis == nullptr) {
-        return false;
-    }
     
     // We need to be extra careful here; if an error happens while we are setting up the
-    // new time axis, we want to leave the existing time axis intact. Therefore, we first
-    // create a new time axis, and then swap it with the existing one only if everything
+    // new scenes, we want to leave the existing screenplay intact. Therefore, we first
+    // create a new screenplay, and then swap it with the existing one only if everything
     // went well.
-    if (sb_time_axis_init(&new_time_axis) != SB_SUCCESS) {
+    if (sb_screenplay_init(&new_screenplay) != SB_SUCCESS) {
         return false;
     }
     
-    // First, we set the origin of the new time axis. This is a delicate process as we
-    // need to watch out for all sorts of overflows.
-    {
-        uint64_t epoch_msec;
-        uint64_t diff;
-        int sign;
+    // From this point onwards we need to clean up the new screenplay if anything
+    // goes wrong, so we can't return directly -- we need to jump to the exit label
+    // instead. We use the 'success' variable to decide whether everything went well
+    // (in which case we need to swap the new screenplay with the old one and destroy
+    // the old one) or something went wrong (in which case we just destroy the new
+    // screenplay and leave the old one intact).
+    success = false;
+    
+    // Header processed; now process each of the scenes
+    ptr = reinterpret_cast<uint8_t*>(data);
+    end = ptr + length;
+    ptr += sizeof(CustomPackets::time_axis_config_header_t);
+    end -= sizeof(CustomPackets::time_axis_config_trailer_t);
 
-        if (uses_gps_time_for_show_start()) {
-            // When using GPS time for show start, the origin is assumed to be an absolute
-            // time in milliseconds since the UNIX epoch
-            epoch_msec = _start_time_unix_usec / 1000;
-        } else {
-            // When using the internal clock for show start, the origin is assumed to be
-            // relative to the show start time. This is not really recommended but we need
-            // to handle it nevertheless.
-            epoch_msec = 0;
-        }
-
-        if (header->origin_msec >= epoch_msec) {
-            diff = header->origin_msec - epoch_msec;
-            sign = 1;
-        } else {
-            diff = epoch_msec - header->origin_msec;
-            sign = -1;
-        }
-
-        if (diff <= std::numeric_limits<int32_t>::max()) {
-            origin_msec = sign * static_cast<int32_t>(diff);
-        } else {
-            // Overflow
-            retval = SB_EINVAL;
+    for (scene_index = 0; scene_index < num_scenes; scene_index++) {
+        if (ptr + sizeof(CustomPackets::time_axis_config_scene_header_t) > end) {
+            // Packet too short
             goto exit;
         }
-    }
-
-    sb_time_axis_set_origin_msec(&new_time_axis, origin_msec);
-    
-    // Add finite segments
-    for (entry_index = 0; entry_index < num_entries; entry_index++) {
-        entry = reinterpret_cast<CustomPackets::time_axis_config_entry_t*>(
-            reinterpret_cast<uint8_t*>(data) +
-            sizeof(CustomPackets::time_axis_config_header_t) +
-            entry_index * sizeof(CustomPackets::time_axis_config_entry_t)
-        );
-
-        if (entry->duration_msec == std::numeric_limits<uint32_t>::max()) {
-            // Invalid duration for a finite segment
-            retval = SB_EINVAL;
+        
+        scene_header = reinterpret_cast<CustomPackets::time_axis_config_scene_header_t*>(ptr);
+        ptr += sizeof(CustomPackets::time_axis_config_scene_header_t);
+        
+        // Add a new scene to the screenplay
+        retval = sb_screenplay_append_new_scene(&new_screenplay, &scene);
+        if (retval != SB_SUCCESS) {
+            // Could not add new scene
+            goto exit;
+        }
+        
+        // Check the scene ID and figure out whether this scene is for the main show
+        // or for a coordinated RTH plan
+        if (scene_header->scene_id == 0) {
+            // Main show
+            sb_screenplay_scene_update_contents_from(scene, &_main_show_scene);
         } else {
+            // Coordinated RTH plan; we do not support coordinated RTH plans
+            // in time axis configuration packets yet
+            goto exit;
+        }
+
+        num_entries = scene_header->num_entries;
+    
+        // Find the time axis to manipulate
+        time_axis = scene ? sb_screenplay_scene_get_time_axis(scene) : nullptr;
+        if (time_axis == nullptr) {
+            // Could not get time axis; this should not happen but let's be defensive
+            goto exit;
+        }
+        
+        // First, we set the origin of the new time axis
+        {
+            uint64_t epoch_msec;
+    
+            if (uses_gps_time_for_show_start()) {
+                // When using GPS time for show start, the origin is assumed to be an absolute
+                // time in milliseconds since the UNIX epoch
+                epoch_msec = _start_time_unix_usec / 1000;
+            } else {
+                // When using the internal clock for show start, the origin is assumed to be
+                // relative to the show start time. This is not really recommended but we need
+                // to handle it nevertheless.
+                epoch_msec = 0;
+            }
+            
+            if (!uint64_sub_safe(scene_header->origin_msec, epoch_msec, &origin_msec)) {
+                // Overflow or underflow
+                goto exit;
+            }
+        }
+    
+        sb_time_axis_set_origin_msec(time_axis, origin_msec);
+        
+        // Add segments
+        for (entry_index = 0; entry_index < num_entries; entry_index++) {
+            if (ptr + sizeof(CustomPackets::time_axis_config_scene_entry_t) > end) {
+                // Packet too short
+                goto exit;
+            }
+            
+            entry = reinterpret_cast<CustomPackets::time_axis_config_scene_entry_t*>(ptr);
+            ptr += sizeof(CustomPackets::time_axis_config_scene_entry_t);
+    
+            if (entry->duration_msec == std::numeric_limits<uint32_t>::max()) {
+                // Invalid duration for a finite segment
+                goto exit;
+            }
+            
             segment = sb_time_segment_make(
                 entry->duration_msec,
                 entry->initial_rate_scaled / 65535.0f,
                 entry->final_rate_scaled / 65535.0f
             );
-            retval = sb_time_axis_append_segment(&new_time_axis, segment);
+            if (sb_time_axis_append_segment(time_axis, segment) != SB_SUCCESS) {
+                goto exit;
+            }
         }
-
-        if (retval != SB_SUCCESS) {
-            goto exit;
-        }
+        
+        // Finally, set total duration of scene to be the duration of its segments on
+        // the time axis
+        sb_screenplay_scene_set_duration_msec(scene, sb_time_axis_get_total_duration_msec(time_axis));
     }
     
-    // Add final, infinite segment
-    trailer = reinterpret_cast<CustomPackets::time_axis_config_trailer_t*>(
-        reinterpret_cast<uint8_t*>(data) +
-        sizeof(CustomPackets::time_axis_config_header_t) +
-        num_entries * sizeof(CustomPackets::time_axis_config_entry_t)
-    );
+    // Add final, infinite segment to last scene. If there are no scenes, add a new
+    // scene first.
+    if (sb_screenplay_size(&new_screenplay) == 0) {
+        retval = sb_screenplay_append_new_scene(&new_screenplay, &scene);
+        if (retval != SB_SUCCESS) {
+            // Could not add new scene
+            goto exit;
+        }
+    } else {
+        scene = sb_screenplay_get_scene_ptr(
+            &new_screenplay,
+            sb_screenplay_size(&new_screenplay) - 1
+        );
+    }
+
+    time_axis = scene ? sb_screenplay_scene_get_time_axis(scene) : nullptr;
+    if (time_axis == nullptr) {
+        // Could not get time axis; this should not happen but let's be defensive
+        goto exit;
+    }
+
+    trailer = reinterpret_cast<CustomPackets::time_axis_config_trailer_t*>(ptr);
     segment = sb_time_segment_make_constant_rate(
         std::numeric_limits<uint32_t>::max(),
         trailer->initial_rate_scaled / 65535.0f
     );
-    retval = sb_time_axis_append_segment(&new_time_axis, segment);
+    if (sb_time_axis_append_segment(time_axis, segment) == SB_SUCCESS) {
+        sb_screenplay_scene_set_duration_msec(scene, sb_time_axis_get_total_duration_msec(time_axis));
+        success = true;
+    }
 
 exit:
-    if (retval == SB_SUCCESS) {
-        // Swap the new time axis with the existing one
-        sb_time_axis_swap(time_axis, &new_time_axis);
+    if (success) {
+        // Clean up the old screenplay and replace it with the new one
+        sb_screenplay_destroy(&_screenplay);
+        _screenplay = new_screenplay;
         
-        // Add log entries containing the current time axis configuration
-        write_time_axis_log_messages(header->seq_no, header->origin_msec);
+        // Add log entries containing the current screenplay
+        write_screenplay_log_messages(header->seq_no, NULL);
+    } else {
+        // Clean up the new screenplay that we tried to prepare
+        sb_screenplay_destroy(&new_screenplay);
     }
     
-    // Clean up the time axis that we do not need any more
-    sb_time_axis_destroy(&new_time_axis);
-    
-    return retval == SB_SUCCESS;
+    return success;
+}
+
+/**
+ * @brief Safely compute the difference of two uint64_t values and store the result
+ *        in an int32_t variable.
+ * 
+ * @param a The minuend
+ * @param b The subtrahend
+ * @param result Pointer to the variable where the result will be stored
+ * @return true if the subtraction was successful and the result fits in int32_t;
+ *         false if an overflow or underflow occurred or the result does not fit
+ */
+static bool uint64_sub_safe(uint64_t a, uint64_t b, int32_t* result)
+{
+    if (a >= b) {
+        uint64_t diff = a - b;
+        if (diff <= static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+            *result = static_cast<int32_t>(diff);
+            return true;
+        } else {
+            return false;
+        }
+    } else {
+        uint64_t diff = b - a;
+        if (diff <= static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+            *result = -static_cast<int32_t>(diff);
+            return true;
+        } else {
+            return false;
+        }
+    }
 }

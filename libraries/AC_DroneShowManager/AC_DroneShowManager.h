@@ -477,15 +477,15 @@ public:
     // Writes a message containing a summary of the gefence status into the log
     void write_fence_status_log_message() const;
 
+    // Writes a sequence of log messages containing a representation of the current time
+    // axis
+    void write_screenplay_log_messages(uint8_t seq_no, sb_screenplay_t* screenplay = NULL);
+
     // Writes a message holding the status of the drone show subsystem into the log
     void write_show_status_log_message() const;
 
     // Writes a message logging the execution of an event from the show file into the log
     void write_show_event_log_message(const struct sb_event_s *event, DroneShowEventResult result) const;
-
-    // Writes a sequence of log messages containing a representation of the current time
-    // axis
-    void write_time_axis_log_messages(uint8_t seq_no, uint64_t origin_msec);
 
     static const struct AP_Param::GroupInfo var_info[];
 
@@ -641,6 +641,12 @@ private:
     // However, the screenplay may be extended with an additional return-to-launch
     // chapter if a collective RTL operation is scheduled during the show.
     sb_screenplay_t _screenplay;
+    
+    // Reference scene containing the trajectory, light program and yaw program of
+    // the show. This is needed to ensure that we always have references to the
+    // original data, even if the screenplay is modified in a way that it does not
+    // refer to the loaded show any more.
+    sb_screenplay_scene_t _main_show_scene;
 
     // Controller that manages the trajectory player, the light program player,
     // the yaw player, the event list and the time axis.
