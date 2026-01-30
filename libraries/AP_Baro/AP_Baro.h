@@ -6,6 +6,7 @@
 #include <AP_Param/AP_Param.h>
 #include <AP_Math/AP_Math.h>
 #include <Filter/DerivativeFilter.h>
+#include <Filter/LowPassFilter.h>
 #include <AP_MSP/msp.h>
 #include <AP_ExternalAHRS/AP_ExternalAHRS.h>
 
@@ -354,6 +355,9 @@ private:
 #endif
 #if AP_BARO_THST_COMP_ENABLED
     float thrust_pressure_correction(uint8_t instance);
+    LowPassFilterFloat _thrust_filter;      // low-pass filter for thrust compensation
+    uint32_t _thrust_filter_last_update_us; // last update time for filter dt calculation
+    AP_Float _thst_filt_cutoff;             // thrust filter cutoff frequency in Hz
 #endif
     // Logging function
     void Write_Baro(void);

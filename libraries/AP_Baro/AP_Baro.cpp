@@ -264,6 +264,14 @@ const AP_Param::GroupInfo AP_Baro::var_info[] = {
     // @Range: -300 300
     // @User: Advanced
     AP_GROUPINFO("1_THST_SCALE", 25, AP_Baro, sensors[0].mot_scale, 0),
+
+    // @Param: 1_THST_FILT
+    // @DisplayName: Thrust compensation filter cutoff
+    // @Description: Low-pass filter cutoff frequency for thrust compensation. This smooths the throttle input to prevent rapid baro altitude changes during throttle transients. Set to 0 to disable filtering.
+    // @Range: 0 10
+    // @Units: Hz
+    // @User: Advanced
+    AP_GROUPINFO("1_THST_FILT", 26, AP_Baro, _thst_filt_cutoff, 1.0),
 #endif  // AP_BARO_THST_COMP_ENABLED
     AP_GROUPEND
 };
@@ -1005,7 +1013,7 @@ void AP_Baro::update_field_elevation(bool force)
 }
 
 #if AP_BARO_THST_COMP_ENABLED
-// scale the baro linearly with thrust
+// scale the baro linearly with thrust, with optional low-pass filtering
 float AP_Baro::thrust_pressure_correction(uint8_t instance)
 {
 #if APM_BUILD_TYPE(APM_BUILD_ArduPlane) || APM_BUILD_COPTER_OR_HELI
@@ -1013,8 +1021,27 @@ float AP_Baro::thrust_pressure_correction(uint8_t instance)
     if (motors == nullptr) {
          return 0.0f;
     }
-    const float motors_throttle = MAX(0,motors->get_throttle_out());
-    return sensors[instance].mot_scale * motors_throttle;
+    const float motors_throttle = MAX(0, motors->get_throttle_out());
+
+    // apply low-pass filter to throttle if enabled
+    float filtered_throttle = motors_throttle;
+    const float cutoff_freq = _thst_filt_cutoff.get();
+    if (cutoff_freq > 0) {
+        const uint32_t now_us = AP_HAL::micros();
+        if (_thrust_filter_last_update_us != 0) {
+            const float dt = (now_us - _thrust_filter_last_update_us) * 1.0e-6f;
+            if (dt > 0 && dt < 1.0f) {  // sanity check dt
+                _thrust_filter.set_cutoff_frequency(cutoff_freq);
+                filtered_throttle = _thrust_filter.apply(motors_throttle, dt);
+            }
+        } else {
+            // first call - initialize filter
+            _thrust_filter.reset(motors_throttle);
+        }
+        _thrust_filter_last_update_us = now_us;
+    }
+
+    return sensors[instance].mot_scale * filtered_throttle;
 #else
     return 0.0f;
 #endif
