@@ -1,0 +1,69 @@
+# hw definition file for processing by chibios_hwdef.py
+# for ABSI Aerospace & Defense Flight Controller bootloader
+
+# MCU class and specific type
+MCU STM32H7xx STM32H743xx
+
+# board ID for firmware
+APJ_BOARD_ID AP_HW_ABSIFC
+
+# crystal frequency - 8MHz external oscillator
+OSCILLATOR_HZ 8000000
+
+# MCU clock rate
+MCU_CLOCKRATE_MHZ 480
+
+# flash size
+FLASH_SIZE_KB 2048
+
+# bootloader is in first flash sector
+FLASH_RESERVE_START_KB 0
+# reserve 128k for bootloader
+FLASH_BOOTLOADER_LOAD_KB 128
+
+# ChibiOS system timer
+STM32_ST_USE_TIMER 5
+
+# USB
+PA11 OTG_FS_DM OTG1
+PA12 OTG_FS_DP OTG1
+
+# USB OTG ID
+PA10 OTG_FS_ID OTG1
+
+# order of UARTs
+SERIAL_ORDER OTG1
+
+# LEDs
+PE10 LED_BOOTLOADER OUTPUT LOW
+PE15 LED_ACTIVITY OUTPUT LOW
+define HAL_LED_ON 0
+
+# UART for serial bootloader (GPS port on UART7)
+PE7 UART7_RX UART7
+PE8 UART7_TX UART7
+
+define HAL_USE_SERIAL TRUE
+
+# support flashing from SD card
+
+# ChibiOS config for FATFS
+define CH_CFG_USE_MEMCORE 1
+define CH_CFG_USE_HEAP 1
+define CH_CFG_USE_SEMAPHORES 0
+define CH_CFG_USE_MUTEXES 1
+define CH_CFG_USE_DYNAMIC 1
+define CH_CFG_USE_WAITEXIT 1
+define CH_CFG_USE_REGISTRY 1
+
+# microSD on SDMMC2
+PB14 SDMMC2_D0 SDMMC2
+PB15 SDMMC2_D1 SDMMC2
+PB3  SDMMC2_D2 SDMMC2
+PB4  SDMMC2_D3 SDMMC2
+PD6  SDMMC2_CK SDMMC2
+PD7  SDMMC2_CMD SDMMC2
+
+define FATFS_HAL_DEVICE SDCD2
+define HAL_OS_FATFS_IO 1
+define AP_BOOTLOADER_FLASH_FROM_SD_ENABLED 1
