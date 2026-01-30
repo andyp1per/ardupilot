@@ -2149,3 +2149,103 @@ if (gndeffect_state.takeoff_expected && (tnow_ms-gndeffect_state.takeoff_time_ms
 - `AP_NavEKF3_core.cpp:750` — Current `if (motorsArmed)` gate to modify
 - `AP_NavEKF3_PosVelFusion.cpp:1136-1144` — Reference for how ground effect gating works
 - `AP_NavEKF3_core.h` — May need to add `dal` include or accessor for ground effect flags
+
+### logtd1.bin Analysis — Baro Propwash and BARO_THST_SCALE
+
+**Log file:** logtd1.bin (user-provided log from optical flow copter)
+
+**Configuration:**
+- ACC_ZBIAS_LEARN = 3 (learn+save + use)
+- INS_ACC_VRFB_Z = 0.0567 m/s² (previously learned bias)
+- TKOFF_GNDEFF_ALT = 1.0 m
+- EK3_RNG_USE_HGT = -1 (disabled — rangefinder not used for height)
+- Optical flow navigation (EK3_SRC1_VELXY = 5)
+
+**Flight profile:** 73 second hover at ~2m actual altitude (per rangefinder)
+
+#### Key finding: Severe baro propwash error
+
+| Phase | Throttle | Baro | RFND | Comment |
+|-------|----------|------|------|---------|
+| Pre-arm (motors off) | 0.00 | -0.6m | 0.01m | Correct |
+| Motors spinning (on ground) | 0.08 | **-3.1m** | 0.02m | Propwash pushes air DOWN, increasing pressure |
+| Peak propwash | 0.37 | **-6.2m** | 0.01m | Maximum pressure from propwash |
+| Liftoff transition | 0.37 | **+4.2m** | 0.06m | Exits propwash zone, pressure normalizes |
+| Stable hover | 0.38 | +7.0m | 2.2m | **+4.8m error locked in** |
+
+**Root cause:** When the copter lifts off, it exits the propwash pressure zone. This causes a **12m altitude jump in <0.5 seconds** (from -6m to +6m). The EKF cannot track such a rapid transient.
+
+#### Ground effect IS working correctly
+
+During ground effect (takeoff_expected=1), the EKF correctly ignores the baro:
+```
+Time   GndEff  Baro    EKF_Alt  Comment
+12.5s    1     +4.2m   -0.1m    EKF ignoring baro jump
+14.0s    1     +7.8m   +0.0m    EKF still ignoring
+16.0s    1     +7.4m   +0.8m    EKF slowly tracking
+18.0s    0     +7.2m   +7.1m    Ground effect clears → EKF accepts baro
+```
+
+**The problem:** When ground effect finally clears, the EKF has no choice but to accept the (wrong) baro reading, because EK3_RNG_USE_HGT=-1 means the rangefinder isn't providing height information.
+
+#### BARO_THST_SCALE can fix this
+
+**Key insight:** Ground effect protects the takeoff transient. BARO_THST_SCALE only needs to work well during stable flight.
+
+**Calculation for this copter:**
+- Hover throttle: 0.392
+- Baro altitude: 7.0m
+- RFND altitude: 2.2m
+- Error: +4.8m
+
+```
+BARO1_THST_SCALE = -(error_m × 12 Pa/m) / throttle
+                 = -(4.8 × 12) / 0.392
+                 = -147 Pa
+```
+
+**Verification across throttle levels:**
+| Throttle | Predicted Correction | Observed Error | Match |
+|----------|---------------------|----------------|-------|
+| 0.35-0.38 | +4.61m | +4.87m | ✓ |
+| 0.38-0.40 | +4.79m | +4.76m | ✓ |
+| 0.40-0.45 | +4.93m | +5.07m | ✓ |
+
+**Result with BARO1_THST_SCALE = -147:**
+| Phase | Throttle | Raw Baro | Correction | Result |
+|-------|----------|----------|------------|--------|
+| Ground (motors off) | 0.00 | 0m | 0m | 0m ✓ |
+| Ground (motors on) | 0.08 | -3m | -1m | -4m (ignored by GndEff) |
+| **Hover** | 0.38 | +7m | **-5m** | **+2m ✓** (matches RFND!) |
+
+#### Alternative: Enable rangefinder for height
+
+Set `EK3_RNG_USE_HGT=70` (use rangefinder below 70% of max range):
+- RNGFND1_MAX_CM = 700 → uses RFND below 4.9m
+- Combined with `TKOFF_GNDEFF_TMO=3` keeps ground effect active during propwash transient
+- EKF will blend RFND into height estimate, overriding corrupted baro
+- When ground effect clears, EKF is already tracking correct altitude via rangefinder
+
+#### Why TKOFF_GNDEFF_TMO alone won't help
+
+Without rangefinder height fusion (`EK3_RNG_USE_HGT=-1`):
+- TKOFF_GNDEFF_TMO keeps ground effect active longer ✓
+- But when ground effect clears, EKF still only has corrupted baro to trust ✗
+- No "correct" altitude reference exists
+
+With rangefinder height fusion (`EK3_RNG_USE_HGT=70`):
+- TKOFF_GNDEFF_TMO keeps ground effect active during propwash ✓
+- Rangefinder provides correct altitude reference ✓
+- When ground effect clears, EKF is already at correct altitude ✓
+
+#### Recommendations for this user
+
+**Option A (simple):** `BARO1_THST_SCALE = -147`
+- Directly compensates propwash-induced offset
+- Works because ground effect protects takeoff transient
+- Calibration specific to this airframe
+
+**Option B (robust):** `EK3_RNG_USE_HGT=70` + `TKOFF_GNDEFF_TMO=3`
+- Uses rangefinder as truth source for altitude
+- More robust to varying conditions
+- Requires reliable rangefinder
