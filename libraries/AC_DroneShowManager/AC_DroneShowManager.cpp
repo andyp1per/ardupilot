@@ -196,8 +196,6 @@ bool AC_DroneShowManager::get_current_guided_mode_command_to_send(
     float yaw_cd = default_yaw_cd;
     float yaw_rate_cd_s = 0;
     
-    return false;
-
     if (!get_desired_global_position_at_seconds(elapsed, loc))
     {
         // unable to get desired position, this should not have happened
