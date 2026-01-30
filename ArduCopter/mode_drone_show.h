@@ -113,7 +113,6 @@ private:
     // Sets the stage of the execution to the given value
     void _set_stage(DroneShowModeStage value);
 
-    bool cancel_requested() const;
     int32_t get_default_yaw_cd() const;
     int32_t get_elapsed_time_since_last_home_position_reset_attempt_msec() const;
     int32_t get_elapsed_time_since_last_stage_change_msec() const;

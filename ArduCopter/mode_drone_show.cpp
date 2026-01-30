@@ -73,11 +73,6 @@ bool ModeDroneShow::allows_arming(AP_Arming::Method method) const
     );
 }
 
-bool ModeDroneShow::cancel_requested() const
-{
-    return copter.g2.drone_show_manager.cancel_requested();
-}
-
 // Handles the takeoff command when sent from the GCS. This can be used for
 // testing the takeoff before the show.
 //
@@ -582,10 +577,7 @@ void ModeDroneShow::takeoff_run()
 
     auto_takeoff.run();
 
-    if (cancel_requested()) {
-        // if a cancellation was requested, land immediately
-        landing_start();
-    } else if (!motors->armed()) {
+    if (!motors->armed()) {
         // if the motors are not armed any more, something is wrong so move to the
         // error stage. This typically happens if we crash during takeoff.
         gcs().send_text(MAV_SEVERITY_CRITICAL, "Motors disarmed during takeoff");
@@ -758,10 +750,7 @@ void ModeDroneShow::performing_run()
         copter.mode_guided.run();
     }
 
-    if (cancel_requested()) {
-        // if a cancellation was requested, return to home and then land
-        rtl_start();
-    } else if (!motors->armed()) {
+    if (!motors->armed()) {
         // if the motors are not armed any more, something is wrong so move to the
         // error stage. This typically happens if we crash during a show.
         gcs().send_text(MAV_SEVERITY_CRITICAL, "Motors disarmed during show");

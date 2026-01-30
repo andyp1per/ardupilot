@@ -43,7 +43,6 @@ AC_DroneShowManager::AC_DroneShowManager() :
     _start_time_on_internal_clock_usec(0),
     _start_time_unix_usec(0),
     _trajectory_is_circular(false),
-    _cancel_requested(false),
     _controller_update_delta_msec(1000 / DEFAULT_UPDATE_RATE_HZ),
     _pyro_device(0),
     _rgb_led(0),
@@ -422,7 +421,6 @@ void AC_DroneShowManager::get_distance_from_desired_position(Vector3f& vec) cons
 
 bool AC_DroneShowManager::notify_drone_show_mode_initialized()
 {
-    _cancel_requested = false;
     _update_pyro_device_instance();
     _update_rgb_led_instance();
     _clear_start_time_if_set_by_switch();
@@ -452,7 +450,6 @@ void AC_DroneShowManager::notify_drone_show_mode_entered_stage(DroneShowModeStag
 
 void AC_DroneShowManager::notify_drone_show_mode_exited()
 {
-    _cancel_requested = false;
     _update_pyro_device_instance();
     _update_rgb_led_instance();
     _clear_start_time_if_set_by_switch();
@@ -485,8 +482,6 @@ bool AC_DroneShowManager::schedule_delayed_start_after(uint32_t delay_ms)
 {
     bool success = false;
 
-    _cancel_requested = false;
-
     if (_stage_in_drone_show_mode != DroneShow_WaitForStartTime)
     {
         // We are not in the "wait for start time" phase so we ignore the request
@@ -512,11 +507,6 @@ bool AC_DroneShowManager::schedule_delayed_start_after(uint32_t delay_ms)
     }
 
     return success;
-}
-
-void AC_DroneShowManager::stop_if_running()
-{
-    _cancel_requested = true;
 }
 
 void AC_DroneShowManager::update()

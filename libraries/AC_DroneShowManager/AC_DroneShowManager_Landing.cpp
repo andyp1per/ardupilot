@@ -47,8 +47,6 @@ void AC_DroneShowManager::_clear_start_time_after_landing()
 
 void AC_DroneShowManager::_handle_switch_to_landed_state()
 {
-    _cancel_requested = false;
-
     // Let's not clear the start time; there's not really much point but at
     // least we don't confuse the GCS (not Skybrush but Mission Planner) with
     // a parameter suddenly changing behind its back. This is just a theoretical

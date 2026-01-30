@@ -149,11 +149,6 @@ public:
     // Initializes the drone show subsystem at boot time
     void init(const AC_WPNav* wp_nav);
 
-    // Returns whether the user has asked the drone show manager to cancel the
-    // show as soon as possible. This flag is checked regularly from
-    // mode_drone_show.cpp
-    bool cancel_requested() const { return _cancel_requested; }
-
     // Clears the scheduled start time of the show (but does not cancel the
     // show if it is already running). Returns whether the request was
     // processed.
@@ -460,10 +455,6 @@ public:
     // Returns whether the drone should switch to show mode when authorized to start
     bool should_switch_to_show_mode_when_authorized() const;
 
-    // Asks the drone show manager to cancel the show as soon as possible if
-    // the show is running yet
-    void stop_if_running();
-
     // Updates the state of the LED light on the drone and performs any additional
     // tasks that have to be performed regularly (such as checking for changes
     // in parameter values). This has to be called at 50 Hz, but most of its
@@ -715,11 +706,6 @@ private:
     // drone is slightly misplaced). This is used to avoid modifying the trajectory
     // multiple times when the show is restarted.
     bool _trajectory_modified_for_landing;
-
-    // Flag that is set to true if the user has instructed the drone show manager
-    // to cancel the show as soon as possible. This is checked regularly by
-    // mode_drone_show.cpp
-    bool _cancel_requested;
 
     // The preferred duration between consecutive guided mode commands
     // during the execution of the show. Updated soon after the corresponding
