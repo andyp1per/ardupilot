@@ -1,3 +1,4 @@
+#include "AC_DroneShowManager/AC_DroneShowManager.h"
 #include "Copter.h"
 
 #include <skybrush/colors.h>
@@ -729,32 +730,37 @@ void ModeDroneShow::performing_start()
 // executes the show performance
 void ModeDroneShow::performing_run()
 {
-    static uint32_t last_guided_command = 0;
-    bool exited_mode = 0;
+    static uint32_t last_guided_command_attempted_at = 0;
+    bool should_exit_mode = 0;
     uint32_t now = AP_HAL::millis();
-    uint32_t target_dt = copter.g2.drone_show_manager.get_controller_update_delta_msec();
+    AC_DroneShowManager* show_manager = &copter.g2.drone_show_manager;
+    uint32_t target_dt = show_manager->get_controller_update_delta_msec();
 
-    if (now - last_guided_command >= target_dt) {
+    if (now - last_guided_command_attempted_at >= target_dt) {
         if (!send_guided_mode_command_during_performance()) {
-            // Failed to send guided mode command; try to switch to position
-            // hold instead. This should not happen anyway.
-            gcs().send_text(MAV_SEVERITY_ERROR, "Failed to send guided mode command");
-            loiter_start();
-            exited_mode = 1;
+            // Failed to send guided mode command. The function has set up a neutral
+            // position hold target, so we will log the failure, execute the target and
+            // then switch to position hold mode. (We can't switch now to avoid an
+            // ArduCopter flow_of_control internal error).
+            gcs().send_text(MAV_SEVERITY_ERROR, "Failed to send guided mode command");            
+            should_exit_mode = 1;
         }
-        last_guided_command = now;
-    }
 
-    // call regular guided flight mode run function
-    if (!exited_mode) {
-        copter.mode_guided.run();
+        last_guided_command_attempted_at = now;
     }
+    
+    // call regular guided flight mode run function
+    copter.mode_guided.run();
 
     if (!motors->armed()) {
         // if the motors are not armed any more, something is wrong so move to the
         // error stage. This typically happens if we crash during a show.
         gcs().send_text(MAV_SEVERITY_CRITICAL, "Motors disarmed during show");
         error_start();
+    } else if (should_exit_mode) {
+        // switch to position hold mode because the last attempt to send a guided mode
+        // command failed
+        loiter_start();
     } else if (performing_completed()) {
         // if we have finished the show, check the configured post-show action
         // and switch to RTL, position hold or land
@@ -985,8 +991,9 @@ void ModeDroneShow::notify_start_time_changed()
 bool ModeDroneShow::send_guided_mode_command_during_performance()
 {
     AC_DroneShowManager::GuidedModeCommand command;
+    AC_DroneShowManager* show_manager = &copter.g2.drone_show_manager;
 
-    if (copter.g2.drone_show_manager.get_current_guided_mode_command_to_send(
+    if (show_manager->get_current_guided_mode_command_to_send(
         command, get_default_yaw_cd(),
         _altitude_locked_above_takeoff_altitude
     )) {
@@ -1002,10 +1009,20 @@ bool ModeDroneShow::send_guided_mode_command_during_performance()
             _altitude_locked_above_takeoff_altitude = false;
         }
 
-        copter.g2.drone_show_manager.notify_guided_mode_command_sent(command);
+        show_manager->notify_guided_mode_command_sent(command);
 
         return true;
     } else {
+        Vector3f pos, zero;
+
+        // Send a zero-velocity command to stop the drone -- this is really just
+        // to prevent an internal "flow of control" error before we actually
+        // switch to loiter mode
+        if (show_manager->get_current_relative_position_NED_origin(pos)) {
+            zero.zero();
+            copter.mode_guided.set_destination_posvelaccel(pos, zero, zero);
+        }
+
         return false;
     }
 }

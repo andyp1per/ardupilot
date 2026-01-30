@@ -120,7 +120,7 @@ private:
     void check_changes_in_parameters();
     void notify_authorization_changed();
     void notify_start_time_changed();
-    bool send_guided_mode_command_during_performance();
+    bool send_guided_mode_command_during_performance() WARN_IF_UNUSED;
     bool start_motors_if_not_running() WARN_IF_UNUSED;
     bool try_to_update_home_position();
     bool try_to_start_motors_if_prepared_to_take_off();
