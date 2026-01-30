@@ -1,0 +1,271 @@
+# hw definition file for processing by chibios_hwdef.py
+# for ABSI Aerospace & Defense Flight Controller
+
+# ---------------- MCU & System ----------------
+
+# MCU class and specific type
+MCU STM32H7xx STM32H743xx
+
+# board ID for firmware - See Tools/AP_Bootloader/board_types.txt
+APJ_BOARD_ID AP_HW_ABSIFC
+
+# crystal frequency - 8MHz external oscillator
+OSCILLATOR_HZ 8000000
+
+# MCU clock rate
+MCU_CLOCKRATE_MHZ 480
+
+# flash size
+FLASH_SIZE_KB 2048
+
+# bootloader takes first sector
+FLASH_RESERVE_START_KB 128
+
+# ChibiOS system timer
+STM32_ST_USE_TIMER 5
+define CH_CFG_ST_RESOLUTION 32
+
+# flash storage for parameters
+define HAL_STORAGE_SIZE 32768
+# use last 2 pages for flash storage (H743 has 16 pages of 128k each)
+STORAGE_FLASH_PAGE 14
+
+# enable FAT filesystem
+define HAL_OS_FATFS_IO 1
+
+# ----------------- USB -----------------------
+
+PA11 OTG_FS_DM OTG1
+PA12 OTG_FS_DP OTG1
+
+# ----------------- SWD Debug -----------------
+
+PA13 JTMS-SWDIO SWD
+PA14 JTCK-SWCLK SWD
+
+# ----------------- SPI Bus -------------------
+
+# SPI1 - IMU1 (ICM-45686)
+PA5 SPI1_SCK SPI1
+PA6 SPI1_MISO SPI1
+PA7 SPI1_MOSI SPI1
+
+# SPI4 - IMU2 (ICM-45686)
+PE2 SPI4_SCK SPI4
+PE5 SPI4_MISO SPI4
+PE6 SPI4_MOSI SPI4
+
+# IMU Chip Selects
+PE3 IMU1_CS CS
+PE4 IMU2_CS CS
+
+# ----------------- I2C Bus -------------------
+
+# I2C order - internal sensors first
+I2C_ORDER I2C1 I2C2 I2C4
+
+# I2C1 - Internal sensors (BMP390 barometer)
+PB6 I2C1_SCL I2C1
+PB7 I2C1_SDA I2C1
+
+# I2C2 - GPS/External compass
+PB10 I2C2_SCL I2C2
+PB11 I2C2_SDA I2C2
+
+# I2C4 - PDB interface
+PB8 I2C4_SCL I2C4
+PB9 I2C4_SDA I2C4
+
+# ----------------- CAN Bus -------------------
+
+# CAN1 - External DroneCAN
+PD0 CAN1_RX CAN1
+PD1 CAN1_TX CAN1
+
+# CAN2 - PDB interface
+PB12 CAN2_RX CAN2
+PB13 CAN2_TX CAN2
+
+# CAN silent pin (directly to transceiver STB pin)
+PD3 GPIO_CAN1_SILENT OUTPUT PUSHPULL SPEED_LOW LOW GPIO(70)
+
+# ----------------- UARTs ---------------------
+
+# UART order: natural ordering (SERIALn maps to UARTn where possible)
+SERIAL_ORDER OTG1 USART1 EMPTY USART3 EMPTY UART5 EMPTY UART7 UART8
+
+# USART1 - RC Input (SERIAL1)
+PA9 USART1_TX USART1
+PA10 USART1_RX USART1
+
+# USART3 - Telemetry (SERIAL3)
+PD8 USART3_TX USART3
+PD9 USART3_RX USART3
+
+# UART5 - Spare (SERIAL5)
+PC12 UART5_TX UART5 NODMA
+PD2 UART5_RX UART5 NODMA
+
+# UART7 - GPS (SERIAL7)
+PE7 UART7_RX UART7
+PE8 UART7_TX UART7
+
+# UART8 - Telemetry with flow control (SERIAL8)
+PE0 UART8_RX UART8 NODMA
+PE1 UART8_TX UART8 NODMA
+PD14 UART8_CTS UART8
+PD15 UART8_RTS UART8
+
+# default protocols
+define DEFAULT_SERIAL1_PROTOCOL SerialProtocol_RCIN
+define DEFAULT_SERIAL3_PROTOCOL SerialProtocol_MAVLink2
+define DEFAULT_SERIAL5_PROTOCOL SerialProtocol_None
+define DEFAULT_SERIAL7_PROTOCOL SerialProtocol_GPS
+define DEFAULT_SERIAL8_PROTOCOL SerialProtocol_MAVLink2
+
+# ----------------- SD Card (SDMMC2) ----------
+
+PB14 SDMMC2_D0 SDMMC2
+PB15 SDMMC2_D1 SDMMC2
+PB3  SDMMC2_D2 SDMMC2
+PB4  SDMMC2_D3 SDMMC2
+PD6  SDMMC2_CK SDMMC2
+PD7  SDMMC2_CMD SDMMC2
+
+define FATFS_HAL_DEVICE SDCD2
+
+# ----------------- ADC -----------------------
+
+# Battery 1 monitoring
+PC0 BATT_VOLTAGE_SENS ADC1 SCALE(1)
+PC1 BATT_CURRENT_SENS ADC1 SCALE(1)
+
+# ESC current (from 4-in-1 ESC connector)
+PA4 ESC_CURRENT_SENS ADC1 SCALE(1)
+
+# RSSI / spare ADC
+PC5 RSSI_ADC ADC1
+
+# Airspeed / spare ADC
+PC4 PRESSURE_SENS ADC1 SCALE(2)
+
+# Battery monitoring defaults
+# Voltage divider: 105k / 10k = 11.5:1 ratio (from schematic R1/R2)
+# Current sense: INA186A2 with 500uOhm shunt, gain 50 = 25mV/A output
+define HAL_BATT_MONITOR_DEFAULT 4
+define HAL_BATT_VOLT_PIN 10
+define HAL_BATT_CURR_PIN 11
+define HAL_BATT_VOLT_SCALE 11.5
+define HAL_BATT_CURR_SCALE 40.0
+
+# RSSI analog input
+define BOARD_RSSI_ANA_PIN 8
+
+# Airspeed analog input
+define HAL_DEFAULT_AIRSPEED_PIN 4
+
+# ----------------- PWM & GPIO ----------------
+
+# PWM output groups - organized by timer for DShot compatibility
+
+# TIM1 - Motors 1-4 (DShot capable)
+# BIDIR on CH1 for CH1/CH2 pair, BIDIR on CH3 for CH3/CH4 pair
+PE9  TIM1_CH1 TIM1 PWM(1) GPIO(50) BIDIR
+PE11 TIM1_CH2 TIM1 PWM(2) GPIO(51)
+PE13 TIM1_CH3 TIM1 PWM(3) GPIO(52) BIDIR
+PE14 TIM1_CH4 TIM1 PWM(4) GPIO(53)
+
+# TIM8 - Motors 5-8 (DShot capable)
+# BIDIR on CH1 for CH1/CH2 pair, BIDIR on CH3 for CH3/CH4 pair
+PC6 TIM8_CH1 TIM8 PWM(5) GPIO(54) BIDIR
+PC7 TIM8_CH2 TIM8 PWM(6) GPIO(55)
+PC8 TIM8_CH3 TIM8 PWM(7) GPIO(56) BIDIR
+PC9 TIM8_CH4 TIM8 PWM(8) GPIO(57)
+
+# TIM3 - Aux outputs 9-11 (DShot capable)
+PB5 TIM3_CH2 TIM3 PWM(9) GPIO(58)
+PB0 TIM3_CH3 TIM3 PWM(10) GPIO(59)
+PB1 TIM3_CH4 TIM3 PWM(11) GPIO(60)
+
+# TIM4 - Aux outputs 12-13 (DShot capable)
+PD12 TIM4_CH1 TIM4 PWM(12) GPIO(61)
+PD13 TIM4_CH2 TIM4 PWM(13) GPIO(62)
+
+# TIM2 - Aux outputs 14-16 (PWM only)
+PA0 TIM2_CH1 TIM2 PWM(14) GPIO(63) NODMA
+PA1 TIM2_CH2 TIM2 PWM(15) GPIO(64) NODMA
+PA2 TIM2_CH3 TIM2 PWM(16) GPIO(65) NODMA
+
+# GPIO control outputs
+PD10 PINIO1 OUTPUT GPIO(81) LOW   # VTX enable
+PD11 PINIO2 OUTPUT GPIO(82) LOW   # 5V-2A enable
+PD4  PINIO3 OUTPUT GPIO(83) LOW   # SPST relay enable
+
+define HAL_GPIO_PIN_VTX_PWR 81
+define HAL_GPIO_PIN_5V_EN 82
+define HAL_GPIO_PIN_RELAY 83
+
+# Relay defaults
+define RELAY1_PIN_DEFAULT 81
+define RELAY2_PIN_DEFAULT 82
+define RELAY3_PIN_DEFAULT 83
+
+# ----------------- LEDs ----------------------
+
+define AP_NOTIFY_GPIO_LED_2_ENABLED 1
+
+PE10 LED_BLUE OUTPUT LOW GPIO(90)
+PE15 LED_GREEN OUTPUT LOW GPIO(91)
+
+define HAL_GPIO_A_LED_PIN 90
+define HAL_GPIO_B_LED_PIN 91
+
+# LED strip support
+define HAL_USE_WS2812_LED 1
+
+# notification LED types
+define DEFAULT_NTF_LED_TYPES 455
+
+# ----------------- IMU Interrupts ------------
+# Optional data ready interrupts - not required for operation
+# PE12 IMU1_DRDY INPUT
+# PC13 IMU2_DRDY INPUT
+
+# ----------------- SPI Devices ---------------
+
+# ICM-45686 IMUs (same as ICM-42688 compatible)
+SPIDEV imu1 SPI1 DEVID1 IMU1_CS MODE3 2*MHZ 16*MHZ
+SPIDEV imu2 SPI4 DEVID1 IMU2_CS MODE3 2*MHZ 16*MHZ
+
+# ----------------- IMU Configuration ---------
+
+# dual ICM-45686 IMUs
+IMU Invensensev3 SPI:imu1 ROTATION_NONE
+IMU Invensensev3 SPI:imu2 ROTATION_YAW_180
+
+define HAL_DEFAULT_INS_FAST_SAMPLE 7
+
+# ----------------- Barometer -----------------
+
+# BMP390 on I2C1 at address 0x76
+BARO BMP388 I2C:0:0x76
+
+# ----------------- Compass -------------------
+
+# No internal compass - probe external I2C compasses
+define ALLOW_ARM_NO_COMPASS
+define HAL_COMPASS_AUTO_ROT_DEFAULT 2
+define HAL_I2C_INTERNAL_MASK 1  # bus 0 (I2C1) is internal
+
+# probe external compass on I2C2 (GPS port)
+define AP_COMPASS_PROBING_ENABLED 1
+
+# ----------------- DMA Configuration ---------
+
+DMA_PRIORITY TIM1* TIM8* SPI1* SPI4* SDMMC*
+DMA_NOSHARE SPI1* SPI4*
+
+# ----------------- Board Features ------------
+
+# enable firmware upgrade via USB
+ENABLE_DFU_BOOT 1
