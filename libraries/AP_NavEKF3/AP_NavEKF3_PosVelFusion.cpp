@@ -1283,6 +1283,17 @@ void NavEKF3_core::selectHeightForFusion()
     } else if ((frontend->_useRngSwHgt > 0) && ((frontend->sources.getPosZSource() == AP_NavEKF_Source::SourceZ::BARO) || (frontend->sources.getPosZSource() == AP_NavEKF_Source::SourceZ::GPS)) && _rng && rangeFinderDataIsFresh) {
         // determine if we are above or below the height switch region
         ftype rangeMaxUse = 1e-4 * (ftype)_rng->max_distance_cm_orient(ROTATION_PITCH_270) * (ftype)frontend->_useRngSwHgt;
+
+        // During ground effect with baro as height source, use raw rangefinder reading for threshold check
+        // to prevent bad baro from corrupting EKF altitude and locking out the rangefinder
+        const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_expected();
+        if (gndEffectActive &&
+            activeHgtSource == AP_NavEKF_Source::SourceZ::BARO &&
+            rangeDataDelayed.rng < rangeMaxUse)
+        {
+            activeHgtSource = AP_NavEKF_Source::SourceZ::RANGEFINDER;
+        }
+
         bool aboveUpperSwHgt = (terrainState - stateStruct.position.z) > rangeMaxUse;
         bool belowLowerSwHgt = ((terrainState - stateStruct.position.z) < 0.7f * rangeMaxUse) && (imuSampleTime_ms - gndHgtValidTime_ms < 1000);
 
@@ -1307,8 +1318,9 @@ void NavEKF3_core::selectHeightForFusion()
             * hysteresis to avoid rapid switching. Using range finder for height requires a consistent terrain height
             * which cannot be assumed if the vehicle is moving horizontally.
         */
-        if ((aboveUpperSwHgt || dontTrustTerrain) && (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER)) {
+        if ((aboveUpperSwHgt || dontTrustTerrain) && (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER) && !gndEffectActive) {
             // cannot trust terrain or range finder so stop using range finder height
+            // Note: don't switch back during ground effect - the aboveUpperSwHgt check uses EKF altitude which may be corrupted
             if (frontend->sources.getPosZSource() == AP_NavEKF_Source::SourceZ::BARO) {
                 activeHgtSource = AP_NavEKF_Source::SourceZ::BARO;
             } else if (frontend->sources.getPosZSource() == AP_NavEKF_Source::SourceZ::GPS) {
