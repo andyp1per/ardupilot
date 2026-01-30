@@ -2249,3 +2249,123 @@ With rangefinder height fusion (`EK3_RNG_USE_HGT=70`):
 - Uses rangefinder as truth source for altitude
 - More robust to varying conditions
 - Requires reliable rangefinder
+
+### logjk6/logjk7/logtd2 Analysis — EK3_RNG_USE_HGT=-1 Effectiveness
+
+**Problem:** With EK3_RNG_USE_HGT > 0, the rangefinder height threshold uses EKF altitude. If baro corrupts EKF altitude above the threshold, the rangefinder gets locked out (feedback loop).
+
+**Test:** User tried EK3_RNG_USE_HGT=-1 to disable rangefinder height source switching entirely.
+
+**Configuration comparison:**
+
+| Parameter | logjk6 | logjk7 | logtd2 |
+|-----------|--------|--------|--------|
+| EK3_RNG_USE_HGT | 2.0 | **-1** | **-1** |
+| BARO1_THST_SCALE | -200 | -200 | -147 |
+| INS_ACC_VRFB_Z | -0.4 | -0.4 | 0.044 |
+| RNGFND1_MAX_CM | 3000 | 3000 | 700 |
+
+**Results:**
+
+| Metric | logjk6 (unflyable) | logjk7 (improved) | logtd2 (good) |
+|--------|-------------------|-------------------|---------------|
+| Flight duration | 22s | 74s | 188s |
+| Alt std dev | **67.4cm** | **10.4cm** | **6.2cm** |
+| Alt error mean | 39.4cm | 14.0cm | 4.7cm |
+| Alt error max | 129.4cm | 34.5cm | 26.7cm |
+
+**Key findings:**
+1. EK3_RNG_USE_HGT=-1 dramatically improved altitude hold (67cm → 10cm std dev)
+2. Remaining difference between logjk7 and logtd2 likely due to INS_ACC_VRFB_Z = -0.4 being too large (exceeds ±0.3 clamp)
+3. The -0.4 value was learned during problematic flights and should be reset to 0
+
+### logtd3.bin Analysis — Ceiling Hit Due to Baro Transients
+
+**Scenario:** Indoor flight with BARO1_THST_SCALE=-147, EK3_RNG_USE_HGT=-1, but rangefinder returning NoData throughout.
+
+**Configuration:**
+- BARO1_THST_SCALE = -147
+- EK3_RNG_USE_HGT = -1
+- RNGFND1_TYPE = 10 (MAVLink)
+- RNGFND1_MAX_CM = 700
+
+**Critical issue:** Rangefinder was returning `Stat=1 (NoData)` throughout takeoff — no valid height reference available.
+
+**Timeline of incident:**
+
+| Time | Baro | EKF Alt | Innovation | Throttle | Event |
+|------|------|---------|------------|----------|-------|
+| 13.08s | -3.1m | -0.69m | -0.5m | 0% | Pre-takeoff |
+| 13.38s | -4.7m | -0.71m | -4.5m | 5% | Baro spike DOWN starts |
+| 13.78s | **-10.5m** | -0.73m | -10.2m | 37% | Baro minimum |
+| 13.98s | 0.0m | -0.68m | -0.5m | 41% | Baro recovers |
+| 14.48s | +0.6m | -0.65m | +0.9m | 47% | Baro now claims HIGHER |
+| 15.28s | +2.2m | -0.83m | +2.6m | 47% | Baro diverging upward |
+| 15.88s | +3.5m | -1.21m | +4.1m | **100%** | **Full throttle commanded** |
+| 16.08s | -0.5m | -1.56m | -0.4m | 100% | **Ceiling impact** |
+| 16.18s | +4.7m | -1.54m | — | 83% | Rangefinder shows 3.1m (at ceiling) |
+| 16.78s | +5.6m | -1.14m | — | 0% | Pilot switches to STABILIZE |
+
+**Sequence of events:**
+1. Baro spiked negative (-10.5m) during motor spinup — EKF correctly rejected (high innovation)
+2. Baro overcorrected positive (+3.5m) as motors sustained power
+3. EKF altitude drifted to -1.21m while baro claimed +3.5m
+4. Altitude controller saw 1.3m error (target ~0.1m, EKF -1.21m)
+5. Full throttle commanded → ceiling impact
+
+**Root cause:** Without a working rangefinder, the only height reference was baro. The BARO1_THST_SCALE compensation works for steady-state hover but cannot handle non-linear pressure dynamics during throttle transients near surfaces.
+
+**Why thrust scaling didn't help during transients:**
+- BARO1_THST_SCALE provides **linear** compensation: `correction = mot_scale * throttle`
+- Actual pressure disturbance during motor spinup is **non-linear** with overshoot/undershoot
+- At t=13.78s: throttle=37%, correction=-147×0.37=-54Pa (≈4.5m), but baro showed -10.5m
+- The 6m difference cannot be compensated by linear scaling
+
+**Lessons learned:**
+1. **Rangefinder is critical for indoor flight** — baro alone is unreliable
+2. Verify rangefinder returns valid data (Stat=4) before flight
+3. `Stat=1` (NoData) or `Stat=2` (OutOfRangeLow) means no height reference available
+
+### BARO1_THST_FILT Implementation
+
+**Problem identified:** During rapid throttle changes, the instantaneous thrust compensation causes step changes in corrected baro altitude, contributing to altitude transients.
+
+**Analysis from logtd3.bin:**
+- Throttle ramped 0% → 33% in 0.6 seconds
+- Without filter: Instant ~4m altitude correction from thrust scaling alone
+- This adds to the already chaotic baro behavior during transients
+
+**Solution implemented:** Low-pass filter on throttle before thrust compensation.
+
+**New parameter: BARO1_THST_FILT**
+- Default: 1.0 Hz cutoff
+- Set to 0 to disable (original behavior)
+- Filter smooths throttle input to reduce altitude transients
+
+**Effect of 1Hz filter on logtd3 scenario:**
+
+| Time | Raw Throttle | Filtered | Raw Correction | Filtered Correction |
+|------|--------------|----------|----------------|---------------------|
+| 0.0s | 0% | 0% | 0m | 0m |
+| 0.1s | 5% | 1.9% | -0.6m | -0.2m |
+| 0.3s | 23% | 12.7% | -2.8m | -1.6m |
+| 0.4s | 33% | 20.5% | -4.1m | -2.5m |
+| 0.6s | 35% | 30% | -4.3m | -3.7m |
+
+The filter reduces peak altitude transients by ~40% during rapid throttle changes.
+
+**Code location:** `libraries/AP_Baro/AP_Baro.cpp:thrust_pressure_correction()`
+
+**Recommended settings for indoor flight:**
+```
+EK3_RNG_USE_HGT = -1          # Disable rangefinder height switching
+BARO1_THST_SCALE = -147       # Calibrated thrust compensation (vehicle-specific)
+BARO1_THST_FILT = 1.0         # Filter throttle transients (NEW)
+INS_ACC_VRFB_Z = 0            # Reset if previously corrupted
+TKOFF_GNDEFF_ALT = 5          # Keep ground effect protection to 5m
+```
+
+**Trade-offs:**
+- More filtering = smoother altitude during throttle transients, but slower response
+- For indoor flight where stability matters more than responsiveness, use 0.5-1.0 Hz
+- For outdoor flight or aggressive maneuvers, may want 0 (disabled) or higher frequency
