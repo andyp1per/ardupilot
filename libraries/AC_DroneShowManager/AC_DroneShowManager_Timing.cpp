@@ -34,7 +34,7 @@ static uint64_t get_gps_timestamp_usec()
     }
 }
 
-// returns the elapsed time since the start of the show, in microseconds
+// Returns the elapsed time since the start of the show, in microseconds
 int64_t AC_DroneShowManager::get_elapsed_time_since_start_usec() const
 {
     uint64_t now, reference, diff;

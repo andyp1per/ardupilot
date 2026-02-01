@@ -53,10 +53,7 @@ AC_DroneShowManager::AC_DroneShowManager() :
 
     AP_Param::setup_object_defaults(this, var_info);
     
-    _trajectory_stats = new sb_trajectory_stats_t;
-
-    ok &= _trajectory_stats != nullptr;
-    ok &= (sb_trajectory_stats_init(_trajectory_stats) == SB_SUCCESS);
+    ok &= (sb_trajectory_stats_init(&_trajectory_stats) == SB_SUCCESS);
     ok &= (sb_screenplay_init(&_screenplay) == SB_SUCCESS);
     ok &= (sb_screenplay_scene_init(&_main_show_scene) == SB_SUCCESS);
     ok &= (sb_show_controller_init(&_show_controller, &_screenplay) == SB_SUCCESS);
@@ -69,12 +66,10 @@ AC_DroneShowManager::AC_DroneShowManager() :
 
 AC_DroneShowManager::~AC_DroneShowManager()
 {
-    sb_trajectory_stats_destroy(_trajectory_stats);
-    delete _trajectory_stats;
-
     sb_show_controller_destroy(&_show_controller);
-    sb_screenplay_destroy(&_screenplay);
     SB_DECREF_STATIC(&_main_show_scene);
+    sb_screenplay_destroy(&_screenplay);
+    sb_trajectory_stats_destroy(&_trajectory_stats);
 }
 
 void AC_DroneShowManager::early_init()

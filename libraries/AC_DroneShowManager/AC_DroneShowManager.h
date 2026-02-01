@@ -245,10 +245,10 @@ public:
     const TelemetryRequest* get_preferred_telemetry_messages() const;
 
     // Returns the landing time relative to the start of the show
-    float get_relative_landing_time_sec() const { return _trajectory_stats->landing_time_sec; }
+    float get_relative_landing_time_sec() const { return _trajectory_stats.landing_time_sec; }
 
     // Returns the takeoff time relative to the start of the show
-    float get_relative_takeoff_time_sec() const { return _trajectory_stats->takeoff_time_sec; }
+    float get_relative_takeoff_time_sec() const { return _trajectory_stats.takeoff_time_sec; }
 
     // Returns the start time in microseconds. Depending on the value of the
     // SHOW_SYNC_MODE parameter, this might be an internal timestamp or a
@@ -263,7 +263,7 @@ public:
     }
 
     // Returns the total duration of the loaded trajectory, in seconds
-    float get_total_duration_sec() const { return _trajectory_stats->duration_sec; }
+    float get_total_duration_sec() const { return _trajectory_stats.duration_sec; }
 
     // Returns the number of seconds elapsed since show start, in microseconds
     int64_t get_elapsed_time_since_start_usec() const;
@@ -363,8 +363,8 @@ public:
     // Returns whether a valid takeoff time was determined for the show
     bool has_valid_takeoff_time() const {
         return (
-            _trajectory_stats->takeoff_time_sec >= 0 && 
-            _trajectory_stats->landing_time_sec > _trajectory_stats->takeoff_time_sec
+            _trajectory_stats.takeoff_time_sec >= 0 && 
+            _trajectory_stats.landing_time_sec > _trajectory_stats.takeoff_time_sec
         );
     }
 
@@ -643,7 +643,7 @@ private:
     // the yaw player, the event list and the time axis.
     sb_show_controller_t _show_controller;
 
-    sb_trajectory_stats_t* _trajectory_stats;
+    sb_trajectory_stats_t _trajectory_stats;
 
     // Result of the drone show specific preflight checks. Updated periodically
     // from _update_preflight_check_result(). See the values from the

@@ -1,4 +1,5 @@
 #include <GCS_MAVLink/GCS.h>
+#include <cstdint>
 #include <limits>
 #include <skybrush/skybrush.h>
 
@@ -7,7 +8,6 @@
 #include "DroneShow_CustomPackets.h"
 #include "DroneShowPyroDevice.h"
 #include "include/mavlink/v2.0/all/mavlink.h"
-#include "skybrush/screenplay.h"
 
 static bool uint64_sub_safe(uint64_t a, uint64_t b, int32_t* result);
 
@@ -327,9 +327,8 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     int32_t origin_msec;
     uint8_t num_scenes, num_entries, scene_index, entry_index;
     uint8_t *ptr, *end;
-    sb_error_t retval;
     sb_screenplay_t new_screenplay;
-    sb_screenplay_scene_t* scene;
+    sb_screenplay_scene_t *scene;
     sb_time_axis_t* time_axis;
     sb_time_segment_t segment;
     bool success;
@@ -376,6 +375,9 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     // screenplay and leave the old one intact).
     success = false;
     
+    // Make sure that the new screenplay refers to the same RTH plan as the existing one
+    sb_screenplay_set_rth_plan(&new_screenplay, sb_screenplay_get_rth_plan(&_screenplay));
+
     // Header processed; now process each of the scenes
     ptr = reinterpret_cast<uint8_t*>(data);
     end = ptr + length;
@@ -392,8 +394,7 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
         ptr += sizeof(CustomPackets::time_axis_config_scene_header_t);
         
         // Add a new scene to the screenplay
-        retval = sb_screenplay_append_new_scene(&new_screenplay, &scene);
-        if (retval != SB_SUCCESS) {
+        if (sb_screenplay_append_new_scene(&new_screenplay, &scene) != SB_SUCCESS) {
             // Could not add new scene
             goto exit;
         }
@@ -403,9 +404,23 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
         if (scene_header->scene_id == 0) {
             // Main show
             sb_screenplay_scene_update_contents_from(scene, &_main_show_scene);
+        } else if ((scene_header->scene_id & 0xC000) == 0xC000) {
+            // Coordinated RTH plan, starting at the number of seconds described by the 
+            // lower 14 bits
+            sb_rth_plan_t* rth_plan = sb_screenplay_get_rth_plan(&new_screenplay);
+            sb_rth_plan_entry_t rth_plan_entry;
+            if (rth_plan == NULL || sb_rth_plan_evaluate_at(rth_plan, scene_header->scene_id & 0x3FFF, &rth_plan_entry) != SB_SUCCESS) {
+                // Could not evaluate RTH plan at the given time
+                goto exit;
+            }
+
+            // TODO(ntamas): create a trajectory based on rth_plan_entry and set it to the scene
+            sb_screenplay_scene_set_trajectory(scene, nullptr);
+            // TODO(ntamas): use a fixed light program with RTH color
+            sb_screenplay_scene_set_light_program(scene, nullptr);
+            // TODO(ntamas): maybe add a yaw program to reset to takeoff yaw?
         } else {
-            // Coordinated RTH plan; we do not support coordinated RTH plans
-            // in time axis configuration packets yet
+            // Unknown scene ID; may be used in the future but it has no meaning now
             goto exit;
         }
 
@@ -474,8 +489,7 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     // Add final, infinite segment to last scene. If there are no scenes, add a new
     // scene first.
     if (sb_screenplay_size(&new_screenplay) == 0) {
-        retval = sb_screenplay_append_new_scene(&new_screenplay, &scene);
-        if (retval != SB_SUCCESS) {
+        if (sb_screenplay_append_new_scene(&new_screenplay, &scene) != SB_SUCCESS) {
             // Could not add new scene
             goto exit;
         }
