@@ -67,7 +67,7 @@ bool ModeDroneShow::allows_arming(AP_Arming::Method method) const
         // by the user
         method == AP_Arming::Method::MAVLINK || (
             copter.g2.drone_show_manager.loaded_show_data_successfully() &&
-            copter.g2.drone_show_manager.has_valid_takeoff_time() &&
+            copter.g2.drone_show_manager.is_trajectory_plausible() &&
             copter.g2.drone_show_manager.has_explicit_show_origin_set_by_user() &&
             copter.g2.drone_show_manager.has_explicit_show_orientation_set_by_user()
         )
@@ -786,7 +786,7 @@ void ModeDroneShow::performing_run()
 
 bool ModeDroneShow::performing_completed() const
 {
-    return copter.g2.drone_show_manager.get_time_until_landing_sec() <= 0;
+    return copter.g2.drone_show_manager.is_performance_completed();
 }
 
 // starts the phase where we are landing at the place where we are, used at
@@ -958,7 +958,7 @@ void ModeDroneShow::light_testing_run()
 // returns whether we should exit the light testing mode
 bool ModeDroneShow::light_testing_completed() const
 {
-    return copter.g2.drone_show_manager.get_time_until_landing_sec() <= 0;
+    return copter.g2.drone_show_manager.is_performance_completed();
 }
 
 // Handler function that is called when the authorization state of the show has

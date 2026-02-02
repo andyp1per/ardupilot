@@ -7,29 +7,14 @@
 void AC_DroneShowManager::write_show_status_log_message() const
 {
     sb_rgb_color_t color;
-    sb_control_output_time_t time_info;
     Vector3f dist;
     ssize_t scene;
     float show_clock_sec;
 
     get_last_rgb_led_color(color);
     get_distance_from_desired_position(dist);
+    get_scene_index_and_show_clock_within_scene(&scene, &show_clock_sec);
     
-    time_info = sb_show_controller_get_current_output_time(&_show_controller);
-    scene = time_info.scene;
-    show_clock_sec = time_info.warped_time_in_scene_sec;
-    
-    if (scene < 0) {
-        scene = sb_screenplay_size(&_screenplay);  // out of range value
-    }
-    if (scene >= 255) {
-        scene = 255;  // out of range value or too many chapters
-    }
-
-    if (!isfinite(show_clock_sec)) {
-        show_clock_sec = 0;
-    }
-
     const struct log_DroneShowStatus pkt {
         LOG_PACKET_HEADER_INIT(LOG_DRONE_SHOW_MSG),
         time_us         : AP_HAL::micros64(),
@@ -70,14 +55,21 @@ void AC_DroneShowManager::write_fence_status_log_message() const
 void AC_DroneShowManager::write_show_event_log_message(
     const sb_event_t *event, DroneShowEventResult result) const
 {
+    ssize_t scene;
+    float show_clock_sec;
+
     if (!event) {
         return;
     }
 
+    get_scene_index_and_show_clock_within_scene(&scene, &show_clock_sec);
+
     const struct log_DroneShowEvent pkt {
         LOG_PACKET_HEADER_INIT(LOG_DRONE_SHOW_EVENT_MSG),
         time_us         : AP_HAL::micros64(),
-        show_clock_ms   : get_elapsed_time_since_start_msec(),
+        wall_clock_ms   : get_elapsed_time_since_start_msec(),
+        scene           : static_cast<uint8_t>(scene),
+        show_clock_ms   : static_cast<int32_t>(show_clock_sec * 1000.0f),
         type            : static_cast<uint8_t>(event->type),
         subtype         : event->subtype,
         payload         : event->payload.as_uint32,

@@ -5,6 +5,7 @@
 
 #include "AC_DroneShowManager.h"
 #include "DroneShow_CustomPackets.h"
+#include "skybrush/control.h"
 
 #define NO_MORE_MESSAGES { MSG_LAST, 0 }
 
@@ -113,13 +114,13 @@ uint8_t* AC_DroneShowManager::_fill_drone_show_status_packet_buffer(uint8_t* buf
     const AP_GPS& gps = AP::gps();
 
     uint8_t flags, flags2, flags3, gps_health;
-    float elapsed_time;
+    sb_control_output_time_t time_info;
     int16_t encoded_elapsed_time;
     DroneShowModeStage stage = get_stage_in_drone_show_mode();
 
     /* calculate status flags */
     flags = 0;
-    if (loaded_show_data_successfully() && has_valid_takeoff_time()) {
+    if (loaded_show_data_successfully() && is_trajectory_plausible()) {
         flags |= (1 << 7);
     }
     if (has_scheduled_start_time()) {
@@ -182,14 +183,15 @@ uint8_t* AC_DroneShowManager::_fill_drone_show_status_packet_buffer(uint8_t* buf
         flags3 |= (1 << 7);
     }
 
-    /* calculate elapsed time */
-    elapsed_time = get_elapsed_time_since_start_sec();
-    if (elapsed_time > 32767) {
+    /* calculate time on show clock since start of the current scene */
+    /* TODO(ntamas): we should probably also send the scene index somewhere */
+    time_info = sb_show_controller_get_current_output_time(&_show_controller);
+    if (time_info.warped_time_in_scene_sec > 32767) {
         encoded_elapsed_time = 32767;
-    } else if (elapsed_time <= -32768) {
+    } else if (time_info.warped_time_in_scene_sec <= -32768) {
         encoded_elapsed_time = -32768;
     } else {
-        encoded_elapsed_time = static_cast<int16_t>(elapsed_time);
+        encoded_elapsed_time = static_cast<int16_t>(time_info.warped_time_in_scene_sec);
     }
 
     /* fill the packet. Note that in the first four bytes we _always_ put the

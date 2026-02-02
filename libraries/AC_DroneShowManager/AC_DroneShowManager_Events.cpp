@@ -1,8 +1,12 @@
 #include <AP_Logger/AP_Logger.h>
 
 #include "AC_DroneShowManager.h"
+#include "AC_DroneShowManager/DroneShow_Enums.h"
 #include "DroneShowPyroDevice.h"
 #include "LogStructure.h"
+#include "skybrush/control.h"
+
+const float EVENT_TIMING_TOLERANCE_SEC = 3.0f;
 
 void AC_DroneShowManager::_trigger_show_events()
 {
@@ -10,11 +14,14 @@ void AC_DroneShowManager::_trigger_show_events()
     DroneShowEventResult result;
     uint8_t events_left = 10;
 
-    int32_t elapsed_time_msec = get_elapsed_time_since_start_msec();
-    if (elapsed_time_msec < 0) {
+    if (_stage_in_drone_show_mode != DroneShow_Performing) {
+        // We are not performing the show, no need to trigger events
         return;
     }
-
+    
+    sb_control_output_time_t time_info = sb_show_controller_get_current_output_time(&_show_controller);
+    float show_clock_sec = time_info.warped_time_in_scene_sec;
+    
     // No need to update the show controller with the timestamp; it has been done
     // earlier before this function was called.
 
@@ -39,7 +46,7 @@ void AC_DroneShowManager::_trigger_show_events()
                     result = _pyro_device->off(event->subtype);
                 } else if (!_is_pyro_safe_to_fire()) {
                     result = DroneShowEventResult_Unsafe;
-                } else if (event->time_msec < (elapsed_time_msec - 3) * 1000.0f) {
+                } else if (event->time_msec < (show_clock_sec - EVENT_TIMING_TOLERANCE_SEC) * 1000.0f) {
                     result = DroneShowEventResult_TimeMissed;
                 } else {
                     result = _pyro_device->fire(event->subtype);
@@ -51,18 +58,8 @@ void AC_DroneShowManager::_trigger_show_events()
                 result = DroneShowEventResult_NotSupported;
                 break;
         }
-
-        const struct log_DroneShowEvent pkt {
-            LOG_PACKET_HEADER_INIT(LOG_DRONE_SHOW_EVENT_MSG),
-            time_us         : AP_HAL::micros64(),
-            show_clock_ms   : static_cast<int32_t>(elapsed_time_msec * 1000.0f),
-            type            : static_cast<uint8_t>(event->type),
-            subtype         : event->subtype,
-            payload         : event->payload.as_uint32,
-            result          : static_cast<uint8_t>(result),
-        };
-
-        AP::logger().WriteBlock(&pkt, sizeof(pkt));
+        
+        write_show_event_log_message(event, result);
 
         events_left--;
     }

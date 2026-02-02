@@ -176,7 +176,7 @@ bool AC_DroneShowManager::_load_show_file_from_storage()
             hal.console->printf("Error while calculating trajectory properties\n");
             success = false;
         }
-        else if (!has_valid_takeoff_time())
+        else if (!is_trajectory_plausible())
         {
             hal.console->printf("Takeoff or landing time is invalid\n");
             success = false;
@@ -335,7 +335,7 @@ bool AC_DroneShowManager::_recalculate_trajectory_properties()
         _takeoff_position_mm.y = 0;
         _takeoff_position_mm.z = 0;
     
-        // This should ensure that has_valid_takeoff_time() returns false
+        // This should ensure that is_trajectory_plausible() returns false
         _trajectory_stats.landing_time_sec = _trajectory_stats.takeoff_time_sec = -1;
     }
 

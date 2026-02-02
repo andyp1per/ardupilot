@@ -1,6 +1,7 @@
 #include <AP_GPS/AP_GPS.h>
 
 #include "AC_DroneShowManager.h"
+#include "AC_DroneShowManager/DroneShow_Enums.h"
 
 // Returns the current time according to the GPS, in microseconds.
 //
@@ -34,7 +35,6 @@ static uint64_t get_gps_timestamp_usec()
     }
 }
 
-// Returns the elapsed time since the start of the show, in microseconds
 int64_t AC_DroneShowManager::get_elapsed_time_since_start_usec() const
 {
     uint64_t now, reference, diff;
@@ -96,6 +96,42 @@ float AC_DroneShowManager::get_elapsed_time_since_start_sec() const
     return elapsed_usec == INT64_MIN ? -86400 : static_cast<float>(elapsed_usec / 1000) / 1000.0f;
 }
 
+void AC_DroneShowManager::get_scene_index_and_show_clock_within_scene(
+    ssize_t* scene_out, float* show_clock_sec_out
+) const {
+    sb_control_output_time_t time_info;
+    ssize_t scene;
+    float show_clock_sec;
+    
+    if (_stage_in_drone_show_mode != DroneShow_Performing) {
+        scene = 0;
+        show_clock_sec = 0;
+    } else {
+        time_info = sb_show_controller_get_current_output_time(&_show_controller);
+        scene = time_info.scene;
+        show_clock_sec = time_info.warped_time_in_scene_sec;
+        
+        if (scene < 0) {
+            scene = sb_screenplay_size(&_screenplay);  // out of range value
+        }
+        if (scene >= 255) {
+            scene = 255;  // out of range value or too many chapters
+        }
+    
+        if (!isfinite(show_clock_sec)) {
+            show_clock_sec = 0;
+        }
+    }
+    
+    if (scene_out) {
+        *scene_out = scene;
+    }
+    
+    if (show_clock_sec_out) {
+        *show_clock_sec_out = show_clock_sec;
+    }
+}
+
 int64_t AC_DroneShowManager::get_time_until_start_usec() const
 {
     return -get_elapsed_time_since_start_usec();
@@ -108,7 +144,7 @@ float AC_DroneShowManager::get_time_until_start_sec() const
 
 float AC_DroneShowManager::get_time_until_landing_sec() const
 {
-    return get_time_until_start_sec() + get_relative_landing_time_sec();
+    return get_time_until_start_sec() + get_relative_landing_time_sec_on_show_clock();
 }
 
 uint32_t AC_DroneShowManager::_get_gps_synced_timestamp_in_millis_for_lights() const

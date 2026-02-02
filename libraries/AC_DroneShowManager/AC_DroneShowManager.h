@@ -245,10 +245,10 @@ public:
     const TelemetryRequest* get_preferred_telemetry_messages() const;
 
     // Returns the landing time relative to the start of the show
-    float get_relative_landing_time_sec() const { return _trajectory_stats.landing_time_sec; }
+    float get_relative_landing_time_sec_on_show_clock() const { return _trajectory_stats.landing_time_sec; }
 
     // Returns the takeoff time relative to the start of the show
-    float get_relative_takeoff_time_sec() const { return _trajectory_stats.takeoff_time_sec; }
+    float get_relative_takeoff_time_sec_on_show_clock() const { return _trajectory_stats.takeoff_time_sec; }
 
     // Returns the start time in microseconds. Depending on the value of the
     // SHOW_SYNC_MODE parameter, this might be an internal timestamp or a
@@ -262,16 +262,13 @@ public:
         );
     }
 
-    // Returns the total duration of the loaded trajectory, in seconds
-    float get_total_duration_sec() const { return _trajectory_stats.duration_sec; }
-
-    // Returns the number of seconds elapsed since show start, in microseconds
+    // Returns the number of seconds elapsed since show start, in microseconds (wall clock time)
     int64_t get_elapsed_time_since_start_usec() const;
 
-    // Returns the number of seconds elapsed since show start, in milliseconds
+    // Returns the number of seconds elapsed since show start, in milliseconds (wall clock time)
     int32_t get_elapsed_time_since_start_msec() const;
 
-    // Returns the number of seconds elapsed since show start, in seconds
+    // Returns the number of seconds elapsed since show start, in seconds (wall clock time)
     float get_elapsed_time_since_start_sec() const;
 
     // Returns the current stage that the drone show mode is in
@@ -282,7 +279,12 @@ public:
 
     // Returns the takeoff acceleration in meters per second squared
     float get_motor_spool_up_time_sec() const;
-    
+
+    // Returns the current scene index and the time elapsed within the scene, according
+    // to the show controller. Both the scene index and the show clock time within the scene
+    // will be zero if the show is not in the "performing" stage.
+    void get_scene_index_and_show_clock_within_scene(ssize_t* scene, float* show_clock_sec) const;
+
     // Returns the takeoff acceleration in meters per second squared
     float get_takeoff_acceleration_m_ss() const {
         float result = _wp_nav ? _wp_nav->get_accel_z() / 100.0f : 0;
@@ -305,10 +307,14 @@ public:
     // Returns the number of seconds left until show start, in seconds
     float get_time_until_start_sec() const;
 
-    // Returns the number of seconds left until the time when we should take off
+    // Returns the number of seconds left until the time when we should take off,
+    // assuming that the show is being played back at real-time and no changes are
+    // made to the show clock rate.
     float get_time_until_takeoff_sec() const;
 
     // Returns the number of seconds left until the time when we should land
+    // TODO(ntamas): this is probably not correct, we are adding wall clock time to
+    // show clock time in the implementation
     float get_time_until_landing_sec() const;
 
     // Returns the velocity feed-forward gain factor to use during velocity control
@@ -359,9 +365,21 @@ public:
             : _start_time_on_internal_clock_usec > 0
         );
     }
+    
+    // Returns whether the performance of the show has finished, based on the current
+    // time. The return value of this function can be used to trigger the post-show
+    // action.
+    bool is_performance_completed() const {
+        // TODO(ntaas): fix this -- get_time_until_landing_sec() conflates wall clock
+        // time and show clock time, which is wrong
+        return get_time_until_landing_sec() <= 0;
+    }
 
-    // Returns whether a valid takeoff time was determined for the show
-    bool has_valid_takeoff_time() const {
+    // Returns whether the trajectory of the show seems plausible:
+    // - has a takeoff time (i.e. a moment when the drone ascends above the takeoff altitude)
+    // - has a landing time (i.e. a moment when the drone sinks below the takeoff altitude)
+    // - landing time comes later than the takeoff time
+    bool is_trajectory_plausible() const {
         return (
             _trajectory_stats.takeoff_time_sec >= 0 && 
             _trajectory_stats.landing_time_sec > _trajectory_stats.takeoff_time_sec

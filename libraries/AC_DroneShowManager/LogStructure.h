@@ -61,7 +61,9 @@ struct PACKED log_FenceStatus {
 // @LoggerMessage: SBEV
 // @Description: Skybrush show file event execution log
 // @Field: TimeUS: Time since system startup
-// @Field: ClockMS: Time on the show clock
+// @Field: ClockMS: Time since the start of the show in wall clock time
+// @Field: Scene: Scene index in the current show
+// @Field; ShowClockMS: Time on the show clock in the current scene
 // @Field: Type: Type of the event from the show file
 // @Field: Subtype: Subtype of the event from the show file
 // @Field: Payload: Payload of the event from the show file as uint32_t
@@ -71,6 +73,8 @@ struct PACKED log_FenceStatus {
 struct PACKED log_DroneShowEvent {
     LOG_PACKET_HEADER;
     uint64_t time_us;
+    int32_t wall_clock_ms;
+    uint8_t scene;
     int32_t show_clock_ms;
     uint8_t type;
     uint8_t subtype;
@@ -106,6 +110,6 @@ struct PACKED log_ScreenplayEntry {
     { LOG_FENCE_STATUS_MSG, sizeof(log_FenceStatus),                    \
       "FNCS", "QBBHBBH", "TimeUS,GeoEn,GeoB,GeoCnt,HardB,BubbleB,BubbleCnt", "s------", "F------" }, \
     { LOG_DRONE_SHOW_EVENT_MSG, sizeof(log_DroneShowEvent),              \
-      "SBEV", "QiBBIB", "TimeUS,ClockMS,Type,Subtype,Payload,Result", "ss----", "FC----" }, \
+      "SBEV", "QiBiBBIB", "TimeUS,ClockMS,Scene,SceneMS,Type,Subtype,Payload,Result", "ss-s----", "FC-C----" }, \
     { LOG_SCREENPLAY_ENTRY_MSG, sizeof(log_ScreenplayEntry),             \
       "SBSP", "QBBBQIff", "TimeUS,Seq,Scene,Index,Origin,Duration,IR,FR", "s---ss--", "F---CC--" }
