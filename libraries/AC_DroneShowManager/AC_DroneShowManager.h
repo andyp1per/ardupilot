@@ -20,6 +20,7 @@
 
 #include "DroneShow_Enums.h"
 #include "DroneShow_FenceConfig.h"
+#include "skybrush/control.h"
 
 class DroneShowLEDFactory;
 class DroneShowLED;
@@ -279,6 +280,9 @@ public:
 
     // Returns the takeoff acceleration in meters per second squared
     float get_motor_spool_up_time_sec() const;
+    
+    // Returns the color to use in return-to-home transitions (both individual and collective)
+    sb_rgb_color_t get_rth_transition_color() const;
 
     // Returns the current scene index and the time elapsed within the scene, according
     // to the show controller. Both the scene index and the show clock time within the scene
@@ -311,11 +315,6 @@ public:
     // assuming that the show is being played back at real-time and no changes are
     // made to the show clock rate.
     float get_time_until_takeoff_sec() const;
-
-    // Returns the number of seconds left until the time when we should land
-    // TODO(ntamas): this is probably not correct, we are adding wall clock time to
-    // show clock time in the implementation
-    float get_time_until_landing_sec() const;
 
     // Returns the velocity feed-forward gain factor to use during velocity control
     float get_velocity_feedforward_gain() const { return _params.velocity_feedforward_gain; }
@@ -367,12 +366,30 @@ public:
     }
     
     // Returns whether the performance of the show has finished, based on the current
-    // time. The return value of this function can be used to trigger the post-show
-    // action.
+    // state and output of the show controller. The return value of this function can
+    // be used to trigger the post-show action.
+    // 
+    // The performance is considered completed if we are in the "performing" stage and
+    // the show controller has reported that the current time is beyond the time axis
+    // limits, _or_ if we are in the "landing", "landed", "loiter", "RTL" or "error" stages.
+    // In all these states, the _normal_ performance of the show has ended, even though
+    // the drone may still be flying.
     bool is_performance_completed() const {
-        // TODO(ntaas): fix this -- get_time_until_landing_sec() conflates wall clock
-        // time and show clock time, which is wrong
-        return get_time_until_landing_sec() <= 0;
+        switch (_stage_in_drone_show_mode) {
+            case DroneShow_Performing:
+                return sb_show_controller_is_output_valid(&_show_controller) &&
+                       sb_show_controller_has_reached_end(&_show_controller);
+
+            case DroneShow_Landing:
+            case DroneShow_Landed:
+            case DroneShow_Loiter:
+            case DroneShow_RTL:
+            case DroneShow_Error:
+                return true;
+                
+            default:
+                return false;
+        }
     }
 
     // Returns whether the trajectory of the show seems plausible:

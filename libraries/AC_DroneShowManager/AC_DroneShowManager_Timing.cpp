@@ -142,11 +142,6 @@ float AC_DroneShowManager::get_time_until_start_sec() const
     return -get_elapsed_time_since_start_sec();
 }
 
-float AC_DroneShowManager::get_time_until_landing_sec() const
-{
-    return get_time_until_start_sec() + get_relative_landing_time_sec_on_show_clock();
-}
-
 uint32_t AC_DroneShowManager::_get_gps_synced_timestamp_in_millis_for_lights() const
 {
     // No need to worry about loss of GPS fix; AP::gps().time_epoch_usec() is

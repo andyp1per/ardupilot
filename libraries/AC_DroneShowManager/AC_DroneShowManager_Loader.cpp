@@ -7,6 +7,7 @@
 
 #include "AC_DroneShowManager.h"
 #include "DroneShow_Constants.h"
+#include "skybrush/trajectory.h"
 
 extern const AP_HAL::HAL &hal;
 
@@ -195,15 +196,27 @@ bool AC_DroneShowManager::_load_show_file_from_storage()
     {
         hal.console->printf("Error while parsing show file, code: %d\n", retval);
     }
-
+    
     if (success)
     {
-        // Adjust the timestamps of pyro events if needed
-        size_t i, num_chapters = sb_screenplay_size(&_screenplay);
-        for (i = 0; i < num_chapters; i++)
+        // Adjust the timestamps of pyro events if needed. Also set the duration of
+        // each scene to the duration of its trajectory to ensure that we consider the
+        // show as finished when the trajectory ends.
+        size_t i, num_scenes = sb_screenplay_size(&_screenplay);
+        for (i = 0; i < num_scenes; i++)
         {
             sb_screenplay_scene_t* scene = sb_screenplay_get_scene_ptr(&_screenplay, i);
             sb_event_list_t* event_list = scene ? sb_screenplay_scene_get_events(scene) : nullptr;
+            sb_trajectory_t* trajectory = scene ? sb_screenplay_scene_get_trajectory(scene) : nullptr;
+            
+            if (trajectory) {
+                if (sb_screenplay_scene_set_duration_msec(scene, _trajectory_stats.duration_msec) != SB_SUCCESS) {
+                    hal.console->printf("Error while setting scene duration\n");
+                    success = false;
+                    break;
+                }
+            }
+
             if (event_list && _params.pyro_spec.time_compensation_msec != 0)
             {
                 sb_event_list_adjust_timestamps_by_type(

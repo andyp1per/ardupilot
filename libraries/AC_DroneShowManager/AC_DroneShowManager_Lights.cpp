@@ -36,6 +36,10 @@ static float get_modulation_factor_for_light_effect(
     uint32_t timestamp, LightEffectType effect, uint16_t period_msec, uint16_t phase_msec
 );
 
+sb_rgb_color_t AC_DroneShowManager::get_rth_transition_color() const {
+    return Colors::ORANGE;
+}
+
 sb_rgb_color_t AC_DroneShowManager::get_desired_color_of_rgb_light() {
     float elapsed_time = get_elapsed_time_since_start_sec();
     if (elapsed_time >= 0) {
@@ -360,12 +364,16 @@ void AC_DroneShowManager::_update_lights()
         light_signal_affected_by_brightness_setting = false;
 
         if (IS_RTL(mode)) {
-            // If we are flying and we are in RTL or smart RTL mode, blink with orange color
-            color = Colors::ORANGE;
+            // If we are flying and we are in RTL mode, blink with the preferred RTH
+            // color
+            color = get_rth_transition_color();
             pattern = BLINK;
             has_failsafe_color = true;
         } else if (IS_LANDING(mode)) {
-            // If we are flying and we are in landing mode, show a solid orange color
+            // If we are flying and we are in landing mode, show a solid orange color.
+            // This is not controlled by get_rth_transition_color() because we want to
+            // see the drone during landing even if the RTH color is configured to be
+            // dark.
             color = Colors::ORANGE;
             has_failsafe_color = true;
         } else if (mode == MODE_DRONE_SHOW) {

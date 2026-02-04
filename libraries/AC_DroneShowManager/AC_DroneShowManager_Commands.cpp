@@ -8,6 +8,7 @@
 #include "DroneShow_CustomPackets.h"
 #include "DroneShowPyroDevice.h"
 #include "include/mavlink/v2.0/all/mavlink.h"
+#include "skybrush/lights.h"
 
 static bool uint64_sub_safe(uint64_t a, uint64_t b, int32_t* result);
 
@@ -416,10 +417,24 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
 
             // TODO(ntamas): create a trajectory based on rth_plan_entry and set it to the scene
             sb_screenplay_scene_set_trajectory(scene, nullptr);
-            // TODO(ntamas): use a fixed light program with RTH color
-            sb_screenplay_scene_set_light_program(scene, nullptr);
-            // TODO(ntamas): maybe add a yaw program to reset to takeoff yaw?
-        } else {
+            
+            // Use a fixed light program with RTH color
+            {
+                sb_light_program_t* rth_light_program = sb_light_program_new();
+                if (rth_light_program) {
+                    if (sb_light_program_set_constant_color(rth_light_program, get_rth_transition_color()) != SB_SUCCESS) {
+                        // Probably out of memory; clean up and proceed without setting
+                        // a light program
+                        SB_DECREF(rth_light_program);
+                        rth_light_program = nullptr;
+                    }
+                } else {
+                    // Out of memory; proceed without setting a light program
+                }
+                sb_screenplay_scene_set_light_program(scene, rth_light_program);
+                SB_XDECREF(rth_light_program);
+            }
+       } else {
             // Unknown scene ID; may be used in the future but it has no meaning now
             goto exit;
         }
