@@ -8,7 +8,6 @@
 #include "DroneShow_CustomPackets.h"
 #include "DroneShowPyroDevice.h"
 #include "include/mavlink/v2.0/all/mavlink.h"
-#include "skybrush/lights.h"
 
 static bool uint64_sub_safe(uint64_t a, uint64_t b, int32_t* result);
 
@@ -410,13 +409,41 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
             // lower 14 bits
             sb_rth_plan_t* rth_plan = sb_screenplay_get_rth_plan(&new_screenplay);
             sb_rth_plan_entry_t rth_plan_entry;
-            if (rth_plan == NULL || sb_rth_plan_evaluate_at(rth_plan, scene_header->scene_id & 0x3FFF, &rth_plan_entry) != SB_SUCCESS) {
+            float rth_start_time = static_cast<float>(scene_header->scene_id & 0x3FFF);
+            if (rth_plan == NULL || sb_rth_plan_evaluate_at(rth_plan, rth_start_time, &rth_plan_entry) != SB_SUCCESS) {
                 // Could not evaluate RTH plan at the given time
                 goto exit;
             }
 
-            // TODO(ntamas): create a trajectory based on rth_plan_entry and set it to the scene
-            sb_screenplay_scene_set_trajectory(scene, nullptr);
+            // Create a trajectory based on rth_plan_entry and set it to the scene
+            {
+                sb_trajectory_t* rth_trajectory = sb_trajectory_new();
+                const sb_control_output_t* current_output = sb_show_controller_get_current_output(&_show_controller);
+                sb_vector3_t start;
+                
+                if (current_output == nullptr || !sb_control_output_get_position_if_set(current_output, &start)) {
+                    // should not happen
+                    goto exit;
+                }
+
+                if (rth_trajectory == nullptr) {
+                    // Out of memory
+                    goto exit;
+                }
+                
+                // rth_plan_entry contains the start time of the RTH plan, but we don't
+                // need that -- we want to create a trajectory that starts at T=0 in
+                // show clock because the clock of the new RTH scene starts from 0
+                rth_plan_entry.time_sec = 0.0f;
+                if (sb_trajectory_update_from_rth_plan_entry(rth_trajectory, &rth_plan_entry, start) != SB_SUCCESS) {
+                    // Could not create RTH plan trajectory
+                    SB_DECREF(rth_trajectory);
+                    goto exit;
+                }
+
+                sb_screenplay_scene_set_trajectory(scene, rth_trajectory);
+                SB_DECREF(rth_trajectory);
+            }
             
             // Use a fixed light program with RTH color
             {
