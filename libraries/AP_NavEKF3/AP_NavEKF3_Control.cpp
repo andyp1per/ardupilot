@@ -298,7 +298,13 @@ void NavEKF3_core::setAidingMode()
                 readyToUseOptFlow() ||
 #endif
                 readyToUseBodyOdm()) {
-                PV_AidingMode = AID_RELATIVE;
+                // Don't enter relative mode if yaw is unobservable (on ground, disarmed, no compass)
+                // because the top special case will immediately force us back to AID_NONE,causing oscillation.
+                // Yaw becomes observable once we have flight motion in this case.
+                const bool yaw_unavailable_on_ground = (yaw_source_last == AP_NavEKF_Source::SourceYaw::NONE) && !motorsArmed && onGround;
+                if (!yaw_unavailable_on_ground) {
+                    PV_AidingMode = AID_RELATIVE;
+                }
             }
             break;
         }
