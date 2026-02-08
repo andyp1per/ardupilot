@@ -323,7 +323,7 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     CustomPackets::time_axis_config_header_t* header;
     CustomPackets::time_axis_config_scene_header_t* scene_header;
     CustomPackets::time_axis_config_scene_entry_t* entry;
-    CustomPackets::time_axis_config_trailer_t* trailer;
+    uint64_t epoch_msec;
     int32_t origin_msec;
     uint8_t num_scenes, num_entries, scene_index, entry_index;
     uint8_t *ptr, *end;
@@ -332,8 +332,9 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     sb_time_axis_t* time_axis;
     sb_time_segment_t segment;
     bool success;
+    const uint32_t INFINITE_DURATION = std::numeric_limits<uint32_t>::max();
 
-    if (length < sizeof(CustomPackets::time_axis_config_header_t) + sizeof(CustomPackets::time_axis_config_trailer_t)) {
+    if (length < sizeof(CustomPackets::time_axis_config_header_t)) {
         // Packet too short - even with no scenes the packet must be at least this long
         return false;
     }
@@ -343,8 +344,7 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     
     if (length < (
         sizeof(CustomPackets::time_axis_config_header_t) +
-        num_scenes * sizeof(CustomPackets::time_axis_config_scene_header_t) +
-        sizeof(CustomPackets::time_axis_config_trailer_t)
+        num_scenes * sizeof(CustomPackets::time_axis_config_scene_header_t)
     )) {
         // Packet too short - even with no segments in each of the scenes the packet
         // must be at least this long
@@ -354,6 +354,19 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     if (header->seq_no == previous_seq_no) {
         // Duplicate packet
         return true;
+    }
+
+    // Figure out the epoch relative to which all origin fields in the packet will be
+    // interpreted
+    if (uses_gps_time_for_show_start()) {
+        // When using GPS time for show start, the origin is assumed to be an absolute
+        // time in milliseconds since the UNIX epoch
+        epoch_msec = _start_time_unix_usec / 1000;
+    } else {
+        // When using the internal clock for show start, the origin is assumed to be
+        // relative to the show start time. This is not really recommended but we need
+        // to handle it nevertheless.
+        epoch_msec = 0;
     }
     
     // Remember the sequence number
@@ -382,7 +395,6 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     ptr = reinterpret_cast<uint8_t*>(data);
     end = ptr + length;
     ptr += sizeof(CustomPackets::time_axis_config_header_t);
-    end -= sizeof(CustomPackets::time_axis_config_trailer_t);
 
     for (scene_index = 0; scene_index < num_scenes; scene_index++) {
         if (ptr + sizeof(CustomPackets::time_axis_config_scene_header_t) > end) {
@@ -476,26 +488,10 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
         }
         
         // First, we set the origin of the new time axis
-        {
-            uint64_t epoch_msec;
-    
-            if (uses_gps_time_for_show_start()) {
-                // When using GPS time for show start, the origin is assumed to be an absolute
-                // time in milliseconds since the UNIX epoch
-                epoch_msec = _start_time_unix_usec / 1000;
-            } else {
-                // When using the internal clock for show start, the origin is assumed to be
-                // relative to the show start time. This is not really recommended but we need
-                // to handle it nevertheless.
-                epoch_msec = 0;
-            }
-            
-            if (!uint64_sub_safe(scene_header->origin_msec, epoch_msec, &origin_msec)) {
-                // Overflow or underflow
-                goto exit;
-            }
+        if (!uint64_sub_safe(scene_header->origin_msec, epoch_msec, &origin_msec)) {
+            // Overflow or underflow
+            goto exit;
         }
-    
         sb_time_axis_set_origin_msec(time_axis, origin_msec);
         
         // Add segments
@@ -508,9 +504,19 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
             entry = reinterpret_cast<CustomPackets::time_axis_config_scene_entry_t*>(ptr);
             ptr += sizeof(CustomPackets::time_axis_config_scene_entry_t);
     
-            if (entry->duration_msec == std::numeric_limits<uint32_t>::max()) {
-                // Invalid duration for a finite segment
-                goto exit;
+            if (entry->duration_msec == 0) {
+                // TODO(ntamas): calculate the desired length of the segment
+                sb_trajectory_t* trajectory = sb_screenplay_scene_get_trajectory(scene);
+                if (trajectory != nullptr) {
+                    uint32_t total_duration_before_this_segment = sb_time_axis_get_total_duration_msec(time_axis);
+                    if (total_duration_before_this_segment != INFINITE_DURATION) {
+                        entry->duration_msec = (
+                            sb_trajectory_get_total_duration_msec(trajectory) -
+                            total_duration_before_this_segment -
+                            sb_time_axis_get_origin_msec(time_axis)
+                        );
+                    }
+                }
             }
             
             segment = sb_time_segment_make(
@@ -528,35 +534,7 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
         sb_screenplay_scene_set_duration_msec(scene, sb_time_axis_get_total_duration_msec(time_axis));
     }
     
-    // Add final, infinite segment to last scene. If there are no scenes, add a new
-    // scene first.
-    if (sb_screenplay_size(&new_screenplay) == 0) {
-        if (sb_screenplay_append_new_scene(&new_screenplay, &scene) != SB_SUCCESS) {
-            // Could not add new scene
-            goto exit;
-        }
-    } else {
-        scene = sb_screenplay_get_scene_ptr(
-            &new_screenplay,
-            sb_screenplay_size(&new_screenplay) - 1
-        );
-    }
-
-    time_axis = scene ? sb_screenplay_scene_get_time_axis(scene) : nullptr;
-    if (time_axis == nullptr) {
-        // Could not get time axis; this should not happen but let's be defensive
-        goto exit;
-    }
-
-    trailer = reinterpret_cast<CustomPackets::time_axis_config_trailer_t*>(ptr);
-    segment = sb_time_segment_make_constant_rate(
-        std::numeric_limits<uint32_t>::max(),
-        trailer->initial_rate_scaled / 65535.0f
-    );
-    if (sb_time_axis_append_segment(time_axis, segment) == SB_SUCCESS) {
-        sb_screenplay_scene_set_duration_msec(scene, sb_time_axis_get_total_duration_msec(time_axis));
-        success = true;
-    }
+    success = true;
 
 exit:
     if (success) {

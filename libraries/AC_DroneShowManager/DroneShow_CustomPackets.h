@@ -141,11 +141,6 @@ namespace CustomPackets {
         // Duration of the time axis segment, in milliseconds.
         uint32_t duration_msec;
     } time_axis_config_scene_entry_t;
-    
-    typedef struct PACKED {
-        // Initial rate of the last time axis segment, scaled to the [0; 65535] range.
-        uint16_t initial_rate_scaled;
-    } time_axis_config_trailer_t;
 };
 
 static_assert(
