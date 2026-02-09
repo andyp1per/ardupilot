@@ -332,7 +332,6 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     sb_time_axis_t* time_axis;
     sb_time_segment_t segment;
     bool success;
-    const uint32_t INFINITE_DURATION = std::numeric_limits<uint32_t>::max();
 
     if (length < sizeof(CustomPackets::time_axis_config_header_t)) {
         // Packet too short - even with no scenes the packet must be at least this long
@@ -505,16 +504,27 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
             ptr += sizeof(CustomPackets::time_axis_config_scene_entry_t);
     
             if (entry->duration_msec == 0) {
-                // TODO(ntamas): calculate the desired length of the segment
                 sb_trajectory_t* trajectory = sb_screenplay_scene_get_trajectory(scene);
                 if (trajectory != nullptr) {
-                    uint32_t total_duration_before_this_segment = sb_time_axis_get_total_duration_msec(time_axis);
-                    if (total_duration_before_this_segment != INFINITE_DURATION) {
-                        entry->duration_msec = (
-                            sb_trajectory_get_total_duration_msec(trajectory) -
-                            total_duration_before_this_segment -
-                            sb_time_axis_get_origin_msec(time_axis)
-                        );
+                    // Find out the total duration of all segments added to the time
+                    // axis so far
+                    uint32_t total_duration_before_this_segment_msec = sb_time_axis_get_total_duration_msec(time_axis);
+                    if (total_duration_before_this_segment_msec <= std::numeric_limits<int32_t>::max()) {
+                        // Calculate the show clock time that would belong to the
+                        // wall clock time at the current end of the time axis
+                        float warped_time = sb_time_axis_map(time_axis, total_duration_before_this_segment_msec);
+                        
+                        // Calculate how much time there is left from the trajectory
+                        // at this moment on the show clock
+                        float remaining_time = sb_trajectory_get_total_duration_sec(trajectory) - warped_time;
+                        
+                        // Calculate the effective rate of the current segment
+                        // (average of the initial and the final rate)
+                        float effective_rate = (entry->initial_rate_scaled / 65535.0f + entry->final_rate_scaled / 65535.0f) / 2.0f;
+                        
+                        // Calculate how long the current segment needs to be to ensure
+                        // that we play all the remaining time from the trajectory
+                        entry->duration_msec = remaining_time > 0 ? remaining_time / effective_rate : 0;
                     }
                 }
             }
