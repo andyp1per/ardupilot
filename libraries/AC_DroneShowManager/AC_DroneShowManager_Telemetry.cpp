@@ -204,7 +204,7 @@ uint8_t* AC_DroneShowManager::_fill_drone_show_status_packet_buffer(uint8_t* buf
     } else if (elapsed_time_sec <= -32768) {
         encoded_elapsed_time = -32768;
     } else {
-        encoded_elapsed_time = static_cast<int16_t>(elapsed_time_sec);
+        encoded_elapsed_time = static_cast<int16_t>(std::floorf(elapsed_time_sec));
     }
 
     /* fill the packet. Note that in the first four bytes we _always_ put the
