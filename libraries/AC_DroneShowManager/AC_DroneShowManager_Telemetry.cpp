@@ -4,6 +4,7 @@
 #include <GCS_MAVLink/GCS.h>
 
 #include "AC_DroneShowManager.h"
+#include "AC_DroneShowManager/DroneShow_Enums.h"
 #include "DroneShow_CustomPackets.h"
 #include "skybrush/control.h"
 
@@ -115,6 +116,7 @@ uint8_t* AC_DroneShowManager::_fill_drone_show_status_packet_buffer(uint8_t* buf
 
     uint8_t flags, flags2, flags3, gps_health;
     sb_control_output_time_t time_info;
+    float elapsed_time_sec;
     int16_t encoded_elapsed_time;
     DroneShowModeStage stage = get_stage_in_drone_show_mode();
 
@@ -184,14 +186,25 @@ uint8_t* AC_DroneShowManager::_fill_drone_show_status_packet_buffer(uint8_t* buf
     }
 
     /* calculate time on show clock since start of the current scene */
-    /* TODO(ntamas): we should probably also send the scene index somewhere */
-    time_info = sb_show_controller_get_current_output_time(&_show_controller);
-    if (time_info.warped_time_in_scene_sec > 32767) {
+    if (_stage_in_drone_show_mode == DroneShow_Performing &&
+        sb_show_controller_is_output_valid(&_show_controller)) {
+        /* Show is currently being performed, show the clock from the output info of the
+         * show controller */
+        /* TODO(ntamas): we should probably also send the scene index somewhere */
+        time_info = sb_show_controller_get_current_output_time(&_show_controller);
+        elapsed_time_sec = time_info.warped_time_in_scene_sec;
+    } else {
+        /* Not in the "performing" phase; probably takeoff, landing or something else.
+         * Show the number of seconds elapsed since the show start, in wall clock time. */
+         elapsed_time_sec = get_elapsed_time_since_start_sec();
+    }
+    
+    if (elapsed_time_sec > 32767) {
         encoded_elapsed_time = 32767;
-    } else if (time_info.warped_time_in_scene_sec <= -32768) {
+    } else if (elapsed_time_sec <= -32768) {
         encoded_elapsed_time = -32768;
     } else {
-        encoded_elapsed_time = static_cast<int16_t>(time_info.warped_time_in_scene_sec);
+        encoded_elapsed_time = static_cast<int16_t>(elapsed_time_sec);
     }
 
     /* fill the packet. Note that in the first four bytes we _always_ put the
