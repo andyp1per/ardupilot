@@ -191,14 +191,22 @@ bool AC_DroneShowManager::get_current_guided_mode_command_to_send(
     float yaw_cd = default_yaw_cd;
     float yaw_rate_cd_s = 0;
     
-    if (!get_desired_global_position_at_seconds(elapsed, loc))
-    {
-        // unable to get desired position, this should not have happened
-        return false;
-    }
-
     command.clear();
     command.yaw_cd = default_yaw_cd;
+
+    if (!get_desired_global_position_at_seconds(elapsed, loc))
+    {
+        // Unable to get desired position. This is either because we have now reached
+        // the end of the trajectory or because the show controller produced an output
+        // without a global position. The former is not a problem so we handle that
+        // gracefully.
+        if (is_performance_completed()) {
+            command.reached_end = true;
+            return true;
+        } else {
+            return false;
+        }
+    }
 
     if (get_desired_yaw_cd_and_yaw_rate_cd_s_at_seconds(elapsed, yaw_cd, yaw_rate_cd_s))
     {

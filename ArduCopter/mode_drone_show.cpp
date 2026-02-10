@@ -992,29 +992,34 @@ bool ModeDroneShow::send_guided_mode_command_during_performance()
 {
     AC_DroneShowManager::GuidedModeCommand command;
     AC_DroneShowManager* show_manager = &copter.g2.drone_show_manager;
+    Vector3f pos, zero;
 
     if (show_manager->get_current_guided_mode_command_to_send(
         command, get_default_yaw_cd(),
         _altitude_locked_above_takeoff_altitude
     )) {
-        copter.mode_guided.set_destination_posvelaccel(
-            command.pos, command.vel, command.acc,
-            /* use_yaw = */ true,
-            command.yaw_cd, /* [cd] */
-            /* use_yaw_rate = */ true,
-            command.yaw_rate_cds  /* [cd/s] */
-        );
+        if (command.reached_end) {
+            // Nothing to do, we have reached the end and we will switch to the
+            // next stage soon
+        } else {
+            // Send the generated command
+            copter.mode_guided.set_destination_posvelaccel(
+                command.pos, command.vel, command.acc,
+                /* use_yaw = */ true,
+                command.yaw_cd, /* [cd] */
+                /* use_yaw_rate = */ true,
+                command.yaw_rate_cds  /* [cd/s] */
+            );
+
+            show_manager->notify_guided_mode_command_sent(command);
+        }
 
         if (command.unlock_altitude) {
             _altitude_locked_above_takeoff_altitude = false;
         }
 
-        show_manager->notify_guided_mode_command_sent(command);
-
         return true;
     } else {
-        Vector3f pos, zero;
-
         // Send a zero-velocity command to stop the drone -- this is really just
         // to prevent an internal "flow of control" error before we actually
         // switch to loiter mode

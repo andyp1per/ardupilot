@@ -121,17 +121,19 @@ public:
         Vector3f pos;
         Vector3f vel;
         Vector3f acc;
-        bool unlock_altitude;
         float yaw_cd;
         float yaw_rate_cds;
+        bool unlock_altitude;
+        bool reached_end;
 
         void clear() {
             pos.zero();
             vel.zero();
             acc.zero();
-            unlock_altitude = false;
             yaw_cd = 0.0f;
             yaw_rate_cds = 0.0f;
+            unlock_altitude = false;
+            reached_end = false;
         }
     };
 
@@ -186,8 +188,9 @@ public:
     // during the execution of the show.
     uint32_t get_controller_update_delta_msec() const { return _controller_update_delta_msec; }
 
-    // Returns the guided mode command that should be sent during the performance
-    // when the function is invoked
+    // Retrieves the guided mode command that should be sent during the performance
+    // when the function is invoked. Returns true if the command was updated successfully,
+    // false when failed to update the command.
     bool get_current_guided_mode_command_to_send(
         GuidedModeCommand& command,
         int32_t default_yaw_cd,
