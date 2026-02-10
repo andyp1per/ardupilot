@@ -1,13 +1,11 @@
-# hw definition file for processing by chibios_pins.py
+# hw definition file for processing by chibios_hwdef.py
 # for wgdrones-dr001 bootloader
 
-# MCU class and specific type
+# ---------------- MCU & System ----------------
 MCU STM32H7xx STM32H743xx
 
-# board ID for firmware load
-APJ_BOARD_ID 1048
+APJ_BOARD_ID AP_HW_KakuteH7
 
-# crystal frequency, setup to use external oscillator
 OSCILLATOR_HZ 8000000
 
 FLASH_SIZE_KB 2048
@@ -15,36 +13,37 @@ FLASH_SIZE_KB 2048
 # bootloader starts at zero offset
 FLASH_RESERVE_START_KB 0
 
-# the location where the bootloader will put the firmware
 # the H743 has 128k sectors
 FLASH_BOOTLOADER_LOAD_KB 128
 
+ENABLE_DFU_BOOT 1
 
-# order of UARTs (and USB).
+# ------------------- USB ----------------------
 SERIAL_ORDER OTG1
 
-# PA10 IO-debug-console
 PA11 OTG_FS_DM OTG1
 PA12 OTG_FS_DP OTG1
 
+# ------------------- SWD ----------------------
 PA13 JTMS-SWDIO SWD
 PA14 JTCK-SWCLK SWD
 
-# make sure Vsw is on during bootloader
-PD10  PINIO1 OUTPUT LOW
+# --------------- Power & GPIO -----------------
+# keep Vsw on during bootloader
+PD10 nVDD_5V_SW OUTPUT LOW
 
+# ------------------- LEDs ---------------------
 PE3 LED_BOOTLOADER OUTPUT LOW
 define HAL_LED_ON 0
 
-# Add CS pins to ensure they are high in bootloader
+# ------------- SPI CS (hold high) -------------
 PC2 ICM42688_CS CS
 PD7 BARO_CS CS
 PB4 BMI088_ACCEL_CS CS
 PC3 BMI088_GYRO_CS CS
 
-# support flashing from SD card:
-
-# FATFS support:
+# ----------- SD Card Flash Support ------------
+# ChibiOS FATFS config
 define CH_CFG_USE_MEMCORE 1
 define CH_CFG_USE_HEAP 1
 define CH_CFG_USE_SEMAPHORES 0
@@ -53,15 +52,14 @@ define CH_CFG_USE_DYNAMIC 1
 define CH_CFG_USE_WAITEXIT 1
 define CH_CFG_USE_REGISTRY 1
 
-# microSD support
-PC8 SDMMC1_D0 SDMMC1
-PC9 SDMMC1_D1 SDMMC1
-PC10 SDMMC1_D2 SDMMC1
-PC11 SDMMC1_D3 SDMMC1
-PC12 SDMMC1_CK SDMMC1
-PD2 SDMMC1_CMD SDMMC1
+# microSD via SDMMC1
+PC8  SDMMC1_D0  SDMMC1
+PC9  SDMMC1_D1  SDMMC1
+PC10 SDMMC1_D2  SDMMC1
+PC11 SDMMC1_D3  SDMMC1
+PC12 SDMMC1_CK  SDMMC1
+PD2  SDMMC1_CMD SDMMC1
 
-# enable FAT filesystem support (needs a microSD defined via SDMMC)
+define FATFS_HAL_DEVICE SDCD1
 define HAL_OS_FATFS_IO 1
-
 define AP_BOOTLOADER_FLASH_FROM_SD_ENABLED 1
