@@ -524,7 +524,7 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
                         
                         // Calculate how long the current segment needs to be to ensure
                         // that we play all the remaining time from the trajectory
-                        entry->duration_msec = remaining_time > 0 ? remaining_time / effective_rate : 0;
+                        entry->duration_msec = remaining_time > 0 ? remaining_time * 1000 / effective_rate : 0;
                     }
                 }
             }
