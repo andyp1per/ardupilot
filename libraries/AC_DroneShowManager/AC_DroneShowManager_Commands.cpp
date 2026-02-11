@@ -8,6 +8,8 @@
 #include "DroneShow_CustomPackets.h"
 #include "DroneShowPyroDevice.h"
 #include "include/mavlink/v2.0/all/mavlink.h"
+#include "skybrush/basic_types.h"
+#include "skybrush/trajectory.h"
 
 static bool uint64_sub_safe(uint64_t a, uint64_t b, int32_t* result);
 
@@ -426,26 +428,41 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
                 goto exit;
             }
 
+            // rth_plan_entry contains the start time of the RTH plan, but we don't
+            // need that -- we want to create a trajectory that starts at T=0 in
+            // show clock because the clock of the new RTH scene starts from 0
+            rth_plan_entry.time_sec = 0.0f;
+
             // Create a trajectory based on rth_plan_entry and set it to the scene
             {
                 sb_trajectory_t* rth_trajectory = sb_trajectory_new();
-                const sb_control_output_t* current_output = sb_show_controller_get_current_output(&_show_controller);
+                sb_trajectory_player_t player;
+                sb_vector3_with_yaw_t start_with_yaw;
                 sb_vector3_t start;
                 
-                if (current_output == nullptr || !sb_control_output_get_position_if_set(current_output, &start)) {
-                    // should not happen
-                    goto exit;
-                }
-
                 if (rth_trajectory == nullptr) {
                     // Out of memory
                     goto exit;
                 }
                 
-                // rth_plan_entry contains the start time of the RTH plan, but we don't
-                // need that -- we want to create a trajectory that starts at T=0 in
-                // show clock because the clock of the new RTH scene starts from 0
-                rth_plan_entry.time_sec = 0.0f;
+                if (_show_controller.trajectory_player == nullptr) {
+                    // should not happen
+                    goto exit;
+                }
+                
+                if (sb_trajectory_player_clone(&player, _show_controller.trajectory_player) != SB_SUCCESS) {
+                    // should not happen
+                    goto exit;
+                }
+                
+                if (sb_trajectory_player_get_position_at(&player, rth_start_time, &start_with_yaw) != SB_SUCCESS) {
+                    // should not happen
+                    goto exit;
+                }
+                
+                start.x = start_with_yaw.x;
+                start.y = start_with_yaw.y;
+                start.z = start_with_yaw.z;
                 if (sb_trajectory_update_from_rth_plan_entry(rth_trajectory, &rth_plan_entry, start) != SB_SUCCESS) {
                     // Could not create RTH plan trajectory
                     SB_DECREF(rth_trajectory);
