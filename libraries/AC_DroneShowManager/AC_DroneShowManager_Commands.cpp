@@ -457,6 +457,7 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
                 
                 if (sb_trajectory_player_get_position_at(&player, rth_start_time, &start_with_yaw) != SB_SUCCESS) {
                     // should not happen
+                    sb_trajectory_player_destroy(&player);
                     goto exit;
                 }
                 
@@ -465,12 +466,15 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
                 start.z = start_with_yaw.z;
                 if (sb_trajectory_update_from_rth_plan_entry(rth_trajectory, &rth_plan_entry, start) != SB_SUCCESS) {
                     // Could not create RTH plan trajectory
+                    sb_trajectory_player_destroy(&player);
                     SB_DECREF(rth_trajectory);
                     goto exit;
                 }
 
                 sb_screenplay_scene_set_trajectory(scene, rth_trajectory);
                 SB_DECREF(rth_trajectory);
+
+                sb_trajectory_player_destroy(&player);
             }
             
             // Use a fixed light program with RTH color
