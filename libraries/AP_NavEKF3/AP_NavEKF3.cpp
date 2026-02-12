@@ -1317,8 +1317,8 @@ bool NavEKF3::setHoverZBiasCorrection(uint8_t imu_index, float correction)
     if (imu_index >= INS_MAX_INSTANCES || !core) {
         return false;
     }
-    // Clamp to safe range - vibration rectification shouldn't exceed ±0.3 m/s²
-    constexpr float MAX_HOVER_BIAS_CORRECTION = 0.3f;
+    // Clamp to safe range - vibration rectification shouldn't exceed ±0.6 m/s²
+    constexpr float MAX_HOVER_BIAS_CORRECTION = 0.6f;
     _accelBiasHoverZ_correction[imu_index] = constrain_float(correction,
                                                               -MAX_HOVER_BIAS_CORRECTION,
                                                               MAX_HOVER_BIAS_CORRECTION);
