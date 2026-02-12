@@ -2369,3 +2369,120 @@ TKOFF_GNDEFF_ALT = 5          # Keep ground effect protection to 5m
 - More filtering = smoother altitude during throttle transients, but slower response
 - For indoor flight where stability matters more than responsiveness, use 0.5-1.0 Hz
 - For outdoor flight or aggressive maneuvers, may want 0 (disabled) or higher frequency
+
+## Log Analysis: logtd5-7 (Outdoor User Drone)
+
+### Vehicle Characteristics
+- MOT_THST_HOVER = 0.125 (very overpowered)
+- FRAME_CLASS=1, FRAME_TYPE=1 (Quad BetaFlight-X)
+- Baro temp starts ~42-45°C (electronics self-heating), drops to ~20°C in flight (-17 to -21°C swing)
+- RNGFND1_TYPE=24 (TOF sensor), RNGFND1_MAX_CM=3000, effective range ~12m
+- EK3_IMU_MASK=2 (only IMU1 used by EKF)
+
+### logtd5.bin — Baseline (no BARO1_THST_SCALE)
+- LOITER at ~20m for 2 minutes
+- Alt error std: 47.3cm, mean: -41.3cm (persistent undershoot)
+- Baro-EKF divergence: 55cm std
+- Baro temp: 42→20°C — 1.53m ground-level baro drift from thermal cooling
+- Rangefinder: NoData at 20m (beyond range), Good below ~12m
+- **Root cause of poor alt hold: PSC_POSZ_P=0.3 (too low), PSC_VELZ_P=1.8 (too low)**
+- INS_ACC_VRFB_Z = -0.531 on IMU0 (not even used by EKF since EK3_IMU_MASK=2)
+
+### logtd6.bin — Improved tuning
+- PSC_POSZ_P=1.0, PSC_VELZ_P=5.0, INS_ACC_VRFB_Z reset to 0, BARO1_THST_SCALE=-100
+- ALT_HOLD at ~18m
+- Alt error std: 17.9cm, mean: -5.4cm — **dramatic improvement**
+- Hover bias learning saved INS_ACC2_VRFB_Z = -0.444 (IMU1, the active one)
+- INS_ACC_VRFB_Z (IMU0) stayed at 0.0 — no EKF core on IMU0
+
+### logtd7.bin — Two-phase flight
+- LOITER1 at 27m: alt error std 23.1cm (baro-only, rangefinder beyond range)
+- LOITER2 at 6m: alt error std 25.7cm (with rangefinder, all Stat=4)
+- Rangefinder fusion at 6m didn't dramatically improve over baro-only at 27m
+- Log truncated before disarm — bias learning not saved
+
+### Key Findings
+
+**Baro thermal drift is the dominant error source, not propwash:**
+- 21°C temperature drop from board self-heating cooling in airflow
+- 1.5m equivalent baro drift over 3-minute flight
+- At 20m altitude, propwash effect on baro is negligible
+- TCAL_BARO_EXP model adds pow(T-25, expo) to pressure — wrong direction for this baro sensor (reads higher pressure when hot, TCAL designed for ICM-20789 which reads low when hot)
+
+**BARO1_THST_SCALE estimation (logtd5):**
+- At 3-8m: estimated -225 to -300 Pa (altitude-detrended)
+- At 15-22m: negligible correlation (propwash doesn't reach)
+- Recommended conservative value: -100 to -150 Pa (thermal drift confounds the estimate)
+- At hover throttle 0.125, correction is only -12 to -19 Pa ≈ 0.1-0.2m
+
+**PSC_POSZ_P and PSC_VELZ_P are the biggest altitude hold levers:**
+- logtd5 (P=0.3, V=1.8): 47cm std, -41cm mean error
+- logtd6 (P=1.0, V=5.0): 18cm std, -5cm mean error
+
+## Throttle vs Current for Baro Thrust Compensation
+
+### Analysis Summary
+Compared throttle command vs battery current as predictors of baro pressure
+error across 17 logs from two different vehicles (indoor logjk drone and
+outdoor logtd drone), at multiple altitude bands.
+
+### Results at 0-3m (where thrust compensation matters most)
+
+| Log | N | Thr→Baro | Curr→Baro | Thr-Curr corr | Winner |
+|------|------|----------|-----------|---------------|--------|
+| logjk1 | 53 | -0.724 | -0.735 | 0.923 | ~same |
+| logjk2 | 312 | -0.491 | -0.413 | 0.952 | THR |
+| logjk3 | 154 | -0.506 | -0.208 | 0.432 | THR |
+| logjk4 | 22 | -0.578 | -0.399 | 0.754 | THR |
+| logjk5 | 47 | -0.788 | -0.480 | 0.521 | THR |
+| logjk6 | 100 | -0.615 | -0.495 | 0.537 | THR |
+| logjk8 | 42 | -0.800 | -0.516 | 0.570 | THR |
+| logtd1 | 46 | +0.093 | +0.075 | 0.997 | ~same |
+| logtd2 | 1775 | -0.106 | -0.112 | 0.974 | ~same |
+| logtd3 | 43 | +0.232 | +0.591 | 0.695 | CURR |
+| logtd4 | 54 | -0.387 | -0.302 | 0.988 | THR |
+| logtd5 | 47 | -0.422 | -0.256 | 0.968 | THR |
+| logtd6 | 40 | -0.352 | -0.249 | 0.986 | THR |
+| logtd7 | 104 | -0.165 | -0.213 | 0.939 | CURR |
+
+**Score: Throttle 9, Current 2, Same 3**
+
+### Results at 3-8m
+
+**Score: Throttle 4, Current 0, Same 4**
+
+Notable: logjk2 (thr=-0.740 vs curr=-0.534), logjk3 (thr=-0.775 vs curr=-0.151),
+logtd1 (thr=-0.807 vs curr=-0.647)
+
+### At 15-30m hover (logtd6 only exception)
+
+Current outperformed throttle only in logtd6 LOITER at 18m:
+- Throttle: corr=0.333, 5.7% noise reduction
+- Current: corr=0.597, 19.8% noise reduction
+- Throttle-current correlation was only 0.412 (windy conditions)
+- 91% of current variation was NOT explained by throttle
+
+### Why Throttle Wins at Low Altitude
+
+1. **Current sensor noise** — battery shunt sensors have significant measurement noise
+   that masks the baro pressure correlation
+2. **Non-motor current** — avionics, servos, LEDs draw current but produce no thrust
+3. **Throttle is already linearized** — motor mixer applies MOT_THST_EXPO, so throttle
+   output ≈ thrust (no need for current to capture the nonlinearity)
+4. **No wind indoors** — throttle accurately predicts thrust without wind disturbance
+5. **Motor inertia** — current spikes during acceleration don't immediately produce
+   thrust/propwash
+
+### Why Current Wins at High Altitude in Wind
+
+- Wind gusts change actual thrust (current) without changing throttle command
+- Battery voltage sag affects thrust-per-throttle ratio
+- But this only matters where propwash doesn't affect the baro anyway
+
+### Conclusion
+
+**Stick with throttle for BARO1_THST_SCALE.** The theoretical advantage of current
+(captures real thrust variations) only appears at high altitude in wind — exactly
+where baro thrust compensation is irrelevant. At low altitude where compensation
+matters, throttle is cleaner, more reliable, universally available, and empirically
+better correlated with baro pressure.
