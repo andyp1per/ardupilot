@@ -1,0 +1,92 @@
+# EKF3 Altitude Hold Analysis
+
+Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Two vehicles tested:
+- **SFD indoor** — small fast drone (MambaH743v4), indoor optical flow, logjk series
+- **TD** — optical flow copter (indoor/outdoor), logtd series
+
+## Master Summary Table
+
+| Log | Date | Vehicle | Key Params Changed | Alt Err Std | Key Finding |
+|-----|------|---------|--------------------|-------------|-------------|
+| [logjk1](logs/logjk1.md) | Jan 25 | SFD indoor | Optical flow, no VELZ | — | Z-bias drifted to +0.92 m/s² while disarmed; led to stationary zero-vel fusion fix |
+| [logjk2](logs/logjk2.md) | Jan 27 | SFD indoor | Same | — | THST_SCALE=-556 Pa estimated (consistent with logjk1) |
+| [logjk3](logs/logjk3.md) | Jan 28 | SFD indoor | Same | — | Worst baro noise (2.71m std), THST_SCALE=-280 Pa |
+| [logjk4](logs/logjk4.md) | Jan 28 | SFD indoor | VRFB_Z=-0.199, GNDEFF=0.8 | **FAILED** | Frozen correction + ground effect conflict prevents takeoff |
+| [logjk5](logs/logjk5.md) | Jan 28 | SFD indoor | Same | — | Best baro noise of logjk series (1.01m std) |
+| [logjk6](logs/logjk6.md) | Jan 30 | SFD indoor | RNG_USE_HGT=2.0 | **67.4cm** | Unflyable — rangefinder feedback loop discovered |
+| [logjk7](logs/logjk7.md) | Jan 30 | SFD indoor | **RNG_USE_HGT=-1** | **10.4cm** | 6.5x improvement — confirmed feedback loop fix |
+| [logjk8](logs/logjk8.md) | Jan 30 | SFD indoor | Same as logjk7 | — | Best throttle→baro correlation (-0.800) |
+| [logjk9](logs/logjk9.md) | Jan 30 | SFD indoor | Same | — | Not yet analyzed in detail |
+| [logtd1](logs/logtd1.md) | Jan 30 | TD indoor | GNDEFF=1.0, no THST | — | Severe baro propwash (+4.8m offset); THST_SCALE=-147 calculated |
+| [logtd2](logs/logtd2.md) | Jan 30 | TD indoor | **RNG_USE_HGT=-1**, THST=-147 | **6.2cm** | Best altitude hold achieved across all logs |
+| [logtd3](logs/logtd3.md) | Jan 30 | TD indoor | THST=-147, RNG NoData | **CEILING** | Ceiling hit — rangefinder had no data; motivated THST_FILT |
+| [logtd4](logs/logtd4.md) | Feb 12 | TD outdoor | Same | — | Throttle vs current comparison data |
+| [logtd5](logs/logtd5.md) | Feb 12 | TD outdoor | PSC_P=0.3, V=1.8 | **47.3cm** | PSC gains too low; baro thermal drift -22°C; VRFB_Z on wrong IMU |
+| [logtd6](logs/logtd6.md) | Feb 12 | TD outdoor | **PSC_P=1.0, V=5.0** | **17.9cm** | 2.6x improvement from PSC tuning alone |
+| [logtd7](logs/logtd7.md) | Feb 12 | TD outdoor | Same as logtd6 | 23-26cm | Rangefinder at 6m didn't beat baro-only at 27m |
+
+## Earlier Development Logs (log1-log12)
+
+These logs document the initial development of ground effect compensation and Z-bias
+inhibition on the SFD vehicle. Key milestones:
+
+| Log | Purpose | Outcome |
+|-----|---------|---------|
+| log4 | Original altitude hold analysis | Ground effect gap identified; TKOFF_GNDEFF_ALT created |
+| log5 | TKOFF_GNDEFF_ALT=0.8 test | Innovation clamping fixed; velocity drift still present |
+| log6 | Ground motor test | +0.084 m/s² AccZ shift from motors confirmed |
+| log7 | Temperature vs motor analysis | Motor effect 20x larger than temperature effect |
+| log8 | Z-bias inhibition flight test | Dramatic improvement: ±0.10m hover, 46s stable |
+| log1 | AID_NONE mode fix | Zero velocity fusion for pre-arm stability |
+| log2 | Hover bias calibration flight | Learned INS_ACC_VRFB_Z: IMU0=0.073, IMU1=0.048 |
+| log3 | Hover bias validation flight | Frozen correction working; EKF residual converged to zero |
+
+## Topic Files
+
+Cross-cutting analysis across multiple logs:
+
+| Topic | Description |
+|-------|-------------|
+| [Throttle vs Current](topics/throttle_vs_current.md) | 17-log comparison: throttle wins 9-2 for baro compensation |
+| [Baro Thermal Drift](topics/baro_thermal_drift.md) | logtd5-7: 21°C temp drop causes 1.5m drift |
+| [EK3_RNG_USE_HGT Feedback](topics/ekf_rng_use_hgt_feedback.md) | logjk6→7: feedback loop discovery and fix |
+| [BARO1_THST_FILT](topics/baro_thrust_filter.md) | Throttle filter implementation, calibration guide |
+
+## Key Implementation Commits
+
+| Commit | Description |
+|--------|-------------|
+| `6bc5565643` | Inhibit Z-bias learning during ground effect |
+| `49187dac64` | Inhibit Z-bias learning without Z velocity source |
+| `0ff35c20b4` | Fuse zero velocity when stationary on ground |
+| `175c635a08` | Check actual Z velocity availability, not just config |
+
+## Open Issues
+
+1. **Ground effect + frozen correction conflict** — [logjk4](logs/logjk4.md) shows
+   frozen correction creates phantom acceleration during ground effect; fix proposed
+   but not yet implemented
+2. **Post-landing EKF divergence** — ground effect protection accumulates error that
+   causes drift after disarm
+3. **Ground effect flags clear too early** — uses EKF altitude (which can be wrong)
+   instead of rangefinder
+
+## Best Known Configuration
+
+### Indoor (small drone, significant propwash)
+```
+EK3_RNG_USE_HGT = -1
+BARO1_THST_SCALE = -550    (vehicle-specific, calibrate per airframe)
+BARO1_THST_FILT = 1.0
+TKOFF_GNDEFF_ALT = 5
+INS_ACC_VRFB_Z = 0         (let it re-learn)
+ACC_ZBIAS_LEARN = 2
+```
+
+### Outdoor (moderate propwash)
+```
+PSC_POSZ_P = 1.0
+PSC_VELZ_P = 5.0
+BARO1_THST_SCALE = -100 to -150
+EK3_RNG_USE_HGT = -1
+```
