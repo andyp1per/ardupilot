@@ -24,6 +24,7 @@ Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Two vehicles test
 | [logtd5](logs/logtd5.md) | Feb 12 | TD outdoor | PSC_P=0.3, V=1.8 | **47.3cm** | PSC gains too low; baro thermal drift -22°C; VRFB_Z on wrong IMU |
 | [logtd6](logs/logtd6.md) | Feb 12 | TD outdoor | **PSC_P=1.0, V=5.0** | **17.9cm** | 2.6x improvement from PSC tuning alone |
 | [logtd7](logs/logtd7.md) | Feb 12 | TD outdoor | Same as logtd6 | 23-26cm | Rangefinder at 6m didn't beat baro-only at 27m |
+| [logtd8](logs/logtd8.md) | Feb 12 | TD outdoor | GPS+baro, VRFB=-0.57 | **20-36cm** | VRFB clamp bug: true bias ~0.57 exceeds ±0.3 clamp |
 
 ## Earlier Development Logs (log1-log12)
 
@@ -70,6 +71,9 @@ Cross-cutting analysis across multiple logs:
    causes drift after disarm
 3. **Ground effect flags clear too early** — uses EKF altitude (which can be wrong)
    instead of rangefinder
+4. **VRFB clamp too small** — [logtd8](logs/logtd8.md) shows true vibration
+   rectification of ~0.57 m/s² exceeds ±0.3 clamp; saved values grow but only
+   0.3 is ever applied, wasting learning each flight
 
 ## Best Known Configuration
 
