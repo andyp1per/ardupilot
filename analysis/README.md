@@ -24,7 +24,7 @@ Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Two vehicles test
 | [logtd5](logs/logtd5.md) | Feb 12 | TD outdoor | PSC_P=0.3, V=1.8 | **47.3cm** | PSC gains too low; baro thermal drift -22°C; VRFB_Z on wrong IMU |
 | [logtd6](logs/logtd6.md) | Feb 12 | TD outdoor | **PSC_P=1.0, V=5.0** | **17.9cm** | 2.6x improvement from PSC tuning alone |
 | [logtd7](logs/logtd7.md) | Feb 12 | TD outdoor | Same as logtd6 | 23-26cm | Rangefinder at 6m didn't beat baro-only at 27m |
-| [logtd8](logs/logtd8.md) | Feb 12 | TD outdoor | GPS+baro, VRFB=-0.57 | **20-36cm** | VRFB clamp bug: true bias ~0.57 exceeds ±0.3 clamp |
+| [logtd8](logs/logtd8.md) | Feb 12 | TD outdoor | GPS+baro, VRFB=-0.57 | **20-36cm** | VRFB clamp finding: true bias ~0.57; clamp raised to ±0.6 |
 
 ## Earlier Development Logs (log1-log12)
 
@@ -55,12 +55,41 @@ Cross-cutting analysis across multiple logs:
 
 ## Key Implementation Commits
 
+Development commits on this branch (unsquashed). Squashed PR is on `pr-z-bias-squashed`.
+
+**EKF3 core changes:**
+
 | Commit | Description |
 |--------|-------------|
-| `6bc5565643` | Inhibit Z-bias learning during ground effect |
-| `49187dac64` | Inhibit Z-bias learning without Z velocity source |
-| `0ff35c20b4` | Fuse zero velocity when stationary on ground |
-| `175c635a08` | Check actual Z velocity availability, not just config |
+| `a0f30dad8f` | Inhibit Z-bias learning during ground effect |
+| `51232123fa` | Inhibit Z-bias learning without Z velocity source |
+| `0625e3264e` | Check actual Z velocity availability for bias inhibition |
+| `2661900e57` | Fuse zero velocity when stationary on ground |
+| `be3f38b595` | Use frozen correction for hover Z-bias |
+| `2b2b439a9b` | Increase hover Z-bias correction clamp to ±0.6 m/s² |
+
+**Parameter storage and abstraction:**
+
+| Commit | Description |
+|--------|-------------|
+| `7d1c3ab2c3` | Per-IMU vibration rectification bias storage (INS_ACCx_VRFB_Z) |
+| `4eff5193dc` | AHRS hover Z-bias accessor methods |
+
+**Copter-level integration:**
+
+| Commit | Description |
+|--------|-------------|
+| `35a7f215dc` | TKOFF_GNDEFF_ALT parameter for ground effect threshold |
+| `b417228a68` | TKOFF_GNDEFF_TMO parameter for ground effect timeout |
+| `78463d24c5` | Hover Z-bias learning in ArduCopter |
+| `b9595ea59a` | ACC_ZBIAS_LEARN bitmask with ground inhibit option |
+| `1e3bca8f8f` | Inhibit accel bias learning during acro flight |
+
+**Tests:**
+
+| Commit | Description |
+|--------|-------------|
+| `2439587c5a` | Autotests for ground effect compensation active in EKF |
 
 ## Open Issues
 
@@ -71,9 +100,17 @@ Cross-cutting analysis across multiple logs:
    causes drift after disarm
 3. **Ground effect flags clear too early** — uses EKF altitude (which can be wrong)
    instead of rangefinder
-4. **VRFB clamp too small** — [logtd8](logs/logtd8.md) shows true vibration
-   rectification of ~0.57 m/s² exceeds ±0.3 clamp; saved values grow but only
-   0.3 is ever applied, wasting learning each flight
+
+## Resolved Issues
+
+1. **VRFB clamp raised to ±0.6** — [logtd8](logs/logtd8.md) showed true vibration
+   rectification of ~0.57 m/s² exceeded the original ±0.3 clamp. MAX_HOVER_BIAS_CORRECTION
+   raised to 0.6f in both InitialiseFilter and setHoverZBiasCorrection.
+2. **Zero velocity fusion CI failures** — Fusing at IMU rate (400Hz) overconstrained the filter;
+   fusing before tiltAlignComplete caused "EKF attitude is bad". Fixed by gating behind
+   `fuseHgtData` and `tiltAlignComplete`. See [EKF3 CLAUDE.md](../libraries/AP_NavEKF3/CLAUDE.md).
+3. **Ground effect default threshold** — TKOFF_GNDEFF_ALT=0 changed default from 0.50m to 0m;
+   fixed with `is_positive()` fallback to original 0.50m.
 
 ## Best Known Configuration
 
