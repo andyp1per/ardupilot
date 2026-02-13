@@ -1,8 +1,9 @@
 # EKF3 Altitude Hold Analysis
 
-Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Two vehicles tested:
+Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Three vehicles tested:
 - **SFD indoor** — small fast drone (MambaH743v4), indoor optical flow, logjk series
 - **TD** — optical flow copter (indoor/outdoor), logtd series
+- **SmallFastDronev1** — BF_X quad, indoor optical flow + rangefinder, log197/198 series
 
 ## Master Summary Table
 
@@ -25,6 +26,8 @@ Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Two vehicles test
 | [logtd6](logs/logtd6.md) | Feb 12 | TD outdoor | **PSC_P=1.0, V=5.0** | **17.9cm** | 2.6x improvement from PSC tuning alone |
 | [logtd7](logs/logtd7.md) | Feb 12 | TD outdoor | Same as logtd6 | 23-26cm | Rangefinder at 6m didn't beat baro-only at 27m |
 | [logtd8](logs/logtd8.md) | Feb 12 | TD outdoor | GPS+baro, VRFB=-0.57 | **20-36cm** | VRFB clamp finding: true bias ~0.57; clamp raised to ±0.6 |
+| [log197](logs/log197.md) | Feb 13 | SmallFastDronev1 indoor | Stabilize, THST=0, TCAL on | — | VRF=+0.089; TCAL Z-axis overcorrects 3.8x (upside-down cal) |
+| [log198](logs/log198.md) | Feb 13 | SmallFastDronev1 indoor | Loiter, RNG_USE_HGT=3 | **CRASH** | Terrain offset feedback loop → flow velocity 2-4x → backward lean |
 
 ## Earlier Development Logs (log1-log12)
 
@@ -52,6 +55,7 @@ Cross-cutting analysis across multiple logs:
 | [Baro Thermal Drift](topics/baro_thermal_drift.md) | logtd5-7: 21°C temp drop causes 1.5m drift |
 | [EK3_RNG_USE_HGT Feedback](topics/ekf_rng_use_hgt_feedback.md) | logjk6→7: feedback loop discovery and fix |
 | [BARO1_THST_FILT](topics/baro_thrust_filter.md) | Throttle filter implementation, calibration guide |
+| [Indoor Loiter — SFDv1](topics/indoor_loiter_sfdv1.md) | Crash analysis, TCAL upside-down discovery, VRF estimation, thermal drift |
 
 ## Key Implementation Commits
 
@@ -100,6 +104,13 @@ Development commits on this branch (unsquashed). Squashed PR is on `pr-z-bias-sq
    causes drift after disarm
 3. **Ground effect flags clear too early** — uses EKF altitude (which can be wrong)
    instead of rangefinder
+4. **TCAL upside-down calibration** — [log197](logs/log197.md) showed INS_TCAL Z-axis
+   coefficients overcorrect 3.8x when board was calibrated upside down. Scale factor
+   drift (0.34%/°C) reverses sign with orientation. Fix: recalibrate right-side up or
+   zero Z-axis coefficients.
+5. **Z-bias learning contaminated by thermal drift** — [log198](logs/log198.md) showed
+   learning converges to wrong value (-0.066 vs true +0.089) when baro thermal drift
+   dominates the height reference. Needs clean TCAL + RNG_USE_HGT=-1 first.
 
 ## Resolved Issues
 
@@ -122,6 +133,17 @@ BARO1_THST_FILT = 1.0
 TKOFF_GNDEFF_ALT = 5
 INS_ACC_VRFB_Z = 0         (let it re-learn)
 ACC_ZBIAS_LEARN = 2
+```
+
+### Indoor (low-throttle quad, thermal-dominated baro)
+```
+EK3_RNG_USE_HGT = -1
+BARO1_THST_SCALE = -20         (vehicle-specific, low throttle = less propwash)
+TKOFF_GNDEFF_TMO = 3.0
+PSC_POSZ_P = 1.0
+INS_ACC_VRFB_Z = 0.09          (measured VRF for this airframe)
+ACC_ZBIAS_LEARN = 3
+INS_TCAL1_ACC*_Z = 0           (zero until recalibrated right-side up)
 ```
 
 ### Outdoor (moderate propwash)
