@@ -30,6 +30,8 @@ This file tracks our EKF3 analysis work, including methodology, implementation n
 - [x] **Fix hover Z-bias not loaded at boot** - Deferred loading via `one_hz_loop()`
 - [x] **Move hover Z-bias learning to Copter** - Learning in ArduCopter/Attitude.cpp
 - [x] **Validate hover Z-bias end-to-end** - log2/log3 confirm full cycle
+- [x] **CI fixes for zero velocity fusion** - tiltAlignComplete gate, fuseHgtData rate limit, 0.50m default threshold
+- [x] **TKOFF_GNDEFF_TMO parameter** - Configurable timeout for ground effect clearing
 - [ ] **Fix post-landing EKF divergence** - Error accumulates during landing ground effect
 - [ ] **Fix ground effect + frozen correction conflict** - See [logjk4 analysis](../../analysis/logs/logjk4.md)
 - [ ] Investigate velocity sensor options (optical flow, rangefinder)
@@ -144,7 +146,11 @@ The EKF has two ground effect mechanisms:
 
 Both only active when `takeoff_expected` OR `touchdown_expected` is true.
 
-**TKOFF_GNDEFF_ALT parameter:** Configurable altitude threshold for ground effect re-activation.
+**Parameters:**
+- **TKOFF_GNDEFF_ALT:** Altitude threshold (m) for ground effect. When set, ground effect re-enables on descent below this altitude, and touchdown detection is limited to below this altitude (allows bias learning at hover altitude). When 0 (default), uses original 0.50m hardcoded threshold for clearing ground effect on takeoff.
+- **TKOFF_GNDEFF_TMO:** Timeout (s) before clearing ground effect. When set, requires BOTH timeout elapsed AND above altitude threshold (with 5s max safety). When 0 (default), uses original behavior (altitude OR 5s timeout).
+
+**Default threshold preservation (CI fix):** When TKOFF_GNDEFF_ALT=0, the code uses `is_positive()` to fall back to the original 0.50m threshold. Without this, the default changed from 0.50m to 0m, which altered ground effect timing for all tests.
 
 ### Z-Axis Bias Inhibition
 
@@ -160,18 +166,31 @@ const bool zAxisInhibit = (i == 15) && gndEffectActive;
 
 | Scenario | Z-bias Learning | Mechanism |
 |----------|-----------------|-----------|
-| Stationary on ground, disarmed | Enabled via zero velocity fusion | Strongly observable |
+| Stationary on ground, disarmed (after tilt align) | Enabled via zero velocity fusion | Strongly observable |
+| Stationary on ground, disarmed (before tilt align) | Not enabled | tiltAlignComplete gate |
 | Armed on ground (motors spinning) | Inhibited | Ground effect flag |
-| Takeoff (below TKOFF_GNDEFF_ALT) | Inhibited | Ground effect flag |
+| Takeoff (below TKOFF_GNDEFF_ALT / 0.50m default) | Inhibited | Ground effect flag |
 | Hover (above TKOFF_GNDEFF_ALT) | Enabled | Weakly observable from baro |
 | Flying with GPS Z velocity | Enabled | Strongly observable |
-| Landing (slow descent) | Inhibited | Ground effect flag |
+| Landing (slow descent, below TKOFF_GNDEFF_ALT) | Inhibited | Ground effect flag |
+| Landing (slow descent, above TKOFF_GNDEFF_ALT) | Enabled | touchdown_expected suppressed |
 
 ### Stationary Zero Velocity Fusion
 
-**Problem:** In AID_RELATIVE mode (optical flow), Z-bias was unobservable when disarmed.
+**Problem:** Accel Z-bias is poorly observable without velocity measurements. In AID_NONE or AID_RELATIVE (no GPS), the EKF cannot learn bias from baro alone.
 
-**Fix (commit `0ff35c20b4`):** Fuse synthetic zero velocity when `onGround && !motorsArmed`, regardless of aiding mode. Makes Z-bias strongly observable when stationary.
+**Fix:** Fuse synthetic zero velocity observations (0,0,0) when the vehicle is stationary on the ground, using `onGroundNotMoving || takeoff_expected` as the gate. This applies in ALL aiding modes:
+- **AID_NONE:** Gated by `fuseHgtData` (baro rate ~10Hz) AND `tiltAlignComplete`
+- **AID_RELATIVE/AID_ABSOLUTE:** Gated by `fuseHgtData` AND no recent velocity aiding from GPS/flow/body
+
+The `updateMovementCheck()` yaw source gate was removed so `onGroundNotMoving` works for all yaw sources (including compass). Previously it was always false with compass.
+
+**R_OBS:** `sq(1.0f)` = 1 m²/s² (moderate trust — synthetic, not real sensor)
+
+**CI test lessons (critical):**
+- Must gate behind `tiltAlignComplete` in AID_NONE — fusing before tilt alignment causes "EKF attitude is bad" prearm failure (EKFSource test)
+- Must gate behind `fuseHgtData` in AID_RELATIVE/AID_ABSOLUTE — fusing at IMU rate (400Hz) overconstrains the filter and causes cascading state differences that break boundary tests (EK3_RNG_USE_HGT test)
+- The `onGroundNotMoving` change activates zero velocity fusion for ALL configs including compass, which changes EKF ground-phase behavior — even tiny state differences propagate through flight
 
 ### Hover Z-Bias Learning (INS_ACCx_VRFB_Z)
 
