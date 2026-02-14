@@ -3,7 +3,7 @@
 Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Three vehicles tested:
 - **SFD indoor** — small fast drone (MambaH743v4), indoor optical flow, logjk series
 - **TD** — optical flow copter (indoor/outdoor), logtd series
-- **SmallFastDronev1** — BF_X quad, indoor optical flow + rangefinder, log197/198/201/202/208 series
+- **SmallFastDronev1** — BF_X quad, indoor optical flow + rangefinder, log197/198/201/202/208/209 series
 
 ## Master Summary Table
 
@@ -31,6 +31,7 @@ Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Three vehicles te
 | [log201](logs/log201.md) | Feb 14 | SmallFastDronev1 indoor | Stabilize, TCAL recal | — | TCAL fix confirmed; yaw inconsistency 24° (MOTCT=0 + MAG_CAL=4 root cause found) |
 | [log202](logs/log202.md) | Feb 14 | SmallFastDronev1 indoor | Loiter, PSC_P=1.0 | — | Alt hold improved (0.39m mean); yaw twitchy (ANG_YAW_P=17.8); terrain offset ±1.7m |
 | [log208](logs/log208.md) | Feb 14 | SmallFastDronev1 outdoor | MAG_CAL=7, MOTCT=2 | — | MAG_CAL=7 verified (5.3° vs 24° divergence); takeoff overshoot; roll 8-10 Hz oscillation |
+| [log209](logs/log209.md) | Feb 14 | SmallFastDronev1 outdoor | ANG_P↓, RAT_P↓ | — | **Oscillation eliminated**: roll overshoot 1.52→0.82, 8 Hz→3 Hz, no further tuning needed |
 
 ## Earlier Development Logs (log1-log12)
 
@@ -59,7 +60,7 @@ Cross-cutting analysis across multiple logs:
 | [EK3_RNG_USE_HGT Feedback](topics/ekf_rng_use_hgt_feedback.md) | logjk6→7: feedback loop discovery and fix |
 | [BARO1_THST_FILT](topics/baro_thrust_filter.md) | Throttle filter implementation, calibration guide |
 | [Indoor Loiter — SFDv1](topics/indoor_loiter_sfdv1.md) | Crash analysis, TCAL upside-down discovery, VRF estimation, thermal drift |
-| [Outdoor Tuning — SFDv1](topics/outdoor_tuning_sfdv1.md) | Aggressive takeoff (MOT_THST_HOVER mismatch), roll 8-10 Hz limit cycle, gain recommendations |
+| [Outdoor Tuning — SFDv1](topics/outdoor_tuning_sfdv1.md) | Takeoff overshoot, roll limit cycle diagnosis + fix verification (log208→209) |
 | [MAG_CAL=7 Verification](topics/mag_cal_7_verification.md) | GROUND_AND_INFLIGHT mode verified: all state transitions correct, 5.3° vs 24° yaw divergence |
 
 ## Key Implementation Commits
@@ -109,11 +110,8 @@ Development commits on this branch (unsquashed). Squashed PR is on `pr-z-bias-sq
    causes drift after disarm
 3. **Ground effect flags clear too early** — uses EKF altitude (which can be wrong)
    instead of rangefinder
-4. **Roll oscillation on SFDv1** — [log208](logs/log208.md) shows 8-10 Hz limit cycle from
-   high autotune gains + asymmetric airframe. See [outdoor tuning topic](topics/outdoor_tuning_sfdv1.md)
-   for recommended gain reductions (ANG_RLL_P: 27→20, ANG_PIT_P: 31→27).
-5. **Aggressive takeoff on SFDv1** — MOT_THST_HOVER=0.125 vs actual 0.069; 5.5x acceleration
-   overshoot at takeoff. Fix: MOT_THST_HOVER=0.07, TKOFF_SLEW_TIME=1.0-1.5.
+4. **Aggressive takeoff on SFDv1** — MOT_THST_HOVER=0.095 but actual hover 0.072 and ThH
+   still reads 0.125 internally. Fix: MOT_THST_HOVER=0.07, TKOFF_SLEW_TIME=1.0-1.5.
 
 ## Resolved Issues
 
@@ -130,6 +128,10 @@ Development commits on this branch (unsquashed). Squashed PR is on `pr-z-bias-sq
 5. **Yaw inconsistency from motor interference** — [log201](logs/log201.md) traced 24° divergence
    to COMPASS_MOTCT=0 + MAG_CAL=4. Fixed with COMPASS_MOTCT=2 + new EK3_MAG_CAL=7
    ([verified in log208](topics/mag_cal_7_verification.md): divergence reduced to 5.3°).
+6. **Roll oscillation on SFDv1** — [log208](logs/log208.md) 8-10 Hz limit cycle from coupled
+   angle-rate resonance with high autotune gains on asymmetric airframe. Fixed by reducing
+   ANG_RLL_P: 27→20, ANG_PIT_P: 31→27, RAT_RLL_P: 0.056→0.048. [Verified in log209](logs/log209.md):
+   overshoot ratio 1.52→0.82, dominant frequency 8 Hz→3 Hz.
 
 ## Best Known Configuration
 

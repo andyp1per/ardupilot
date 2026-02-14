@@ -1,6 +1,7 @@
 # Outdoor Tuning — SmallFastDronev1
 
-Analysis from [log208](../logs/log208.md): outdoor hover with GPS, Loiter + Stabilize.
+Analysis from [log208](../logs/log208.md) (problem identification) and
+[log209](../logs/log209.md) (verification after gain reduction).
 
 ## Aggressive Takeoff
 
@@ -133,6 +134,65 @@ needs ~2x the percentage reduction to achieve the same stability margin as pitch
 
 At ANG_RLL_P=20: 1 deg error still commands 20 deg/s correction (48ms settling).
 The vehicle will still feel snappy — rate loop bandwidth is unchanged.
+
+## Verification: Log209
+
+All recommended changes were applied for log209. Results confirm the oscillation
+is eliminated and no further rate/angle tuning is needed.
+
+### Changes Applied
+
+| Parameter | Log208 | Log209 | Recommended | Applied? |
+|-----------|--------|--------|-------------|----------|
+| ATC_ANG_RLL_P | 27.25 | 20.0 | 20 | Yes |
+| ATC_ANG_PIT_P | 31.54 | 27.0 | 27 | Yes |
+| ATC_RAT_RLL_P | 0.0562 | 0.048 | 0.048 | Yes |
+| ATC_RAT_RLL_I | 0.0562 | 0.048 | 0.048 | Yes |
+
+### Oscillation Eliminated
+
+| Metric | Log208 | Log209 | Improvement |
+|--------|--------|--------|-------------|
+| Roll overshoot ratio | **1.52** | **0.82** | Below 1.0 — feedback loop broken |
+| Pitch overshoot ratio | 1.38 | 1.22 | -12%, within normal range |
+| Roll Tar std | 3.13 deg/s | 2.12 deg/s | -32% |
+| Roll Act std | 4.77 deg/s | 1.74 deg/s | -64% |
+| Pitch Tar std | 2.85 deg/s | 1.43 deg/s | -50% |
+| Pitch Act std | 3.93 deg/s | 1.74 deg/s | -56% |
+
+### Frequency Content Shift
+
+| Metric | Log208 | Log209 |
+|--------|--------|--------|
+| Roll Tar dominant frequency | 8-10 Hz | **3 Hz** |
+| Roll 7-12 Hz band power | 55% | **18%** |
+| D-term autocorrelation | Coherent 8 Hz peaks | Broadband (no periodicity) |
+| Tar-Act cross-correlation | 0.807 at +20ms lag | 0.974 at -8ms |
+
+The cross-correlation sign flip is diagnostic: in log208, Act lagged Tar by 20ms
+(rate loop chasing angle controller oscillation). In log209, Act leads Tar by 8ms
+(rate loop reacting to external disturbances, angle controller following — normal
+stable hover behavior).
+
+### Attitude Tracking Preserved
+
+Roll angle error std = 0.09° (unchanged from log208). Pitch error std = 0.04°.
+The vehicle remains responsive — reducing ANG_P affects stiffness at hover but
+rate loop bandwidth is unchanged. At ANG_RLL_P=20 a 1° error still commands
+20 deg/s correction.
+
+### Wind Disturbance Handling
+
+Log209 had wind gusts producing DesRoll excursions of ±10° and DesPitch to -14°.
+Under these conditions, overshoot ratios were roll=1.24, pitch=1.22 — still
+significantly better than log208's calm-hover ratios. The gains handle both
+calm and disturbed conditions well.
+
+### Verdict
+
+No further angle or rate gain changes needed. The recommended changes eliminated
+the limit cycle exactly as predicted. Only remaining tuning issue is
+MOT_THST_HOVER (see Aggressive Takeoff section).
 
 ## Other Notes
 
