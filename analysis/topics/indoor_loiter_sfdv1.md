@@ -200,6 +200,48 @@ After recalibrating TCAL with the board right-side up:
 - The learning should find +0.09 within a few flights
 - Monitor with `ACC_ZBIAS_LEARN = 3`
 
+## Follow-Up Flights: Log201 and Log202
+
+After applying fixes from the log197/198 analysis, two follow-up flights were performed.
+
+### Log201 — Stabilize Sanity Check
+
+See [log201](../logs/log201.md). Key outcomes:
+
+1. **TCAL fix confirmed:** After recalibrating right-side up (ACC1_Z: 55844 → -3597),
+   AccZ bias remained stable through a 5.3°C temperature swing. The upside-down
+   calibration issue is fully resolved.
+
+2. **Yaw inconsistency discovered:** 24° yaw divergence between EKF cores during flight.
+   Root cause: COMPASS_MOTCT=0 + EK3_MAG_CAL=4 (ALWAYS) — motor interference at
+   -236 mG/throttle on X caused Core 1 MX body offset to run away from +2 to -58 mG
+   while Core 0 MX stayed stable at -5 to +6 mG. This led to developing EK3_MAG_CAL=7.
+
+### Log202 — Loiter with Updated Parameters
+
+See [log202](../logs/log202.md). Key outcomes:
+
+1. **Altitude improved:** BAlt mean 0.39m (vehicle held altitude, no crash).
+   The PSC_POSZ_P=1.0 + TKOFF_GNDEFF_TMO=3.0 changes were effective.
+
+2. **Yaw twitchiness:** ATC_ANG_YAW_P=17.8 (4x default of 4.5) chases compass noise
+   aggressively, causing visible twitchiness. In-flight yaw alignment at t=57s caused
+   18° heading snap. Recommend reducing to 4.5-6.0.
+
+3. **Terrain offset still noisy:** ±1.7m noise confirms need for EK3_RNG_USE_HGT=-1.
+
+### Parameter Progression
+
+| Parameter | Log197/198 | Log201/202 | Log208 (outdoor) | Notes |
+|-----------|-----------|-----------|-------------------|-------|
+| EK3_MAG_CAL | 4 | 4 | **7** | New GROUND_AND_INFLIGHT mode |
+| COMPASS_MOTCT | 0 | 0 | **2** | Current-based motor compensation |
+| EK3_RNG_USE_HGT | 3.0 | 3.0 | **-1** | Fixed terrain offset feedback |
+| INS_TCAL ACC_Z | Wrong (upside-down) | **Recalibrated** | Recalibrated | Fixed in log201 |
+| PSC_POSZ_P | default | **1.0** | 1.0 | Improved altitude hold |
+| TKOFF_GNDEFF_TMO | 0 | **3.0** | 3.0 | Prevents premature ground effect timeout |
+| ATC_ANG_YAW_P | 17.8 | 17.8 | 17.8 | Still needs reduction to 4.5-6.0 |
+
 ## Comparison with Other Vehicles
 
 | | SFD Indoor | TD Indoor | **SmallFastDronev1 Indoor** |

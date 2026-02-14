@@ -3,7 +3,7 @@
 Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Three vehicles tested:
 - **SFD indoor** — small fast drone (MambaH743v4), indoor optical flow, logjk series
 - **TD** — optical flow copter (indoor/outdoor), logtd series
-- **SmallFastDronev1** — BF_X quad, indoor optical flow + rangefinder, log197/198 series
+- **SmallFastDronev1** — BF_X quad, indoor optical flow + rangefinder, log197/198/201/202/208 series
 
 ## Master Summary Table
 
@@ -28,6 +28,9 @@ Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Three vehicles te
 | [logtd8](logs/logtd8.md) | Feb 12 | TD outdoor | GPS+baro, VRFB=-0.57 | **20-36cm** | VRFB clamp finding: true bias ~0.57; clamp raised to ±0.6 |
 | [log197](logs/log197.md) | Feb 13 | SmallFastDronev1 indoor | Stabilize, THST=0, TCAL on | — | VRF=+0.089; TCAL Z-axis overcorrects 3.8x (upside-down cal) |
 | [log198](logs/log198.md) | Feb 13 | SmallFastDronev1 indoor | Loiter, RNG_USE_HGT=3 | **CRASH** | Terrain offset feedback loop → flow velocity 2-4x → backward lean |
+| [log201](logs/log201.md) | Feb 14 | SmallFastDronev1 indoor | Stabilize, TCAL recal | — | TCAL fix confirmed; yaw inconsistency 24° (MOTCT=0 + MAG_CAL=4 root cause found) |
+| [log202](logs/log202.md) | Feb 14 | SmallFastDronev1 indoor | Loiter, PSC_P=1.0 | — | Alt hold improved (0.39m mean); yaw twitchy (ANG_YAW_P=17.8); terrain offset ±1.7m |
+| [log208](logs/log208.md) | Feb 14 | SmallFastDronev1 outdoor | MAG_CAL=7, MOTCT=2 | — | MAG_CAL=7 verified (5.3° vs 24° divergence); takeoff overshoot; roll 8-10 Hz oscillation |
 
 ## Earlier Development Logs (log1-log12)
 
@@ -56,6 +59,8 @@ Cross-cutting analysis across multiple logs:
 | [EK3_RNG_USE_HGT Feedback](topics/ekf_rng_use_hgt_feedback.md) | logjk6→7: feedback loop discovery and fix |
 | [BARO1_THST_FILT](topics/baro_thrust_filter.md) | Throttle filter implementation, calibration guide |
 | [Indoor Loiter — SFDv1](topics/indoor_loiter_sfdv1.md) | Crash analysis, TCAL upside-down discovery, VRF estimation, thermal drift |
+| [Outdoor Tuning — SFDv1](topics/outdoor_tuning_sfdv1.md) | Aggressive takeoff (MOT_THST_HOVER mismatch), roll 8-10 Hz limit cycle, gain recommendations |
+| [MAG_CAL=7 Verification](topics/mag_cal_7_verification.md) | GROUND_AND_INFLIGHT mode verified: all state transitions correct, 5.3° vs 24° yaw divergence |
 
 ## Key Implementation Commits
 
@@ -104,13 +109,11 @@ Development commits on this branch (unsquashed). Squashed PR is on `pr-z-bias-sq
    causes drift after disarm
 3. **Ground effect flags clear too early** — uses EKF altitude (which can be wrong)
    instead of rangefinder
-4. **TCAL upside-down calibration** — [log197](logs/log197.md) showed INS_TCAL Z-axis
-   coefficients overcorrect 3.8x when board was calibrated upside down. Scale factor
-   drift (0.34%/°C) reverses sign with orientation. Fix: recalibrate right-side up or
-   zero Z-axis coefficients.
-5. **Z-bias learning contaminated by thermal drift** — [log198](logs/log198.md) showed
-   learning converges to wrong value (-0.066 vs true +0.089) when baro thermal drift
-   dominates the height reference. Needs clean TCAL + RNG_USE_HGT=-1 first.
+4. **Roll oscillation on SFDv1** — [log208](logs/log208.md) shows 8-10 Hz limit cycle from
+   high autotune gains + asymmetric airframe. See [outdoor tuning topic](topics/outdoor_tuning_sfdv1.md)
+   for recommended gain reductions (ANG_RLL_P: 27→20, ANG_PIT_P: 31→27).
+5. **Aggressive takeoff on SFDv1** — MOT_THST_HOVER=0.125 vs actual 0.069; 5.5x acceleration
+   overshoot at takeoff. Fix: MOT_THST_HOVER=0.07, TKOFF_SLEW_TIME=1.0-1.5.
 
 ## Resolved Issues
 
@@ -122,6 +125,11 @@ Development commits on this branch (unsquashed). Squashed PR is on `pr-z-bias-sq
    `fuseHgtData` and `tiltAlignComplete`. See [EKF3 CLAUDE.md](../libraries/AP_NavEKF3/CLAUDE.md).
 3. **Ground effect default threshold** — TKOFF_GNDEFF_ALT=0 changed default from 0.50m to 0m;
    fixed with `is_positive()` fallback to original 0.50m.
+4. **TCAL upside-down calibration** — [log201](logs/log201.md) confirmed recalibration right-side
+   up fixed the 3.8x Z-axis overcorrection. ACC1_Z went from 55844 to -3597.
+5. **Yaw inconsistency from motor interference** — [log201](logs/log201.md) traced 24° divergence
+   to COMPASS_MOTCT=0 + MAG_CAL=4. Fixed with COMPASS_MOTCT=2 + new EK3_MAG_CAL=7
+   ([verified in log208](topics/mag_cal_7_verification.md): divergence reduced to 5.3°).
 
 ## Best Known Configuration
 
