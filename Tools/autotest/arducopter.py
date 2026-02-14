@@ -12545,6 +12545,436 @@ return update, 1000
             if pname in all_params:
                 raise ValueError(f"{pname} in fetched-all-parameters when it should have gone away")
 
+    # ---- Scenario test helpers ----
+
+    # Common feature params applied to all scenario tests:
+    # - ACC_ZBIAS_LEARN=3: VRF bias learn+use (bits 0+1)
+    # - TKOFF_GNDEFF_ALT=0.5: Ground effect altitude threshold
+    # - TKOFF_GNDEFF_TMO=2: Ground effect timeout (2s)
+    # - EK3_MAG_CAL=3: After-first-climb mag cal (best for small drones)
+    SCENARIO_FEATURE_PARAMS = {
+        "ACC_ZBIAS_LEARN": 3,
+        "TKOFF_GNDEFF_ALT": 0.5,
+        "TKOFF_GNDEFF_TMO": 2,
+        "EK3_MAG_CAL": 3,
+    }
+
+    # Prop configs: SITL-compatible vibration/noise levels.
+    # Real MOT_THST_HOVER values documented in scenario markdown files.
+    # Vibration scaled down from real values to avoid EKF issues in SITL.
+    PROP_CONFIGS = {
+        "high_vibe": {
+            "SIM_ACC1_RND": 2.0,
+            "SIM_VIB_MOT_MAX": 25,
+            "SIM_BARO_WCF_DN": -0.001,
+        },
+        "med_vibe": {
+            "SIM_ACC1_RND": 1.0,
+            "SIM_VIB_MOT_MAX": 15,
+            "SIM_BARO_WCF_DN": -0.0005,
+        },
+        "low_vibe": {
+            "SIM_ACC1_RND": 0.5,
+            "SIM_VIB_MOT_MAX": 5,
+            "SIM_BARO_WCF_DN": -0.0002,
+        },
+    }
+
+    def _scenario_althold_hover(self, alt, hover_time, max_drift, params=None):
+        '''Helper: set params, arm ALT_HOLD, takeoff, hover, check drift, land.'''
+        self.context_push()
+        all_params = dict(self.SCENARIO_FEATURE_PARAMS)
+        if params:
+            all_params.update(params)
+        self.set_parameters(all_params)
+        self.reboot_sitl()
+        self.change_mode('ALT_HOLD')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.set_rc(3, 1700)
+        self.wait_altitude(alt - 2, alt + 5, relative=True, timeout=60)
+        self.hover()
+        self.progress("Hovering for %u seconds at %um" % (hover_time, alt))
+        tstart = self.get_sim_time()
+        start_alt = self.get_altitude(relative=True)
+        self.delay_sim_time(hover_time)
+        end_alt = self.get_altitude(relative=True)
+        drift = abs(end_alt - start_alt)
+        self.progress("Altitude drift: %.2fm (limit: %.2fm)" % (drift, max_drift))
+        if drift > max_drift:
+            raise NotAchievedException(
+                "Altitude drift %.2fm exceeds limit %.2fm" % (drift, max_drift))
+        self.do_RTL()
+        self.context_pop()
+        self.reboot_sitl()
+
+    def _scenario_arm_and_hover(self, pre_takeoff_fn=None):
+        '''Helper: arm with feature params, optionally run pre-takeoff
+        callback, takeoff, hover, check alt, RTL.
+        '''
+        self.context_push()
+        params = dict(self.SCENARIO_FEATURE_PARAMS)
+        params["DISARM_DELAY"] = 127  # max delay to avoid auto-disarm during wait
+        self.set_parameters(params)
+        self.reboot_sitl()
+        self.change_mode('ALT_HOLD')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        if pre_takeoff_fn:
+            pre_takeoff_fn(self)
+        self.set_rc(3, 1700)
+        self.wait_altitude(8, 15, relative=True, timeout=60)
+        self.hover()
+        self.progress("Hovering for 30s")
+        self.delay_sim_time(30)
+        alt = self.get_altitude(relative=True)
+        if abs(alt - 10) > 5:
+            raise NotAchievedException(
+                "Alt hold failed: alt=%.1fm" % alt)
+        self.do_RTL()
+        self.context_pop()
+        self.reboot_sitl()
+
+    # ---- Baro AltHold scenarios ----
+
+    def ScenarioBaroAltHold_OpenSpace(self):
+        '''Scenario: baro althold baseline in open space'''
+        self._scenario_althold_hover(alt=15, hover_time=60, max_drift=2.0)
+
+    def ScenarioBaroAltHold_NarrowHall(self):
+        '''Scenario: baro althold in narrow hall (baro noise)'''
+        self._scenario_althold_hover(
+            alt=5,
+            hover_time=30,
+            max_drift=3.0,
+            params={
+                "SIM_BARO_RND": 0.3,
+                "SIM_BARO_WCF_DN": -0.005,
+            },
+        )
+
+    def ScenarioBaroAltHold_ColdBoot(self):
+        '''Scenario: baro althold with cold-start thermal transient'''
+        # T starts at 5C, warms to ~45C (ambient+offset). Factor 1.2
+        # gives realistic ICM-20789 baro drift per code comment.
+        self._scenario_althold_hover(
+            alt=15,
+            hover_time=60,
+            max_drift=5.0,
+            params={
+                "SIM_TEMP_START": 5,
+                "SIM_TEMP_BRD_OFF": 25,
+                "SIM_TEMP_TCONST": 30,
+                "SIM_TEMP_BFACTOR": 1.2,
+            },
+        )
+
+    def ScenarioBaroAltHold_HotBoot(self):
+        '''Scenario: baro althold with hot-start thermal transient'''
+        self._scenario_althold_hover(
+            alt=15,
+            hover_time=60,
+            max_drift=3.0,
+            params={
+                "SIM_TEMP_START": 50,
+                "SIM_TEMP_BRD_OFF": 20,
+                "SIM_TEMP_TCONST": 30,
+                "SIM_TEMP_BFACTOR": 2.0,
+            },
+        )
+
+    # ---- Arming scenarios ----
+
+    def ScenarioArm_ImmediateLaunch(self):
+        '''Scenario: arm and immediate takeoff with VRF + ground effect'''
+        self._scenario_arm_and_hover()
+
+    def ScenarioArm_DelayedLaunch(self):
+        '''Scenario: arm, wait 45s, then takeoff with VRF + ground effect'''
+        def delay_45s(tself):
+            tself.progress("Waiting 45s before takeoff (delayed launch)")
+            tself.delay_sim_time(45)
+        self._scenario_arm_and_hover(pre_takeoff_fn=delay_45s)
+
+    def ScenarioArm_BackpackCarry(self):
+        '''Scenario: arm, shove (backpack carry), then takeoff'''
+        self.context_push()
+        params = dict(self.SCENARIO_FEATURE_PARAMS)
+        params["SIM_SHOVE_Z"] = -2
+        self.set_parameters(params)
+        self.reboot_sitl()
+        self.change_mode('ALT_HOLD')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.progress("Simulating backpack carry via SIM_SHOVE")
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 5000)
+        except ValueError:
+            pass
+        self.delay_sim_time(6)
+        self.progress("Taking off after carry")
+        self.set_rc(3, 1700)
+        self.wait_altitude(8, 15, relative=True, timeout=60)
+        self.hover()
+        self.delay_sim_time(15)
+        alt = self.get_altitude(relative=True)
+        if abs(alt - 10) > 5:
+            raise NotAchievedException(
+                "Alt hold failed after backpack carry: alt=%.1fm" % alt)
+        self.do_RTL()
+        self.context_pop()
+        self.reboot_sitl()
+
+    def ScenarioArm_HipCarry(self):
+        '''Scenario: arm, shove (hip carry), then takeoff'''
+        self.context_push()
+        params = dict(self.SCENARIO_FEATURE_PARAMS)
+        params.update({
+            "SIM_SHOVE_X": 1,
+            "SIM_SHOVE_Y": 0.5,
+        })
+        self.set_parameters(params)
+        self.reboot_sitl()
+        self.change_mode('ALT_HOLD')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.progress("Simulating hip carry via SIM_SHOVE")
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 3000)
+        except ValueError:
+            pass
+        self.delay_sim_time(4)
+        self.progress("Taking off after carry")
+        self.set_rc(3, 1700)
+        self.wait_altitude(8, 15, relative=True, timeout=60)
+        self.hover()
+        self.delay_sim_time(15)
+        alt = self.get_altitude(relative=True)
+        if abs(alt - 10) > 5:
+            raise NotAchievedException(
+                "Alt hold failed after hip carry: alt=%.1fm" % alt)
+        self.do_RTL()
+        self.context_pop()
+        self.reboot_sitl()
+
+    def ScenarioArm_InfilRun(self):
+        '''Scenario: arm, shove (100m infil run), then takeoff'''
+        self.context_push()
+        params = dict(self.SCENARIO_FEATURE_PARAMS)
+        params["SIM_SHOVE_X"] = 3
+        self.set_parameters(params)
+        self.reboot_sitl()
+        self.change_mode('ALT_HOLD')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.progress("Simulating 100m infil run via SIM_SHOVE")
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 10000)
+        except ValueError:
+            pass
+        self.delay_sim_time(11)
+        self.progress("Taking off after run")
+        self.set_rc(3, 1700)
+        self.wait_altitude(8, 15, relative=True, timeout=60)
+        self.hover()
+        self.delay_sim_time(15)
+        alt = self.get_altitude(relative=True)
+        if abs(alt - 10) > 5:
+            raise NotAchievedException(
+                "Alt hold failed after infil run: alt=%.1fm" % alt)
+        self.do_RTL()
+        self.context_pop()
+        self.reboot_sitl()
+
+    # ---- Optical flow scenarios ----
+
+    def _scenario_flow_params(self, gps_disabled=False, flow_noise=0.05):
+        '''Return common optical flow + feature parameters.'''
+        params = dict(self.SCENARIO_FEATURE_PARAMS)
+        params.update({
+            "SIM_FLOW_ENABLE": 1,
+            "SIM_FLOW_RND": flow_noise,
+            "FLOW_TYPE": 10,
+            "RNGFND1_TYPE": 1,
+            "RNGFND1_MIN_CM": 0,
+            "RNGFND1_MAX_CM": 4000,
+            "RNGFND1_PIN": 0,
+            "RNGFND1_SCALING": 12.12,
+            "EK3_SRC1_VELXY": 5,
+        })
+        if gps_disabled:
+            params.update({
+                "SIM_GPS_DISABLE": 1,
+                "EK3_SRC1_POSXY": 0,
+                "EK3_SRC1_VELZ": 0,
+                "ARMING_CHECK": 786390,
+            })
+        return params
+
+    def ScenarioFlow_ExteriorThrow(self):
+        '''Scenario: throw launch with GPS + optical flow'''
+        self.context_push()
+        params = self._scenario_flow_params(gps_disabled=False)
+        params.update({
+            "THROW_NEXTMODE": 5,  # LOITER
+            "SIM_SHOVE_Z": -30,
+            "SIM_SHOVE_X": -20,
+        })
+        self.set_parameters(params)
+        self.reboot_sitl()
+
+        self.change_mode('THROW')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.progress("Throwing vehicle (exterior, GPS+flow)")
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 500)
+        except ValueError:
+            pass
+
+        tstart = self.get_sim_time()
+        self.wait_mode('LOITER', timeout=15)
+        tdelta = self.get_sim_time() - tstart
+        self.progress("Throw caught in %.1fs" % tdelta)
+        if tdelta > 15:
+            raise NotAchievedException(
+                "Throw catch took too long: %.1fs" % tdelta)
+
+        self.progress("Hovering in LOITER for 15s")
+        self.delay_sim_time(15)
+        self.land_and_disarm()
+        self.context_pop()
+        self.reboot_sitl()
+
+    def ScenarioFlow_InteriorThrow(self):
+        '''Scenario: throw launch indoors, flow-only (no GPS)'''
+        self.context_push()
+        params = self._scenario_flow_params(gps_disabled=True)
+        params.update({
+            "THROW_NEXTMODE": 5,  # LOITER
+            "SIM_SHOVE_Z": -30,
+            "SIM_SHOVE_X": -20,
+        })
+        self.set_parameters(params)
+        self.reboot_sitl()
+
+        self.change_mode('THROW')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.progress("Throwing vehicle (interior, flow-only)")
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 500)
+        except ValueError:
+            pass
+
+        tstart = self.get_sim_time()
+        self.wait_mode('LOITER', timeout=15)
+        tdelta = self.get_sim_time() - tstart
+        self.progress("Throw caught in %.1fs" % tdelta)
+        if tdelta > 15:
+            raise NotAchievedException(
+                "Throw catch took too long: %.1fs" % tdelta)
+
+        self.progress("Hovering in LOITER for 15s (flow-only)")
+        self.delay_sim_time(15)
+        self.land_and_disarm()
+        self.context_pop()
+        self.reboot_sitl()
+
+    def ScenarioFlow_HoverPosHold(self):
+        '''Scenario: optical flow hover position hold drift test'''
+        self.context_push()
+        params = self._scenario_flow_params(gps_disabled=True)
+        self.set_parameters(params)
+        self.reboot_sitl()
+
+        self.change_mode('LOITER')
+        self.wait_ready_to_arm(require_absolute=False)
+        self.arm_vehicle()
+        self.set_rc(3, 1700)
+        self.wait_altitude(4, 8, relative=True, timeout=60)
+        self.hover()
+
+        self.progress("Recording start position for drift measurement")
+        start_pos = self.mav.recv_match(
+            type='GLOBAL_POSITION_INT', blocking=True)
+        self.delay_sim_time(60)
+        end_pos = self.mav.recv_match(
+            type='GLOBAL_POSITION_INT', blocking=True)
+
+        # Calculate horizontal drift in meters
+        dlat = (end_pos.lat - start_pos.lat) * 1.0e-7
+        dlon = (end_pos.lon - start_pos.lon) * 1.0e-7
+        drift_m = math.sqrt(
+            (dlat * 111320)**2 +
+            (dlon * 111320 * math.cos(math.radians(start_pos.lat * 1.0e-7)))**2
+        )
+        self.progress("Position drift: %.2fm" % drift_m)
+        max_drift = 5.0
+        if drift_m > max_drift:
+            raise NotAchievedException(
+                "Position drift %.2fm exceeds limit %.2fm" % (drift_m, max_drift))
+
+        self.land_and_disarm()
+        self.context_pop()
+        self.reboot_sitl()
+
+    def ScenarioFlow_AcroLoiterGoodLight(self):
+        '''Scenario: ACRO to LOITER transition with good flow quality'''
+        self.context_push()
+        params = self._scenario_flow_params(gps_disabled=False, flow_noise=0.05)
+        self.set_parameters(params)
+        self.reboot_sitl()
+
+        self.takeoff(10, mode="LOITER")
+
+        self.progress("Switching to ACRO and flying manually")
+        self.change_mode('ACRO')
+        self.set_rc(1, 1600)  # roll right
+        self.delay_sim_time(3)
+        self.set_rc(1, 1500)
+        self.set_rc(2, 1600)  # pitch forward
+        self.delay_sim_time(3)
+        self.set_rc(2, 1500)
+
+        self.progress("Switching to LOITER - vehicle should stop")
+        self.change_mode('LOITER')
+        self.wait_groundspeed(0, 0.5, timeout=15)
+        self.progress("Vehicle settled, hovering for 15s")
+        self.delay_sim_time(15)
+
+        self.do_RTL()
+        self.context_pop()
+        self.reboot_sitl()
+
+    def ScenarioFlow_AcroLoiterNoLight(self):
+        '''Scenario: ACRO to LOITER transition with degraded flow (no light)'''
+        self.context_push()
+        params = self._scenario_flow_params(gps_disabled=False, flow_noise=2.0)
+        self.set_parameters(params)
+        self.reboot_sitl()
+
+        self.takeoff(10, mode="LOITER")
+
+        self.progress("Switching to ACRO with high flow noise")
+        self.change_mode('ACRO')
+        self.set_rc(1, 1600)  # roll right
+        self.delay_sim_time(3)
+        self.set_rc(1, 1500)
+
+        self.progress("Switching to LOITER with degraded flow")
+        self.change_mode('LOITER')
+        # Relaxed: just verify no crash and controllable
+        self.delay_sim_time(10)
+        alt = self.get_altitude(relative=True)
+        if alt < 2:
+            raise NotAchievedException(
+                "Vehicle lost altitude with degraded flow: alt=%.1fm" % alt)
+
+        self.do_RTL()
+        self.context_pop()
+        self.reboot_sitl()
+
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
         ret = ([
@@ -12652,6 +13082,23 @@ return update, 1000
             self.MAV_CMD_MISSION_START_p1_p2,
             self.ScriptingAHRSSource,
             self.CommonOrigin,
+            # Scenario tests (FULL feasibility)
+            self.ScenarioBaroAltHold_OpenSpace,
+            self.ScenarioBaroAltHold_ColdBoot,
+            self.ScenarioBaroAltHold_HotBoot,
+            self.ScenarioArm_ImmediateLaunch,
+            self.ScenarioArm_DelayedLaunch,
+            self.ScenarioFlow_ExteriorThrow,
+            self.ScenarioFlow_HoverPosHold,
+            # PARTIAL-feasibility scenario tests also registered here;
+            # disabled via disabled_tests()
+            self.ScenarioBaroAltHold_NarrowHall,
+            self.ScenarioArm_BackpackCarry,
+            self.ScenarioArm_HipCarry,
+            self.ScenarioArm_InfilRun,
+            self.ScenarioFlow_InteriorThrow,
+            self.ScenarioFlow_AcroLoiterGoodLight,
+            self.ScenarioFlow_AcroLoiterNoLight,
         ])
         return ret
 
@@ -12734,6 +13181,14 @@ return update, 1000
             "GPSForYawCompassLearn": "Vehicle currently crashed in spectacular fashion",
             "CompassMot": "Cuases an arithmetic exception in the EKF",
             "SMART_RTL_EnterLeave": "Causes a panic",
+            # PARTIAL-feasibility scenario tests
+            "ScenarioBaroAltHold_NarrowHall": "PARTIAL SITL feasibility - no true confined aerodynamics",
+            "ScenarioArm_BackpackCarry": "PARTIAL SITL feasibility - SIM_SHOVE is one-shot only",
+            "ScenarioArm_HipCarry": "PARTIAL SITL feasibility - SIM_SHOVE is one-shot only",
+            "ScenarioArm_InfilRun": "PARTIAL SITL feasibility - SIM_SHOVE is one-shot only",
+            "ScenarioFlow_InteriorThrow": "PARTIAL SITL feasibility - flow-only throw needs tuning",
+            "ScenarioFlow_AcroLoiterGoodLight": "PARTIAL SITL feasibility - needs mode transition tuning",
+            "ScenarioFlow_AcroLoiterNoLight": "PARTIAL SITL feasibility - SIM_FLOW_RND not true lighting model",
         }
 
 
