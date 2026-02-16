@@ -1,9 +1,10 @@
 # EKF3 Altitude Hold Analysis
 
-Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Three vehicles tested:
+Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Four vehicles tested:
 - **SFD indoor** — small fast drone (MambaH743v4), indoor optical flow, logjk series
-- **TD** — optical flow copter (indoor/outdoor), logtd series
+- **TD** (TD-Matek-5) — optical flow copter (indoor/outdoor), logtd/log3-7 series
 - **SmallFastDronev1** — BF_X quad, indoor optical flow + rangefinder, log197/198/201/202/208/209 series
+- **TD-MicoAir-2** — GPS-denied quad (MicoAir743v2), optical flow + rangefinder, logm2 series
 
 ## Master Summary Table
 
@@ -32,6 +33,18 @@ Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Three vehicles te
 | [log202](logs/log202.md) | Feb 14 | SmallFastDronev1 indoor | Loiter, PSC_P=1.0 | — | Alt hold improved (0.39m mean); yaw twitchy (ANG_YAW_P=17.8); terrain offset ±1.7m |
 | [log208](logs/log208.md) | Feb 14 | SmallFastDronev1 outdoor | MAG_CAL=7, MOTCT=2 | — | MAG_CAL=7 verified (5.3° vs 24° divergence); takeoff overshoot; roll 8-10 Hz oscillation |
 | [log209](logs/log209.md) | Feb 14 | SmallFastDronev1 outdoor | ANG_P↓, RAT_P↓ | — | **Oscillation eliminated**: roll overshoot 1.52→0.82, 8 Hz→3 Hz, no further tuning needed |
+| [log3](logs/log3.md) | Feb 16 | TD outdoor GPS | Stab→AltHold, 2m hover | **14.2cm** | 9.4°C baro thermal rise; post-land EKF drifts +0.94m; yaw reset took 98s |
+| [log4](logs/log4.md) | Feb 16 | TD outdoor GPS | AltHold, 3m hover | **29.1cm** | Persistent IVD=-0.54; 0.69m core divergence; BAlt spike -6.8m; post-land EKF -2.3m |
+| [log5](logs/log5.md) | Feb 16 | TD outdoor GPS | MAG_CAL=7, MOTCT=2, ZBIAS=3 | 37.5cm* | **EKF Failsafe** at +56s; GPS+compass error cascade; massive compass interference 200mG |
+| [log6](logs/log6.md) | Feb 16 | TD outdoor GPS | Same as log5 | **23.5cm** | IVD no longer stuck (mean=-0.39); compass offsets MY~300 MZ~-280; 61° post-disarm yaw |
+| [log7](logs/log7.md) | Feb 16 | TD outdoor GPS | Same as log5 | **12.5cm** | **Best outdoor TD** — C0 IVD frozen -0.99; MAG_FUSION stayed frozen; VRFB -0.39→-0.30 |
+| [log11](logs/log11.md) | Feb 16 | TD outdoor GPS | GNDEFF_TMO=3, ARMING=1 | **15.5cm** | GNDEFF+ARMING applied; compass IMZ=-263 stuck; zero clips; no failsafe |
+| [log12](logs/log12.md) | Feb 16 | TD ground | Same as log11 | — | Ground session; baro drift -1.17m/20°C; vehicle rotated at T+200s |
+| [log14](logs/log14.md) | Feb 16 | TD outdoor GPS | Same (learned only) | **7.7cm** | 50% improvement; no lane switch; GPS absent 88s; compass still stuck |
+| [log15](logs/log15.md) | Feb 16 | TD outdoor GPS | Same (learned only) | **7.1cm** | **Compass breakthrough** — innovations 275→1.5 mG; MAG_CAL=7 YawOnly; 173s flight |
+| [logm2_4](logs/logm2_4.md) | Feb 16 | TD-MicoAir-2 GPS-denied | Baro+flow, IMU0 only | **2.5cm** | Excellent — rangefinder aiding despite RNG_USE_HGT=-1; 32°C cold start |
+| [logm2_5](logs/logm2_5.md) | Feb 16 | TD-MicoAir-2 GPS-denied | Same | 19.1cm | IMU0 Z clipping (9,870 events); IMU1 6x better with zero clips |
+| [logm2_6](logs/logm2_6.md) | Feb 16 | TD-MicoAir-2 GPS-denied | Same | **FAILED** | AccZ bias -0.62 m/s² → EKF thinks 25m underground → full throttle panic |
 
 ## Earlier Development Logs (log1-log12)
 
@@ -112,6 +125,11 @@ Development commits on this branch (unsquashed). Squashed PR is on `pr-z-bias-sq
    instead of rangefinder
 4. **Aggressive takeoff on SFDv1** — MOT_THST_HOVER=0.095 but actual hover 0.072 and ThH
    still reads 0.125 internally. Fix: MOT_THST_HOVER=0.07, TKOFF_SLEW_TIME=1.0-1.5.
+5. **TD vehicle parameter drift** — [log3](logs/log3.md)/[log4](logs/log4.md) show
+   INS_ACC_VRFB_Z=-0.343 (corrupted, should be small positive), ACC_ZBIAS_LEARN=0
+   (disabled), TKOFF_GNDEFF_TMO=0, MAG_CAL=3/MOTCT=0. Persistent IVD=-0.54 m/s in log4
+   and 0.69m core divergence are direct consequences. Fix: zero VRFB, enable ZBIAS_LEARN=2,
+   set GNDEFF_TMO=3, MAG_CAL=7, MOTCT=2.
 
 ## Resolved Issues
 
