@@ -45,6 +45,7 @@ Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Four vehicles tes
 | [logm2_4](logs/logm2_4.md) | Feb 16 | TD-MicoAir-2 GPS-denied | Baro+flow, IMU0 only | **2.5cm** | Excellent — rangefinder aiding despite RNG_USE_HGT=-1; 32°C cold start |
 | [logm2_5](logs/logm2_5.md) | Feb 16 | TD-MicoAir-2 GPS-denied | Same | 19.1cm | IMU0 Z clipping (9,870 events); IMU1 6x better with zero clips |
 | [logm2_6](logs/logm2_6.md) | Feb 16 | TD-MicoAir-2 GPS-denied | Same | **FAILED** | AccZ bias -0.62 m/s² → EKF thinks 25m underground → full throttle panic |
+| [logm2_log4](logs/logm2_log4.md) | Feb 17 | TD-MicoAir-2 GPS-denied | IMU_MASK=3, PRIMARY=1, RNG_USE_HGT=10, ZBIAS=3, JERK_Z=30 | **CEILING** | Terrain lockout on Core 1 — flow lost 4s after takeoff, 38s dead reckoning, ceiling hit |
 
 ## Earlier Development Logs (log1-log12)
 
