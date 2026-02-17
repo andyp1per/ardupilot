@@ -117,6 +117,28 @@ target. When baro resumed, the step correction caused overshoot.
 
 **Symptom**: Vehicle reached 3.31m RFND with 1.5m target.
 
+### 11. EK3_RNG_USE_HGT blending blocks resetHeightDatum on ground (log47)
+
+`resetHeightDatum()` has an early-return guard:
+`if (activeHgtSource == RANGEFINDER) return false`. When
+`EK3_RNG_USE_HGT > 0`, the height source blending logic in
+`selectHeightForFusion()` sets `activeHgtSource = RANGEFINDER` whenever
+the vehicle is below the blend transition height and terrain data is
+trusted. On the ground (0m AGL), this is always true when a rangefinder
+is present — even though the configured primary source (`EK3_SRC1_POSZ`)
+is baro.
+
+In log 47, the user powered on, jogged around for ~100s (43m total
+distance), then set the drone down and armed. During the jogging phase,
+baro drifted -1.787m (from handling/altitude changes), accumulating
++1.488m of PD offset. At arming, `resetHeightDatum()` was called but
+returned false because `activeHgtSource == RANGEFINDER` from blending.
+Both EKF cores retained their pre-arm PD offset.
+
+**Symptom**: PD=+1.488m at arming instead of ~0. Vehicle took ~10s to
+climb from the offset to the target altitude, with RFND oscillating
+between 1.3–2.9m (target 1.5m).
+
 ## Fixes Applied
 
 ### AP_NavEKF3: resetHeightDatum() improvements
@@ -149,6 +171,15 @@ target. When baro resumed, the step correction caused overshoot.
 - Reset GE timer while `ap.land_complete` so the timeout begins at
   actual liftoff regardless of how long motors spool on the ground.
 
+### AP_NavEKF3: fix resetHeightDatum blocked by rangefinder blending
+- The `activeHgtSource == RANGEFINDER` guard blocked datum resets on the
+  ground when `EK3_RNG_USE_HGT` blending was active
+- Changed guard: when `onGroundNotMoving` is true AND the configured
+  primary source (`EK3_SRC1_POSZ`) is not rangefinder, allow the reset
+  even if `activeHgtSource` is currently rangefinder from blending
+- When airborne or moving, the original `activeHgtSource` check is
+  preserved to prevent resets during actual rangefinder-primary flight
+
 ## Test Flight Log Summary
 
 | Log | Key Observation | Fix Applied |
@@ -168,6 +199,7 @@ target. When baro resumed, the step correction caused overshoot.
 | 42  | 2-min delay (99s), DZ=-1, hover 1.89m (+0.4m error) | Comparative: DZ=-1 error grows with warm-up time |
 | 43  | 5-min delay (238s), DZ=-1, hover 2.55m (+1.1m error) | Comparative: DZ=-1 catastrophically undersized |
 | 46  | 75s delay, DZ=-8, hover 1.34m (-0.2m error) | Validates fix 10: noise floor works regardless of warm-up |
+| 47  | Jogged 43m pre-arm, PD=+1.488m at ARM (datum reset blocked) | Fix 11: allow datum reset when onGroundNotMoving |
 
 ## Comparative Analysis: Warm-up Time vs AltHold Performance
 
@@ -246,6 +278,7 @@ All four logs confirm `resetHeightDatum()` works correctly at arming:
 | 42  | +0.004m   |
 | 43  | +0.012m   |
 | 46  | +0.001m   |
+| 47  | +1.488m (FAILED — datum reset blocked by rangefinder blending) |
 
 ### Analysis note: ARM message type captures both arm AND disarm
 
