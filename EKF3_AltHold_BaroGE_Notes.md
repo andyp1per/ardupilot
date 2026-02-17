@@ -200,8 +200,132 @@ between 1.3–2.9m (target 1.5m).
 | 43  | 5-min delay (238s), DZ=-1, hover 2.55m (+1.1m error) | Comparative: DZ=-1 catastrophically undersized |
 | 46  | 75s delay, DZ=-8, hover 1.34m (-0.2m error) | Validates fix 10: noise floor works regardless of warm-up |
 | 47  | Jogged 43m pre-arm, PD=+1.488m at ARM (datum reset blocked) | Fix 11: allow datum reset when onGroundNotMoving |
+| 49  | Powered on while moving — EKF never converged, wild flight | Analysis only: bootstrap reset enhancement |
 | 50  | Pre-arm movement, PD=+0.010m at ARM, hover 2.25m | Validates fix 11: datum reset succeeds with movement |
 | 51  | Pre-arm movement, PD=+0.000m at ARM, hover 1.59m | Validates fix 11: datum reset succeeds, hover on target |
+
+## Log 49 Analysis: Power-On While Moving
+
+### Scenario
+
+The user powered on the drone **while walking/jogging** with it, carried it
+for ~100 seconds, then set it down and attempted to arm and fly. This is
+an extreme edge case where every sensor calibration is contaminated.
+
+### Firmware
+
+ArduCopter V4.6.3v2-SFD on MatekH743, `ARMING_CHECK=0`,
+`EK3_GND_EFF_DZ=-8`, `EK3_RNG_USE_HGT=3`, `EK3_CHECK_SCALE=100`.
+
+### Timeline
+
+| Time (s) | Event |
+|----------|-------|
+| 35       | Boot, firmware starts |
+| 35–131   | **Drone being carried — massive IMU disturbance** |
+| 42       | GPS 3D fix (21 sats, HDop=0.64) while moving |
+| 47       | EKF3 initialized on both IMUs, first yaw reset |
+| 57       | EKF origin set (SET_HOME) |
+| 98       | PreArm: "EKF3 core 0 unhealthy" |
+| ~132     | Drone set down — IMU goes quiet |
+| 154      | EKF3 re-initialized (2nd time), still unhealthy |
+| 164      | EKF origin set again |
+| 171      | Arm attempt failed: "EKF3 core 0 unhealthy" |
+| 175      | Arm attempt failed: same reason |
+| 182      | EKF3 re-initialized (3rd time) — forced reinit |
+| 185      | **ARM with ARMING_CHECK=0** (all checks disabled) |
+| 185      | EKF_ALT_RESET at arm |
+| 192      | Takeoff — PD jumps from ~0 to -3.3m |
+| 192      | EKF origin set again (4th time) |
+| 204      | Mode change to AltHold |
+| 214–256  | **4 EKF lane switches** during flight |
+| 259      | DISARM + LAND_COMPLETE |
+
+### Root Causes
+
+**1. Gyro calibration during motion**
+
+`init_gyro()` runs at boot and assumes the vehicle is stationary. It
+converges when consecutive 250ms gyro averages agree to within 0.1 deg/s.
+During walking, the gyro saw avg 0.55 rad/s (31 deg/s), max 6.14 rad/s
+(352 deg/s). The calibration converged to incorrect offsets.
+
+**2. EKF initialized during motion**
+
+The EKF bootstrap at t=47s happened while IMU accel was swinging 4.4 to
+23.2 m/s² (0.5g to 2.4g). The initial tilt alignment, velocity, and
+position states were all contaminated.
+
+**3. Magnetometer severely disturbed**
+
+SM (magnetometer innovation test ratio) averaged 3.5 with peaks to 8.6
+(should be < 1.0). Over 50 yaw resets occurred from boot through landing.
+The mag calibration was likely contaminated by body motion during walking.
+
+**4. Baro drifted 2m during walking**
+
+Baro altitude shifted from +0.63m to -1.34m during the walking phase
+(1.99m total), consistent with actual altitude changes while walking.
+
+**5. Force-armed with unhealthy EKF**
+
+Two arm attempts were rejected ("EKF3 core 0 unhealthy"). The user
+forced a third EKF reinit at t=182s and then armed at t=185s with
+`ARMING_CHECK=0`. The EKF was still not properly converged.
+
+**6. 3.3m altitude jump at takeoff**
+
+PD was ~0 at ARM (datum reset worked), but at takeoff a new EKF origin
+was set with a GPS altitude mismatch (~3.2m difference), causing a
+sudden PD jump to -3.3m.
+
+**7. EKF lane switching during flight**
+
+Four lane switches in 74 seconds. Innovation ratios during flight:
+SV up to 1.88, SP up to 2.27, SH up to 1.12. Both cores were fighting
+with contaminated state estimates.
+
+### Key IMU Data
+
+| Phase | Gyro (rad/s) | Accel (m/s²) | AccZ (m/s²) |
+|-------|-------------|-------------|-------------|
+| Walking (t=35–131s) | avg 0.55, max 6.14 | 4.4–23.2 | -15.2 to +14.8 |
+| Stationary (t=132+) | avg 0.064 | 9.86 | -9.86 |
+
+### Mitigation: Enhanced EKF Bootstrap Reset (aux function)
+
+This scenario cannot be fully prevented in software — if the user powers
+on while moving, all calibrations will be wrong. However, we can provide
+a recovery mechanism for when the drone is subsequently set down.
+
+The existing EKF_RESET aux function (option 187) was enhanced:
+
+1. **Gyro recalibration**: `AP::ins().calibrate_gyros()` is called before
+   the EKF reinit, so the filter bootstraps with fresh gyro offsets.
+   This is blocking (up to 30s) and uses the INS's own convergence and
+   movement detection.
+
+2. **onGroundNotMoving guard**: `NavEKF3::InitialiseFilterBootstrap()` now
+   checks `isOnGroundNotMoving()` on all cores and refuses to reset if
+   the vehicle is not confirmed stationary. This prevents the user from
+   triggering the reset while still walking.
+
+3. **GCS feedback**: The aux switch now sends "EKF bootstrap reset
+   performed" or "EKF bootstrap reset failed" to the GCS.
+
+**Expected recovery procedure for power-on-while-moving:**
+1. Power on (even while moving)
+2. Set the drone down on a level surface
+3. Wait for `onGroundNotMoving` to settle (a few seconds)
+4. Trigger EKF_RESET aux switch
+5. Wait for "EKF bootstrap reset performed" message
+6. Arm normally (with arming checks enabled)
+
+### Commits (on SmallFastDrone-4.6-AltHoldv2)
+
+- `e488dd1886` AP_NavEKF3: require onGroundNotMoving for bootstrap reset
+- `7f7a5e58f6` AP_AHRS: add gyro recalibration to EKF bootstrap reset
+- `15b5044707` RC_Channel: add GCS feedback for EKF bootstrap reset
 
 ## Comparative Analysis: Warm-up Time vs AltHold Performance
 
