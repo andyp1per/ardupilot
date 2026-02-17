@@ -200,6 +200,8 @@ between 1.3–2.9m (target 1.5m).
 | 43  | 5-min delay (238s), DZ=-1, hover 2.55m (+1.1m error) | Comparative: DZ=-1 catastrophically undersized |
 | 46  | 75s delay, DZ=-8, hover 1.34m (-0.2m error) | Validates fix 10: noise floor works regardless of warm-up |
 | 47  | Jogged 43m pre-arm, PD=+1.488m at ARM (datum reset blocked) | Fix 11: allow datum reset when onGroundNotMoving |
+| 50  | Pre-arm movement, PD=+0.010m at ARM, hover 2.25m | Validates fix 11: datum reset succeeds with movement |
+| 51  | Pre-arm movement, PD=+0.000m at ARM, hover 1.59m | Validates fix 11: datum reset succeeds, hover on target |
 
 ## Comparative Analysis: Warm-up Time vs AltHold Performance
 
@@ -279,6 +281,8 @@ All four logs confirm `resetHeightDatum()` works correctly at arming:
 | 43  | +0.012m   |
 | 46  | +0.001m   |
 | 47  | +1.488m (FAILED — datum reset blocked by rangefinder blending) |
+| 50  | +0.010m (fix 11 validated — reset succeeds with pre-arm movement) |
+| 51  | +0.000m (fix 11 validated — reset succeeds with pre-arm movement) |
 
 ### Analysis note: ARM message type captures both arm AND disarm
 
