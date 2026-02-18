@@ -141,44 +141,41 @@ between 1.3–2.9m (target 1.5m).
 
 ## Fixes Applied
 
-### AP_NavEKF3: resetHeightDatum() improvements
-- Flush output state buffer (`storedOutput[].position.z`, `.velocity.z`)
-- Reset complementary filter state (`vertCompFiltState.pos/vel`)
-- Zero vertical velocity (`stateStruct.velocity.z`)
-- Clear baro offset tracker (`baroHgtOffset = 0`)
+### AP_NavEKF3: Fix baro height datum reset bug (Paul Riseborough)
+Commit `995d64e83a` — upstream fix by EKF author.
 - Flush baro delay buffer (`storedBaro.reset()`)
-- Reset height timeout (`lastHgtPassTime_ms`, `hgtTimeout`)
-- Sync `public_origin.alt = EKF_origin.alt`
+- Zero vertical position and velocity states
+- Flush output state buffer (`storedOutput[].position.z`, `.velocity.z`)
+- Reset `outputDataNew/Delayed` position and velocity
+- Reset `vertCompFiltState.vel`
+
+### AP_NavEKF3: fix resetHeightDatum guards and height fusion during ground effect
+Commit `6a45c0d0a3` — additional fixes on top of Paul's commit.
+
+resetHeightDatum() additions:
+- Reset `vertCompFiltState.pos` to match zeroed position
+- Clear baro offset tracker (`baroHgtOffset = 0`)
+- Reset height timeout (`lastHgtPassTime_ms`, `hgtTimeout`) so the
+  empty buffer period does not trigger `ResetHeight()`
+- Sync `public_origin.alt = EKF_origin.alt` so `getPosD()` does not
+  add a stale offset
 - Fix guard: use `!onGround && motorsArmed` instead of `!onGround`
+- Allow datum reset when `onGroundNotMoving` even if `activeHgtSource`
+  is RANGEFINDER from `EK3_RNG_USE_HGT` blending (configured primary
+  source must not be rangefinder)
 
-### AP_NavEKF3: suppress ResetHeight() during ground effect
-- When `hgtTimeout` fires during `takeoff_expected || touchdown_expected`,
-  skip `ResetHeight()` and set `fuseHgtData = false`
-
-### AP_NavEKF3: EK3_GND_EFF_DZ negative value as noise floor
-- When negative, use `|value|` as the baro observation noise in metres
-  (variance = value^2) instead of the fixed 4x scaler
-- Also use `|value|` for the dead zone size
-- E.g. -8 gives 64x variance increase, K≈0.008, limiting per-sample
-  contamination to ~0.004m while maintaining a weak altitude anchor
-- Updated parameter range to -10..10 and documentation
+Height fusion during ground effect:
+- Suppress `ResetHeight()` when `hgtTimeout` fires during ground effect
+- When `EK3_GND_EFF_DZ` is negative, use `|value|` as the baro
+  observation noise floor in metres (e.g. -8 gives variance 64,
+  K≈0.008) instead of the fixed 4x scaler
+- Use `fabsF()` for dead zone size so negative values work correctly
+- Updated parameter range to -10..10 and documentation (`6d16760ae6`)
 
 ### Copter: always reset EKF height datum on arming
+Commit `8e3aed50ad`.
 - Call `ahrs.resetHeightDatum()` unconditionally, not just when home
   is unset. Set `arming_altitude_m = 0` after reset.
-
-### Copter: count ground effect timeout from liftoff
-- Reset GE timer while `ap.land_complete` so the timeout begins at
-  actual liftoff regardless of how long motors spool on the ground.
-
-### AP_NavEKF3: fix resetHeightDatum blocked by rangefinder blending
-- The `activeHgtSource == RANGEFINDER` guard blocked datum resets on the
-  ground when `EK3_RNG_USE_HGT` blending was active
-- Changed guard: when `onGroundNotMoving` is true AND the configured
-  primary source (`EK3_SRC1_POSZ`) is not rangefinder, allow the reset
-  even if `activeHgtSource` is currently rangefinder from blending
-- When airborne or moving, the original `activeHgtSource` check is
-  preserved to prevent resets during actual rangefinder-primary flight
 
 ## Test Flight Log Summary
 
@@ -323,9 +320,9 @@ The existing EKF_RESET aux function (option 187) was enhanced:
 
 ### Commits (on SmallFastDrone-4.6-AltHoldv2)
 
-- `e488dd1886` AP_NavEKF3: require onGroundNotMoving for bootstrap reset
-- `7f7a5e58f6` AP_AHRS: add gyro recalibration to EKF bootstrap reset
-- `15b5044707` RC_Channel: add GCS feedback for EKF bootstrap reset
+- `80b4f22880` AP_NavEKF3: require onGroundNotMoving for bootstrap reset
+- `113d46eee6` AP_AHRS: add gyro recalibration to EKF bootstrap reset
+- `e021fb773a` RC_Channel: add GCS feedback for EKF bootstrap reset
 
 ## Comparative Analysis: Warm-up Time vs AltHold Performance
 
