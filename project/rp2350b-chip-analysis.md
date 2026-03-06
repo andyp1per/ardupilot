@@ -29,6 +29,41 @@ MatekF405 runs ArduCopter, ArduPlane, and Rover with feature limitations
 similar to what we expect on RP2350. The H757 is shown for reference as a
 high-end dual-core target — not what RP2350 competes with.
 
+### RP2350B vs F405 Summary Verdict
+
+**Where RP2350B wins clearly:**
+- **Cost:** ~$0.80 vs ~$6-10 — 8-12x cheaper, transformative for BOM
+- **SRAM:** 296KB usable for data (after 224KB code placement) vs 128KB — 2.4x
+- **Dual-core:** Core 1 can offload I/O, logging, MAVLink — F405 is single-core
+- **PWM:** 24 channels vs ~6
+- **PIO:** 12 state machines can implement nearly any I/O protocol
+- **Flash storage:** 16MB external vs 1MB internal — room for Lua, larger firmware
+- **Supply chain:** Readily available; STM32F4 had severe shortages 2021-2023
+- **Security:** TrustZone, SecureBoot, OTP — F405 has none
+
+**Where F405 wins clearly:**
+- **Simplicity:** Internal flash + ART accelerator — no XIP complexity, no SRAM
+  code placement, no linker gymnastics
+- **Hardware peripherals:** 6 UARTs, 2x CAN, 3x SPI, 3x I2C, 16 ADC — all
+  just work without PIO programs
+- **Mature ecosystem:** Dozens of proven FC boards, production-tested ChibiOS HAL
+- **USB 2.0** vs 1.1
+- **Single-core simplicity:** No SMP concurrency concerns
+
+**Where they're roughly equal:**
+- Compute: F405 at 168MHz Cortex-M4F ~ RP2350B at 150MHz dual Cortex-M33
+  (similar single-core DMIPS; RP2350 has two cores)
+- FPU: Both single-precision only
+- Both can run ArduPlane/Rover at 400Hz and Copter with feature limitations
+
+**Bottom line:** The RP2350B is not simpler — every UART beyond 2, every CAN
+bus, every protocol the F405 handles in hardware needs a PIO program. The XIP
+memory model adds real engineering complexity. But at $0.80 vs $6-10, a
+complete RP2350B flight controller board can cost what the F405 chip alone
+costs. For cost-sensitive applications (AP_Periph nodes, educational boards,
+emerging-market drones), that's transformative. The software complexity only
+has to be solved once in the HAL port.
+
 ## Capability Assessment for ArduPilot
 
 ### Sufficient
