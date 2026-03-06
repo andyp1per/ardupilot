@@ -7,7 +7,7 @@
 | **Core** | 2x Cortex-M33 @ 150MHz | 1x Cortex-M4F @ 168MHz | Cortex-M7 @ 480MHz + M4 @ 240MHz |
 | **FPU** | Single-precision | Single-precision | Single+Double precision |
 | **SRAM** | 520KB (10 banks) | 192KB (128+64) | 1MB |
-| **Flash** | External QSPI up to 16MB | 1MB internal | 2MB internal |
+| **Flash** | None internal; external QSPI (16MB on Laurel) | 1MB internal | 2MB internal |
 | **GPIO** | 48 (B variant) | ~80 (LQFP-64) | 140+ (176-pin) |
 | **UART** | 2 hardware (+PIO) | 6 (UART/USART) | 8 (UART/USART) |
 | **SPI** | 2 hardware | 3 | 6 |
@@ -39,7 +39,7 @@ high-end dual-core target — not what RP2350 competes with.
 - **GPIO:** 48 pins on B variant provides adequate pin count
 - **USB:** 1.1 device mode sufficient for MAVLink console
 - **SRAM:** 520KB is nearly 3x the F405's 192KB — more headroom than expected
-- **Flash:** 16MB external QSPI is ample for program storage
+- **Flash (external):** 16MB QSPI on Laurel is ample for program storage; all code executes via XIP
 - **Clock:** 150MHz Cortex-M33 with DSP extensions provides reasonable compute
 - **Dual-core:** Second core can handle sensor sampling or I/O
 
@@ -73,11 +73,11 @@ hardware peripheral gaps. Each PIO block has 4 state machines, and there are
 | **No double-precision FPU** | Reduced EKF precision | Same — F405 is also single-precision | Use `HAL_WITH_EKF_DOUBLE 0`, same as F4/ESP32 |
 | **150MHz clock** | Lower throughput per core | Comparable — F405 is 168MHz single-core | Dual-core compensates; net compute is higher |
 | **8 ADC channels** | Limited analog sensing | F405 has 16; but MatekF405 uses only 3 | Sufficient: battery V, battery I, RSSI |
-| **External flash** | Slower code execution | F405 has 1MB internal | XIP cache helps; place hot code in SRAM |
+| **No internal flash** | All code via QSPI XIP (~2-4x slower than internal) | F405 has 1MB internal flash | XIP cache (16KB) + SRAM placement for hot paths; ArduPilot H750 boards already use XIP model |
 | **No CAN hardware** | CAN requires PIO or external IC | F405 has 2x bxCAN | PIO CAN (proven on RP2040) or MCP2515 via SPI |
 | **520KB SRAM** | Tight but workable | F405 has only 192KB — RP2350 has 2.7x more | Actually an advantage over F4 boards |
 | **2 HW UARTs only** | Need PIO for additional | F405 has 6 | PIO UARTs add 3-4 more; proven implementations exist |
-| **1MB flash** | Less program space | F405 has 1MB — identical | 16MB QSPI available; flash is not the constraint |
+| **XIP latency** | Cache misses stall CPU | F405 executes from internal flash (wait-states but no XIP) | 16KB XIP cache; place scheduler + EKF hot loops in SRAM |
 
 ## Memory Budget Estimate
 
@@ -108,9 +108,21 @@ hardware peripheral gaps. Each PIO block has 4 state machines, and there are
 
 For context, the **MatekF405 runs ArduCopter in 192KB SRAM** with aggressive
 feature disabling. The RP2350B has 520KB — nearly 3x more — so RAM is less
-of a constraint than initially assumed. The binding constraint is more likely
-flash execution speed (XIP vs internal) and single-precision FPU performance,
-both of which the F405 also suffers from.
+of a constraint than initially assumed.
+
+**The binding constraint is XIP flash execution speed.** The RP2350B has no
+internal flash — all program code (~1.2MB for a minimal vehicle) must execute
+via XIP from external QSPI. Betaflight solves this by loading all code into
+RAM, but ArduPilot's firmware is too large for that (1.2MB code vs 520KB SRAM).
+ArduPilot already has a working XIP model for H750 boards (`EXT_FLASH_SIZE_MB`,
+`common_extf.ld`, `COPY_VECTORS_TO_RAM`), so the infrastructure exists. The
+RP2350's 16KB XIP cache and ability to place critical functions in SRAM
+(`__not_in_flash_func()`) will be essential for acceptable loop rates.
+
+The STM32F405 also has flash latency (wait-states at 168MHz with limited
+ART accelerator cache), so the comparison is not as stark as "internal vs
+external" might suggest. Both platforms benefit from SRAM placement of hot
+paths.
 
 ## ChibiOS RP2350 Support
 

@@ -33,9 +33,11 @@ wrangling. Estimates include integration testing and debugging.
 
 **Critical path to first flight: ~17 weeks (~4 months).** The biggest time
 risks are Step 3 (build system/ChibiOS integration), Step 4g (PIO UART — first
-PIO driver), and Step 5 (platform integration debugging — MatekF405 proves
-Copter fits in 192KB SRAM, so RP2350's 520KB is ample, but XIP flash behavior
-and new HAL assumptions will need debugging).
+PIO driver), and Step 5 (platform integration debugging). The RP2350B has no
+internal flash — all program code (~1.2MB) must execute via QSPI XIP. ArduPilot
+already supports this model on H750 boards (`EXT_FLASH_SIZE_MB`, `common_extf.ld`),
+but XIP cache behavior and SRAM placement of hot paths will need tuning.
+MatekF405 proves Copter fits in 192KB SRAM, so RP2350's 520KB is ample for RAM.
 
 ---
 

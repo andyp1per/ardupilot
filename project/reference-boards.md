@@ -16,7 +16,7 @@ significantly more RAM (520KB vs 192KB) and dual-core.
 |---|---|---|---|
 | Clock | 168MHz Cortex-M4F | 150MHz Cortex-M33 x2 | Similar per-core; RP2350 has 2 cores |
 | SRAM | 192KB | 520KB | RP2350 has 2.7x more |
-| Flash | 1MB internal | 16MB external QSPI | RP2350 has more but XIP latency |
+| Flash | 1MB internal | No internal; 16MB external QSPI (XIP) | F405 advantage: internal flash execution |
 | SPI buses | 3 (IMU, OSD, SD) | 2 (IMU, SD/OSD) | Similar |
 | I2C buses | 1 | 2 | RP2350 has more |
 | UARTs | 5 + USB | 2 HW + PIO UARTs + USB | Similar total with PIO |
@@ -129,7 +129,7 @@ Betaflight uses **Pico SDK + bare metal** (no RTOS). ArduPilot will use
 |---|---|---|---|
 | CAN bus | No CAN hardware | F405 has 2x bxCAN (unused on MatekF405) | PIO CAN or MCP2515 via SPI |
 | 6 HW UARTs | Only 2 HW UART | F405 has 6; MatekF405 uses 5 | PIO UARTs (3-4 additional) |
-| Internal flash | External QSPI (XIP latency) | F405 has 1MB internal | XIP cache + SRAM placement for hot paths |
+| Internal flash | No internal flash — all code via QSPI XIP | F405 has 1MB internal flash | ArduPilot H750 XIP model (`EXT_FLASH_SIZE_MB`); 16KB XIP cache + SRAM hot paths |
 
 ### RP2350B Advantages over MatekF405
 

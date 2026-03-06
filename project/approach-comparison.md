@@ -219,7 +219,8 @@ size and complexity.
 
 ### Performance tuning needs are RP2350-specific
 
-At 150MHz with external flash, the optimization strategies are unlike STM32:
+At 150MHz with no internal flash (all code via QSPI XIP), the optimization
+strategies differ from most STM32 boards (though H750 boards share some):
 SRAM code placement (`__not_in_flash_func()`), XIP cache management, PIO
 offloading, and overclock configuration. These need first-class integration
 in system.cpp, Scheduler, and RCOutput — not afterthought #ifdefs in files
