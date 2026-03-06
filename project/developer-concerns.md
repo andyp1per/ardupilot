@@ -270,28 +270,33 @@ cost.
 
 **Estimated achievable loop rates:**
 
-| Configuration | Estimated Rate | Notes |
+See [xip-performance-comparison.md](xip-performance-comparison.md) for
+detailed analysis. The RP2350B XIP cache has a 2-cycle hit penalty (unlike
+H750's zero-penalty L1 I-cache), 8-byte cache lines (vs H750's 32-byte),
+and no ITCM/internal flash fallback. Pure XIP execution is ~3x slower than
+internal flash. **SRAM code placement is mandatory, not optional.**
+
+| Configuration | Estimated Rate | Requirements |
 |---|---|---|
-| AP_Periph (single sensor) | 400Hz+ | Easily achievable, minimal processing |
-| Rover/Plane (minimal) | 400Hz | MatekF405 achieves this; RP2350 has more RAM and dual-core |
-| Copter (minimal) | 200-400Hz | F405 achieves 400Hz; RP2350 should match with dual-core |
+| AP_Periph (single sensor) | 400Hz+ | No special optimization needed |
+| Rover/Plane (minimal) | 400Hz | SRAM placement of hot code (~35KB) |
+| Copter (minimal) @ 150MHz | 200Hz | SRAM placement + single core |
+| Copter (minimal) @ 200MHz | 400Hz | SRAM placement + overclock + dual-core I/O offload |
 | Copter (full features) | Not a target | Same as F405 — feature-limited build |
 
-**Key optimizations:**
-1. **Dual-core:** Sensor sampling on Core 0, UART/USB I/O on Core 1
-2. **DMA everywhere:** SPI sensor reads, ADC conversions, UART transfers
-3. **SRAM placement:** Critical control loop code marked `__RAMFUNC__` to
-   avoid XIP latency (Pico SDK provides `__not_in_flash_func()`)
+**Key optimizations (in priority order):**
+1. **SRAM placement (mandatory):** ~35KB of hot code (EKF core, attitude
+   controller, IMU read, scheduler) must be in SRAM via `__RAMFUNC__` /
+   `__not_in_flash_func()`. Without this, even 200Hz Copter is not achievable.
+   See [xip-performance-comparison.md](xip-performance-comparison.md).
+2. **Overclock to 200MHz:** RP2350 commonly runs at 200MHz (33% gain).
+   Required for 400Hz Copter target.
+3. **Dual-core:** Control loop on Core 0, I/O (logging, MAVLink, GPS) on
+   Core 1. Essential for 400Hz Copter at 200MHz.
 4. **PIO offloading:** DShot, SBUS decode, UART all run in PIO hardware
    without CPU intervention
-5. **Overclock to 200MHz:** RP2350 commonly runs at 200MHz (well within
-   spec for many boards)
+5. **DMA everywhere:** SPI sensor reads, ADC conversions, UART transfers
 6. **Reduce features:** See section 9 below
-
-**Comparison with ESP32:** The ESP32 port runs at 240MHz dual-core Xtensa
-with 520KB SRAM and achieves functional flight. RP2350 at 150MHz has a
-more efficient ISA (Cortex-M33 vs Xtensa) and better DSP extensions, so
-comparable performance is expected.
 
 ---
 
