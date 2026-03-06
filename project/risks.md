@@ -57,28 +57,28 @@
 
 ---
 
-### R4: Flash XIP Latency (PRIMARY PERFORMANCE RISK)
+### R4: Flash XIP Performance
 
 **Risk:** The RP2350B has no internal flash — all program code (~1.2MB for a
 minimal vehicle) must execute via XIP from external QSPI. Betaflight avoids
 this by loading all code into RAM, but ArduPilot firmware is too large for
-the 520KB SRAM. XIP cache misses will cause latency spikes that could affect
-control loop timing.
+the 520KB SRAM. XIP cache misses could cause timing jitter in the control loop.
 
-**Likelihood:** High — XIP latency is inherent to the architecture
-**Impact:** Medium-High - timing jitter in control loops, potentially limiting
-achievable loop rates
+**Likelihood:** Medium — XIP cache has 1-cycle hit (per RP2350 datasheet),
+so cached code runs at near-full speed. Risk is primarily from cache misses
+due to 8-byte cache lines (smaller than H750's 32-byte lines).
+**Impact:** Medium — timing jitter from cache misses; SRAM placement mitigates
 
 **Mitigation:**
-- ArduPilot already supports XIP execution on H750 boards (`EXT_FLASH_SIZE_MB`,
+- XIP cache has **1-cycle hit latency** — cached code runs at near-full
+  150MHz throughput. See [xip-performance-comparison.md](xip-performance-comparison.md).
+- 16KB XIP cache with 2048 lines covers hot code paths effectively
+- ArduPilot already supports XIP on H750 boards (`EXT_FLASH_SIZE_MB`,
   `common_extf.ld`, `COPY_VECTORS_TO_RAM`) — proven model to follow
-- RP2350 has 16KB XIP cache (helps with hot code paths)
-- Critical functions marked `__RAMFUNC__` to execute from SRAM
-- Scheduler hot paths, interrupt handlers, EKF core, and sensor reads placed in SRAM
-- Pico SDK provides `__not_in_flash_func()` attribute for easy SRAM placement
-- Flash writes (storage) carefully scheduled outside control loop
-- STM32F405 also has flash wait-states at 168MHz with limited cache, so the
-  gap is not as extreme as "internal vs external" suggests
+- SRAM placement of ~35KB hot code eliminates miss jitter for control loop
+- Flash write routines MUST be in SRAM (XIP stalls during flash erase/write)
+- Pico SDK provides `__not_in_flash_func()` attribute for SRAM placement
+- Analysis projects 400Hz Copter at 150MHz with SRAM placement (~35% headroom)
 
 ---
 
@@ -246,7 +246,7 @@ loop rates for flight-critical vehicles (Copter needs 200-400Hz).
 | R1: SRAM insufficient | Medium-High | High | **Critical** |
 | R2: PIO UART reliability | Low-Medium | Medium | Medium |
 | R3: Sampling rate | Medium | High | **High** |
-| R4: XIP latency (no internal flash) | High | Medium-High | High |
+| R4: XIP performance (no internal flash) | Medium | Medium | Medium |
 | R5: PIO CAN reliability | Medium | Medium-High | **High** |
 | R6: ChibiOS RP2350 maturity | Low-Medium | Medium | Medium |
 | R7: ChibiOS SMP bugs | Medium | Medium | Medium |
