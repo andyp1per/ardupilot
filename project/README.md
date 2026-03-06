@@ -42,6 +42,7 @@ review. See [implementation-plan.md](implementation-plan.md).
 | [implementation-plan.md](implementation-plan.md) | Step-by-step plan structured as mergeable PRs |
 | [reference-boards.md](reference-boards.md) | MatekF405 comparison and Laurel board pin mapping |
 | [xip-performance-comparison.md](xip-performance-comparison.md) | XIP execution speed analysis: STM32H750 vs RP2350B |
+| [f405-performance-comparison.md](f405-performance-comparison.md) | F405 viability comparison: RP2350B must match or exceed F405 |
 | [risks.md](risks.md) | Technical risks and mitigation strategies |
 | [developer-concerns.md](developer-concerns.md) | Detailed analysis of specific technical concerns (GCC, DMA, dual-core, performance, features) |
 
