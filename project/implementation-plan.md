@@ -23,21 +23,26 @@ wrangling. Estimates include integration testing and debugging.
 |---|---|---|---|
 | 1 | ChibiOS update | 2–3 days | 0.5 wk |
 | 2 | Bootloader | 1–2 weeks | 2.5 wk |
-| 3 | HAL skeleton + pico2 | 2–3 weeks | 5 wk |
-| 4a-4k | Peripherals | 6–9 weeks | 13 wk |
-| 5 | Laurel board flying | 3–5 weeks | 17 wk |
-| | **Sponsor milestone** | | **~4 months** |
-| 6a-6g | Additional peripherals | 4–7 weeks | 23 wk |
-| 7a-7o | Full HAL fidelity | 6–10 weeks | 31 wk |
-| | **Production-quality port** | | **~7–8 months** |
+| 3a | HAL skeleton + pico2 | 2–3 weeks | 5 wk |
+| 3b | XIP flash and memory model | 1–1.5 weeks | 6.5 wk |
+| 4a-4k | Peripherals | 6–9 weeks | 14.5 wk |
+| 5 | Laurel board flying | 3–5 weeks | 18.5 wk |
+| | **Sponsor milestone** | | **~4.5 months** |
+| 6a-6g | Additional peripherals | 4–7 weeks | 24.5 wk |
+| 7a-7o | Full HAL fidelity | 6–10 weeks | 32.5 wk |
+| | **Production-quality port** | | **~8 months** |
 
-**Critical path to first flight: ~17 weeks (~4 months).** The biggest time
-risks are Step 3 (build system/ChibiOS integration), Step 4g (PIO UART — first
-PIO driver), and Step 5 (platform integration debugging). The RP2350B has no
-internal flash — all program code (~1.2MB) must execute via QSPI XIP. ArduPilot
-already supports this model on H750 boards (`EXT_FLASH_SIZE_MB`, `common_extf.ld`),
-but XIP cache behavior and SRAM placement of hot paths will need tuning.
-MatekF405 proves Copter fits in 192KB SRAM, so RP2350's 520KB is ample for RAM.
+**Critical path to first flight: ~18.5 weeks (~4.5 months).** The biggest time
+risks are Step 3a (build system/ChibiOS integration), Step 3b (XIP flash model),
+Step 4g (PIO UART — first PIO driver), and Step 5 (platform integration
+debugging). The RP2350B has no internal flash — all program code (~1.2MB)
+must execute via QSPI XIP. This is the primary performance constraint: unlike
+Betaflight (which loads all code into RAM), ArduPilot's firmware is too large
+for 520KB SRAM and must run from XIP. Step 3b is dedicated to establishing
+the correct XIP memory model, SRAM placement infrastructure, and verifying
+flash-safe operation. ArduPilot already supports XIP on H750 boards
+(`EXT_FLASH_SIZE_MB`, `common_extf.ld`) — proven model to follow. MatekF405
+proves Copter fits in 192KB SRAM, so RP2350's 520KB is ample for RAM.
 
 ---
 
@@ -151,7 +156,7 @@ USB at the register level could add a week.
 
 ---
 
-## Step 3: AP_HAL_Pico Skeleton + Pico 2 Demo Board (2–3 weeks)
+## Step 3a: AP_HAL_Pico Skeleton + Pico 2 Demo Board (2–3 weeks)
 
 **Goal:** `./waf configure --board pico2 && ./waf AP_Periph` compiles (even if
 firmware does nothing useful). Board boots via bootloader, LED blinks, USB
@@ -239,6 +244,112 @@ build log.
 
 ---
 
+## Step 3b: XIP Flash and Memory Model (1–1.5 weeks)
+
+**Goal:** Establish the correct XIP execution model, SRAM code placement
+infrastructure, and verify that flash write operations don't break XIP.
+This is the foundation that all subsequent code depends on — the RP2350B
+has no internal flash, so every instruction fetch goes through QSPI XIP
+unless explicitly placed in SRAM.
+
+**PR scope:** Modifications to linker script, system startup, and build
+infrastructure from Step 3a. May extend `pico_hwdef.py` and `pico.py`.
+
+### Context: Why This Needs Its Own Step
+
+Betaflight solves the external-flash problem by loading all code into RAM
+(`RUN_FROM_RAM=1`). ArduPilot's firmware is ~1.2MB for a minimal vehicle
+build — far larger than the 520KB SRAM — so the RAM-loading approach is
+not viable. All code must execute via XIP from QSPI flash.
+
+ArduPilot already has a working XIP model for H750 boards (STM32H750 has
+only 128KB internal flash, so most code runs from external QSPI). The key
+infrastructure is: `EXT_FLASH_SIZE_MB`, `common_extf.ld` linker script,
+`COPY_VECTORS_TO_RAM`, and `__EXTFLASHFUNC__` section placement. The
+RP2350 case is more extreme (zero internal flash vs H750's 128KB) but the
+model is proven.
+
+### Tasks
+
+1. **Linker script for full-XIP execution**
+   - Define memory regions: QSPI flash (XIP, 16MB), SRAM (520KB), scratch
+   - Vector table in XIP flash with `COPY_VECTORS_TO_RAM` to SRAM at boot
+     (ARM Cortex-M33 requires vectors in RAM for lowest interrupt latency)
+   - `.text` and `.rodata` in XIP flash region
+   - `.data` and `.bss` in SRAM (loaded from flash at startup)
+   - Define `.ramfunc` section for SRAM-resident code
+   - Reserve flash sectors: storage (16KB), crash dump (4KB), bootloader
+
+2. **SRAM code placement infrastructure**
+   - Implement `__RAMFUNC__` attribute (maps to `.ramfunc` section)
+   - Equivalent to Pico SDK's `__not_in_flash_func()` — function executes
+     from SRAM copy, not XIP
+   - Mark critical functions for SRAM: scheduler fast loop, IMU read,
+     attitude controller inner loop, flash write routines
+   - Build system support: waf flags to control SRAM placement
+   - Track SRAM code budget (functions in SRAM reduce available heap)
+
+3. **XIP cache configuration**
+   - RP2350 has a 16KB XIP cache (4-way set-associative, 8-byte lines)
+   - Configure cache policy at boot (enable, set replacement policy)
+   - Consider cache partitioning if supported (dedicate lines to hot paths)
+   - Verify cache is enabled and working (performance counter if available)
+
+4. **Flash write safety during XIP**
+   - QSPI flash erase/write operations stall XIP on the same flash
+   - On RP2350, flash writes must disable XIP, perform the operation, then
+     re-enable XIP — ChibiOS EFL driver handles this, but ArduPilot's
+     `AP_FlashStorage` must ensure no other thread accesses flash-resident
+     code during writes
+   - Validate with interrupts: flash write must not be interrupted by code
+     that itself is in XIP flash (ISRs that touch flash code must be in SRAM)
+   - This is critical for Step 4e (Storage) — parameter saves must not crash
+
+5. **Boot validation and performance baseline**
+   - Verify firmware boots correctly from XIP
+   - Measure loop timing jitter with basic scheduler running
+   - Compare loop execution time with and without SRAM placement of key
+     functions to quantify XIP overhead
+   - Document baseline: "scheduler tick takes Xus from XIP vs Yus from SRAM"
+   - This baseline informs later optimization in Step 6f (dual-core)
+
+### Verification
+```bash
+./waf configure --board pico2
+./waf AP_Periph
+# Flash, verify boot from XIP
+# Measure scheduler tick timing via GPIO toggle + oscilloscope
+# Verify parameter write doesn't crash (flash write during XIP)
+# Compare function execution time: XIP vs SRAM-resident
+```
+
+### Deliverable
+- Linker script with correct XIP + SRAM memory model
+- `__RAMFUNC__` infrastructure for SRAM code placement
+- Flash write operations verified safe during XIP
+- Performance baseline documented
+
+### Time Estimate: 1–1.5 weeks
+
+The linker script and SRAM placement infrastructure are 2–3 days (building
+on the basic linker script from Step 3a). XIP cache configuration is
+straightforward (1 day). The bulk of the time goes to flash-write-during-XIP
+safety validation (2–3 days) — this requires careful testing with interrupts
+and multi-threaded scenarios, and bugs here cause hard-to-reproduce crashes.
+The performance baseline is 1 day of measurement and documentation.
+
+**Where the time goes:**
+- Linker script refinement (XIP regions, SRAM sections, flash reserves): 2–3 days
+- SRAM placement macros + build integration: 1 day
+- Flash-write-during-XIP testing: 2–3 days (subtle concurrency issues)
+- Performance baseline measurement: 1 day
+
+**Risk:** Flash write safety is the hardest part. If ChibiOS EFL driver
+doesn't properly handle XIP stall during erase/write, this could require
+custom flash routines running from SRAM — adding 2–3 days.
+
+---
+
 ## Step 4: Peripherals (6–9 weeks total, one PR per peripheral)
 
 Each peripheral is a separate PR that adds one capability. Order chosen to
@@ -306,10 +417,11 @@ a working Storage backend, and Storage depends on flash page operations.
 **Verification:** Set parameter, reboot, parameter persists. Verify wear-leveling
 by writing parameters repeatedly and confirming flash sector rotation.
 
-**Where the time goes:** Flash is deceptively tricky. Getting the sector layout
-right in the linker script (program, storage, crash dump regions) takes time.
-Flash erase/write timing, making sure XIP isn't disrupted during flash
-operations, and wear-leveling corner cases are where the debugging hours go.
+**Where the time goes:** Flash is deceptively tricky. The flash sector layout
+and XIP safety foundations are established in Step 3b; this step builds on that
+with the `AP_FlashStorage` wear-leveling layer and `AP_HAL::Storage` backend.
+The remaining debugging hours go to wear-leveling corner cases and ensuring the
+full parameter load/save cycle works reliably under concurrent XIP access.
 
 ### Step 4f: Hardware UARTs (2–3 days)
 
@@ -738,16 +850,17 @@ These AP_HAL_ChibiOS features are **not needed** for RP2350:
 |---|---|---|---|---|
 | 1 | ChibiOS submodule update | Submodule pointer only | Low | None |
 | 2 | Bootloader | Board ID + board_types.txt | Low | Step 1 |
-| 3 | AP_HAL_Pico skeleton + pico2 | New files + board header | Low | Step 2 |
-| 4a | SPI bus driver | New files only | None | Step 3 |
+| 3a | AP_HAL_Pico skeleton + pico2 | New files + board header | Low | Step 2 |
+| 3b | XIP flash and memory model | Linker script + system startup | Medium | Step 3a |
+| 4a | SPI bus driver | New files only | None | Step 3b |
 | 4b | IMU (ICM-42688P) | New files only | None | Step 4a |
-| 4c | I2C bus driver | New files only | None | Step 3 |
+| 4c | I2C bus driver | New files only | None | Step 3b |
 | 4d | Barometer (DPS310) | New files only | None | Step 4c |
-| 4e | Flash + storage | New files only | None | Step 3 |
-| 4f | Hardware UARTs | New files only | None | Step 3 |
+| 4e | Flash + storage | New files only | None | Step 3b |
+| 4f | Hardware UARTs | New files only | None | Step 3b |
 | 4g | PIO UART | New files only | None | Step 4f |
-| 4h | PWM output | New files only | None | Step 3 |
-| 4i | ADC | New files only | None | Step 3 |
+| 4h | PWM output | New files only | None | Step 3b |
+| 4i | ADC | New files only | None | Step 3b |
 | 4j | RC input (CRSF) | New files only | None | Step 4g |
 | 4k | SD card + filesystem | New files only | None | Step 4a |
 | 5 | Laurel board support | New hwdef + config | Low | Steps 4a-4k |
@@ -755,8 +868,8 @@ These AP_HAL_ChibiOS features are **not needed** for RP2350:
 | 6b | WS2812 (PIO) | New files only | None | Step 5 |
 | 6c-g | Additional features | New files only | None | Step 5 |
 | 7a | Shared DMA | New files only | None | Step 4a |
-| 7b | Util — system infrastructure | New files only | None | Step 3 |
-| 7c | Watchdog + fault handling | New files only | None | Step 3 |
+| 7b | Util — system infrastructure | New files only | None | Step 3b |
+| 7c | Watchdog + fault handling | New files only | None | Step 3b |
 | 7d | Crash dump | New files only | None | Step 7c |
 | 7e | Util — diagnostics | New files only | None | Step 7a |
 | 7f | Flash bootloader update | New files only | None | Step 2, 4e |
@@ -770,7 +883,7 @@ These AP_HAL_ChibiOS features are **not needed** for RP2350:
 | 7n | WSPI/QSPI device manager | New files only | None | Step 4a |
 | 7o | IMU heater | New files only | None | Step 4h |
 
-**Key insight:** After Step 3, virtually all PRs are new files in
+**Key insight:** After Step 3b, virtually all PRs are new files in
 `libraries/AP_HAL_Pico/`. They don't touch AP_HAL_ChibiOS or any vehicle code.
 This makes them low-risk, easy to review, and safe to merge incrementally.
 
@@ -786,9 +899,11 @@ is each PR is self-contained and testable.
 | **Medium** | 7d (crash dump), 7e (diagnostics), 7g (DFU), 7h (DSP), 7i (bidir DShot) | Important for debugging and advanced features |
 | **Low** | 7j (BLHeli), 7k (serial LED), 7l (CAN), 7m (persistent params), 7n (WSPI), 7o (heater) | Nice-to-have or hardware-dependent |
 
-**Note:** Bootloader is Step 2 (first bringup milestone). Flash page operations
-(`AP_HAL::Flash`) and SD card filesystem are in Steps 4e and 4k respectively —
-ArduPilot cannot boot without Storage, and a working board needs SD logging.
+**Note:** Bootloader is Step 2 (first bringup milestone). XIP flash model is
+Step 3b (all code executes via QSPI XIP — must be validated before any
+peripheral work). Flash page operations (`AP_HAL::Flash`) and SD card
+filesystem are in Steps 4e and 4k respectively — ArduPilot cannot boot without
+Storage, and a working board needs SD logging.
 
 ---
 
@@ -804,7 +919,8 @@ the HELLBENDER_0001 board config. Key observations:
   (must be clean-room reimplemented due to GPL vs ArduPilot license)
 - **PIO allocation:** PIO0 → DShot motors, PIO1 → PIO UARTs, PIO2 → LED strip
 - **Runs from RAM** by default (`RUN_FROM_RAM=1`) to avoid XIP latency —
-  we should evaluate this approach vs SRAM code placement for hot paths
+  this is not viable for ArduPilot (~1.2MB firmware vs 520KB SRAM). ArduPilot
+  must use XIP with selective SRAM placement for hot paths (see Step 3b)
 - Uses `-mcmse` flag (TrustZone) — we don't need this
 - Has multicore support via Pico SDK multicore API
 - SD card on SPI1, mutually exclusive with MAX7456 OSD
