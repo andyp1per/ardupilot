@@ -17,7 +17,7 @@ The RP2350B is a dual-core ARM Cortex-M33 running at 150MHz with 520KB SRAM,
 - **Primary target board:** Laurel (Betaflight: HELLBENDER_0001) — RP2350B FC
   with ICM-42688P, DPS310, SD card, 4 motor outputs, PIO UARTs, CRSF RC
 - **Development board:** Raspberry Pi Pico 2 (for early bringup)
-- **Reference designs:** Holybro Aeolus (HF-A001-RC01), ABSI Flight Controller
+- **Reference designs:** MatekF405 (STM32F405 comparison target)
 
 ## Key Design Decisions
 
@@ -40,7 +40,7 @@ review. See [implementation-plan.md](implementation-plan.md).
 | [rp2350b-chip-analysis.md](rp2350b-chip-analysis.md) | RP2350B capabilities, ChibiOS driver status |
 | [architecture.md](architecture.md) | HAL architecture and key design decisions |
 | [implementation-plan.md](implementation-plan.md) | Step-by-step plan structured as mergeable PRs |
-| [reference-boards.md](reference-boards.md) | Analysis of Holybro and ABSI reference schematics |
+| [reference-boards.md](reference-boards.md) | MatekF405 comparison and Laurel board pin mapping |
 | [risks.md](risks.md) | Technical risks and mitigation strategies |
 | [developer-concerns.md](developer-concerns.md) | Detailed analysis of specific technical concerns (GCC, DMA, dual-core, performance, features) |
 

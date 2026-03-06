@@ -119,7 +119,7 @@ Minimum viable RP2350B flight controller:
 - Battery V/I sensing (ADC)
 
 See [reference-boards.md](reference-boards.md) for detailed pin mapping
-derived from Holybro Aeolus and ABSI schematics.
+derived from the Laurel (HELLBENDER_0001) Betaflight configuration and MatekF405 comparison.
 
 ---
 

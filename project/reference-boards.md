@@ -1,124 +1,34 @@
 # Reference Board Analysis
 
-## Holybro Aeolus (HF-A001-RC01)
+## MatekF405 (STM32F405, Primary Comparison)
 
-**Schematic:** `HF-A001-RC01.pdf` (15 sheets)
-**MCU:** STM32H753IIK (176-pin LQFP, Cortex-M7 @ 480MHz, 2MB flash, 1MB RAM)
+**MCU:** STM32F405RG (LQFP-64, Cortex-M4F @ 168MHz, 1MB flash, 192KB SRAM)
+**Status:** Shipping, widely used, runs ArduCopter/Plane/Rover
 
-### Sensor Suite
+The MatekF405 is the most relevant comparison for the RP2350B port — it's a
+resource-constrained F4 board that runs full ArduPilot vehicles. The RP2350B
+has similar clock speed (150 vs 168MHz), similar FPU (single-precision), but
+significantly more RAM (520KB vs 192KB) and dual-core.
 
-| Sensor | Type | Interface | Quantity | ArduPilot Driver |
-|---|---|---|---|---|
-| ICM-45686 | 6-axis IMU (accel+gyro) | SPI1, SPI2, SPI3 | 3 | AP_InertialSensor_Invensensev3 |
-| ICP-20100 | Barometer | I2C2, I2C4 | 2 | AP_Baro_ICP201XX |
-| MS4525 | Airspeed (differential) | I2C1 | 1 | AP_Airspeed_MS4525 |
-| RM3100 | Magnetometer | I2C3 | 1 | AP_Compass_RM3100 |
-| IST8310 | Magnetometer (not installed) | I2C3 | 0 | AP_Compass_IST8310 |
+### MatekF405 Key Specs
 
-### Communication Interfaces
-
-| Interface | STM32 Peripheral | External | Purpose |
+| Resource | MatekF405 | RP2350B (Laurel) | Comparison |
 |---|---|---|---|
-| UART7 | USART7 | BST0014MN52G | Telem1 (with flow control) |
-| UART5 | UART5 | BST0014MN52G | Telem2 (with flow control) |
-| UART8 | UART8 | NEO-F9P | GPS2 |
-| USART1 | USART1 | NEO-F9P | GPS1 |
-| USART6 TX | USART6 | - | ELRS output |
-| USART6 RX | USART6 | - | RC_IN (SBUS/DSM/PPM) |
-| USART3 | USART3 | - | FMU Debug |
-| CAN1 | FDCAN1 | TJA1051 | DroneCAN bus 1 |
-| CAN2 | FDCAN2 | TJA1051 | DroneCAN bus 2 |
-| ETH | ETH MII | PHY chip | Ethernet |
-| USB | USB OTG | Type-C | Console/MAVLink |
-
-### PWM Outputs
-
-- 12 PWM channels via timer outputs
-- Level shifting: VER0 = no shift (3.3V), VER1 = with shift (configurable voltage)
-- Two groups of 8 driven by SN74LVC8T245BNR level shifters
-- Additional 2 PWM through BSS214NW6 FETs
-
-### Power Architecture
-
-- Input: 10-52V via XT60-M connector
-- Power MUX: LTC4417 with triple input (Brick1 > Brick2 > VBUS priority)
-- Over-voltage: 5.6V, Under-voltage: 3.6V, Hysteresis: 30mV
-- Voltage sensing: Two scales (18x and 35x dividers)
-- Current sensing: 132A max (BATT_AMP_PERVLT = 40)
-- Regulated outputs: 5V servo, 3.3V sensors, 5V peripherals
-
-### Storage
-
-- FRAM on SPI5 (fast parameter storage)
-- SD NAND on SDMMC2 (logging)
-- 24LC64 EEPROM on I2C (board ID / calibration)
-- SE050 secure element on I2C (cryptographic operations)
-
-### Key Design Patterns for RP2350B Port
-
-1. **Triple-redundant IMUs** on separate SPI buses with individual chip selects
-2. **Dual barometers** on separate I2C buses for redundancy
-3. **Hardware flow control** on telemetry UARTs (CTS/RTS)
-4. **Level-shifted PWM** to support 5V servo rail
-5. **Dual CAN** with TJA1051 transceivers (high-side/low-side)
-6. **Dual GPS** with separate UART connections + shared PPS/Event
-7. **Battery monitoring** with separate voltage and current sense per battery
-
----
-
-## ABSI Flight Controller (SCH-ABSI-Flight_Control)
-
-**Schematic:** `SCH-ABSI-Flight_Control.PDF` (7 sheets)
-**MCU:** STM32H743VIT6 (100-pin LQFP, Cortex-M7 @ 480MHz)
-**Customer:** ABSI Aerospace & Defense
-**Designer:** Pelican Engineering
-
-### Sensor Suite
-
-| Sensor | Type | Interface | Priority | Notes |
-|---|---|---|---|---|
-| ICM-45686 (U2) | 6-axis IMU | SPI (AP_SDO, AP_SDI, AP_CS) | SHALL | Primary IMU |
-| ICM-45686 (U3) | 6-axis IMU | SPI (IMU2_MISO/MOSI/CS) | SHOULD | Redundant IMU |
-| ICM-45686 (U7) | 6-axis IMU | SPI (IMU3_MISO/MOSI/CS) | MAY | Third IMU |
-| BMP390 (U4) | Barometer | I2C1 (SENSOR_SCL/SDA) | SHALL | I2C addr 0x76 |
-| RM3100 | Magnetometer | I2C | SHOULD | Draft removed from project |
-
-### Communication Interfaces
-
-| Interface | Purpose | Notes |
-|---|---|---|
-| UART7 + UART8 | GPS + Compass | TX, RX, I2C SDA/SCL |
-| UART6 | Telemetry | TX, RX, CTS, RTS (flow control) |
-| UART1, UART3, UART4, UART5 | Additional UARTs | General purpose |
-| USART2 TX | Misc | Single direction |
-| FDCAN1 | CAN bus 1 | TJA1462A with standby |
-| FDCAN2 | CAN bus 2 | TJA1462A |
-| USB OTG | Console | Via USB-C breakout board |
-
-### PWM Outputs
-
-- **16 PWM outputs** organized in groups:
-  - TIM1: CH1-CH4 (4 channels)
-  - TIM8: CH1-CH4 (4 channels)
-  - TIM3: CH2 + TIM4: CH1-CH2 (3 channels)
-  - TIM2: CH1 + TIM4: CH1-CH2 (3 channels)
-  - TIM5: CH1-CH4 (last 2 for PWM13-16)
-
-### Power Architecture
-
-- PDB (Power Distribution Board) interface via FTS/FLE connectors
-- Battery monitoring: 4x ADC inputs (BATTERY1_V, BATTERY1_I, BATTERY2_V, BATTERY2_I)
-- 4-in-1 ESC interface: ESC_BATTERY, ESC_CURRENT, ESC_TELEMETRY
-- Power rails: Servo (5V/6V, 15A), Telemetry (5V, 6A), VTX (9V/12V, 6A), MCU/Sensor (3.3V, 3A)
-
-### Key Design Patterns
-
-1. **SHALL/SHOULD/MAY priority system** for component population variants
-2. **USB-C breakout PCB** as a separate sub-board (with DFU boot button)
-3. **CAN standby mode** via TJA1462A (supports bus wake-up)
-4. **Board-to-board mounting** with FTS/FLE connector system (5.85mm stack height)
-5. **Extensive decoupling** on ADC inputs (100nF per channel)
-6. **External oscillators** for both LSE (32.768kHz) and HSE (8MHz)
+| Clock | 168MHz Cortex-M4F | 150MHz Cortex-M33 x2 | Similar per-core; RP2350 has 2 cores |
+| SRAM | 192KB | 520KB | RP2350 has 2.7x more |
+| Flash | 1MB internal | 16MB external QSPI | RP2350 has more but XIP latency |
+| SPI buses | 3 (IMU, OSD, SD) | 2 (IMU, SD/OSD) | Similar |
+| I2C buses | 1 | 2 | RP2350 has more |
+| UARTs | 5 + USB | 2 HW + PIO UARTs + USB | Similar total with PIO |
+| PWM outputs | 6 | 4 (PWM) + DShot via PIO | Similar |
+| ADC | 3 used (V, I, RSSI) | 3 used (V, I, RSSI) | Identical |
+| CAN | 2x bxCAN (unused on MatekF405) | None (PIO or MCP2515) | F405 advantage |
+| OSD | MAX7456 on SPI2 | MAX7456 on SPI1 | Identical |
+| SD card | SPI mode on SPI3 | SPI mode on SPI1 | Identical |
+| Storage | 15KB flash | 16KB flash | Similar |
+| IMU | MPU6000 on SPI1 | ICM-42688P on SPI0 | Both single SPI IMU |
+| Baro | BMP280 on I2C (optional) | DPS310 on I2C | Both I2C baro |
+| Price | ~$25-35 (board) | ~$0.80 (MCU) | RP2350 MCU far cheaper |
 
 ---
 
@@ -213,26 +123,29 @@ Betaflight uses **Pico SDK + bare metal** (no RTOS). ArduPilot will use
 | SD card | SPI mode via HW SPI | Not SDMMC, but functional |
 | FRAM | SPI via HW SPI | Same approach |
 
-### What Cannot Be Directly Replicated (vs H7 Reference Boards)
-
-These are limitations versus the H753-based Aeolus and ABSI boards. However,
-many of these are shared with the STM32F405 (MatekF405), which is the more
-relevant comparison for an RP2350B-class flight controller.
+### What Cannot Be Directly Replicated (vs MatekF405)
 
 | Feature | RP2350B Limitation | vs MatekF405 (F405) | Alternative |
 |---|---|---|---|
-| Dual FDCAN | No CAN hardware | F405 has 2x bxCAN | PIO CAN or MCP2515 via SPI |
-| Ethernet | No Ethernet | F405 also lacks Ethernet | N/A — H7 only feature |
-| 4+ I2C buses | Only 2 HW I2C | F405 has 3; MatekF405 uses 1 | PIO I2C for additional buses |
-| 8 UARTs | Only 2 HW UART (+PIO) | F405 has 6; MatekF405 uses 5 | PIO UARTs (3-4 additional) |
-| DMA sophistication | 16 ch flat | F405 has 16 streams — similar | Adequate for this scale |
-| Double-precision FPU | Single only | F405 also single-precision | Software double; EKF impact |
-| 480MHz clock | 150MHz | F405 is 168MHz — comparable | Dual-core compensates; net higher compute |
-| 1MB+ SRAM | 520KB | **F405 has only 192KB** | RP2350 actually has 2.7x more RAM than F405 |
+| CAN bus | No CAN hardware | F405 has 2x bxCAN (unused on MatekF405) | PIO CAN or MCP2515 via SPI |
+| 6 HW UARTs | Only 2 HW UART | F405 has 6; MatekF405 uses 5 | PIO UARTs (3-4 additional) |
+| Internal flash | External QSPI (XIP latency) | F405 has 1MB internal | XIP cache + SRAM placement for hot paths |
+
+### RP2350B Advantages over MatekF405
+
+| Feature | RP2350B | MatekF405 | Benefit |
+|---|---|---|---|
+| SRAM | 520KB | 192KB | 2.7x more — room for more features |
+| Cores | 2 (SMP) | 1 | I/O offloading, higher effective throughput |
+| PIO | 12 state machines | None | Flexible protocol support without CPU |
+| Flash storage | 16MB QSPI | 1MB internal | Ample program + log space |
+| I2C buses | 2 (+PIO) | 1 used | More sensor buses |
+| Price (MCU) | ~$0.80 | ~$6-10 | 8-12x cheaper |
 
 ### Recommended RP2350B Flight Controller Minimum Viable Peripherals
 
-Based on both reference designs, a minimal RP2350B flight controller should have:
+Based on the MatekF405 and Laurel board designs, a minimal RP2350B flight
+controller should have:
 
 **SHALL (Required):**
 - 1x ICM-45686 IMU on SPI

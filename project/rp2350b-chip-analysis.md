@@ -2,9 +2,9 @@
 
 ## RP2350B Key Specifications
 
-| Feature | RP2350B | STM32F405 (MatekF405) | STM32H753 (Aeolus) |
+| Feature | RP2350B | STM32F405 (MatekF405) | STM32H757 (high-end ref) |
 |---|---|---|---|
-| **Core** | 2x Cortex-M33 @ 150MHz | 1x Cortex-M4F @ 168MHz | 1x Cortex-M7 @ 480MHz |
+| **Core** | 2x Cortex-M33 @ 150MHz | 1x Cortex-M4F @ 168MHz | Cortex-M7 @ 480MHz + M4 @ 240MHz |
 | **FPU** | Single-precision | Single-precision | Single+Double precision |
 | **SRAM** | 520KB (10 banks) | 192KB (128+64) | 1MB |
 | **Flash** | External QSPI up to 16MB | 1MB internal | 2MB internal |
@@ -26,8 +26,8 @@
 The most relevant comparison is the **STM32F405**, which is the same class of
 resource-constrained flight controller that the RP2350B will compete with. The
 MatekF405 runs ArduCopter, ArduPlane, and Rover with feature limitations
-similar to what we expect on RP2350. The H753 is shown for reference as a
-high-end target.
+similar to what we expect on RP2350. The H757 is shown for reference as a
+high-end dual-core target — not what RP2350 competes with.
 
 ## Capability Assessment for ArduPilot
 
