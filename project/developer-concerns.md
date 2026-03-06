@@ -11,7 +11,7 @@ port planning, with findings from code analysis and testing.
 
 **Finding: All essential LLD drivers are COMPLETE.**
 
-ChibiOS trunk (`../ChibiOS.svn`) includes production-ready RP2350 drivers:
+ChibiOS trunk ([ChibiOS.svn](https://github.com/ArduPilot/ChibiOS.svn)) includes production-ready RP2350 drivers:
 
 | Driver | LLD Path | DMA | Status |
 |---|---|---|---|
@@ -132,7 +132,7 @@ Do we need to write a ChibiOS DMA driver? Will it be totally different from STM3
 
 The concern is resolved - a DMA driver already exists:
 
-- **Path:** `ChibiOS.svn/os/hal/ports/RP/LLD/DMAv1/`
+- **Path:** `os/hal/ports/RP/LLD/DMAv1/` in [ChibiOS.svn](https://github.com/ArduPilot/ChibiOS.svn)
 - **Channels:** 16 DMA channels (confirmed in `rp_registry.h`: `RP_DMA_NUM_CHANNELS 16`)
 - **SPI integration:** ChibiOS SPI LLD uses DMA automatically (`rp_dma_channel_t` in `hal_spi_lld.h`)
 - **ADC integration:** ChibiOS ADC LLD uses DMA for conversion results
@@ -165,7 +165,7 @@ The ChibiOS RP2350 demo compiles cleanly with ArduPilot's exact toolchain:
 $ arm-none-eabi-gcc --version
 arm-none-eabi-gcc (GNU Arm Embedded Toolchain 10-2020-q4-major) 10.2.1
 
-$ cd ChibiOS.svn/demos/RP/RT-RP2350-PICO2 && make
+$ cd demos/RP/RT-RP2350-PICO2 && make   # in ChibiOS.svn checkout
 Compiler Options: arm-none-eabi-gcc -mcpu=cortex-m33 -mthumb -O2 ...
                   -mfloat-abi=softfp -mfpu=fpv5-sp-d16
 ...
@@ -201,7 +201,7 @@ works for the entire RP2350 port. This avoids the dual-toolchain problem entirel
 
 **Finding: ChibiOS SMP dual-core on RP2350 is CONFIRMED WORKING.**
 
-The ChibiOS demo at `ChibiOS.svn/demos/RP/RT-RP2350-PICO2/` demonstrates:
+The ChibiOS demo at `demos/RP/RT-RP2350-PICO2/` in [ChibiOS.svn](https://github.com/ArduPilot/ChibiOS.svn) demonstrates:
 
 **Core 0 (main.c):**
 ```c

@@ -130,7 +130,7 @@ foundation for AP_HAL_Pico (see [architecture.md](architecture.md)).
 - Spinlock #31 for inter-core synchronization
 - Inter-processor FIFO for scheduling messages
 - Core-local memory sections (SCRATCH_X at 0x20080000, SCRATCH_Y at 0x20081000)
-- Proven in demo: `ChibiOS.svn/demos/RP/RT-RP2350-PICO2/`
+- Proven in demo: `demos/RP/RT-RP2350-PICO2/` in [ChibiOS.svn](https://github.com/ArduPilot/ChibiOS.svn)
 
 ### What ChibiOS Does NOT Provide
 
