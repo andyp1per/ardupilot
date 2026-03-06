@@ -244,12 +244,13 @@ in an already complex build system for zero benefit to STM32 users.
 
 ### Feature disabling is more aggressive
 
-520KB RAM requires disabling far more features than any current ChibiOS board.
-While `HAL_MEM_CLASS` handles some scaling, the board header needs 20+
-additional feature disables. This isn't a problem for separation per se, but
-it means RP2350 builds exercise a very different subset of ArduPilot code
-than STM32 builds, reducing the "shared code benefits" argument for keeping
-them in one HAL.
+While 520KB SRAM is actually more than the STM32F405's 192KB (MatekF405 runs
+Copter in this), the RP2350 still needs feature disabling similar to F4 boards.
+The feature set will be comparable to existing `minimize_fpv_osd.inc` boards.
+This isn't a problem for separation per se, but it means RP2350 builds exercise
+a similar subset of ArduPilot code to resource-constrained F4 boards rather than
+the full H7 feature set, reducing the "shared code benefits" argument for
+keeping them in one HAL.
 
 ---
 

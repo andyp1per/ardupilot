@@ -249,23 +249,33 @@ I/O to Core 1 is the primary mitigation for the clock speed limitation.
 
 **Analysis:**
 
-| Metric | STM32H7 @ 480MHz | RP2350 @ 150MHz | Ratio |
+| Metric | STM32F405 @ 168MHz | RP2350 @ 150MHz | Ratio |
 |---|---|---|---|
-| Raw clock | 480 MHz | 150 MHz | 3.2x slower |
-| Architecture | Cortex-M7 (superscalar, 6-stage) | Cortex-M33 (3-stage, in-order) | ~2x IPC disadvantage |
-| FPU | Double-precision | Single-precision only | Use `HAL_WITH_EKF_DOUBLE 0` |
-| D-Cache | 64KB + 16KB I-Cache | 16KB XIP cache only | Significant for code-heavy loops |
-| Cores | 1 | 2 (SMP) | Offload I/O to core 1 |
-| Flash | Internal (zero wait-state) | External QSPI via XIP | Hot paths must be in SRAM |
+| Raw clock | 168 MHz | 150 MHz | ~0.9x — nearly identical |
+| Architecture | Cortex-M4 (3-stage, in-order) | Cortex-M33 (3-stage, in-order) | Similar IPC; M33 has some DSP improvements |
+| FPU | Single-precision | Single-precision | Identical |
+| Cache | ART accelerator + 64B I-cache | 16KB XIP cache | F405 has limited cache too |
+| Cores | 1 | 2 (SMP) | RP2350 can offload I/O to core 1 |
+| Flash | Internal (flash wait-states at 168MHz) | External QSPI via XIP | Both have flash latency; hot paths in SRAM helps both |
+| SRAM | 192KB (128+64) | 520KB | RP2350 has 2.7x more |
+
+The MatekF405 runs ArduCopter at 400Hz. With similar clock speed, similar
+architecture, and significantly more RAM, the RP2350 should achieve comparable
+loop rates — especially with dual-core I/O offloading.
+
+For reference vs high-end boards: STM32H7 @ 480MHz with Cortex-M7 superscalar
+pipeline and double-precision FPU is ~6x faster in raw compute. The RP2350 is
+not competing with H7 boards; it competes with F4 boards at a fraction of the
+cost.
 
 **Estimated achievable loop rates:**
 
 | Configuration | Estimated Rate | Notes |
 |---|---|---|
 | AP_Periph (single sensor) | 400Hz+ | Easily achievable, minimal processing |
-| Rover/Plane (minimal) | 200-400Hz | Single EKF3 core, reduced features |
-| Copter (minimal) | 100-200Hz | More demanding attitude control |
-| Copter (full) | Unlikely to fit | RAM constraint hits before CPU |
+| Rover/Plane (minimal) | 400Hz | MatekF405 achieves this; RP2350 has more RAM and dual-core |
+| Copter (minimal) | 200-400Hz | F405 achieves 400Hz; RP2350 should match with dual-core |
+| Copter (full features) | Not a target | Same as F405 — feature-limited build |
 
 **Key optimizations:**
 1. **Dual-core:** Sensor sampling on Core 0, UART/USB I/O on Core 1
@@ -289,7 +299,10 @@ comparable performance is expected.
 
 **Concern:** Do we need to disable large subsystems? MavFTP? EKF? Others?
 
-**Finding: Yes, aggressive feature disabling is needed, following the ESP32 pattern.**
+**Finding: Feature disabling is needed, but less aggressively than initially
+assumed.** The MatekF405 runs ArduCopter in 192KB SRAM — the RP2350 has 520KB
+(2.7x more). We follow the same pattern as F4 boards rather than the extreme
+ESP32 approach.
 
 ArduPilot has a well-established mechanism for this:
 
@@ -350,12 +363,15 @@ Based on ESP32's `board/esp32.h` pattern and build options from
 
 ### Memory Budget with Disabling
 
+For context, MatekF405 (192KB SRAM) runs Copter with the `minimize_fpv_osd.inc`
+feature set. RP2350 has 520KB — significantly more headroom.
+
 | Build | RAM without disabling | RAM with disabling | Fits in 520KB? |
 |---|---|---|---|
 | AP_Periph | ~150KB | ~120KB | Yes (comfortable) |
-| Rover (minimal) | ~400KB | ~300KB | Yes (tight) |
-| Plane (minimal) | ~420KB | ~320KB | Yes (tight) |
-| Copter (minimal) | ~500KB+ | ~380KB | Marginal |
+| Rover (minimal) | ~400KB | ~300KB | Yes |
+| Plane (minimal) | ~420KB | ~320KB | Yes |
+| Copter (minimal) | ~500KB+ | ~380KB | Yes — similar to F4 boards |
 
 ---
 

@@ -2,25 +2,32 @@
 
 ## RP2350B Key Specifications
 
-| Feature | RP2350B | STM32H753 (Aeolus) | ESP32 |
+| Feature | RP2350B | STM32F405 (MatekF405) | STM32H753 (Aeolus) |
 |---|---|---|---|
-| **Core** | 2x Cortex-M33 @ 150MHz | 1x Cortex-M7 @ 480MHz | 2x Xtensa LX6 @ 240MHz |
-| **FPU** | Single-precision | Single+Double precision | Single-precision |
-| **SRAM** | 520KB (10 banks) | 1MB | 520KB + 4MB PSRAM |
-| **Flash** | External QSPI up to 16MB | 2MB internal | External up to 16MB |
-| **GPIO** | 48 (B variant) | 140+ (176-pin) | 34 |
-| **UART** | 2 hardware | 8 (UART/USART) | 3 |
-| **SPI** | 2 hardware | 6 | 4 |
-| **I2C** | 2 hardware | 4 | 2 |
-| **ADC** | 8 ext channels (B), 12-bit | 20+ channels, 16-bit | 18 channels, 12-bit |
-| **PWM** | 24 channels (12 slices) | Many timer channels | 16 channels |
-| **CAN** | None | 2x FDCAN | None |
-| **Ethernet** | None | Yes (MII) | None |
-| **USB** | 1.1 host/device | 2.0 OTG HS | None (via UART) |
-| **DMA** | 16 channels | 32 channels | Yes |
+| **Core** | 2x Cortex-M33 @ 150MHz | 1x Cortex-M4F @ 168MHz | 1x Cortex-M7 @ 480MHz |
+| **FPU** | Single-precision | Single-precision | Single+Double precision |
+| **SRAM** | 520KB (10 banks) | 192KB (128+64) | 1MB |
+| **Flash** | External QSPI up to 16MB | 1MB internal | 2MB internal |
+| **GPIO** | 48 (B variant) | ~80 (LQFP-64) | 140+ (176-pin) |
+| **UART** | 2 hardware (+PIO) | 6 (UART/USART) | 8 (UART/USART) |
+| **SPI** | 2 hardware | 3 | 6 |
+| **I2C** | 2 hardware (+PIO) | 3 | 4 |
+| **ADC** | 8 ext channels (B), 12-bit | 16 channels, 12-bit | 20+ channels, 16-bit |
+| **PWM** | 24 channels (12 slices) | 6 typical (timer-limited) | Many timer channels |
+| **CAN** | None (+PIO possible) | 2x bxCAN | 2x FDCAN |
+| **Ethernet** | None | None | Yes (MII) |
+| **USB** | 1.1 host/device | 2.0 OTG FS | 2.0 OTG HS |
+| **DMA** | 16 channels | 16 streams (2 controllers) | 32 channels |
 | **Special** | 3x PIO (12 state machines) | - | - |
-| **Security** | TrustZone, SecureBoot, OTP | - | Flash encryption |
-| **Package** | QFN-80 | LQFP-176 | QFN-48 |
+| **Security** | TrustZone, SecureBoot, OTP | - | - |
+| **Package** | QFN-80 | LQFP-64 | LQFP-176 |
+| **Price** | ~$0.80 | ~$6-10 | ~$15-20 |
+
+The most relevant comparison is the **STM32F405**, which is the same class of
+resource-constrained flight controller that the RP2350B will compete with. The
+MatekF405 runs ArduCopter, ArduPlane, and Rover with feature limitations
+similar to what we expect on RP2350. The H753 is shown for reference as a
+high-end target.
 
 ## Capability Assessment for ArduPilot
 
@@ -31,7 +38,7 @@
 - **I2C:** 2 hardware I2C buses, plus PIO can add more
 - **GPIO:** 48 pins on B variant provides adequate pin count
 - **USB:** 1.1 device mode sufficient for MAVLink console
-- **SRAM:** 520KB is tight but workable for a minimal build (comparable to STM32F4)
+- **SRAM:** 520KB is nearly 3x the F405's 192KB — more headroom than expected
 - **Flash:** 16MB external QSPI is ample for program storage
 - **Clock:** 150MHz Cortex-M33 with DSP extensions provides reasonable compute
 - **Dual-core:** Second core can handle sensor sampling or I/O
@@ -61,16 +68,16 @@ hardware peripheral gaps. Each PIO block has 4 state machines, and there are
 
 ### Limitations
 
-| Limitation | Impact | Mitigation |
-|---|---|---|
-| **No double-precision FPU** | Reduced EKF precision | Use `HAL_WITH_EKF_DOUBLE 0`, same as ESP32 |
-| **150MHz clock** | Lower throughput than H7 | Dual-core, optimize hot paths, reduce loop rate |
-| **4 ADC channels** | Limited analog sensing | Prioritize: battery V, battery I, RSSI, spare |
-| **External flash** | Slower code execution | XIP cache helps; place hot code in SRAM |
-| **No CAN hardware** | CAN requires PIO or external IC | PIO CAN (proven on RP2040) or MCP2515 via SPI |
-| **No Ethernet** | No Ethernet MAVLink | Not required for most use cases |
-| **520KB SRAM** | Must disable many features | Minimal build like ESP32; AP_Periph fits easily |
-| **2 HW UARTs only** | Need PIO for additional | Well-proven PIO UART implementations exist |
+| Limitation | Impact | vs F405 | Mitigation |
+|---|---|---|---|
+| **No double-precision FPU** | Reduced EKF precision | Same — F405 is also single-precision | Use `HAL_WITH_EKF_DOUBLE 0`, same as F4/ESP32 |
+| **150MHz clock** | Lower throughput per core | Comparable — F405 is 168MHz single-core | Dual-core compensates; net compute is higher |
+| **8 ADC channels** | Limited analog sensing | F405 has 16; but MatekF405 uses only 3 | Sufficient: battery V, battery I, RSSI |
+| **External flash** | Slower code execution | F405 has 1MB internal | XIP cache helps; place hot code in SRAM |
+| **No CAN hardware** | CAN requires PIO or external IC | F405 has 2x bxCAN | PIO CAN (proven on RP2040) or MCP2515 via SPI |
+| **520KB SRAM** | Tight but workable | F405 has only 192KB — RP2350 has 2.7x more | Actually an advantage over F4 boards |
+| **2 HW UARTs only** | Need PIO for additional | F405 has 6 | PIO UARTs add 3-4 more; proven implementations exist |
+| **1MB flash** | Less program space | F405 has 1MB — identical | 16MB QSPI available; flash is not the constraint |
 
 ## Memory Budget Estimate
 
@@ -99,9 +106,11 @@ hardware peripheral gaps. Each PIO block has 4 state machines, and there are
 | **Total** | **~1.2MB** | **~380KB** |
 | **Available** | **16MB** | **520KB** |
 
-RAM is the binding constraint. A minimal vehicle build should fit within 520KB
-with careful feature selection, but margins are tight. Copter with its more
-demanding attitude control loop may require further optimization.
+For context, the **MatekF405 runs ArduCopter in 192KB SRAM** with aggressive
+feature disabling. The RP2350B has 520KB — nearly 3x more — so RAM is less
+of a constraint than initially assumed. The binding constraint is more likely
+flash execution speed (XIP vs internal) and single-precision FPU performance,
+both of which the F405 also suffers from.
 
 ## ChibiOS RP2350 Support
 
