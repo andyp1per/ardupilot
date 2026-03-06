@@ -213,18 +213,22 @@ Betaflight uses **Pico SDK + bare metal** (no RTOS). ArduPilot will use
 | SD card | SPI mode via HW SPI | Not SDMMC, but functional |
 | FRAM | SPI via HW SPI | Same approach |
 
-### What Cannot Be Directly Replicated
+### What Cannot Be Directly Replicated (vs H7 Reference Boards)
 
-| Feature | Limitation | Alternative |
-|---|---|---|
-| Dual FDCAN | No CAN hardware | PIO CAN or MCP2515 via SPI |
-| Ethernet | No Ethernet | Not available; use WiFi add-on |
-| 4+ I2C buses | Only 2 HW I2C | PIO I2C for additional buses |
-| 8 UARTs | Only 2 HW UART | PIO UARTs (3-4 additional) |
-| DMA sophistication | 12 ch vs 32 ch | Adequate for this scale |
-| Double-precision FPU | Single only | Software double; EKF impact |
-| 480MHz clock | 150MHz | Dual-core compensates partially |
-| 1MB+ SRAM | 520KB | Minimal feature set |
+These are limitations versus the H753-based Aeolus and ABSI boards. However,
+many of these are shared with the STM32F405 (MatekF405), which is the more
+relevant comparison for an RP2350B-class flight controller.
+
+| Feature | RP2350B Limitation | vs MatekF405 (F405) | Alternative |
+|---|---|---|---|
+| Dual FDCAN | No CAN hardware | F405 has 2x bxCAN | PIO CAN or MCP2515 via SPI |
+| Ethernet | No Ethernet | F405 also lacks Ethernet | N/A — H7 only feature |
+| 4+ I2C buses | Only 2 HW I2C | F405 has 3; MatekF405 uses 1 | PIO I2C for additional buses |
+| 8 UARTs | Only 2 HW UART (+PIO) | F405 has 6; MatekF405 uses 5 | PIO UARTs (3-4 additional) |
+| DMA sophistication | 16 ch flat | F405 has 16 streams — similar | Adequate for this scale |
+| Double-precision FPU | Single only | F405 also single-precision | Software double; EKF impact |
+| 480MHz clock | 150MHz | F405 is 168MHz — comparable | Dual-core compensates; net higher compute |
+| 1MB+ SRAM | 520KB | **F405 has only 192KB** | RP2350 actually has 2.7x more RAM than F405 |
 
 ### Recommended RP2350B Flight Controller Minimum Viable Peripherals
 

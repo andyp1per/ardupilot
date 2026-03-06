@@ -33,7 +33,9 @@ wrangling. Estimates include integration testing and debugging.
 
 **Critical path to first flight: ~17 weeks (~4 months).** The biggest time
 risks are Step 3 (build system/ChibiOS integration), Step 4g (PIO UART — first
-PIO driver), and Step 5 (fitting ArduCopter in 520KB RAM).
+PIO driver), and Step 5 (platform integration debugging — MatekF405 proves
+Copter fits in 192KB SRAM, so RP2350's 520KB is ample, but XIP flash behavior
+and new HAL assumptions will need debugging).
 
 ---
 
@@ -477,8 +479,10 @@ From Betaflight HELLBENDER_0001 config:
 ### Time Estimate: 3–5 weeks
 
 **Week 1:** hwdef creation, feature flag tuning, getting ArduCopter to link.
-The 520KB RAM budget is the main challenge — expect significant iteration on
-which features to disable. May need to try Rover first if Copter won't fit.
+RAM should be manageable — MatekF405 runs Copter in 192KB, and RP2350 has 520KB
+(2.7x more). The challenge is more about getting the build to link and run on a
+new HAL than about RAM pressure. Feature flags will still need tuning for flash
+size and peripheral availability.
 
 **Week 2–3:** Vehicle integration debugging. Sensor data flowing through to
 EKF, RC input to motor output, MAVLink telemetry. This is where you discover
@@ -493,9 +497,11 @@ fixing issues that only appear under real sensor load.
 **Week 4–5:** Flight testing, crash investigation, iteration. Buffer for the
 unexpected — there's always something.
 
-**Biggest risk:** ArduCopter doesn't fit in 520KB. If this happens, the fallback
-is Rover (simpler vehicle, less RAM) or aggressive EKF3 trimming. This could
-add 1–2 weeks of feature profiling and negotiation.
+**Biggest risk:** Subtle platform assumptions in ArduPilot code that break on
+RP2350 — external flash timing, XIP cache behavior, thread stack sizes, or
+hardware timer differences. These are the kind of bugs that take hours to
+diagnose with a debugger. RAM itself is unlikely to be the blocker since
+MatekF405 proves Copter fits in 192KB.
 
 ### Deliverable
 - ArduPilot flies on Laurel board
