@@ -264,9 +264,9 @@ architecture, and significantly more RAM, the RP2350 should achieve comparable
 loop rates — especially with dual-core I/O offloading.
 
 For reference vs high-end boards: STM32H7 @ 480MHz with Cortex-M7 superscalar
-pipeline and double-precision FPU is ~6x faster in raw compute. The RP2350 is
-not competing with H7 boards; it competes with F4 boards at a fraction of the
-cost.
+pipeline and double-precision FPU is ~4.6x faster in raw compute (~1027 vs
+~225 DMIPS). The RP2350 is not competing with H7 boards; it competes with F4
+boards at a fraction of the cost.
 
 **Estimated achievable loop rates:**
 
@@ -286,12 +286,13 @@ is cache misses from 8-byte lines (4x more misses than H750's 32-byte lines).
 | Copter (full features) | Not a target | Same as F405 — feature-limited build |
 
 **Key optimizations (in priority order):**
-1. **SRAM placement (required for flash safety, recommended for performance):**
+1. **SRAM placement (required for flash safety AND F405-equivalent performance):**
    Flash write routines MUST be in SRAM (XIP stalls during erase/write).
    ~35KB of hot code (EKF core, attitude controller, IMU read, scheduler)
-   in SRAM eliminates cache miss jitter. With 1-cycle cache hit, pure XIP
-   may also work — validate empirically.
-   See [xip-performance-comparison.md](xip-performance-comparison.md).
+   in SRAM eliminates cache miss jitter and is required to match or exceed
+   F405 control loop throughput. Pure XIP cannot match the F405's ART
+   accelerator due to the high XIP miss penalty (~52 cycles vs F405's ~6).
+   See [f405-performance-comparison.md](f405-performance-comparison.md).
 2. **Overclock to 200MHz:** RP2350 commonly runs at 200MHz (33% gain).
    Provides significant headroom for 400Hz Copter.
 3. **Dual-core:** Control loop on Core 0, I/O (logging, MAVLink, GPS) on

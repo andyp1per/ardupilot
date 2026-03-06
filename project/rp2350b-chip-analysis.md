@@ -6,9 +6,9 @@
 |---|---|---|---|
 | **Core** | 2x Cortex-M33 @ 150MHz | 1x Cortex-M4F @ 168MHz | Cortex-M7 @ 480MHz + M4 @ 240MHz |
 | **FPU** | Single-precision | Single-precision | Single+Double precision |
-| **SRAM** | 520KB (10 banks) | 192KB (128+64) | 1MB |
+| **SRAM** | 520KB (10 banks, all uniform) | 192KB (128KB usable + 64KB CCM data-only) | 1MB |
 | **Flash** | None internal; external QSPI (16MB on Laurel) | 1MB internal | 2MB internal |
-| **GPIO** | 48 (B variant) | ~80 (LQFP-64) | 140+ (176-pin) |
+| **GPIO** | 48 (B variant) | 51 (LQFP-64, per DS8626 Table 2) | 140+ (176-pin) |
 | **UART** | 2 hardware (+PIO) | 6 (UART/USART) | 8 (UART/USART) |
 | **SPI** | 2 hardware | 3 | 6 |
 | **I2C** | 2 hardware (+PIO) | 3 | 4 |
@@ -106,28 +106,40 @@ hardware peripheral gaps. Each PIO block has 4 state machines, and there are
 | **Total** | **~1.2MB** | **~380KB** |
 | **Available** | **16MB** | **520KB** |
 
-For context, the **MatekF405 runs ArduCopter in 192KB SRAM** with aggressive
-feature disabling. The RP2350B has 520KB — nearly 3x more — so RAM is less
-of a constraint than initially assumed.
+For context, the **MatekF405 runs ArduCopter in 128KB code-executable SRAM**
+(using 122KB, only 8.5KB free). The RP2350B has 520KB — 4× more — but
+this must be shared between code placement and data.
 
-**The binding constraint is XIP flash execution speed.** The RP2350B has no
-internal flash — all program code (~1.2MB for a minimal vehicle) must execute
-via XIP from external QSPI. Betaflight solves this by loading all code into
-RAM, but ArduPilot's firmware is too large for that (1.2MB code vs 520KB SRAM).
+**The binding constraint is the SRAM split between code and data.** The
+RP2350B has no internal flash — all program code (~877KB for ArduCopter,
+measured) must execute via XIP from external QSPI or be placed in SRAM.
+Analysis of the H750 linker script (`common_extf_h750.ld`) shows that
+effective XIP performance requires placing not just "hot functions" but
+also vtables, module `.rodata`, math libraries, and the vector table in
+RAM. The H750 places **334KB** of code+rodata in RAM from its ~1MB SRAM.
 
-The RP2350's XIP cache has **1-cycle hit latency** (per datasheet), 16KB
-capacity, 2-way set-associative. With 1-cycle hit, the Cortex-M33 pipeline
-can sustain near-full throughput for cached code — much better than the 5+
-wait-state internal flash on the F405. The main risk is **cache misses** from
-the 8-byte cache lines (smaller than typical, causing more frequent refills).
-See [xip-performance-comparison.md](xip-performance-comparison.md) for detailed
-analysis showing 400Hz Copter is feasible at 150MHz with SRAM placement of
-~35KB hot code.
+For the RP2350, the recommended tiered approach places **~224KB** of
+code+rodata in SRAM (all 400Hz code, math libraries, vtables, associated
+rodata), leaving **~296KB for data** (2.4× the F405's 128KB). This is
+viable but not generous — the full H750-equivalent (334KB code) would
+leave only 128KB for data, matching the F405 with zero margin.
+
+Key items that must be in SRAM beyond "hot functions":
+- **Vector table** (~0.7KB) — interrupt safety during flash ops
+- **Vtables** (~5-28KB) — every virtual call costs 52 cycles on miss
+- **ALL of libm/libgcc** (~24KB) — called from everywhere
+- **AP_Math/vector3/matrix3** (~22KB) — math foundation
+- **Module `.rodata`** (~30KB) — const data co-located with code
+
+See [f405-performance-comparison.md](f405-performance-comparison.md) for
+the full tiered analysis with measured sizes. See
+[xip-performance-comparison.md](xip-performance-comparison.md) for XIP
+cache vs H750 comparison.
 
 ArduPilot already has a working XIP model for H750 boards (`EXT_FLASH_SIZE_MB`,
 `common_extf.ld`, `COPY_VECTORS_TO_RAM`), so the infrastructure exists. SRAM
 code placement (`__not_in_flash_func()`) is required for flash write safety
-and valuable for guaranteed timing.
+and F405-equivalent performance.
 
 ## ChibiOS RP2350 Support
 
