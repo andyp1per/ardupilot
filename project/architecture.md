@@ -271,7 +271,7 @@ ChibiOS SMP on RP2350 uses the inter-processor FIFO for cross-core
 scheduling. Each core runs its own ChibiOS instance (`ch0`, `ch1`) with
 shared ready lists.
 
-The demo in `ChibiOS.svn/demos/RP/RT-RP2350-PICO2/` confirms this works:
+The demo in [ChibiOS.svn](https://github.com/ArduPilot/ChibiOS.svn) `demos/RP/RT-RP2350-PICO2/` confirms this works:
 core 0 runs the main thread, core 1 runs the shell and timer via
 `chSysWaitSystemState()` / `chInstanceObjectInit()`.
 

@@ -2,7 +2,7 @@
 
 ## Context
 
-ChibiOS trunk (in `../ChibiOS.svn`) now includes RP2350 support with:
+ChibiOS trunk (in [ChibiOS.svn](https://github.com/ArduPilot/ChibiOS.svn)) now includes RP2350 support with:
 - **Complete LLD drivers:** ADC, DMA, GPIO, I2C, PWM, SPI, UART (SIO), USB, WDG, Timer, Flash
 - **Full SMP/dual-core support** with inter-core FIFO, spinlocks, core-local memory
 - **Linker scripts** for both XIP (flash) and RAM execution

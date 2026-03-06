@@ -85,7 +85,7 @@ Each HAL port must implement these core interfaces (defined in `libraries/AP_HAL
 
 ### ChibiOS RP2350 Source
 
-ChibiOS RP2350 support is in `../ChibiOS.svn` (trunk). Key paths:
+ChibiOS RP2350 support is in [ChibiOS.svn](https://github.com/ArduPilot/ChibiOS.svn) (trunk). Key paths:
 - `os/hal/ports/RP/RP2350/` - Platform HAL (clocks, PLLs, flash)
 - `os/hal/ports/RP/LLD/` - Low-level drivers (ADC, SPI, I2C, UART, PWM, etc.)
 - `os/common/ports/ARMv8-M-ML/smp/rp2/` - Dual-core SMP port
