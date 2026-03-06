@@ -12,9 +12,32 @@ RASP). This is an RP2350B flight controller with ICM-42688P IMU, DPS310 baro,
 SD card, 4 motor outputs, PIO UARTs, CRSF RC input, and WS2812 LEDs. Betaflight
 already flies on this board.
 
+### Time Estimate Summary
+
+Estimates assume a skilled ArduPilot developer with Claude assistance. Claude
+accelerates boilerplate, API lookup, and cross-referencing but does not reduce
+hardware debugging, timing issues, flash/linker problems, or build system
+wrangling. Estimates include integration testing and debugging.
+
+| Step | Description | Estimate | Cumulative |
+|---|---|---|---|
+| 1 | ChibiOS update | 2–3 days | 0.5 wk |
+| 2 | Bootloader | 1–2 weeks | 2.5 wk |
+| 3 | HAL skeleton + pico2 | 2–3 weeks | 5 wk |
+| 4a-4k | Peripherals | 6–9 weeks | 13 wk |
+| 5 | Laurel board flying | 3–5 weeks | 17 wk |
+| | **Sponsor milestone** | | **~4 months** |
+| 6a-6g | Additional peripherals | 4–7 weeks | 23 wk |
+| 7a-7o | Full HAL fidelity | 6–10 weeks | 31 wk |
+| | **Production-quality port** | | **~7–8 months** |
+
+**Critical path to first flight: ~17 weeks (~4 months).** The biggest time
+risks are Step 3 (build system/ChibiOS integration), Step 4g (PIO UART — first
+PIO driver), and Step 5 (fitting ArduCopter in 520KB RAM).
+
 ---
 
-## Step 1: ChibiOS Update
+## Step 1: ChibiOS Update (2–3 days)
 
 **Goal:** Update the ChibiOS submodule to include RP2350 support.
 
@@ -42,6 +65,13 @@ ls modules/ChibiOS/os/hal/ports/RP/RP2350/
 - ChibiOS submodule updated, all CI tests pass
 - RP2350 LLD drivers available in the tree
 
+### Time Estimate: 2–3 days
+
+Mostly coordination time with the ChibiOS submodule maintainer (bugbot) and
+waiting for CI. The actual change is trivial but may require rebasing if trunk
+has diverged significantly from ArduPilot's ChibiOS fork. Could stretch to a
+week if there are merge conflicts in ChibiOS that need resolution.
+
 ### Notes
 - This is the lowest-risk PR — it changes nothing about ArduPilot itself
 - May require coordination with the ChibiOS submodule maintainer (bugbot)
@@ -49,7 +79,7 @@ ls modules/ChibiOS/os/hal/ports/RP/RP2350/
 
 ---
 
-## Step 2: Bootloader
+## Step 2: Bootloader (1–2 weeks)
 
 **Goal:** ArduPilot bootloader runs on Pico 2, accepts firmware via USB.
 This is the standard first milestone for any new board bringup — nothing else
@@ -94,6 +124,19 @@ in `board_types.txt`.
 - Firmware can be uploaded via USB (MAVLink or UF2)
 - Board ID registered
 
+### Time Estimate: 1–2 weeks
+
+The bootloader is minimal code but touches everything that's hard on a new MCU:
+startup sequence, clock init, flash writing, USB enumeration, linker scripts.
+BOOTSEL fallback means you can't brick the board, which makes iteration fast —
+but expect 2–3 days just getting ChibiOS to boot and USB to enumerate on real
+hardware. Another 2–3 days for the MAVLink firmware upload protocol or UF2
+chaining. The rest is debugging flash write/erase operations and verifying
+firmware integrity after upload.
+
+**Risk:** If ChibiOS USB driver doesn't enumerate cleanly on RP2350, debugging
+USB at the register level could add a week.
+
 ### Notes
 - RP2350 has a ROM bootloader (BOOTSEL) that can always be used as fallback,
   so a bricked bootloader is recoverable by holding the BOOTSEL button
@@ -104,7 +147,7 @@ in `board_types.txt`.
 
 ---
 
-## Step 3: AP_HAL_Pico Skeleton + Pico 2 Demo Board
+## Step 3: AP_HAL_Pico Skeleton + Pico 2 Demo Board (2–3 weeks)
 
 **Goal:** `./waf configure --board pico2 && ./waf AP_Periph` compiles (even if
 firmware does nothing useful). Board boots via bootloader, LED blinks, USB
@@ -164,6 +207,25 @@ already registered in Step 2.
 - Board boots, LED blinks, `hal.console->printf()` works over USB
 - Scheduler timer ticks at correct rate
 
+### Time Estimate: 2–3 weeks
+
+This is one of the hardest steps despite producing minimal visible output.
+The waf build integration (`pico.py`, board class in `boards.py`) will take
+3–5 days of fighting with build paths, toolchain flags, ChibiOS config file
+generation, and linker script placement. The hwdef processor (`pico_hwdef.py`)
+is another 2–3 days. Getting ArduPilot's AP_Periph to actually link and boot
+(Scheduler threads running, `hal.console` printing) is another 3–5 days of
+debugging startup ordering, missing symbols, and ChibiOS configuration.
+
+**Where the time goes:**
+- Waf integration + build system: 3–5 days (Claude helps with boilerplate,
+  but waf debugging is trial-and-error)
+- ChibiOS config (`mcuconf.h`, `halconf.h`, `chconf.h`): 2–3 days
+  (getting clock trees, peripheral enables, and memory regions right)
+- hwdef processor: 2–3 days
+- Scheduler + USB console on real hardware: 2–3 days
+- Integration debugging: 2–3 days
+
 ### GCC Toolchain Note
 The full ChibiOS RP2350 demo (88 source files, all LLD drivers, dual-core SMP)
 compiles with zero errors using ArduPilot's existing GCC 10.2.1
@@ -173,13 +235,15 @@ build log.
 
 ---
 
-## Step 4: Peripherals (one PR per peripheral)
+## Step 4: Peripherals (6–9 weeks total, one PR per peripheral)
 
 Each peripheral is a separate PR that adds one capability. Order chosen to
 build toward the Laurel board's sensor set, with the most fundamental
 peripherals first.
 
-### Step 4a: SPI Bus
+Per-peripheral estimates include writing, testing on hardware, and debugging:
+
+### Step 4a: SPI Bus (3–4 days)
 
 **Goal:** SPI bus works, can detect devices on the bus.
 
@@ -190,7 +254,7 @@ peripherals first.
 
 **Verification:** SPI bus scan detects IMU chip ID.
 
-### Step 4b: IMU (ICM-42688P over SPI)
+### Step 4b: IMU (ICM-42688P over SPI) (2–3 days)
 
 **Goal:** IMU produces valid accel/gyro readings.
 
@@ -201,7 +265,7 @@ peripherals first.
 **Verification:** `hal.console` prints accel/gyro data. Values respond to
 board movement.
 
-### Step 4c: I2C Bus
+### Step 4c: I2C Bus (2–3 days)
 
 **Goal:** I2C bus works, can probe for devices.
 
@@ -211,7 +275,7 @@ board movement.
 
 **Verification:** I2C scan finds baro at expected address.
 
-### Step 4d: Barometer (DPS310 over I2C)
+### Step 4d: Barometer (DPS310 over I2C) (1–2 days)
 
 **Goal:** Barometer produces valid pressure/temperature readings.
 
@@ -220,7 +284,7 @@ board movement.
 
 **Verification:** Baro readings on console, altitude changes with hand over sensor.
 
-### Step 4e: Flash and Storage (Parameters)
+### Step 4e: Flash and Storage (Parameters) (4–6 days)
 
 **Goal:** Parameters persist across reboots. ArduPilot will not boot without
 a working Storage backend, and Storage depends on flash page operations.
@@ -238,7 +302,12 @@ a working Storage backend, and Storage depends on flash page operations.
 **Verification:** Set parameter, reboot, parameter persists. Verify wear-leveling
 by writing parameters repeatedly and confirming flash sector rotation.
 
-### Step 4f: Hardware UARTs
+**Where the time goes:** Flash is deceptively tricky. Getting the sector layout
+right in the linker script (program, storage, crash dump regions) takes time.
+Flash erase/write timing, making sure XIP isn't disrupted during flash
+operations, and wear-leveling corner cases are where the debugging hours go.
+
+### Step 4f: Hardware UARTs (2–3 days)
 
 **Goal:** Hardware UART0 and UART1 work at configurable baud rates.
 
@@ -248,7 +317,7 @@ by writing parameters repeatedly and confirming flash sector rotation.
 
 **Verification:** Loopback test at 115200 and 921600 baud.
 
-### Step 4g: PIO UART
+### Step 4g: PIO UART (1.5–2.5 weeks)
 
 **Goal:** Additional serial ports via PIO state machines.
 
@@ -272,7 +341,16 @@ for the full analysis of options.
 
 **Verification:** PIO UART loopback test. GPS connected to PIO UART gets fix.
 
-### Step 4h: PWM Output
+**Where the time goes:** This is the first PIO driver and sets the pattern for
+all subsequent PIO work (DShot, WS2812, CAN). The PIO runtime (~300 LOC) is new
+code with no ArduPilot precedent — program loading, SM configuration, FIFO/DMA
+wiring all need to be correct. PIO UART timing bugs are subtle (baud rate
+accuracy depends on clock divider precision). The pioasm build integration or
+pre-assembly workflow also needs to be established. Once this works, Steps 6a
+(DShot) and 6b (WS2812) become much faster because the PIO infrastructure
+exists.
+
+### Step 4h: PWM Output (2–3 days)
 
 **Goal:** PWM outputs drive servos.
 
@@ -283,7 +361,7 @@ for the full analysis of options.
 **Verification:** Servo responds to RC input (manual test with servo and
 oscilloscope).
 
-### Step 4i: ADC (Battery Monitoring)
+### Step 4i: ADC (Battery Monitoring) (1–2 days)
 
 **Goal:** Battery voltage and current sensing.
 
@@ -293,7 +371,7 @@ oscilloscope).
 
 **Verification:** Battery voltage displayed, matches multimeter.
 
-### Step 4j: RC Input (CRSF via PIO UART)
+### Step 4j: RC Input (CRSF via PIO UART) (2–3 days)
 
 **Goal:** RC receiver input decoded.
 
@@ -302,7 +380,7 @@ oscilloscope).
 
 **Verification:** RC channel values appear on console from CRSF receiver.
 
-### Step 4k: SD Card and Filesystem
+### Step 4k: SD Card and Filesystem (3–5 days)
 
 **Goal:** SD card mounts, files can be created and read. Required for logging.
 
@@ -319,7 +397,7 @@ oscilloscope).
 
 ---
 
-## Step 5: Laurel Board Support
+## Step 5: Laurel Board Support (3–5 weeks)
 
 **Goal:** ArduPilot flies on the Laurel (HELLBENDER_0001) board.
 
@@ -396,19 +474,42 @@ From Betaflight HELLBENDER_0001 config:
 # Flash, connect GCS, verify sensors, fly
 ```
 
+### Time Estimate: 3–5 weeks
+
+**Week 1:** hwdef creation, feature flag tuning, getting ArduCopter to link.
+The 520KB RAM budget is the main challenge — expect significant iteration on
+which features to disable. May need to try Rover first if Copter won't fit.
+
+**Week 2–3:** Vehicle integration debugging. Sensor data flowing through to
+EKF, RC input to motor output, MAVLink telemetry. This is where you discover
+all the subtle assumptions in ArduPilot code that don't hold on RP2350 — timing
+precision, thread priorities, memory alignment, double-precision fallbacks.
+SD card logging integration.
+
+**Week 3–4:** Bench testing with actual hardware. Motors spinning, RC input
+responsive, telemetry to GCS. PID tuning for first hover. Discovering and
+fixing issues that only appear under real sensor load.
+
+**Week 4–5:** Flight testing, crash investigation, iteration. Buffer for the
+unexpected — there's always something.
+
+**Biggest risk:** ArduCopter doesn't fit in 520KB. If this happens, the fallback
+is Rover (simpler vehicle, less RAM) or aggressive EKF3 trimming. This could
+add 1–2 weeks of feature profiling and negotiation.
+
 ### Deliverable
 - ArduPilot flies on Laurel board
 - Sponsor milestone: working flight controller
 
 ---
 
-## Step 6: Additional Peripherals
+## Step 6: Additional Peripherals (4–7 weeks)
 
 **Goal:** Full-featured flight controller with DShot, WS2812, and other
 peripherals that aren't strictly needed for basic flight but make the board
 competitive with Betaflight's feature set.
 
-### Step 6a: DShot Output (PIO)
+### Step 6a: DShot Output (PIO) (1–2 weeks)
 
 - PIO-based DShot150/300/600 using PIO runtime from Step 4g
 - Write PIO program for DShot bit timing. Betaflight's `dshot.pio` is a
@@ -419,36 +520,36 @@ competitive with Betaflight's feature set.
 - Bidirectional DShot for ESC telemetry (stretch) — Betaflight has working
   bidir with edge-detection sampling at 75MHz (clkdiv=2)
 
-### Step 6b: WS2812 LEDs (PIO)
+### Step 6b: WS2812 LEDs (PIO) (2–3 days)
 
 - PIO-based WS2812 driver
 - NeoPixel notification patterns
 - Integration with AP_Notify
 
-### Step 6c: SD Card Logging Optimization
+### Step 6c: SD Card Logging Optimization (2–3 days)
 
 - DMA optimization for SD SPI transfers
 - Larger log buffers if RAM permits
 - Logging rate optimization
 
-### Step 6d: Compass Support
+### Step 6d: Compass Support (1 day)
 
 - If Laurel has a compass (or external I2C compass)
 - I2C compass driver verification
 
-### Step 6e: OSD (MAX7456 over SPI1)
+### Step 6e: OSD (MAX7456 over SPI1) (3–4 days)
 
 - MAX7456 OSD chip on SPI1 (shared with SD card — mutually exclusive
   per Betaflight config)
 - ArduPilot OSD integration
 
-### Step 6f: Dual-Core Optimization
+### Step 6f: Dual-Core Optimization (1–2 weeks)
 
 - Move I/O threads to Core 1 via ChibiOS SMP
 - Profile and optimize loop rate
 - Target 400Hz for Copter
 
-### Step 6g: Additional Vehicle Types
+### Step 6g: Additional Vehicle Types (1–2 weeks per vehicle)
 
 - Plane (if RAM allows with minimal feature set)
 - Rover
@@ -456,20 +557,21 @@ competitive with Betaflight's feature set.
 
 ---
 
-## Step 7: Full HAL Fidelity
+## Step 7: Full HAL Fidelity (6–10 weeks)
 
 **Goal:** Feature parity with AP_HAL_ChibiOS for capabilities relevant to RP2350.
 These items are optional for basic flight but needed for a production-quality port.
-Ordered roughly by priority.
+Ordered roughly by priority. Many of these are 1–3 day items that can be
+interleaved with other work or tackled opportunistically.
 
-### Step 7a: Shared DMA Arbitration
+### Step 7a: Shared DMA Arbitration (3–4 days)
 
 - DMA channel allocation/deallocation with mutex-based locking
 - Contention tracking and reporting (for `@SYS/dma.txt`)
 - RP2350 has 16 flat DMA channels (simpler than STM32's stream/channel model)
 - Used by SPI, ADC, PIO FIFO DMA — needed when multiple peripherals share channels
 
-### Step 7b: Util — System Infrastructure
+### Step 7b: Util — System Infrastructure (3–5 days)
 
 Core Util methods that most ArduPilot features depend on:
 
@@ -490,7 +592,7 @@ Core Util methods that most ArduPilot features depend on:
 - **Safety switch:** `safety_switch_state()` — GPIO-based if board has one,
   otherwise return `SAFETY_NONE`.
 
-### Step 7c: Watchdog and Fault Handling
+### Step 7c: Watchdog and Fault Handling (3–5 days)
 
 - **Watchdog:** RP2350 has a hardware watchdog (ChibiOS WDG driver). Configure
   timeout, feed from scheduler, detect watchdog reset on boot.
@@ -503,14 +605,14 @@ Core Util methods that most ArduPilot features depend on:
 - **Stack overflow detection:** ChibiOS `CH_DBG_ENABLE_STACK_CHECK` with
   `AP_stack_overflow()` callback.
 
-### Step 7d: Crash Dump
+### Step 7d: Crash Dump (2–3 days)
 
 - Save crash state (registers, stack trace, persistent data) to flash on fault
 - `last_crash_dump_size()` / `last_crash_dump_ptr()` for retrieval via MAVLink
 - Dedicated flash sector for crash dump storage
 - Lower priority than watchdog persistent data (Step 7c)
 
-### Step 7e: Util — Diagnostics and Monitoring
+### Step 7e: Util — Diagnostics and Monitoring (2–3 days)
 
 Reporting methods for `@SYS/` virtual filesystem and GCS status:
 
@@ -526,19 +628,19 @@ Reporting methods for `@SYS/` virtual filesystem and GCS status:
 - **Timer info:** `timer_info()` — report PWM timer frequencies and assignments.
 - **Stack logging:** `log_stack_info()` — log per-thread stack high-water marks.
 
-### Step 7f: Flash Bootloader Update
+### Step 7f: Flash Bootloader Update (1–2 days)
 
 - `flash_bootloader()` in Util — overwrite bootloader from ROMFS image
 - Uses `AP_HAL::Flash` page operations (from Step 4e)
 - Required for in-field bootloader updates via MAVLink
 
-### Step 7g: DFU Boot
+### Step 7g: DFU Boot (1–2 days)
 
 - `boot_to_dfu()` — reboot into USB DFU mode for firmware recovery
 - RP2350 has a built-in USB bootloader in ROM (BOOTSEL mode)
 - Set flag in persistent data, reset, ROM bootloader checks flag
 
-### Step 7h: DSP (FFT for GyroFFT)
+### Step 7h: DSP (FFT for GyroFFT) (3–5 days)
 
 - `AP_HAL::DSP` implementation using CMSIS-DSP `arm_math.h`
 - Cortex-M33 supports CMSIS-DSP (same ARM math library as STM32)
@@ -547,7 +649,7 @@ Reporting methods for `@SYS/` virtual filesystem and GCS status:
 - Required by AP_GyroFFT harmonic notch filter
 - May be RAM-constrained on RP2350 (FFT buffers are significant)
 
-### Step 7i: Bidirectional DShot (PIO)
+### Step 7i: Bidirectional DShot (PIO) (1–2 weeks)
 
 - Extension of Step 6a DShot output
 - PIO program switches between TX and RX mode for ESC telemetry
@@ -556,7 +658,7 @@ Reporting methods for `@SYS/` virtual filesystem and GCS status:
 - Integration with `AP_ESC_Telem_Backend`
 - ~29 PIO instructions for bidir (vs ~13 for unidirectional)
 
-### Step 7j: Serial ESC Passthrough (BLHeli)
+### Step 7j: Serial ESC Passthrough (BLHeli) (3–5 days)
 
 - `setup_serial_output()` — bit-bang serial protocol on motor output pins
 - Used by BLHeli configurator passthrough (BLHeli32/BLHeliS)
@@ -564,7 +666,7 @@ Reporting methods for `@SYS/` virtual filesystem and GCS status:
   more flexible serial emulation
 - Lower priority — BLHeli configuration can be done via separate USB adapter
 
-### Step 7k: Serial LED via RCOutput Channels
+### Step 7k: Serial LED via RCOutput Channels (2–3 days)
 
 - `set_serial_led_num_LEDs()`, `set_serial_led_rgb_data()`, `serial_led_send()`
 - NeoPixel/ProfiLED output on PWM channels (not standalone GPIO)
@@ -572,7 +674,7 @@ Reporting methods for `@SYS/` virtual filesystem and GCS status:
   but routed through RCOutput channel API)
 - Allows LED strips on motor output pins when not used for motors
 
-### Step 7l: CAN Bus (PIO or MCP2515)
+### Step 7l: CAN Bus (PIO or MCP2515) (2–4 weeks)
 
 - RP2350 has no hardware CAN — two options:
   1. **PIO CAN:** Implement CAN 2.0B via PIO state machines (~2 SMs per bus).
@@ -585,7 +687,7 @@ Reporting methods for `@SYS/` virtual filesystem and GCS status:
 - Important for GPS modules, airspeed sensors, and other CAN peripherals
 - PIO CAN would use 2 of 3 PIO blocks — conflicts with DShot + UART allocation
 
-### Step 7m: Persistent Parameters
+### Step 7m: Persistent Parameters (1–2 days)
 
 - `load_persistent_params()` / `get_persistent_param_by_name()` — save key
   calibration data (temperature cal, etc.) in dedicated flash sector
@@ -593,7 +695,7 @@ Reporting methods for `@SYS/` virtual filesystem and GCS status:
   flash region beyond program and storage areas
 - Lower priority — most parameters already persist via normal Storage
 
-### Step 7n: WSPI / QSPI Device Manager
+### Step 7n: WSPI / QSPI Device Manager (2–3 days)
 
 - Wide SPI (quad/octal SPI) device manager for external flash
 - RP2350 QMI (QSPI Memory Interface) already handles the boot flash
@@ -601,7 +703,7 @@ Reporting methods for `@SYS/` virtual filesystem and GCS status:
 - **Very low priority** — no known RP2350 FC boards use separate QSPI devices
   beyond the boot flash
 
-### Step 7o: IMU Heater
+### Step 7o: IMU Heater (1 day)
 
 - `set_imu_temp()` / `set_imu_target_temp()` — PWM-controlled heater pad
 - Requires dedicated GPIO + PWM output for heater element
