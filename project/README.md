@@ -41,6 +41,7 @@ review. See [implementation-plan.md](implementation-plan.md).
 | [architecture.md](architecture.md) | HAL architecture and key design decisions |
 | [implementation-plan.md](implementation-plan.md) | Step-by-step plan structured as mergeable PRs |
 | [reference-boards.md](reference-boards.md) | MatekF405 comparison and Laurel board pin mapping |
+| [xip-performance-comparison.md](xip-performance-comparison.md) | XIP execution speed analysis: STM32H750 vs RP2350B |
 | [risks.md](risks.md) | Technical risks and mitigation strategies |
 | [developer-concerns.md](developer-concerns.md) | Detailed analysis of specific technical concerns (GCC, DMA, dual-core, performance, features) |
 

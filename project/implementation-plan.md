@@ -574,6 +574,10 @@ From Betaflight HELLBENDER_0001 config:
 
 3. **Vehicle integration**
    - Build ArduCopter (or start with Rover if Copter RAM is too tight)
+   - **Initial target: 200Hz loop rate at 150MHz** — achievable with SRAM
+     code placement from Step 3b. See
+     [xip-performance-comparison.md](xip-performance-comparison.md).
+   - 400Hz requires overclock + dual-core (Step 6f)
    - Verify sensor data flows through to EKF
    - Verify RC → motor output control loop
    - MAVLink telemetry over USB
@@ -581,7 +585,7 @@ From Betaflight HELLBENDER_0001 config:
 
 4. **Flight test**
    - Bench test: motors spin, RC input works, telemetry flows
-   - First hover (with safety pilot, conservative PIDs)
+   - First hover at 200Hz (with safety pilot, conservative PIDs)
 
 ### Verification
 ```bash
@@ -663,11 +667,13 @@ competitive with Betaflight's feature set.
   per Betaflight config)
 - ArduPilot OSD integration
 
-### Step 6f: Dual-Core Optimization (1–2 weeks)
+### Step 6f: Dual-Core Optimization + 400Hz Target (1–2 weeks)
 
-- Move I/O threads to Core 1 via ChibiOS SMP
-- Profile and optimize loop rate
-- Target 400Hz for Copter
+- Move I/O threads (logging, MAVLink, GPS) to Core 1 via ChibiOS SMP
+- Overclock to 200MHz (well-established for RP2350, 33% gain)
+- Profile and optimize SRAM code placement (refine ~35KB hot code budget)
+- Target: **400Hz Copter** (requires overclock + dual-core + SRAM placement)
+- See [xip-performance-comparison.md](xip-performance-comparison.md) for analysis
 
 ### Step 6g: Additional Vehicle Types (1–2 weeks per vehicle)
 
