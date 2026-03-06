@@ -290,10 +290,10 @@ model is proven.
    - Track SRAM code budget (functions in SRAM reduce available heap)
 
 3. **XIP cache configuration**
-   - RP2350 has a 16KB XIP cache (4-way set-associative, 8-byte lines)
+   - RP2350 has a 16KB XIP cache (2-way set-associative, 1-cycle hit per datasheet)
    - Configure cache policy at boot (enable, set replacement policy)
-   - Consider cache partitioning if supported (dedicate lines to hot paths)
    - Verify cache is enabled and working (performance counter if available)
+   - Measure actual hit rate during scheduler loop to validate projections
 
 4. **Flash write safety during XIP**
    - QSPI flash erase/write operations stall XIP on the same flash
@@ -574,10 +574,11 @@ From Betaflight HELLBENDER_0001 config:
 
 3. **Vehicle integration**
    - Build ArduCopter (or start with Rover if Copter RAM is too tight)
-   - **Initial target: 200Hz loop rate at 150MHz** — achievable with SRAM
-     code placement from Step 3b. See
+   - **Initial target: 400Hz loop rate at 150MHz** — XIP cache has 1-cycle
+     hit (per RP2350 datasheet), so cached code runs at near-full speed.
+     SRAM placement of ~35KB hot code gives ~35% headroom. See
      [xip-performance-comparison.md](xip-performance-comparison.md).
-   - 400Hz requires overclock + dual-core (Step 6f)
+   - 200MHz overclock + dual-core (Step 6f) provides ~65% headroom
    - Verify sensor data flows through to EKF
    - Verify RC → motor output control loop
    - MAVLink telemetry over USB
@@ -585,7 +586,7 @@ From Betaflight HELLBENDER_0001 config:
 
 4. **Flight test**
    - Bench test: motors spin, RC input works, telemetry flows
-   - First hover at 200Hz (with safety pilot, conservative PIDs)
+   - First hover at 400Hz (with safety pilot, conservative PIDs)
 
 ### Verification
 ```bash

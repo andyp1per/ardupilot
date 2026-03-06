@@ -20,8 +20,8 @@ significantly worse, it may not achieve acceptable loop rates.
 | **TCM** | 64KB ITCM + 128KB DTCM (zero wait-state) | None (all SRAM is uniform) |
 | **L1 I-cache** | 16KB, 32B lines, 4-way (core-integrated) | None |
 | **L1 D-cache** | 16KB, 32B lines, 4-way (core-integrated) | None |
-| **XIP cache** | None (L1 cache serves this role) | 16KB, 8B lines, 2-way set-associative |
-| **XIP cache hit latency** | 0 cycles (L1 cache is core-integrated) | 2 system clock cycles |
+| **XIP cache** | None (L1 cache serves this role) | 16KB, 2-way set-associative, 1-cycle hit |
+| **XIP cache hit latency** | 0 cycles (L1 cache is core-integrated) | 1 system clock cycle |
 | **Cores** | 1 | 2 (SMP) |
 
 ## QSPI Flash Interface
@@ -53,10 +53,38 @@ QMI clock    = sys_clk / clkdiv = 150MHz / 2 = 75MHz SCK
   (clkdiv=2 is typical; clkdiv=1 may work with fast flash chips)
 ```
 
-## Cache Miss Latency Analysis
+## Cache Architecture Comparison
 
-This is the critical metric — how long does the CPU stall when it needs an
-instruction that isn't in cache?
+### STM32H750
+
+The H750 Cortex-M7 has **core-integrated L1 caches**:
+- 16KB I-cache: 32-byte lines, 4-way set-associative, **0-cycle hit** (part
+  of the pipeline — instruction fetch sees cached data with no penalty)
+- 16KB D-cache: 32-byte lines, 4-way set-associative, 0-cycle hit
+- 512 cache lines per cache
+- Line fill fetches 32 bytes (8 Thumb-2 instructions) per miss
+- Plus **64KB ITCM**: zero wait-state code region, bypasses cache entirely
+
+For hot loops, the H750 runs at full 400MHz from L1 cache or ITCM with
+zero penalty. Only cache misses (cold code, branches to new pages) incur
+the QSPI fetch latency.
+
+### RP2350B
+
+The RP2350B has a **dedicated XIP cache controller** (not a CPU L1 cache):
+- 16KB, 2-way set-associative, **1-cycle hit** (per RP2350 datasheet)
+- Cache lines are 8 bytes (2 Thumb-2 instructions per line)
+- 2048 cache lines total (more lines than H750, but smaller)
+- No ITCM — SRAM is the only zero-wait-state code region
+- Cortex-M33 has a prefetch buffer that can partially hide cache latency
+  for sequential code
+
+The **1-cycle hit latency** is the key datapoint. This means for sequential
+code that stays in cache, the M33 pipeline can sustain close to 1 instruction
+per cycle — nearly matching SRAM execution speed for hot loops. The penalty
+is only paid on cache misses.
+
+## Cache Miss Latency Analysis
 
 ### STM32H750 Cache Miss
 
@@ -78,7 +106,7 @@ In CPU cycles (400MHz): ~344 cycles lost per cache miss
 
 But H750 has **three layers of mitigation**:
 1. **128KB internal flash**: Bootloader, vectors, and small critical routines
-   execute from internal flash at zero wait-states
+   execute from internal flash at low wait-states
 2. **ITCM (64KB)**: Hot code copied here runs at zero wait-states, bypassing
    QSPI entirely. ArduPilot places scheduler, attitude controller, and EKF
    critical paths here.
@@ -89,8 +117,7 @@ But H750 has **three layers of mitigation**:
 
 **Effective H750 performance:** For hot code in ITCM, execution is at full
 400MHz. For cached XIP code, hits are zero-cycle. Only cold/random code paths
-pay the ~860ns miss penalty. This is why H750 is "borderline" but works —
-the hot path mostly avoids XIP misses.
+pay the ~860ns miss penalty.
 
 ### RP2350B Cache Miss
 
@@ -115,12 +142,13 @@ In CPU cycles (150MHz): ~52 cycles lost per cache miss
 RP2350B mitigation layers:
 1. **No internal flash**: Zero benefit — all code is XIP
 2. **No TCM**: No dedicated zero-wait-state code memory. SRAM is uniform.
-3. **XIP cache (16KB, 8B lines)**: 2048 cache lines, but only 8B each.
-   **2-cycle hit latency** (not zero like H750's L1). Sequential code gets
-   one instruction every 2 cycles from cache hits.
+3. **XIP cache (16KB, 8B lines, 1-cycle hit)**: 2048 cache lines. The
+   1-cycle hit means hot loops run at near-full 150MHz throughput. The main
+   cost is **miss frequency** — 8B lines mean the cache covers only 2
+   instructions per line, so branches and function calls cause more misses.
 4. **SRAM code placement**: Functions marked `__not_in_flash_func()` are
-   copied to SRAM at boot and execute at zero wait-states. This is the
-   primary mitigation — equivalent to H750's ITCM but sharing the heap.
+   copied to SRAM at boot and execute at zero wait-states. Eliminates miss
+   risk entirely for critical code.
 
 ## Effective Execution Speed Comparison
 
@@ -129,20 +157,19 @@ RP2350B mitigation layers:
 | Metric | STM32H750 | RP2350B | Ratio |
 |---|---|---|---|
 | CPU clock | 400MHz | 150MHz | 2.67x |
-| Cache hit penalty | 0 cycles | 2 cycles | — |
-| Effective instruction rate | 400MHz × ~1.5 IPC = 600 MIPS | 150MHz / 3 cycles = 50 MIPS | **12x** |
-| Per-instruction time | ~1.67ns | ~20ns | 12x slower |
+| Cache hit penalty | 0 cycles | 1 cycle | — |
+| Effective instruction rate | 400MHz × ~1.5 IPC = 600 MIPS | ~150 MIPS (pipeline hides 1-cycle hit) | **~4x** |
+| Per-instruction time | ~1.67ns | ~6.67ns | 4x slower |
 
-**Note:** The 2-cycle XIP cache hit penalty is devastating. Even with a 100%
-cache hit rate, RP2350B executes XIP code at effectively **50 MIPS** — one
-instruction every 3 cycles (1 execute + 2 cache access). The H750's
-core-integrated L1 cache has zero hit penalty.
+With 1-cycle hit latency, the Cortex-M33 pipeline and prefetch buffer can
+sustain close to **1 instruction per cycle** for sequential code from XIP
+cache. This means cached XIP code on RP2350 runs at nearly the same speed as
+SRAM-resident code. The performance gap vs H750 is primarily the clock speed
+and IPC difference (~4x), not the cache penalty.
 
-Wait — this needs qualification. The Cortex-M33 pipeline can overlap cache
-access with execution for sequential code (prefetch buffer). The actual
-sustained throughput from XIP cache is likely closer to **1 instruction per
-2 cycles** (75 MIPS) for sequential Thumb-2 code, not worst-case 3 cycles.
-But it's still far below the 150 MIPS that SRAM execution would give.
+This is a much better picture than a 2-cycle penalty would give — the XIP
+cache essentially makes flash-resident code competitive with SRAM for hot
+loops that fit in 16KB of cache.
 
 ### SRAM-Resident Code (hot path in SRAM)
 
@@ -150,11 +177,13 @@ But it's still far below the 150 MIPS that SRAM execution would give.
 |---|---|---|---|
 | CPU clock | 400MHz | 150MHz | 2.67x |
 | Wait states | 0 | 0 | Same |
-| Effective instruction rate | ~600 MIPS | ~150 MIPS | **4x** |
+| Effective instruction rate | ~600 MIPS | ~150 MIPS | **~4x** |
 | Per-instruction time | ~1.67ns | ~6.67ns | 4x slower |
 
-With SRAM execution, the gap narrows to **4x** (just the clock speed ×
-IPC difference). This is the achievable baseline for hot code.
+With SRAM execution, the gap is the same **~4x** as cached XIP, because the
+1-cycle XIP hit is mostly hidden by the pipeline. SRAM placement still
+provides value for **guaranteed** timing (no cache miss risk) and for
+**flash write safety** (code in SRAM keeps running during flash erase/write).
 
 ### Code with Cache Misses (cold paths, large functions)
 
@@ -163,12 +192,15 @@ IPC difference). This is the achievable baseline for hot code.
 | Miss penalty (time) | ~860ns | ~347ns | H750 worse per miss |
 | Miss penalty (CPU cycles) | ~344 cycles | ~52 cycles | H750 loses more cycles |
 | Data per miss | 32 bytes (~8 insns) | 8 bytes (~2 insns) | H750 more efficient |
-| Effective miss cost per insn | ~107ns | ~173ns | RP2350 1.6x worse |
-| Amortized miss rate | Lower (32B lines) | Higher (8B lines) | RP2350 has more misses |
+| Effective miss cost per insn | ~107ns | ~173ns | RP2350 ~1.6x worse |
+| Amortized miss rate | Lower (32B lines) | Higher (8B lines) | RP2350 has ~4x more misses |
 
 For cold code paths (initialization, rare branches), RP2350B's smaller cache
 lines mean ~4x more cache misses for the same code sequence. Each miss is
-cheaper in absolute time (347ns vs 860ns), but there are far more of them.
+cheaper in absolute time (347ns vs 860ns), but there are more of them. The
+net effect is that **cold code is ~1.6x slower per instruction** on RP2350
+compared to H750, which is better than the ~4x clock speed difference would
+suggest (because H750's miss penalty is proportionally more expensive).
 
 ## Loop Rate Feasibility
 
@@ -188,37 +220,44 @@ At 400Hz, each loop iteration has **2500µs**. Typical breakdown:
 
 ### RP2350B Projection
 
-**Scenario A: All code from XIP (no SRAM placement)**
+**Scenario A: All code from XIP cache (no SRAM placement) @ 150MHz**
 
-With ~50 MIPS effective (XIP cache hits at 2-cycle penalty), RP2350 would be
-~3x slower than F405 (which has ~168 MIPS from internal flash):
+With 1-cycle cache hit, cached XIP code runs at ~150 MIPS for sequential
+code. The RP2350 is ~1x F405 clock speed (150 vs 168MHz) but has lower IPC
+for some operations. For hot loops that fit in the 16KB XIP cache, performance
+should be comparable to the F405. The main cost is cache misses on code that
+doesn't fit.
 
-| Phase | RP2350B @ 150MHz XIP | Budget |
+| Phase | RP2350B @ 150MHz XIP | Notes |
 |---|---|---|
-| IMU read | ~150µs | |
-| EKF update | ~2400µs | |
-| Attitude control | ~600µs | |
-| Motor output | ~150µs | |
-| Logging + MAVLink | ~1200µs | |
-| **Total** | **~4500µs** | **EXCEEDS 2500µs budget** |
+| IMU read | ~60µs | Hot loop, fits in cache |
+| EKF update | ~1000-1200µs | Large code — cache misses on outer functions |
+| Attitude control | ~250µs | Mostly fits in cache |
+| Motor output (PIO) | ~30µs | PIO handles DShot, CPU just loads FIFO |
+| Logging + MAVLink | ~500µs | Cold paths, many cache misses |
+| **Total** | **~1840-2040µs** | **Fits in 2500µs at 400Hz** |
+| **Headroom** | ~460-660µs (18-26%) | **Tight but possible** |
 
-**Result: 400Hz Copter impossible from pure XIP. Even 200Hz (5000µs) is tight.**
+**Result: 400Hz Copter may be achievable from pure XIP at 150MHz** — but
+it's tight. The EKF is the wildcard: if it causes too many cache misses
+(the code is large and branches frequently), it could push over budget.
 
-**Scenario B: Hot path in SRAM (~32KB), rest from XIP**
+**Scenario B: Hot path in SRAM (~35KB), rest from XIP @ 150MHz**
 
-With critical code (EKF inner loop, attitude controller, IMU read, scheduler)
-in SRAM at 150 MIPS, and cold paths from XIP:
+Moving critical code (EKF inner loop, attitude controller, IMU read,
+scheduler) to SRAM eliminates cache miss risk for the hot path:
 
 | Phase | RP2350B SRAM+XIP | Notes |
 |---|---|---|
-| IMU read | ~100µs | SRAM (sensor read + filter) |
-| EKF update | ~1600µs | SRAM for core, XIP for init/config |
-| Attitude control | ~400µs | SRAM |
-| Motor output (PIO) | ~50µs | PIO handles DShot, CPU just loads FIFO |
-| Logging + MAVLink | ~800µs | XIP (not time-critical) |
-| **Total** | **~2950µs** | **Exceeds 2500µs at 400Hz** |
+| IMU read | ~50µs | SRAM (guaranteed zero wait-state) |
+| EKF update | ~800-900µs | Core in SRAM, outer code from XIP cache |
+| Attitude control | ~200µs | SRAM |
+| Motor output (PIO) | ~30µs | PIO + SRAM FIFO load |
+| Logging + MAVLink | ~500µs | XIP (not time-critical) |
+| **Total** | **~1580-1680µs** | **Comfortable at 400Hz** |
+| **Headroom** | ~820-920µs (33-37%) | **Good margin** |
 
-**Result: 400Hz Copter marginal even with SRAM placement at 150MHz.**
+**Result: 400Hz Copter comfortable with SRAM placement at 150MHz.**
 
 **Scenario C: SRAM hot path + overclock to 200MHz + dual-core**
 
@@ -227,92 +266,124 @@ Core 0 doing control + EKF, and Core 1 handling I/O:
 
 | Phase | RP2350B @ 200MHz | Notes |
 |---|---|---|
-| IMU read | ~75µs | SRAM, 200MHz |
-| EKF update | ~1200µs | SRAM core path, 200MHz |
-| Attitude control | ~300µs | SRAM, 200MHz |
-| Motor output (PIO) | ~30µs | PIO + SRAM FIFO load |
-| **Core 0 total** | **~1605µs** | Control loop only |
+| IMU read | ~38µs | SRAM, 200MHz |
+| EKF update | ~600-675µs | SRAM core path, 200MHz |
+| Attitude control | ~150µs | SRAM, 200MHz |
+| Motor output (PIO) | ~23µs | PIO + SRAM FIFO load |
+| **Core 0 total** | **~811-886µs** | Control loop only |
 | Logging + MAVLink | (Core 1) | Offloaded |
-| **Headroom** | ~895µs (36%) | **400Hz feasible** |
+| **Headroom** | ~1614-1689µs (65-68%) | **Very comfortable** |
 
-**Result: 400Hz Copter likely achievable at 200MHz with SRAM + dual-core.**
+**Result: 400Hz Copter very comfortable at 200MHz with SRAM + dual-core.**
 
-**Scenario D: Conservative — 200Hz Copter at 150MHz**
+**Scenario D: Conservative — 200Hz Copter at 150MHz, no SRAM**
 
-At 200Hz (5000µs budget), even Scenario B works comfortably:
+At 200Hz (5000µs budget), even Scenario A (pure XIP) works easily:
 
-| Phase | RP2350B @ 150MHz | Budget |
+| Phase | RP2350B @ 150MHz XIP | Budget |
 |---|---|---|
-| Total (from Scenario B) | ~2950µs | 5000µs available |
-| **Headroom** | ~2050µs (41%) | **200Hz comfortable** |
+| Total (from Scenario A) | ~1840-2040µs | 5000µs available |
+| **Headroom** | ~2960-3160µs (59-63%) | **Very comfortable** |
 
 ## SRAM Budget for Code Placement
 
+SRAM code placement is valuable for **guaranteed timing** (no cache miss risk)
+and **required** for flash write safety (code must not be in XIP during flash
+erase/write). The 1-cycle cache hit means it's less critical for pure
+performance than originally feared.
+
 | Code section | Size (est.) | Priority |
 |---|---|---|
-| EKF3 core loop | ~15KB | Critical |
-| Attitude controller | ~5KB | Critical |
-| IMU read + filter | ~3KB | Critical |
-| Scheduler fast path | ~2KB | Critical |
-| Flash write routines | ~2KB | Critical (XIP safety) |
-| PID controllers | ~3KB | High |
-| Math utilities (hot) | ~5KB | High |
+| Flash write routines | ~2KB | Critical (XIP safety during flash ops) |
+| Scheduler fast path | ~2KB | High (guaranteed timing) |
+| EKF3 core loop | ~15KB | High (eliminates cache miss risk) |
+| Attitude controller | ~5KB | High (guaranteed timing) |
+| IMU read + filter | ~3KB | High (guaranteed timing) |
+| PID controllers | ~3KB | Medium |
+| Math utilities (hot) | ~5KB | Medium |
 | **Total SRAM code** | **~35KB** | |
 | **Remaining SRAM** | **~485KB** | For .data, .bss, stacks, heap |
 
 35KB of SRAM code is very manageable — it leaves 485KB for data, which is
 still 2.5x more than the MatekF405's entire 192KB SRAM.
 
+**However**, the 1-cycle cache hit means we may not need all of this in SRAM.
+The flash write routines are mandatory (must be in SRAM during flash ops),
+but the EKF and attitude controller may run acceptably from XIP cache. This
+should be validated empirically in Step 3b.
+
 ## Key Differences from H750
 
 | Aspect | H750 (works, borderline) | RP2350B | Impact |
 |---|---|---|---|
 | **CPU raw speed** | ~600 DMIPS | ~150 DMIPS (1 core) | 4x slower |
-| **Internal flash** | 128KB for boot+critical | None | More SRAM code needed |
-| **ITCM** | 64KB zero-wait code | None (use SRAM) | RP2350 must use SRAM, reducing heap |
-| **L1 I-cache hit** | 0 cycles | 2 cycles | XIP hits 2-3x slower on RP2350 |
-| **Cache line size** | 32 bytes | 8 bytes | RP2350 has 4x more misses per code path |
+| **Internal flash** | 128KB for boot+critical | None | All code via XIP or SRAM |
+| **ITCM** | 64KB zero-wait code | None (use SRAM) | RP2350 must use SRAM for guaranteed timing |
+| **L1 I-cache hit** | 0 cycles | 1 cycle (XIP cache) | Similar — M33 pipeline hides 1-cycle hit |
+| **Cache line size** | 32 bytes | 8 bytes | RP2350 has ~4x more misses per code path |
+| **Cache lines** | 512 | 2048 | RP2350 covers more unique addresses |
 | **Dual core** | No | Yes | RP2350 can offload I/O to Core 1 |
 | **FPU** | Single+Double precision | Single precision only | Same constraint as F405 |
 | **Overclock** | 480MHz (20% gain) | 200MHz (33% gain) | Overclock helps RP2350 more (%) |
 
+### Why H750 is "borderline" despite being 4x faster
+
+The H750's 400MHz Cortex-M7 is ~4x faster than RP2350, yet is "borderline"
+for 400Hz Copter. This is because:
+
+1. **H750 runs ArduPilot with full features** (more processing per loop)
+2. **Double-precision EKF** on H750 uses FP64 math (2-3x slower per operation
+   than FP32). RP2350 uses single-precision EKF (`HAL_WITH_EKF_DOUBLE 0`),
+   which is faster per operation.
+3. **H750 is single-core** — all I/O (logging, MAVLink, GPS parsing) shares
+   the CPU with the control loop. RP2350 can offload I/O to Core 1.
+4. **H750's 32-byte cache lines** waste bandwidth fetching unused bytes at
+   the end of functions. RP2350's 8-byte lines are more efficient per miss
+   (less wasted data) though they miss more often.
+
+This means the **effective performance gap for ArduPilot Copter is closer
+to 2x than 4x** when accounting for feature set, FPU precision, and
+dual-core benefits.
+
 ## Conclusions
 
-1. **Pure XIP at 150MHz is not fast enough** for 400Hz Copter. The 2-cycle
-   XIP cache hit penalty and 8-byte cache lines make XIP execution ~3x slower
-   than internal flash execution on comparable hardware.
+1. **The 1-cycle XIP cache hit is the key enabler.** With 1-cycle hit, cached
+   XIP code runs at near-full CPU speed (~150 MIPS), making pure XIP execution
+   viable for many code paths. This is much better than a 2-cycle penalty
+   would be.
 
-2. **SRAM placement is not optional — it's mandatory.** Unlike H750 where
-   ITCM is a performance optimization, RP2350 SRAM code placement is required
-   for any viable loop rate. ~35KB of hot code in SRAM is the minimum.
+2. **400Hz Copter appears feasible at 150MHz** from pure XIP cache, though
+   tight (~20% headroom). With SRAM placement of ~35KB hot code, headroom
+   improves to ~35%.
 
-3. **400Hz Copter is achievable** but requires all three optimizations:
-   - SRAM placement of ~35KB hot code
-   - Overclock to 200MHz (well-established for RP2350)
-   - Dual-core: I/O (logging, MAVLink, GPS) on Core 1
+3. **SRAM placement is valuable but not strictly mandatory** for basic
+   operation. It's **required** for:
+   - Flash write safety (code must run from SRAM during flash erase/write)
+   - Guaranteed timing (no cache miss jitter in control loop)
+   - Additional headroom for 400Hz
 
-4. **200Hz Copter at 150MHz is comfortable** with just SRAM placement, no
-   overclocking needed. This may be an acceptable initial target.
+4. **At 200MHz + dual-core, 400Hz Copter is very comfortable** (~65%
+   headroom). This is the recommended production configuration.
 
-5. **400Hz Plane/Rover is easily achievable** — these vehicles have simpler
-   control loops and lower EKF update rates, using well under 2500µs even
-   with conservative settings.
+5. **200Hz Copter at 150MHz requires no special optimization** — even pure
+   XIP works with 60% headroom.
 
-6. **The H750 comparison is somewhat misleading** because H750 has 64KB ITCM +
-   128KB internal flash to fall back on. RP2350 has none of this. But RP2350's
-   dual-core compensates significantly by offloading I/O work.
+6. **400Hz Plane/Rover is easily achievable** at 150MHz — these vehicles
+   have simpler control loops and lower EKF update rates.
 
-7. **Step 3b (XIP memory model) is correctly identified as critical path.**
-   The SRAM code placement infrastructure and performance baseline measurement
-   will determine the achievable loop rates early in development.
+7. **Step 3b (XIP memory model) remains critical** but the emphasis shifts:
+   - Flash write SRAM placement: mandatory (XIP safety)
+   - Performance SRAM placement: valuable optimization, not hard requirement
+   - Performance baseline measurement: essential to validate these projections
 
 ## Recommendations for Implementation Plan
 
-- **Default target: 200Hz Copter at 150MHz** for initial bringup (Step 5)
-- **Stretch target: 400Hz Copter at 200MHz** with dual-core (Step 6f)
-- **SRAM placement macros must be in Step 3b** — not a later optimization
-- **Build-time SRAM budget tracking** — warn if SRAM code exceeds threshold
+- **Default target: 400Hz Copter at 150MHz** with SRAM hot code (Step 5)
+- **Stretch target: 400Hz Copter at 200MHz** with dual-core (Step 6f) for
+  maximum headroom
+- **SRAM placement macros must be in Step 3b** — mandatory for flash write
+  safety, valuable for performance
 - **Performance profiling infrastructure** early (GPIO toggle timing) to
-  measure actual vs projected loop times
-- **Consider EKF2 instead of EKF3** for initial port — simpler, smaller,
-  may fit better in SRAM budget
+  validate projections
+- **Measure actual XIP cache hit rate** during flight loop to confirm the
+  16KB cache covers the hot path adequately

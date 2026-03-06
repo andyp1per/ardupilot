@@ -271,28 +271,31 @@ cost.
 **Estimated achievable loop rates:**
 
 See [xip-performance-comparison.md](xip-performance-comparison.md) for
-detailed analysis. The RP2350B XIP cache has a 2-cycle hit penalty (unlike
-H750's zero-penalty L1 I-cache), 8-byte cache lines (vs H750's 32-byte),
-and no ITCM/internal flash fallback. Pure XIP execution is ~3x slower than
-internal flash. **SRAM code placement is mandatory, not optional.**
+detailed analysis. The RP2350B XIP cache has 1-cycle hit latency (per
+datasheet), 16KB capacity, 8-byte cache lines (vs H750's 32-byte). With
+1-cycle hit, the M33 pipeline hides the cache access and XIP cached code
+runs at near-full 150MHz — much better than initially feared. The main risk
+is cache misses from 8-byte lines (4x more misses than H750's 32-byte lines).
 
 | Configuration | Estimated Rate | Requirements |
 |---|---|---|
 | AP_Periph (single sensor) | 400Hz+ | No special optimization needed |
-| Rover/Plane (minimal) | 400Hz | SRAM placement of hot code (~35KB) |
-| Copter (minimal) @ 150MHz | 200Hz | SRAM placement + single core |
-| Copter (minimal) @ 200MHz | 400Hz | SRAM placement + overclock + dual-core I/O offload |
+| Rover/Plane (minimal) | 400Hz | XIP cache sufficient; SRAM placement optional |
+| Copter (minimal) @ 150MHz | 400Hz | SRAM placement of ~35KB hot code recommended |
+| Copter (minimal) @ 200MHz | 400Hz | Very comfortable (~65% headroom) with dual-core |
 | Copter (full features) | Not a target | Same as F405 — feature-limited build |
 
 **Key optimizations (in priority order):**
-1. **SRAM placement (mandatory):** ~35KB of hot code (EKF core, attitude
-   controller, IMU read, scheduler) must be in SRAM via `__RAMFUNC__` /
-   `__not_in_flash_func()`. Without this, even 200Hz Copter is not achievable.
+1. **SRAM placement (required for flash safety, recommended for performance):**
+   Flash write routines MUST be in SRAM (XIP stalls during erase/write).
+   ~35KB of hot code (EKF core, attitude controller, IMU read, scheduler)
+   in SRAM eliminates cache miss jitter. With 1-cycle cache hit, pure XIP
+   may also work — validate empirically.
    See [xip-performance-comparison.md](xip-performance-comparison.md).
 2. **Overclock to 200MHz:** RP2350 commonly runs at 200MHz (33% gain).
-   Required for 400Hz Copter target.
+   Provides significant headroom for 400Hz Copter.
 3. **Dual-core:** Control loop on Core 0, I/O (logging, MAVLink, GPS) on
-   Core 1. Essential for 400Hz Copter at 200MHz.
+   Core 1. Significant benefit for CPU-budget headroom.
 4. **PIO offloading:** DShot, SBUS decode, UART all run in PIO hardware
    without CPU intervention
 5. **DMA everywhere:** SPI sensor reads, ADC conversions, UART transfers

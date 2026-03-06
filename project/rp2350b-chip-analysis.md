@@ -73,11 +73,11 @@ hardware peripheral gaps. Each PIO block has 4 state machines, and there are
 | **No double-precision FPU** | Reduced EKF precision | Same — F405 is also single-precision | Use `HAL_WITH_EKF_DOUBLE 0`, same as F4/ESP32 |
 | **150MHz clock** | Lower throughput per core | Comparable — F405 is 168MHz single-core | Dual-core compensates; net compute is higher |
 | **8 ADC channels** | Limited analog sensing | F405 has 16; but MatekF405 uses only 3 | Sufficient: battery V, battery I, RSSI |
-| **No internal flash** | All code via QSPI XIP (~2-4x slower than internal) | F405 has 1MB internal flash | XIP cache (16KB) + SRAM placement for hot paths; ArduPilot H750 boards already use XIP model |
+| **No internal flash** | All code via QSPI XIP | F405 has 1MB internal flash | XIP cache (16KB, 1-cycle hit) makes cached code near-full speed; SRAM for flash-write safety; H750 boards already use XIP model |
 | **No CAN hardware** | CAN requires PIO or external IC | F405 has 2x bxCAN | PIO CAN (proven on RP2040) or MCP2515 via SPI |
 | **520KB SRAM** | Tight but workable | F405 has only 192KB — RP2350 has 2.7x more | Actually an advantage over F4 boards |
 | **2 HW UARTs only** | Need PIO for additional | F405 has 6 | PIO UARTs add 3-4 more; proven implementations exist |
-| **XIP latency** | Cache misses stall CPU | F405 executes from internal flash (wait-states but no XIP) | 16KB XIP cache; place scheduler + EKF hot loops in SRAM |
+| **XIP cache misses** | 8-byte lines cause more misses than H750's 32-byte | F405 has ~5 wait-state internal flash (ART accelerator helps) | 16KB XIP cache with 1-cycle hit; SRAM placement for guaranteed timing |
 
 ## Memory Budget Estimate
 
@@ -114,15 +114,20 @@ of a constraint than initially assumed.
 internal flash — all program code (~1.2MB for a minimal vehicle) must execute
 via XIP from external QSPI. Betaflight solves this by loading all code into
 RAM, but ArduPilot's firmware is too large for that (1.2MB code vs 520KB SRAM).
-ArduPilot already has a working XIP model for H750 boards (`EXT_FLASH_SIZE_MB`,
-`common_extf.ld`, `COPY_VECTORS_TO_RAM`), so the infrastructure exists. The
-RP2350's 16KB XIP cache and ability to place critical functions in SRAM
-(`__not_in_flash_func()`) will be essential for acceptable loop rates.
 
-The STM32F405 also has flash latency (wait-states at 168MHz with limited
-ART accelerator cache), so the comparison is not as stark as "internal vs
-external" might suggest. Both platforms benefit from SRAM placement of hot
-paths.
+The RP2350's XIP cache has **1-cycle hit latency** (per datasheet), 16KB
+capacity, 2-way set-associative. With 1-cycle hit, the Cortex-M33 pipeline
+can sustain near-full throughput for cached code — much better than the 5+
+wait-state internal flash on the F405. The main risk is **cache misses** from
+the 8-byte cache lines (smaller than typical, causing more frequent refills).
+See [xip-performance-comparison.md](xip-performance-comparison.md) for detailed
+analysis showing 400Hz Copter is feasible at 150MHz with SRAM placement of
+~35KB hot code.
+
+ArduPilot already has a working XIP model for H750 boards (`EXT_FLASH_SIZE_MB`,
+`common_extf.ld`, `COPY_VECTORS_TO_RAM`), so the infrastructure exists. SRAM
+code placement (`__not_in_flash_func()`) is required for flash write safety
+and valuable for guaranteed timing.
 
 ## ChibiOS RP2350 Support
 
