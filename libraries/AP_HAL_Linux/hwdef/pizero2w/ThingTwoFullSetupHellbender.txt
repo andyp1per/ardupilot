@@ -1,0 +1,154 @@
+diff all
+
+# version
+# Betaflight / RP2350B (235B) 2026.6.0-alpha Mar  4 2026 / 11:58:29 (e763b67b2) MSP API: 1.48
+
+# start the command batch
+batch start
+
+# reset configuration to default settings
+defaults nosave
+
+board_name HELLBENDER_0001
+manufacturer_id RASP
+mcu_id 44d3ed50965e309f00000000
+signature 
+
+# resources
+resource PIOUART_TX 1 A34
+resource PIOUART_TX 2 A20
+resource PIOUART_RX 1 A35
+resource PIOUART_RX 2 A21
+resource I2C_SCL 2 A11
+resource I2C_SDA 2 A10
+
+# feature
+feature -AIRMODE
+feature GPS
+feature TELEMETRY
+feature LED_STRIP
+feature OSD
+
+# serial
+serial UART0 2 115200 57600 0 115200
+serial UART1 64 115200 57600 0 115200
+serial PIOUART0 0 115200 57600 0 115200
+
+# aux
+aux 0 0 5 1800 2100 0 0
+
+# rxrange
+rxrange 0 990 2010
+rxrange 1 2010 990
+rxrange 2 990 2010
+rxrange 3 990 2010
+
+# master
+set dyn_notch_count = 1
+set dyn_notch_q = 500
+set dyn_notch_min_hz = 60
+set acc_calibration = 41,-21,12,1
+set align_mag = CW180
+set mag_align_yaw = 1800
+set mag_i2c_device = 2
+set mag_calibration = 73,-29,-19
+set max_check = 1950
+set rc_smoothing_auto_factor = 0
+set rc_smoothing_auto_factor_throttle = 0
+set rc_smoothing_setpoint_cutoff = 250
+set rc_smoothing_throttle_cutoff = 250
+set crsf_use_negotiated_baud = ON
+set serialrx_halfduplex = OFF
+set blackbox_sample_rate = 1/8
+set blackbox_device = NONE
+set dshot_bidir = ON
+set failsafe_throttle_low_delay = 30
+set current_meter = ADC
+set battery_meter = ADC
+set ibata_scale = 250
+set beeper_inversion = ON
+set beeper_od = OFF
+set beeper_frequency = 2500
+set small_angle = 180
+set gps_auto_baud = ON
+set gps_ublox_acquire_model = AIRBORNE_4G
+set gps_update_rate_hz = 5
+set crsf_tlm_accgyro = ON
+set osd_stat_bitmask = 14124
+set pinio_box = 40,41,255,255
+set rpm_filter_weights = 100,0,80
+set rpm_filter_min_hz = 70
+
+profile 0
+
+# profile 0
+set dterm_lpf1_dyn_min_hz = 60
+set dterm_lpf1_dyn_max_hz = 120
+set dterm_lpf1_static_hz = 60
+set dterm_lpf2_static_hz = 120
+set vbat_sag_compensation = 100
+set anti_gravity_gain = 0
+set iterm_relax = OFF
+set iterm_relax_cutoff = 5
+set throttle_boost = 0
+set p_pitch = 70
+set i_pitch = 9
+set d_pitch = 35
+set f_pitch = 135
+set p_roll = 70
+set i_roll = 9
+set d_roll = 35
+set f_roll = 135
+set p_yaw = 56
+set i_yaw = 2
+set f_yaw = 100
+set d_max_gain = 0
+set d_max_advance = 0
+set thrust_linear = 25
+set feedforward_smooth_factor = 30
+set feedforward_jitter_factor = 2
+set feedforward_max_rate_limit = 0
+set dyn_idle_min_rpm = 20
+set dyn_idle_p_gain = 40
+set simplified_pids_mode = OFF
+set simplified_i_gain = 20
+set simplified_pi_gain = 125
+set simplified_feedforward_gain = 150
+set simplified_pitch_d_gain = 90
+set simplified_dterm_filter_multiplier = 80
+set tpa_mode = PD
+set tpa_rate = 0
+set tpa_breakpoint = 1600
+set ez_landing_limit = 5
+
+profile 1
+
+profile 2
+
+profile 3
+
+# restore original profile selection
+profile 0
+
+rateprofile 0
+
+# rateprofile 0
+set roll_rc_rate = 60
+set pitch_rc_rate = 60
+set yaw_rc_rate = 60
+set roll_srate = 60
+set pitch_srate = 60
+set yaw_srate = 60
+
+rateprofile 1
+
+rateprofile 2
+
+rateprofile 3
+
+# restore original rateprofile selection
+rateprofile 0
+
+# save configuration
+save
+# 
