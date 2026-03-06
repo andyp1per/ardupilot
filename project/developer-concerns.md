@@ -256,7 +256,7 @@ I/O to Core 1 is the primary mitigation for the clock speed limitation.
 | FPU | Single-precision | Single-precision | Identical |
 | Cache | ART accelerator + 64B I-cache | 16KB XIP cache | F405 has limited cache too |
 | Cores | 1 | 2 (SMP) | RP2350 can offload I/O to core 1 |
-| Flash | Internal (flash wait-states at 168MHz) | External QSPI via XIP | Both have flash latency; hot paths in SRAM helps both |
+| Flash | 1MB internal (wait-states at 168MHz) | No internal; all code via QSPI XIP | **Primary risk**: XIP cache misses are costlier than F405 wait-states; SRAM placement critical |
 | SRAM | 192KB (128+64) | 520KB | RP2350 has 2.7x more |
 
 The MatekF405 runs ArduCopter at 400Hz. With similar clock speed, similar
