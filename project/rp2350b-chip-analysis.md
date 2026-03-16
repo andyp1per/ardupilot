@@ -207,9 +207,13 @@ foundation for AP_HAL_Pico (see [architecture.md](architecture.md)).
 
 ### What ChibiOS Does NOT Provide
 
-- **PIO driver** - No ChibiOS abstraction for RP2350's Programmable I/O
 - **CAN driver** - RP2350 has no hardware CAN; PIO CAN or external MCP2515 needed
 - **SD/MMC** - No SDMMC peripheral; must use SPI mode via SPIv1
+
+**Note:** ChibiOS has recently merged a PIO driver into master (March 2026).
+This should be evaluated early — if it provides program loading, SM
+configuration, and FIFO/DMA access, it reduces the custom PIO work needed
+for AP_HAL_Pico.
 
 ## PIO Deep Dive
 

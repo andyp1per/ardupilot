@@ -28,9 +28,12 @@ ChibiOS trunk ([ChibiOS.svn](https://github.com/ArduPilot/ChibiOS.svn)) includes
 | Flash | `os/hal/ports/RP/LLD/efl/` | NO | Complete - QMI QSPI, 256B pages, 4K sectors, XIP |
 
 **Not provided by ChibiOS (must be implemented in AP_HAL_Pico):**
-- PIO driver (no ChibiOS abstraction; needed for extra UARTs, SBUS, DShot, CAN, WS2812)
 - CAN driver (no hardware CAN on RP2350; need PIO CAN or MCP2515 via SPI)
 - SD/MMC (no SDMMC peripheral; use SPI mode via SPIv1)
+
+**Recently added to ChibiOS:**
+- PIO driver (merged into ChibiOS master, March 2026) — evaluate for use
+  with PIO UARTs, DShot, WS2812, and potentially PIO CAN
 
 ---
 
@@ -157,7 +160,8 @@ direct DMA registers.
 **Concern:** ArduPilot uses old stable GCC 10. RP2350 needs GCC 15. Is there
 a middle ground?
 
-**Finding: GCC 10.2 CONFIRMED WORKING. This is NOT a blocker.**
+**Finding: GCC 10.2 compiles ChibiOS RP2350 cleanly, but there is a known
+runtime risk with the Redundancy Coprocessor (RCP). A newer GCC is recommended.**
 
 The ChibiOS RP2350 demo compiles cleanly with ArduPilot's exact toolchain:
 
@@ -185,13 +189,24 @@ with GCC 10.2.1. This includes:
 - All RP2350 LLD drivers (DMA, SPI, SIO, GPIO, ADC, PWM, USB, WDG, Timer, Flash)
 - SMP dual-core port (`chcoresmp.c`, `chcoreasm.S`)
 
-**Why it works:** Cortex-M33 (ARMv8-M Mainline) support was added in GCC 8.
+**Why it compiles:** Cortex-M33 (ARMv8-M Mainline) support was added in GCC 8.
 ChibiOS uses standard C99/C11 and GCC `__attribute__` extensions that have
 been available since GCC 4.x. No TrustZone CMSE intrinsics are used (those
 would need GCC 11+ with `-mcmse`, but ArduPilot doesn't need TrustZone).
 
-**No toolchain change needed.** ArduPilot's existing `gcc-arm-none-eabi-10-2020-q4-major`
-works for the entire RP2350 port. This avoids the dual-toolchain problem entirely.
+**RCP risk with GCC 10:** The RP2350's Redundancy Coprocessor (RCP) is a
+hardware security feature that validates critical operations by requiring
+paired instructions. GCC 10's optimization passes (at `-O2` and above) can
+reorder instructions or merge redundant operations in ways that violate the
+strict invariants the RCP expects, causing a system halt. Discussions in the
+ChibiOS community indicate this is a known issue. Newer GCC versions (12+)
+have better awareness of the RCP constraints.
+
+**Recommendation:** While GCC 10 compiles and may work if the RCP is not
+relied upon (or is disabled), using a newer GCC (12 or 13) is recommended
+to avoid subtle runtime issues. ArduPilot already supports per-board
+toolchain selection, so the RP2350 port can use a newer GCC without
+affecting other boards. This should be validated early in Step 3a.
 
 ---
 
@@ -393,7 +408,7 @@ feature set. RP2350 has 520KB — significantly more headroom.
 | hwdef expandability | Medium | **Low** | Simpler model for RP2350 |
 | Custom board | Medium | **Low** | Pico 2 for dev, ref designs exist |
 | DMA support | High | **Resolved** | ChibiOS DMAv1 exists, 16 channels |
-| GCC version | High | **Low** | GCC 10.2 supports cortex-m33 |
+| GCC version | High | **Medium** | GCC 10 compiles but RCP risk — recommend GCC 12+ |
 | Dual-core | High | **Medium** | ChibiOS SMP confirmed, start single-core |
 | Performance | Medium | **Medium** | 200-400Hz achievable with optimization |
 | Feature disabling | Medium | **Low** | Well-established mechanism exists |

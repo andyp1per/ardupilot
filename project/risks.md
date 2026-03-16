@@ -202,19 +202,26 @@ configuration to avoid false resets.
 ### R12: GCC Toolchain Compatibility
 
 **Risk:** ArduPilot uses GCC 10.2 (`gcc-arm-none-eabi-10-2020-q4-major`).
-RP2350's Cortex-M33 may require a newer compiler.
+GCC 10's optimization passes can reorder or merge instructions that violate
+the RP2350's Redundancy Coprocessor (RCP) invariants, causing system halts.
+This is a known issue discussed in the ChibiOS community.
 
-**Likelihood:** Very Low (full build tested and confirmed)
-**Impact:** Medium - would require dual toolchain or ArduPilot-wide upgrade
+**Likelihood:** Medium (compiles fine, but RCP-related runtime failures are
+possible at `-O2` and above)
+**Impact:** Medium - would require per-board toolchain or ArduPilot-wide upgrade
 
 **Mitigation:**
-- **CONFIRMED: Full ChibiOS RP2350 demo (88 source files, all LLD drivers,
-  dual-core SMP) compiles with zero errors on GCC 10.2.1**
-- CMSIS `core_cm33.h` V5.0.9 only requires GCC 4.5+
-- ChibiOS uses standard C99/C11 and GCC `__attribute__` extensions
-- No TrustZone CMSE intrinsics used (would need GCC 11+ with `-mcmse`)
+- GCC 10.2 compiles the full ChibiOS RP2350 demo (88 source files, all LLD
+  drivers, dual-core SMP) with zero errors
+- However, a newer GCC (12+) is recommended to avoid RCP issues at runtime
+- ArduPilot supports per-board toolchain selection — the RP2350 port can use
+  a newer GCC without affecting other boards
+- Validate toolchain choice early in Step 3a
+- If RCP is not used (disabled or not relied upon), GCC 10 may work, but
+  this trades a security feature for toolchain convenience
 
-**Status:** Resolved. See [developer-concerns.md](developer-concerns.md) section 6.
+**Status:** Medium risk. Compiles, but runtime RCP issues likely require
+GCC 12+. See [developer-concerns.md](developer-concerns.md) section 6.
 
 ---
 
@@ -254,5 +261,5 @@ loop rates for flight-critical vehicles (Copter needs 200-400Hz).
 | R9: USB 1.1 bandwidth | Low | Low | Low |
 | R10: ADC noise | Low | Low | Low |
 | R11: Watchdog | Low | Low | Low |
-| R12: GCC toolchain | Very Low | Medium | **Resolved** (full build tested) |
+| R12: GCC toolchain | Medium | Medium | **Medium** (compiles, but RCP risk at runtime — recommend GCC 12+) |
 | R13: Loop rate performance | Medium | High | **High** |

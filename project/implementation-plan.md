@@ -7,6 +7,14 @@ avoids an unwieldy branch and shows concrete progress to the community and
 sponsor. The steps build on each other but each one compiles and is testable
 in isolation.
 
+**This is a suggested ordering, not a rigid sequence.** Steps can be
+reordered, combined, or deferred based on what makes sense during
+implementation. In particular: peripheral PRs (Step 4a-4k) are largely
+independent and can be tackled in any order; hard features can be left
+for later; and multiple steps can be batched into fewer PRs if reviewers
+prefer. The dependency column in the PR sequencing table shows the true
+hard constraints.
+
 **Target hardware:** Laurel board (Betaflight: HELLBENDER_0001, manufacturer
 RASP). This is an RP2350B flight controller with ICM-42688P IMU, DPS310 baro,
 SD card, 4 motor outputs, PIO UARTs, CRSF RC input, and WS2812 LEDs. Betaflight
@@ -32,10 +40,13 @@ wrangling. Estimates include integration testing and debugging.
 | 7a-7o | Full HAL fidelity | 6–10 weeks | 32.5 wk |
 | | **Production-quality port** | | **~8 months** |
 
-**Critical path to first flight: ~18.5 weeks (~4.5 months).** The biggest time
-risks are Step 3a (build system/ChibiOS integration), Step 3b (XIP flash model),
-Step 4g (PIO UART — first PIO driver), and Step 5 (platform integration
-debugging). The RP2350B has no internal flash — all program code (~1.2MB)
+**Critical path to first flight: ~18.5 weeks (~4.5 months).** These are
+conservative estimates that account for the debugging time typical of new
+platform bringups (the Betaflight RP2350 port took at least 6 months).
+Actual time may be shorter if ChibiOS drivers work cleanly, or longer if
+subtle platform bugs arise. The biggest time risks are Step 3a (build
+system/ChibiOS integration), Step 3b (XIP flash model), Step 4g (PIO
+UART — first PIO driver), and Step 5 (platform integration debugging). The RP2350B has no internal flash — all program code (~1.2MB)
 must execute via QSPI XIP. This is the primary performance constraint: unlike
 Betaflight (which loads all code into RAM), ArduPilot's firmware is too large
 for 520KB SRAM and must run from XIP. Step 3b is dedicated to establishing
@@ -85,14 +96,23 @@ week if there are merge conflicts in ChibiOS that need resolution.
 - This is the lowest-risk PR — it changes nothing about ArduPilot itself
 - May require coordination with the ChibiOS submodule maintainer (bugbot)
 - ChibiOS RP2350 demo confirmed building with ArduPilot's GCC 10.2.1
+- ChibiOS now includes a PIO driver (merged March 2026) — this will be
+  available in the updated submodule
 
 ---
 
 ## Step 2: Bootloader (1–2 weeks)
 
 **Goal:** ArduPilot bootloader runs on Pico 2, accepts firmware via USB.
-This is the standard first milestone for any new board bringup — nothing else
-can be tested until firmware can be flashed.
+
+**Why bootloader first?** The bootloader is typically the easiest thing to
+bring up on a new platform (minimal code, minimal dependencies), which makes
+it a natural first milestone. It also means the board works with ArduPilot's
+standard tools (Mission Planner, MAVProxy firmware upload) from day one. The
+RP2350's BOOTSEL mode provides a fallback — you can always recover via UF2 —
+so the bootloader is optional in the strictest sense, but having one is
+standard ArduPilot practice and avoids requiring users to use BOOTSEL for
+every firmware update.
 
 **PR scope:** New files (bootloader hwdef, board config). Board ID registration
 in `board_types.txt`.
@@ -237,10 +257,13 @@ debugging startup ordering, missing symbols, and ChibiOS configuration.
 
 ### GCC Toolchain Note
 The full ChibiOS RP2350 demo (88 source files, all LLD drivers, dual-core SMP)
-compiles with zero errors using ArduPilot's existing GCC 10.2.1
-(`gcc-arm-none-eabi-10-2020-q4-major`). No toolchain change is required.
-See [developer-concerns.md](developer-concerns.md) section 6 for the full
-build log.
+compiles with zero errors using ArduPilot's existing GCC 10.2.1. However,
+GCC 10's optimizer can violate the RP2350's Redundancy Coprocessor (RCP)
+invariants at `-O2` and above, causing runtime halts. **A newer GCC (12+)
+is recommended** to avoid this. ArduPilot supports per-board toolchain
+selection, so this doesn't affect other boards. Validate the toolchain
+choice early in this step.
+See [developer-concerns.md](developer-concerns.md) section 6 for details.
 
 ---
 
@@ -437,10 +460,17 @@ full parameter load/save cycle works reliably under concurrent XIP access.
 
 **Goal:** Additional serial ports via PIO state machines.
 
-- **PIO runtime driver** (`pio_manager.cpp`, ~300 LOC): program loading,
-  SM configuration, clock divider, FIFO access, DMA setup. Uses ChibiOS
-  register definitions from `rp2350.h` (which has the full `PIO_TypeDef`
-  struct, `PIO0`/`PIO1`/`PIO2` macros, and DMA DREQ defines).
+**Note:** ChibiOS now has a PIO driver merged into master (as of March 2026).
+This may significantly reduce the work needed here — evaluate the ChibiOS
+PIO driver first before writing a custom `pio_manager.cpp`. If the ChibiOS
+driver provides program loading, SM configuration, and FIFO/DMA access, the
+main work is writing PIO UART programs and integrating with UARTDriver.
+
+- **PIO runtime driver:** Either use ChibiOS PIO driver (preferred if
+  sufficient) or custom `pio_manager.cpp` (~300 LOC): program loading,
+  SM configuration, clock divider, FIFO access, DMA setup. ChibiOS provides
+  register definitions in `rp2350.h` (`PIO_TypeDef` struct, `PIO0`/`PIO1`/
+  `PIO2` macros, DMA DREQ defines).
 - **PIO assembler** (`pioasm`): build-time tool from Pico SDK that compiles
   `.pio` files into C headers with instruction arrays. BSD-3-Clause licensed.
   Either integrate as waf build step or pre-assemble and check in headers.
@@ -458,13 +488,13 @@ for the full analysis of options.
 **Verification:** PIO UART loopback test. GPS connected to PIO UART gets fix.
 
 **Where the time goes:** This is the first PIO driver and sets the pattern for
-all subsequent PIO work (DShot, WS2812, CAN). The PIO runtime (~300 LOC) is new
-code with no ArduPilot precedent — program loading, SM configuration, FIFO/DMA
-wiring all need to be correct. PIO UART timing bugs are subtle (baud rate
-accuracy depends on clock divider precision). The pioasm build integration or
-pre-assembly workflow also needs to be established. Once this works, Steps 6a
-(DShot) and 6b (WS2812) become much faster because the PIO infrastructure
-exists.
+all subsequent PIO work (DShot, WS2812, CAN). If using the ChibiOS PIO driver,
+the infrastructure work is reduced — mainly writing PIO programs and wiring
+them to the UARTDriver. If writing a custom runtime, the PIO runtime (~300
+LOC) is new code with no ArduPilot precedent. PIO UART timing bugs are subtle
+(baud rate accuracy depends on clock divider precision). Once this works,
+Steps 6a (DShot) and 6b (WS2812) become much faster because the PIO
+infrastructure exists.
 
 ### Step 4h: PWM Output (2–3 days)
 
@@ -894,9 +924,12 @@ These AP_HAL_ChibiOS features are **not needed** for RP2350:
 `libraries/AP_HAL_Pico/`. They don't touch AP_HAL_ChibiOS or any vehicle code.
 This makes them low-risk, easy to review, and safe to merge incrementally.
 
-Steps 4a-4k could also be batched into fewer PRs if the reviewers prefer
-(e.g., "SPI + IMU" as one PR, "I2C + Baro" as another). The important thing
-is each PR is self-contained and testable.
+**Flexibility:** This ordering is a suggestion based on dependencies, not a
+rigid sequence. Steps 4a-4k are largely independent and can be reordered,
+combined into fewer PRs, or deferred. Hard features (PIO CAN, bidirectional
+DShot, DSP/GyroFFT) can be left for later without blocking flight. The
+dependency column shows the true hard constraints — everything else is
+flexible.
 
 ### Priority Tiers for Step 7
 
