@@ -489,6 +489,7 @@ void ModeDroneShow::wait_for_start_time_run()
 // starts the phase where we are taking off at the start of the show
 void ModeDroneShow::takeoff_start()
 {
+    AC_DroneShowManager_Copter& show_manager = copter.g2.drone_show_manager;
     Location current_loc(copter.current_loc);
     int32_t current_alt, target_alt;
 
@@ -507,7 +508,7 @@ void ModeDroneShow::takeoff_start()
     // show manager _may_ cancel the takeoff if it deems that the drone is not
     // prepared for takeoff (e.g., the show origin or orientation was not
     // configured)
-    if (!copter.g2.drone_show_manager.notify_takeoff_attempt())
+    if (!show_manager.notify_takeoff_attempt())
     {
         gcs().send_text(MAV_SEVERITY_CRITICAL, "Takeoff cancelled by show manager");
         AP::logger().Write_Error(LogErrorSubsystem::NAVIGATION, LogErrorCode::FAILED_TO_INITIALISE);
@@ -529,12 +530,12 @@ void ModeDroneShow::takeoff_start()
     _set_stage(DroneShow_Takeoff);
     
     // early exit if the motor output is prevented
-    if (copter.g2.drone_show_manager.is_motor_output_disabled()) {
+    if (show_manager.is_motor_output_disabled()) {
         return;
     }
 
     // set the target altitude of the takeoff
-    target_alt = current_alt + copter.g2.drone_show_manager.get_takeoff_altitude_cm();
+    target_alt = current_alt + show_manager.get_takeoff_altitude_cm();
 
     // the body of this function from here on is mostly adapted from
     // ModeAuto::takeoff_start()
@@ -579,9 +580,10 @@ void ModeDroneShow::takeoff_start()
 // performs the takeoff stage
 void ModeDroneShow::takeoff_run()
 {
+    AC_DroneShowManager_Copter& show_manager = copter.g2.drone_show_manager;
     bool completed = false;
 
-    if (copter.g2.drone_show_manager.is_motor_output_disabled()) {
+    if (show_manager.is_motor_output_disabled()) {
         // if the motor output is prevented, move on to the performing stage as soon as
         // possible
         completed = true;
