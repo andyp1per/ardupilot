@@ -372,6 +372,13 @@ void ModeDroneShow::wait_for_start_time_run()
     float time_since_takeoff_sec = -time_until_takeoff_sec;
     const float latest_takeoff_attempt_after_scheduled_takeoff_time_in_seconds = 5.0f;
 
+    if (show_manager.is_collective_rth_triggered()) {
+        // if collective RTH was triggered, we should not continue with the
+        // takeoff but rather land immediately
+        landing_start();
+        return;
+    }
+
     // Drone is in standby so keep all I terms in controllers at zero
     attitude_control->reset_yaw_target_and_rate();
     attitude_control->reset_rate_controller_I_terms();
@@ -582,6 +589,13 @@ void ModeDroneShow::takeoff_run()
 {
     AC_DroneShowManager_Copter& show_manager = copter.g2.drone_show_manager;
     bool completed = false;
+    
+    if (show_manager.is_collective_rth_triggered()) {
+        // if collective RTH was triggered, we should not continue with the
+        // takeoff but rather land immediately
+        landing_start();
+        return;
+    }
 
     if (show_manager.is_motor_output_disabled()) {
         // if the motor output is prevented, move on to the performing stage as soon as

@@ -20,6 +20,7 @@
 
 #include "DroneShow_Enums.h"
 #include "DroneShow_FenceConfig.h"
+#include "skybrush/screenplay.h"
 
 class DroneShowLEDFactory;
 class DroneShowLED;
@@ -360,6 +361,15 @@ public:
         );
     }
     
+    // Returns whether a collective RTH operation was triggered
+    bool is_collective_rth_triggered() const {
+        // Currently we take a shortcut here and simply return true if we have more than
+        // one scene in the screenplay. This is correct for the current implementation
+        // of the show controller, but if we add more complexity to the show
+        // controller in the future, we might want to track this with a separate flag.
+        return sb_screenplay_size(&_screenplay) > 1;
+    }
+
     // Returns whether any motor output from show mode is disabled due to testing
     // purposes.
     bool is_motor_output_disabled() const {
