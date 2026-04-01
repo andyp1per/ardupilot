@@ -53,7 +53,10 @@ fi
 if [ ! -d .venv ]; then
     $PYTHON -m venv .venv
     .venv/bin/pip install -U pip wheel
-    .venv/bin/pip install future "empy>=3,<4" intelhex pexpect
+
+    # dronecan requires pkg_resources, which is provided by setuptools <= 80.10 only,
+    # hence the dependencies
+    .venv/bin/pip install future "empy>=3,<4" intelhex pexpect dronecan 'setuptools<80.11'
 fi
 
 export PATH=".venv/bin:$PATH"
