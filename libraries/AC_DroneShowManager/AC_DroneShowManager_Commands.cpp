@@ -8,6 +8,7 @@
 #include "DroneShow_CustomPackets.h"
 #include "DroneShow_Enums.h"
 #include "DroneShowPyroDevice.h"
+#include "skybrush/time_axis.h"
 
 MAV_RESULT AC_DroneShowManager::handle_command_int_packet(const mavlink_command_int_t &packet)
 {
@@ -544,12 +545,18 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
                     uint32_t total_duration_before_this_segment_msec = sb_time_axis_get_total_duration_msec(time_axis);
                     if (total_duration_before_this_segment_msec <= std::numeric_limits<int32_t>::max()) {
                         // Calculate the show clock time that would belong to the
-                        // wall clock time at the current end of the time axis
-                        float warped_time = sb_time_axis_map(time_axis, total_duration_before_this_segment_msec);
+                        // wall clock time at the current end of the time axis. Note
+                        // that total_duration_before_this_segment_msec is measured from
+                        // the origin of the time axis, but sb_time_axis_map() needs
+                        // absolute wall clock time so we need to add the origin
+                        float warped_time_sec = sb_time_axis_map(
+                            time_axis,
+                            sb_time_axis_get_origin_msec(time_axis) + total_duration_before_this_segment_msec
+                        );
                         
                         // Calculate how much time there is left from the trajectory
                         // at this moment on the show clock
-                        float remaining_time = sb_trajectory_get_total_duration_sec(trajectory) - warped_time;
+                        float remaining_time_sec = sb_trajectory_get_total_duration_sec(trajectory) - warped_time_sec;
                         
                         // Calculate the effective rate of the current segment
                         // (average of the initial and the final rate)
@@ -557,7 +564,7 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
                         
                         // Calculate how long the current segment needs to be to ensure
                         // that we play all the remaining time from the trajectory
-                        entry->duration_msec = remaining_time > 0 ? remaining_time * 1000 / effective_rate : 0;
+                        entry->duration_msec = remaining_time_sec > 0 ? remaining_time_sec * 1000 / effective_rate : 0;
                     }
                 }
             }
