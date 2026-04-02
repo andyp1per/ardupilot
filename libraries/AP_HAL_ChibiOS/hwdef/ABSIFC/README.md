@@ -8,12 +8,13 @@ The ABSI FC is a professional-grade flight controller designed by ABSI Aerospace
  - 2MB Flash, 1MB RAM
  - Two ICM-45686 6-axis IMUs (SPI1 and SPI4)
  - BMP390 barometer (I2C, address 0x76)
- - microSD card slot for logging (SDMMC2, 4-bit mode)
- - 6x UARTs (including USB)
+ - microSD card slot for logging (SDMMC2, 4-bit mode) with card detect
+ - 8x UARTs (including USB)
  - 2x CAN ports with TJA1462 transceivers
  - 3x I2C ports with 4.7k pull-ups
  - 16x PWM outputs (8 motor + 8 aux)
  - Dual battery monitoring inputs
+ - 5V rail voltage monitoring
  - GPIO-controlled power outputs (VTX, 5V-2A rail, SPST relay)
  - External 8MHz and 32.768kHz crystals
  - USB-C interface via external breakout board with DFU boot button
@@ -39,8 +40,10 @@ The UARTs are marked Rn and Tn in the pinout. The Rn pin is the receive pin for 
 
  - SERIAL0 -> USB
  - SERIAL1 -> USART1 (RC Input, on J6)
- - SERIAL3 -> USART3 (Spare, on J6)
- - SERIAL5 -> UART5 (Spare, on J6)
+ - SERIAL2 -> USART2 (ESC Telemetry, on J9)
+ - SERIAL3 -> USART3 (Spare, solder pads)
+ - SERIAL4 -> UART4 (Spare, solder pads)
+ - SERIAL5 -> UART5 (Spare, solder pads)
  - SERIAL7 -> UART7 (GPS, DMA-enabled)
  - SERIAL8 -> UART8 (Telemetry with flow control, on J7)
 
@@ -62,8 +65,8 @@ The UARTs are marked Rn and Tn in the pinout. The Rn pin is the receive pin for 
 | 1 | 5V | 5V Telemetry Power |
 | 2 | TX | UART7_TX (GPS_TX) |
 | 3 | RX | UART7_RX (GPS_RX) |
-| 4 | SCL | I2C2_SCL (for compass) |
-| 5 | SDA | I2C2_SDA (for compass) |
+| 4 | SCL | I2C1_SCL (for compass) |
+| 5 | SDA | I2C1_SDA (for compass) |
 | 6 | GND | Ground |
 
 ### 4-in-1 ESC Connector (J9) Pinout
@@ -72,8 +75,8 @@ The UARTs are marked Rn and Tn in the pinout. The Rn pin is the receive pin for 
 |-----|--------|-------------|
 | 1 | ESC_BATTERY | Battery voltage sense from ESC |
 | 2 | GND | Ground |
-| 3 | ESC_CURRENT | Current sense (ADC) |
-| 4 | ESC_TELEMETRY | UART8_RX (ESC telemetry) |
+| 3 | ESC_CURRENT | Current sense (PC5, ADC1_INP8) |
+| 4 | ESC_TELEMETRY | USART2_RX (ESC telemetry, SERIAL2) |
 | 5 | M1 | Motor 1 signal |
 | 6 | M2 | Motor 2 signal |
 | 7 | M3 | Motor 3 signal |
@@ -131,7 +134,7 @@ The board has built-in voltage and current monitoring. Battery sensing is provid
 ### Battery 1 (Primary)
 
 Voltage divider: 105k/10k (11.5:1 ratio)
-Current sensor: INA186A2 with 500µΩ shunt resistor
+Current sensor: INA186A2 with 500uOhm shunt resistor
 
 The default battery parameters are:
 
@@ -143,17 +146,13 @@ The default battery parameters are:
 
 ### Battery 2 (Secondary, via PDB)
 
-Pads for a second analog battery monitor are provided via the PDB interface. To use:
+The ICD allocates PC2/PC3 for Battery 2 voltage and current sensing. However, these pins are ADC3-only inputs which are not available on the 100-pin LQFP package (STM32H743VIT6). For second battery monitoring, use a DroneCAN battery monitor on CAN2 instead:
 
- - :ref:`BATT2_MONITOR<BATT2_MONITOR>` = 4
- - :ref:`BATT2_VOLT_PIN<BATT2_VOLT_PIN__AP_BattMonitor_Analog>` = 12
- - :ref:`BATT2_CURR_PIN<BATT2_CURR_PIN__AP_BattMonitor_Analog>` = 13
- - :ref:`BATT2_VOLT_MULT<BATT2_VOLT_MULT__AP_BattMonitor_Analog>` = 11.5
- - :ref:`BATT2_AMP_PERVLT<BATT2_AMP_PERVLT__AP_BattMonitor_Analog>` as required
+ - :ref:`BATT2_MONITOR<BATT2_MONITOR>` = 8 (DroneCAN)
 
 ### Current Sensing Specifications
 
- - Shunt resistor: 500µΩ, 10W, 1%
+ - Shunt resistor: 500uOhm, 10W, 1%
  - Maximum continuous current: 90A
  - Maximum burst current: 120A
  - Current sense amplifier: INA186A2 (gain = 50V/V)
@@ -165,30 +164,30 @@ The ABSI FC has two CAN ports using TJA1462ATK transceivers:
  - **CAN1 (FDCAN1)**: External DroneCAN port for GPS, airspeed sensors, compass, and other peripherals. Active by default.
  - **CAN2 (FDCAN2)**: Internal interface to the ABSI Power Distribution Board via board-to-board connector.
 
-Both CAN ports include 60.4Ω termination resistors and 47nF common-mode filter capacitors. The flight controller is not expected to be a central node; termination can be removed by the user if necessary.
+Both CAN ports include 60.4 Ohm termination resistors and 47nF common-mode filter capacitors. The flight controller is not expected to be a central node; termination can be removed by the user if necessary.
 
-CAN1 includes a standby control pin (active low) for power management.
+CAN1 includes a standby control pin (active high) for power management.
 
 ## I2C
 
 Three I2C buses are available:
 
- - **I2C1**: Internal sensors (barometer BMP390 at 0x76)
- - **I2C2**: External I2C on GPS connector (for compass)
- - **I2C4**: PDB interface for expansion
+ - **I2C4** (bus 0): Internal sensors (barometer BMP390 at 0x76)
+ - **I2C1** (bus 1): External I2C on GPS and standalone I2C connectors (for compass)
+ - **I2C2** (bus 2): PDB interface for expansion
 
-All I2C buses have 4.7kΩ pull-up resistors installed.
+All I2C buses have 4.7k Ohm pull-up resistors installed.
 
 ## Compass
 
 The ABSI FC does not have a builtin compass, but you can attach an external compass using:
 
- - I2C on the GPS connector (I2C2)
+ - I2C on the GPS connector (I2C1, bus 1)
  - CAN-connected compass via DroneCAN
 
 ## Barometer
 
-The board includes a BMP390 barometer connected via I2C1 at address 0x76.
+The board includes a BMP390 barometer connected via I2C4 (bus 0) at address 0x76.
 
 ## IMU
 
@@ -223,7 +222,7 @@ gpio:write(81, 1)  -- Enable VTX power
 
 The ABSI FC is designed to integrate with the ABSI Power Distribution Board via board-to-board connectors (Samtec FTS/FLE series):
 
-### Power Connector (J1 - FTS-115-01-L-DV, 30-pin)
+### Power Connector (J1 - FTS-125-01-L-DV, 50-pin)
 
 | Rail | Voltage | Current | Description |
 |------|---------|---------|-------------|
@@ -232,22 +231,22 @@ The ABSI FC is designed to integrate with the ABSI Power Distribution Board via 
 | V_VTX | 9V or 12V | 3A | VTX power, relay controlled |
 | 3V3_MCU | 3.3V | 1A | MCU and sensors, always on |
 
-### Signal Connector (J2 - FTS-108-01-L-DV, 16-pin)
+### Signal Connector (J2)
 
-| Signal | Description |
-|--------|-------------|
-| EN_VTX | VTX rail enable (GPIO 81) |
-| EN_5V-2A | 5V-2A rail enable (GPIO 82) |
-| EN_SPST | SPST relay enable (GPIO 83) |
-| BATTERY1_V | Battery 1 voltage sense |
-| BATTERY1_I | Battery 1 current sense |
-| BATTERY2_V | Battery 2 voltage sense |
-| BATTERY2_I | Battery 2 current sense |
-| I2C_SDA | I2C4 data (expansion) |
-| I2C_SCL | I2C4 clock (expansion) |
-| FDCAN2_TX | CAN2 transmit |
-| FDCAN2_RX | CAN2 receive |
-| ESC_BATTERY | 4-in-1 ESC battery sense |
+| Signal | MCU Pin | Description |
+|--------|---------|-------------|
+| EN_VTX | PD10 | VTX rail enable (GPIO 81) |
+| EN_V-ADD | PD11 | 5V-2A rail enable (GPIO 82) |
+| EN_SPST | PA8 | SPST relay enable (GPIO 83) |
+| BATTERY1_V | PC0 | Battery 1 voltage sense |
+| BATTERY1_I | PC1 | Battery 1 current sense |
+| BATTERY2_V | PC2 | Battery 2 voltage sense (ADC3, see note) |
+| BATTERY2_I | PC3 | Battery 2 current sense (ADC3, see note) |
+| I2C_SDA | PB11 | I2C2 data (PDB expansion) |
+| I2C_SCL | PB10 | I2C2 clock (PDB expansion) |
+| FDCAN2_TX | PB13 | CAN2 transmit |
+| FDCAN2_RX | PB12 | CAN2 receive |
+| ESC_BATTERY | N/A | 4-in-1 ESC battery sense |
 
 ### PDB Power Specifications
 
@@ -292,14 +291,13 @@ When powered via USB-C only:
 
 ## LED Indicators
 
-The board has two status LEDs on dedicated GPIO pins:
+The board has three status LEDs on dedicated GPIO pins:
 
-| LED | Color | GPIO | Resistor | Function |
-|-----|-------|------|----------|----------|
-| D1 | Blue | PE10 | 100Ω | Activity/Status |
-| D2 | Green | PE15 | 165Ω | Armed status |
-
-LED brightness is calibrated for approximately 20mcd intensity.
+| LED | Color | GPIO | Function |
+|-----|-------|------|----------|
+| D1 | Blue | PE15 | Activity/Status |
+| D2 | Green | PE12 | Armed status |
+| D3 | Amber | PD3 | Auxiliary indicator |
 
 ## Debug Interface
 
