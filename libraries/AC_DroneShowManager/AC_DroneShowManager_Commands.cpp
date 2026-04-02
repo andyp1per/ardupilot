@@ -355,6 +355,12 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
         // Duplicate packet
         return true;
     }
+    
+    if (previous_seq_no <= 0xFF && (header->seq_no - static_cast<uint8_t>(previous_seq_no) >= 0xF0)) {
+        // Probably the packets are being sent on two or more redundant channels and
+        // we are receiving them out-of-order
+        return true;
+     }
 
     // Figure out the epoch relative to which all origin fields in the packet will be
     // interpreted
