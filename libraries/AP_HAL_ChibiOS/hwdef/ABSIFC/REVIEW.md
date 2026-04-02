@@ -43,15 +43,15 @@ The following reference documents were used for this review:
 **Issue:** The schematic shows 100nF capacitors on VCAP pins (pins 48 and 73).
 
 **Problem:** Per [STM32H743 Datasheet](https://www.st.com/resource/en/datasheet/stm32h743vi.pdf) Table 124 "VCAP operating conditions" (Section 6.3.18, page 153), the VCAP pins require:
-- CDEXT = 2.2 µF ±20%
-- ESR < 100 mΩ
+- CDEXT = 2.2 uF +/-20%
+- ESR < 100 mOhm
 
 See also [AN5096 Section 3.5 "Power supply"](https://www.st.com/resource/en/application_note/an5096-getting-started-with-stm32h7-series-hardware-development-stmicroelectronics.pdf) which states:
-> "The two VCAP pins must be connected to 2.2 µF ceramic capacitors (X5R or X7R, 4V minimum rating)"
+> "The two VCAP pins must be connected to 2.2 uF ceramic capacitors (X5R or X7R, 4V minimum rating)"
 
 **Current Design:** 2x 100nF (C7, C8)
 
-**Required:** 2x 2.2µF ceramic capacitors (X5R or X7R, 6.3V minimum)
+**Required:** 2x 2.2uF ceramic capacitors (X5R or X7R, 6.3V minimum)
 
 **Impact:** The internal voltage regulator may not be stable. This can cause:
 - Random resets
@@ -59,7 +59,7 @@ See also [AN5096 Section 3.5 "Power supply"](https://www.st.com/resource/en/appl
 - Failed operation at temperature extremes
 - Potential permanent damage to the MCU
 
-**Recommendation:** Replace C7 and C8 with 2.2µF X5R or X7R capacitors. Place as close to VCAP pins as possible with short, wide traces to ground.
+**Recommendation:** Replace C7 and C8 with 2.2uF X5R or X7R capacitors. Place as close to VCAP pins as possible with short, wide traces to ground.
 
 ---
 
@@ -72,7 +72,7 @@ See also [AN5096 Section 3.5 "Power supply"](https://www.st.com/resource/en/appl
 Per [AN2867: Oscillator Design Guide](https://www.st.com/resource/en/application_note/an2867-guidelines-for-oscillator-design-on-stm8afals-and-stm32-mcusmpus-stmicroelectronics.pdf) Section 5.2, the load capacitor calculation is:
 
 ```
-CL = (CL1 × CL2) / (CL1 + CL2) + Cstray
+CL = (CL1 x CL2) / (CL1 + CL2) + Cstray
 ```
 
 Where Cstray is typically 2-5pF for PCB traces.
@@ -106,15 +106,15 @@ Where Cstray is typically 2-5pF for PCB traces.
 - VDDIO: 1x 100nF
 
 Per [ICM-45686 Datasheet](https://invensense.tdk.com/wp-content/uploads/documentation/DS-000577_ICM-45686.pdf) Section 10 "Application Information":
-> "Place 0.1µF and 10µF capacitors as close as possible to the VDD and VDDIO pins"
+> "Place 0.1uF and 10uF capacitors as close as possible to the VDD and VDDIO pins"
 
 The datasheet Figure 10-1 "Application Circuit" shows:
-- VDD: 100nF + 10µF
-- VDDIO: 100nF (minimum), 100nF + 10µF (recommended)
+- VDD: 100nF + 10uF
+- VDDIO: 100nF (minimum), 100nF + 10uF (recommended)
 
 **Recommendation:** Add bulk capacitors per datasheet recommendations:
-- VDD: 100nF + 10µF (or at minimum 1µF)
-- VDDIO: 100nF + 1µF (or 10µF for best performance)
+- VDD: 100nF + 10uF (or at minimum 1uF)
+- VDDIO: 100nF + 1uF (or 10uF for best performance)
 
 **Rationale:** IMUs are extremely sensitive to power supply noise. Insufficient decoupling causes:
 - Increased noise floor
@@ -123,62 +123,35 @@ The datasheet Figure 10-1 "Application Circuit" shows:
 
 ---
 
-### 4. Second Battery Monitoring - NOT AVAILABLE
+### 4. Second Battery Monitoring - ADC3 LIMITATION
 
 **Location:** SCH-ABSI-Flight_Control-MCU.SchDoc, ADC section
 
-**Issue:** The schematic shows BATTERY2_V on PC2 (ADC3_INP0) and BATTERY2_I on PC3 (ADC3_INP1).
+**Issue:** The ICD allocates PC2 (ADC3_INP0) and PC3 (ADC3_INP1) for BATTERY2_V and BATTERY2_I.
 
 **Problem:** Per [STM32H743 Datasheet](https://www.st.com/resource/en/datasheet/stm32h743vi.pdf) Table 10 "STM32H743xI pin and ball definitions" (page 90), on the STM32H743VIT6 (100-pin LQFP package):
 - PC2 and PC3 are mapped to ADC3 channels only
 - ADC3 inputs on these pins are not bonded out in the 100-pin package
 
 From the datasheet pin definitions:
-- PC0 = ADC1_INP10 / ADC2_INP10 / ADC3_INP10 ✓
-- PC1 = ADC1_INP11 / ADC2_INP11 / ADC3_INP11 ✓
+- PC0 = ADC1_INP10 / ADC2_INP10 / ADC3_INP10 (available)
+- PC1 = ADC1_INP11 / ADC2_INP11 / ADC3_INP11 (available)
 - PC2 = ADC3_INP0 only (NOT available on 100-pin, see Note 7)
 - PC3 = ADC3_INP1 only (NOT available on 100-pin, see Note 7)
 
-**Impact:** Second battery monitoring cannot be implemented with current pin assignments.
+**Impact:** Second battery monitoring cannot be implemented via analog ADC with current pin assignments on the 100-pin package.
 
-**Recommendations:**
-
-*Option A (Different ADC pins):*
-Use pins that have ADC1/ADC2 alternate functions (per Table 10):
-- PA0 = ADC1_INP16 (currently UART4_TX)
-- PA1 = ADC1_INP17 (currently UART4_RX)
-- PA2 = ADC1_INP14 (currently PWM13)
-- PA3 = ADC1_INP15 (currently PWM14)
-
-*Option B (Reduce UARTs):*
-- Remove UART4 (PA0/PA1) and use those pins for BATT2_V/BATT2_I
-- This maintains all PWM outputs
-
-*Option C (Use PDB CAN for battery monitoring):*
-- Implement battery monitoring on the PDB via CAN (FDCAN2)
-- PDB sends battery data to FC over DroneCAN
-- This is actually a cleaner architecture
+**Recommendation:** Use DroneCAN battery monitor on CAN2 (PDB interface) for second battery monitoring. This is the cleanest architecture since the PDB already has CAN2 connectivity.
 
 ---
 
 ## Moderate Issues
 
-### 5. SD Card Detect Pin - NOT CONFIGURED
+### 5. SD Card Detect Pin - RESOLVED (V3R3)
 
-**Location:** SCH-ABSI-Flight_Control-User_IO.SchDoc, SD CARD section
+~~**Issue:** No MCU pin was assigned for card detection.~~
 
-**Issue:** The SD card socket (SKT1 - Wurth 5033981892) has CD_A (pin 9) and CD_B (pin 10) card detect pins, but no MCU pin is assigned for card detection.
-
-**Impact:**
-- ArduPilot cannot detect SD card insertion/removal
-- Must assume card is always present
-- Hot-swap of SD card may cause filesystem corruption
-
-**Recommendation:** Connect CD_A or CD_B to an available GPIO (active low typically). Suggested pins:
-- PC13 (available, near SD signals)
-- Any unused PE pin
-
----
+**Status:** Resolved in V3R3. PD4 is now assigned as SDCARD_DETECT and is configured in the hwdef.
 
 ---
 
@@ -186,14 +159,11 @@ Use pins that have ADC1/ADC2 alternate functions (per Table 10):
 
 **Location:** SCH-ABSI-Flight_Control-Sensors.SchDoc
 
-**Observation:** The IMU interrupt signals (IMU1_INT1, IMU1_INT2, IMU2_INT1, IMU2_INT2) are routed to the MCU but commented out in the hwdef.
-
-**Current hwdef:**
-```
-# Optional data ready interrupts - not required for operation
-# PE12 IMU1_DRDY INPUT
-# PC13 IMU2_DRDY INPUT
-```
+**Observation:** The IMU interrupt signals are routed to the MCU but commented out in the hwdef:
+- PB2: IMU1_INT1
+- PE10: IMU1_INT2
+- PE4: IMU2_INT1
+- PC13: IMU2_INT2
 
 **Note:** ArduPilot typically uses FIFO-based IMU access rather than interrupt-driven sampling. The FIFO approach is more than adequate for most applications and is the standard method used across ArduPilot-supported boards. DRDY interrupts are not required and their absence does not impact flight performance.
 
@@ -205,12 +175,12 @@ Use pins that have ADC1/ADC2 alternate functions (per Table 10):
 
 **Location:** SCH-ABSI-Flight_Control-CAN_XCVR.SchDoc
 
-**Issue:** Both CAN buses have fixed 60.4Ω termination resistors (R12/R14 for CAN1, R13/R15 for CAN2).
+**Issue:** Both CAN buses have fixed 60.4 Ohm termination resistors (R12/R14 for CAN1, R13/R15 for CAN2).
 
 Per [TJA1462 Datasheet](https://www.nxp.com/docs/en/data-sheet/TJA1462.pdf) Section 8.1 "Bus termination":
-> "For proper CAN bus operation, the bus must be terminated at both ends with 120Ω resistors."
+> "For proper CAN bus operation, the bus must be terminated at both ends with 120 Ohm resistors."
 
-The 60.4Ω split termination with 47nF capacitor provides 120Ω DC termination with common-mode filtering (per Section 8.2 "Split termination").
+The 60.4 Ohm split termination with 47nF capacitor provides 120 Ohm DC termination with common-mode filtering (per Section 8.2 "Split termination").
 
 **Note from schematic:** "Flight controller not expected to be central node. Termination components will remain and can be removed by user if necessary."
 
@@ -224,44 +194,29 @@ If FC is in the middle of a CAN bus, the extra termination will cause signal int
 
 ---
 
-### 8. Voltage Monitoring - LIMITED
+### 8. Voltage Monitoring - PARTIALLY RESOLVED
 
-**Issue:** The board lacks comprehensive voltage monitoring capabilities:
+**Issue:** The board previously lacked comprehensive voltage monitoring capabilities.
 
+**Status (V3R7):** PC4 is now configured as VDD_5V_SENS with a 2:1 voltage divider, providing 5V rail monitoring. This is a significant improvement.
+
+**Remaining limitations:**
 1. **Internal MCU monitoring not available:** `HAL_WITH_MCU_MONITORING` requires ADC3 internal channels for MCU temperature, VREF, and VBAT monitoring. However, ADC3 is NOT available on the 100-pin LQFP package (STM32H743VIT6). This is a package limitation, not a design error.
 
-2. **No 5V rail monitoring:** There is no `VDD_5V_SENS` pin to monitor the 5V supply rail voltage. Many flight controllers include this to detect brownouts or power issues.
-
-**Impact:** 
-- Cannot monitor MCU die temperature for thermal throttling warnings
-- Cannot detect 5V rail voltage drops that may indicate power system issues
-- Cannot use internal VREF for ADC calibration
+2. **No 3.3V rail monitoring:** Consider adding a voltage divider from the 3.3V rail to a spare ADC pin if one becomes available.
 
 **Recommendation for future revision:**
 1. Consider using the 144-pin or 176-pin STM32H743 package to gain access to ADC3 for internal monitoring
-2. Add a voltage divider from the 5V rail to an ADC pin for `VDD_5V_SENS`:
-   - If RSSI input is not needed, repurpose PC5 for VDD_5V_SENS
-   - Alternatively, add a dedicated voltage divider (e.g., 10k/10k for 2:1 ratio) to a spare ADC-capable pin
-3. For 3.3V monitoring, a simple voltage divider to any ADC pin would suffice
-
-**Example hwdef for 5V monitoring:**
-```
-PC5 VDD_5V_SENS ADC1 SCALE(2)  # 10k/10k divider = 2:1 ratio
-```
 
 ---
 
 ## Minor Issues / Suggestions
 
-### 9. USART2 - NOT EXPOSED
+### 9. USART2 - RESOLVED (V3R7)
 
-**Observation:** Per [STM32H743 Datasheet Table 9](https://www.st.com/resource/en/datasheet/stm32h743vi.pdf), USART2 is available on:
-- PD5 = USART2_TX (AF7)
-- PD6 = USART2_RX (AF7) - but used for SDMMC2_CK
+~~**Observation:** USART2 was not exposed.~~
 
-PD5 appears unused in the current design.
-
-**Opportunity:** Could expose USART2_TX on PD5 as a half-duplex debug/auxiliary UART if needed in future revisions.
+**Status:** Resolved in V3R7. USART2 is now exposed on PD5 (TX) and PA3 (RX) for ESC telemetry on the 4-in-1 ESC connector.
 
 ---
 
@@ -280,8 +235,8 @@ PD5 appears unused in the current design.
 **Current Timer Allocation:**
 | Timer | Channels | PWM Outputs | Notes |
 |-------|----------|-------------|-------|
-| TIM1 | CH1-CH4 | PWM 1-4 | BIDIR DShot ✓ |
-| TIM8 | CH1-CH4 | PWM 5-8 | BIDIR DShot ✓ |
+| TIM1 | CH1-CH4 | PWM 1-4 | BIDIR DShot |
+| TIM8 | CH1-CH4 | PWM 5-8 | BIDIR DShot |
 | TIM3 | CH2-CH4 | PWM 9-11 | DShot capable |
 | TIM4 | CH1-CH2 | PWM 12-13 | DShot capable |
 | TIM2 | CH1-CH3 | PWM 14-16 | PWM only |
@@ -314,7 +269,7 @@ Per [BMP390 Datasheet](https://www.bosch-sensortec.com/media/boschsensortec/down
 | V_Servo | [SIC472ED](https://www.vishay.com/docs/75786/sic47x.pdf) | 5V/6V | 8A | Always on |
 | V_VTX | [AP64350SP](https://www.diodes.com/datasheet/download/AP64350.pdf) | 9V/12V | 3A | EN_VTX (GPIO 81) |
 | 5V_Telemetry | [AP64350SP](https://www.diodes.com/datasheet/download/AP64350.pdf) | 5V | 3A | Always on |
-| 3V3_MCU | [AP64100SP](https://www.diodes.com/datasheet/download/AP64100.pdf) | 3.3V | 1A | Always on |
+| 3V3_MCU | [AP64100SP](https://www.diodes.com/assets/Datasheets/AP64100.pdf) | 3.3V | 1A | Always on |
 | 5V_Additional | [AP64200SP](https://www.diodes.com/assets/Datasheets/AP64200.pdf) | 5V | 2A | EN_5V-2A (GPIO 82) |
 
 ### Power Sequencing Consideration
@@ -333,44 +288,40 @@ For H7 MCUs:
 
 ---
 
-## Firmware Considerations
+## ICD Revision History (Firmware-Relevant Changes)
 
-Based on the hardware analysis, the following firmware configurations are recommended:
-
-### hwdef.dat Updates Needed
-
-1. **Add SD card detect** (if GPIO is connected):
-```
-# Example if using PC13:
-PC13 SDCARD_DETECT INPUT
-define HAL_SDCARD_DETECT_PIN 13
-```
-
-2. **Battery 2 monitoring** (if using CAN-based monitoring):
-```
-define HAL_BATTMON_SMBUS_ENABLE 0
-# Configure DroneCAN battery monitor instead
-```
+| Revision | Changes affecting hwdef |
+|----------|------------------------|
+| V3R3 | SD card detect moved to PD4 |
+| V3R4 | Barometer moved from I2C1 to I2C4; GPS/compass moved from I2C2 to I2C1; PDB I2C moved to I2C2 |
+| V3R5 | Blue LED moved from PE10 to PE15; Green LED moved from PE15 to PE12; Amber LED added on PD3 |
+| V3R6 | PDB I2C pins confirmed on PB10/PB11 (I2C2) |
+| V3R7 | IMU1_CS moved from PE3 to PA4; IMU2_CS moved from PE4 to PE3; CAN1_STB moved from PD3 to PA15; SPST relay moved from PD4 to PA8; USART2 added (PD5/PA3); UART4 added (PC10/PC11); PC4 reassigned to VDD_5V_SENS; PC5 reassigned to ESC current |
 
 ---
 
 ## Summary of Recommendations by Priority
 
 ### Must Fix (Before Production)
-1. ❌ **VCAP capacitors:** Change from 100nF to 2.2µF - [DS12110 Table 124](https://www.st.com/resource/en/datasheet/stm32h743vi.pdf)
+1. **VCAP capacitors:** Change from 100nF to 2.2uF - [DS12110 Table 124](https://www.st.com/resource/en/datasheet/stm32h743vi.pdf)
 
 ### Should Fix (High Impact)
-2. ⚠️ **Crystal load capacitors:** Verify and adjust values - [AN2867](https://www.st.com/resource/en/application_note/an2867-guidelines-for-oscillator-design-on-stm8afals-and-stm32-mcusmpus-stmicroelectronics.pdf)
-3. ⚠️ **IMU bulk decoupling:** Add 10µF capacitors - [ICM-45686 DS Section 10](https://invensense.tdk.com/wp-content/uploads/documentation/DS-000577_ICM-45686.pdf)
-4. ⚠️ **Battery 2 ADC:** Reassign pins or use CAN monitoring - [DS12110 Table 10](https://www.st.com/resource/en/datasheet/stm32h743vi.pdf)
+2. **Crystal load capacitors:** Verify and adjust values - [AN2867](https://www.st.com/resource/en/application_note/an2867-guidelines-for-oscillator-design-on-stm8afals-and-stm32-mcusmpus-stmicroelectronics.pdf)
+3. **IMU bulk decoupling:** Add 10uF capacitors - [ICM-45686 DS Section 10](https://invensense.tdk.com/wp-content/uploads/documentation/DS-000577_ICM-45686.pdf)
+4. **Battery 2 ADC:** Use DroneCAN battery monitor on CAN2 - [DS12110 Table 10](https://www.st.com/resource/en/datasheet/stm32h743vi.pdf)
 
 ### Consider (Improvements)
-5. 💡 **SD card detect:** Add GPIO connection
-6. 💡 **CAN termination:** Add GPIO-controlled or solder jumpers - [TJA1462 DS Section 8.1](https://www.nxp.com/docs/en/data-sheet/TJA1462.pdf)
-7. 💡 **Voltage monitoring:** Add VDD_5V_SENS or use larger MCU package for HAL_WITH_MCU_MONITORING
-8. 💡 **Power-good monitoring:** Route to GPIO - [SIC472ED DS](https://www.vishay.com/docs/75786/sic47x.pdf)
+5. **CAN termination:** Add GPIO-controlled or solder jumpers - [TJA1462 DS Section 8.1](https://www.nxp.com/docs/en/data-sheet/TJA1462.pdf)
+6. **3.3V rail monitoring:** Add voltage divider if spare ADC pin available
+7. **Power-good monitoring:** Route to GPIO - [SIC472ED DS](https://www.vishay.com/docs/75786/sic47x.pdf)
+
+### Resolved in V3R3-V3R7
+- SD card detect (V3R3): PD4 now connected
+- USART2 exposure (V3R7): PA3/PD5 now available for ESC telemetry
+- 5V rail monitoring (V3R7): PC4 configured as VDD_5V_SENS
 
 ---
 
 *Review Date: Based on schematics SCH-ABSI-Flight_Control-System.SchDoc and SCH-ABSI-Power_Distribution_2ESC-System.SchDoc*
+*ICD Reference: ABSI-Flight_Controller-ICD-V3R7.xlsx*
 *Reviewer: ArduPilot hwdef analysis*

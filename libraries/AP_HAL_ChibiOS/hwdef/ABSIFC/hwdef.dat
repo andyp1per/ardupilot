@@ -55,26 +55,27 @@ PE2 SPI4_SCK SPI4
 PE5 SPI4_MISO SPI4
 PE6 SPI4_MOSI SPI4
 
-# IMU Chip Selects
-PE3 IMU1_CS CS
-PE4 IMU2_CS CS
+# IMU Chip Selects (V3R7: IMU1 moved to PA4, IMU2 moved to PE3)
+PA4 IMU1_CS CS
+PE3 IMU2_CS CS
 
 # ----------------- I2C Bus -------------------
 
 # I2C order - internal sensors first
-I2C_ORDER I2C1 I2C2 I2C4
+# V3R4: baro moved to I2C4, GPS/compass moved to I2C1, PDB moved to I2C2
+I2C_ORDER I2C4 I2C1 I2C2
 
-# I2C1 - Internal sensors (BMP390 barometer)
+# I2C4 - Internal sensors (BMP390 barometer)
+PB8 I2C4_SCL I2C4
+PB9 I2C4_SDA I2C4
+
+# I2C1 - GPS/Compass and external I2C connector
 PB6 I2C1_SCL I2C1
 PB7 I2C1_SDA I2C1
 
-# I2C2 - GPS/External compass
+# I2C2 - PDB interface
 PB10 I2C2_SCL I2C2
 PB11 I2C2_SDA I2C2
-
-# I2C4 - PDB interface
-PB8 I2C4_SCL I2C4
-PB9 I2C4_SDA I2C4
 
 # ----------------- CAN Bus -------------------
 
@@ -86,23 +87,31 @@ PD1 CAN1_TX CAN1
 PB12 CAN2_RX CAN2
 PB13 CAN2_TX CAN2
 
-# CAN silent pin (directly to transceiver STB pin)
-PD3 GPIO_CAN1_SILENT OUTPUT PUSHPULL SPEED_LOW LOW GPIO(70)
+# CAN1 standby pin (active high, directly to transceiver STB pin)
+PA15 GPIO_CAN1_SILENT OUTPUT PUSHPULL SPEED_LOW LOW GPIO(70)
 
 # ----------------- UARTs ---------------------
 
 # UART order: natural ordering (SERIALn maps to UARTn where possible)
-SERIAL_ORDER OTG1 USART1 EMPTY USART3 EMPTY UART5 EMPTY UART7 UART8
+SERIAL_ORDER OTG1 USART1 USART2 USART3 UART4 UART5 EMPTY UART7 UART8
 
 # USART1 - RC Input (SERIAL1)
 PA9 USART1_TX USART1
 PA10 USART1_RX USART1
 
-# USART3 - Telemetry (SERIAL3)
+# USART2 - ESC Telemetry (SERIAL2)
+PD5 USART2_TX USART2
+PA3 USART2_RX USART2
+
+# USART3 - Spare UART pads (SERIAL3)
 PD8 USART3_TX USART3
 PD9 USART3_RX USART3
 
-# UART5 - Spare (SERIAL5)
+# UART4 - Spare UART pads (SERIAL4)
+PC10 UART4_TX UART4
+PC11 UART4_RX UART4
+
+# UART5 - Spare UART pads (SERIAL5)
 PC12 UART5_TX UART5 NODMA
 PD2 UART5_RX UART5 NODMA
 
@@ -118,7 +127,9 @@ PD15 UART8_RTS UART8
 
 # default protocols
 define DEFAULT_SERIAL1_PROTOCOL SerialProtocol_RCIN
+define DEFAULT_SERIAL2_PROTOCOL SerialProtocol_None
 define DEFAULT_SERIAL3_PROTOCOL SerialProtocol_MAVLink2
+define DEFAULT_SERIAL4_PROTOCOL SerialProtocol_None
 define DEFAULT_SERIAL5_PROTOCOL SerialProtocol_None
 define DEFAULT_SERIAL7_PROTOCOL SerialProtocol_GPS
 define DEFAULT_SERIAL8_PROTOCOL SerialProtocol_MAVLink2
@@ -132,6 +143,9 @@ PB4  SDMMC2_D3 SDMMC2
 PD6  SDMMC2_CK SDMMC2
 PD7  SDMMC2_CMD SDMMC2
 
+# SD card detect (active low)
+PD4 SDCARD_DETECT INPUT
+
 define FATFS_HAL_DEVICE SDCD2
 
 # ----------------- ADC -----------------------
@@ -140,14 +154,18 @@ define FATFS_HAL_DEVICE SDCD2
 PC0 BATT_VOLTAGE_SENS ADC1 SCALE(1)
 PC1 BATT_CURRENT_SENS ADC1 SCALE(1)
 
+# Battery 2 monitoring (on PDB connector)
+# NOTE: PC2/PC3 are ADC3-only inputs (ADC3_INP0/INP1) which are not
+# available on the 100-pin LQFP package (STM32H743VIT6). Use DroneCAN
+# battery monitor on CAN2 instead for second battery monitoring.
+# PC2 BATT2_VOLTAGE_SENS ADC3 SCALE(1)
+# PC3 BATT2_CURRENT_SENS ADC3 SCALE(1)
+
+# V-MCU monitoring (5V rail with 2:1 voltage divider)
+PC4 VDD_5V_SENS ADC1 SCALE(2)
+
 # ESC current (from 4-in-1 ESC connector)
-PA4 ESC_CURRENT_SENS ADC1 SCALE(1)
-
-# RSSI / spare ADC
-PC5 RSSI_ADC ADC1
-
-# Airspeed / spare ADC
-PC4 PRESSURE_SENS ADC1 SCALE(2)
+PC5 ESC_CURRENT_SENS ADC1 SCALE(1)
 
 # Battery monitoring defaults
 # Voltage divider: 105k / 10k = 11.5:1 ratio (from schematic R1/R2)
@@ -157,12 +175,6 @@ define HAL_BATT_VOLT_PIN 10
 define HAL_BATT_CURR_PIN 11
 define HAL_BATT_VOLT_SCALE 11.5
 define HAL_BATT_CURR_SCALE 40.0
-
-# RSSI analog input
-define BOARD_RSSI_ANA_PIN 8
-
-# Airspeed analog input
-define HAL_DEFAULT_AIRSPEED_PIN 4
 
 # ----------------- PWM & GPIO ----------------
 
@@ -199,7 +211,7 @@ PA2 TIM2_CH3 TIM2 PWM(16) GPIO(65) NODMA
 # GPIO control outputs
 PD10 PINIO1 OUTPUT GPIO(81) LOW   # VTX enable
 PD11 PINIO2 OUTPUT GPIO(82) LOW   # 5V-2A enable
-PD4  PINIO3 OUTPUT GPIO(83) LOW   # SPST relay enable
+PA8  PINIO3 OUTPUT GPIO(83) LOW   # SPST relay enable
 
 define HAL_GPIO_PIN_VTX_PWR 81
 define HAL_GPIO_PIN_5V_EN 82
@@ -212,13 +224,16 @@ define RELAY3_PIN_DEFAULT 83
 
 # ----------------- LEDs ----------------------
 
-define AP_NOTIFY_GPIO_LED_2_ENABLED 1
+# V3R5: blue and green LED GPIOs swapped for improved routing
+define AP_NOTIFY_GPIO_LED_3_ENABLED 1
 
-PE10 LED_BLUE OUTPUT LOW GPIO(90)
-PE15 LED_GREEN OUTPUT LOW GPIO(91)
+PE15 LED_BLUE OUTPUT LOW GPIO(90)
+PE12 LED_GREEN OUTPUT LOW GPIO(91)
+PD3  LED_AMBER OUTPUT LOW GPIO(92)
 
 define HAL_GPIO_A_LED_PIN 90
 define HAL_GPIO_B_LED_PIN 91
+define HAL_GPIO_C_LED_PIN 92
 
 # LED strip support
 define HAL_USE_WS2812_LED 1
@@ -228,8 +243,10 @@ define DEFAULT_NTF_LED_TYPES 455
 
 # ----------------- IMU Interrupts ------------
 # Optional data ready interrupts - not required for operation
-# PE12 IMU1_DRDY INPUT
-# PC13 IMU2_DRDY INPUT
+# PB2  IMU1_INT1 INPUT
+# PE10 IMU1_INT2 INPUT
+# PE4  IMU2_INT1 INPUT
+# PC13 IMU2_INT2 INPUT
 
 # ----------------- SPI Devices ---------------
 
@@ -247,7 +264,7 @@ define HAL_DEFAULT_INS_FAST_SAMPLE 7
 
 # ----------------- Barometer -----------------
 
-# BMP390 on I2C1 at address 0x76
+# BMP390 on I2C4 (bus 0) at address 0x76
 BARO BMP388 I2C:0:0x76
 
 # ----------------- Compass -------------------
@@ -255,9 +272,9 @@ BARO BMP388 I2C:0:0x76
 # No internal compass - probe external I2C compasses
 define ALLOW_ARM_NO_COMPASS
 define HAL_COMPASS_AUTO_ROT_DEFAULT 2
-define HAL_I2C_INTERNAL_MASK 1  # bus 0 (I2C1) is internal
+define HAL_I2C_INTERNAL_MASK 1  # bus 0 (I2C4) is internal
 
-# probe external compass on I2C2 (GPS port)
+# probe external compass on I2C1 (GPS port, bus 1)
 define AP_COMPASS_PROBING_ENABLED 1
 
 # ----------------- DMA Configuration ---------
