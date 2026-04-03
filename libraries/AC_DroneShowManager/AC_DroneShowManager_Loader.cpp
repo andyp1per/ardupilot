@@ -244,6 +244,11 @@ bool AC_DroneShowManager::_load_show_file_from_storage()
     {
         sb_screenplay_clear(&_screenplay);
     }
+    
+    // Now that the screenplay is updated, forget the previous sequence number of
+    // time axis configuration packets so we will process it again (with the new
+    // screenplay) when the GCS sends one
+    _last_time_axis_config_seq_no = 0xFFFF;    // 0xFFFF is never a valid sequence number
 
 exit:
     // if we still have the show data here and its ownership was not moved to the
