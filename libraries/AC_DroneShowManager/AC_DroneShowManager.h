@@ -843,7 +843,25 @@ private:
     // Creates the directory in which the drone show specific files are stored
     // on the filesystem
     bool _create_show_directory();
-
+    
+    // Ensures that the time axis of the given scene is set up in a way that the
+    // relevant part of the trajectory will be played in full.
+    // 
+    // The relevant part is defined as follows. If the trajectory is the main show
+    // trajectory, its relevant part is all the way up to the point where it crosses
+    // the takeoff altitude for the last time from above. Otherwise, it is the full
+    // duration of the trajectory. This is to ensure that we trigger the landing at
+    // the end of the normal show trajectory at the takeoff altitude so ArduPilot can
+    // take over with its own landing algorithm (which has landing detection enabled).
+    //
+    // If the current time axis configuration has a total duration that is shorter than
+    // the duration of the relevant part of the trajectory, the time axis will be
+    // extended with a new segment with the given initial and final rates and the
+    // necessary duration.
+    bool _ensure_scene_covers_relevant_part_of_trajectory(
+        sb_screenplay_scene_t* scene, float initial_rate, float final_rate
+    ) WARN_IF_UNUSED;
+    
     // Fills the given buffer with basic drone show telemetry data and returns
     // a pointer to after the last byte written into the buffer.
     //

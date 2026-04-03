@@ -1,7 +1,6 @@
-#include <GCS_MAVLink/GCS.h>
-
 #include <sys/types.h>
 
+#include <AC_Fence/AC_Fence.h>
 #include <AP_Filesystem/AP_Filesystem.h>
 #include <AP_GPS/AP_GPS.h>
 #include <AP_HAL/AP_HAL.h>
@@ -11,9 +10,9 @@
 #include <AP_Notify/AP_Notify.h>
 #include <AP_Notify/DroneShowNotificationBackend.h>
 #include <AP_Param/AP_Param.h>
+#include <GCS_MAVLink/GCS.h>
 
 #include "AC_DroneShowManager.h"
-#include <AC_Fence/AC_Fence.h>
 
 #include <skybrush/skybrush.h>
 
@@ -561,7 +560,50 @@ void AC_DroneShowManager::_clear_start_time_if_set_by_switch()
     if (_start_time_requested_by == StartTimeSource::RC_SWITCH) {
         clear_scheduled_start_time(/* force = */ true);
     }
- }
+}
+
+bool AC_DroneShowManager::_ensure_scene_covers_relevant_part_of_trajectory(
+    sb_screenplay_scene_t* scene, float initial_rate, float final_rate
+)
+{
+    float duration_sec;
+    sb_time_axis_t* time_axis;
+    sb_time_segment_t segment;
+
+    time_axis = scene ? sb_screenplay_scene_get_time_axis(scene) : nullptr;
+    if (!time_axis) {
+        return false;
+    }
+
+    if (sb_screenplay_scene_get_uncovered_trajectory_duration_sec(scene, &duration_sec) != SB_SUCCESS) {
+        return false;
+    }
+    
+    switch (sb_screenplay_scene_get_tag(scene)) {
+        case SceneTag_MainShow:
+            if (
+                isfinite(_trajectory_stats.duration_sec) &&
+                isfinite(_trajectory_stats.landing_time_sec) &&
+                _trajectory_stats.duration_sec >= 0 &&
+                _trajectory_stats.landing_time_sec >= 0 &&
+                _trajectory_stats.landing_time_sec <= _trajectory_stats.duration_sec
+            ) {
+                duration_sec -= _trajectory_stats.duration_sec - _trajectory_stats.landing_time_sec;
+            }
+            break;
+
+        default:
+            break;
+    }
+    
+    if (duration_sec <= 0) {
+        return true;
+    }
+    
+    // We need to add a new segment to the time axis to cover the relevant part of the trajectory
+    segment = sb_time_segment_make_warped(duration_sec, initial_rate, final_rate);
+    return sb_time_axis_append_segment(time_axis, segment) == SB_SUCCESS;
+}
 
 bool AC_DroneShowManager::_is_at_expected_position() const
 {

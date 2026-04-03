@@ -1,6 +1,4 @@
 #include <GCS_MAVLink/GCS.h>
-#include <cstdint>
-#include <limits>
 #include <skybrush/skybrush.h>
 
 #include "AC_DroneShowManager.h"
@@ -8,8 +6,6 @@
 #include "DroneShow_CustomPackets.h"
 #include "DroneShow_Enums.h"
 #include "DroneShowPyroDevice.h"
-#include "skybrush/screenplay.h"
-#include "skybrush/time_axis.h"
 
 MAV_RESULT AC_DroneShowManager::handle_command_int_packet(const mavlink_command_int_t &packet)
 {
@@ -547,27 +543,22 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
             ptr += sizeof(CustomPackets::time_axis_config_scene_entry_t);
     
             if (entry->duration_msec == 0) {
-                float duration_sec;
-
-                if (sb_screenplay_scene_get_uncovered_trajectory_duration_sec(scene, &duration_sec) != SB_SUCCESS) {
+                if (!_ensure_scene_covers_relevant_part_of_trajectory(
+                    scene, entry->initial_rate_scaled / 65535.0f,
+                    entry->final_rate_scaled / 65535.0f
+                )) {
                     goto exit;
                 }
-
-                segment = sb_time_segment_make_warped(
-                    duration_sec,
-                    entry->initial_rate_scaled / 65535.0f,
-                    entry->final_rate_scaled / 65535.0f
-                );
             } else {
                 segment = sb_time_segment_make(
                     entry->duration_msec,
                     entry->initial_rate_scaled / 65535.0f,
                     entry->final_rate_scaled / 65535.0f
                 );
-            }
-
-            if (sb_time_axis_append_segment(time_axis, segment) != SB_SUCCESS) {
-                goto exit;
+    
+                if (sb_time_axis_append_segment(time_axis, segment) != SB_SUCCESS) {
+                    goto exit;
+                }
             }
         }
         
