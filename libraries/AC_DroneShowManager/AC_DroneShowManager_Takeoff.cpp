@@ -102,7 +102,7 @@ bool AC_DroneShowManager::notify_takeoff_attempt()
         
         // Get a handle to the current trajectory from the show controller so we can
         // modify its end point
-        trajectory = _get_trajectory_at_seconds(get_elapsed_time_since_start_sec());
+        trajectory = sb_screenplay_scene_get_trajectory(&_main_show_scene);
         if (trajectory != nullptr)
         {
             land_speed_mm_s = get_landing_speed_m_sec() * 1000.0f;   /* [mm/s] */

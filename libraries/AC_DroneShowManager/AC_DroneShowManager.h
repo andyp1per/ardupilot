@@ -686,6 +686,9 @@ private:
     // the show. This is needed to ensure that we always have references to the
     // original data, even if the screenplay is modified in a way that it does not
     // refer to the loaded show any more.
+    // 
+    // Also ensure that we can get a handle to the trajectory of the show any time
+    // to modify its ending at takeoff even if the screenplay does not contain it.
     sb_screenplay_scene_t _main_show_scene;
 
     // Controller that manages the trajectory player, the light program player,
@@ -885,14 +888,6 @@ private:
     // This is unlikely and probably indicates bigger problems, but we need to handle
     // it anyway.
     const sb_control_output_t* _get_raw_show_control_output_at_seconds(float time);
-    
-    // Returns a borrowed reference to the trajectory being flown at the given
-    // timestamp, or \c nullptr if the timestamp is out of range or there is no
-    // associated trajectory at the given time.
-    // 
-    // The reference is borrowed; you need to increase its reference count with
-    // \c SB_INCREF if you want to hold on to it.
-    sb_trajectory_t* _get_trajectory_at_seconds(float time);
     
     // Handles a generic MAVLink DATA* message from the ground station.
     bool _handle_custom_data_message(mavlink_channel_t chan, uint8_t type, void* data, uint8_t length);
