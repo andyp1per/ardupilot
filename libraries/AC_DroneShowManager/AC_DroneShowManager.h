@@ -796,6 +796,9 @@ private:
 
     // Last guided mode command that was sent
     GuidedModeCommand _last_setpoint;
+    
+    // Sequence number of the last time axis configuration packet that was processed
+    uint16_t _last_time_axis_config_seq_no;
 
     // Timestamp that defines whether the RC start switch is blocked (and if so, until when)
     uint32_t _rc_switches_blocked_until;

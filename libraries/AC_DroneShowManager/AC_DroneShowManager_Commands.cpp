@@ -322,7 +322,6 @@ bool AC_DroneShowManager::_handle_data96_message(mavlink_channel_t chan, const m
 
 bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uint8_t length)
 {
-    static uint16_t previous_seq_no = 0xFFFF;   // 0xFFFF is never a valid sequence number
     CustomPackets::time_axis_config_header_t* header;
     CustomPackets::time_axis_config_scene_header_t* scene_header;
     CustomPackets::time_axis_config_scene_entry_t* entry;
@@ -352,12 +351,15 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
         return false;
     }
     
-    if (header->seq_no == previous_seq_no) {
+    if (header->seq_no == _last_time_axis_config_seq_no) {
         // Duplicate packet
         return true;
     }
     
-    if (previous_seq_no <= 0xFF && (header->seq_no - static_cast<uint8_t>(previous_seq_no) >= 0xF0)) {
+    if (
+        _last_time_axis_config_seq_no <= 0xFF &&
+        (header->seq_no - static_cast<uint8_t>(_last_time_axis_config_seq_no) >= 0xF0)
+    ) {
         // Probably the packets are being sent on two or more redundant channels and
         // we are receiving them out-of-order
         return true;
@@ -388,7 +390,7 @@ bool AC_DroneShowManager::_handle_time_axis_configuration_packet(void* data, uin
     }
     
     // Remember the sequence number
-    previous_seq_no = header->seq_no;
+    _last_time_axis_config_seq_no = header->seq_no;
     
     // We need to be extra careful here; if an error happens while we are setting up the
     // new scenes, we want to leave the existing screenplay intact. Therefore, we first
