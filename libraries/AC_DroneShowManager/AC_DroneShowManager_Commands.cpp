@@ -592,7 +592,7 @@ exit:
         _invalidate_projected_wall_clock_time_at_takeoff();
 
         // Add log entries containing the current screenplay
-        write_screenplay_log_messages(header->seq_no, NULL);
+        write_screenplay_log_messages();
     } else {
         // Clean up the new screenplay that we tried to prepare
         sb_screenplay_destroy(&new_screenplay);

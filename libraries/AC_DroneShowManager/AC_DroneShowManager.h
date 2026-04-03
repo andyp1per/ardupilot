@@ -519,7 +519,7 @@ public:
 
     // Writes a sequence of log messages containing a representation of the current time
     // axis
-    void write_screenplay_log_messages(uint8_t seq_no, sb_screenplay_t* screenplay = NULL);
+    void write_screenplay_log_messages();
 
     // Writes a message holding the status of the drone show subsystem into the log
     void write_show_status_log_message() const;

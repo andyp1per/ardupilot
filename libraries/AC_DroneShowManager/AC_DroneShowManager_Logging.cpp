@@ -105,7 +105,7 @@ void AC_DroneShowManager::write_crth_trigger_log_message(float rth_start_time_se
 }
 
 // Write a sequence of log messages representing the state of the screenplay
-void AC_DroneShowManager::write_screenplay_log_messages(uint8_t seq_no, sb_screenplay_t* screenplay)
+void AC_DroneShowManager::write_screenplay_log_messages()
 {
     size_t i, j, num_scenes, num_segments;
     sb_screenplay_scene_t* scene;
@@ -115,14 +115,11 @@ void AC_DroneShowManager::write_screenplay_log_messages(uint8_t seq_no, sb_scree
     struct log_ScreenplayEntry pkt {
         LOG_PACKET_HEADER_INIT(LOG_SCREENPLAY_ENTRY_MSG),
         time_us         : AP_HAL::micros64(),
-        seq_no          : seq_no,
     };
     
-    if (screenplay == NULL) {
-        screenplay = &_screenplay;
-    }
+    pkt.seq_no = _last_time_axis_config_seq_no <= 0xFF ? static_cast<uint8_t>(_last_time_axis_config_seq_no) : 0xFF;
 
-    num_scenes = sb_screenplay_size(screenplay);
+    num_scenes = sb_screenplay_size(&_screenplay);
     for (i = 0; i < num_scenes; i++) {
         if (i > 255) {
             break;   // too many scenes
@@ -130,7 +127,7 @@ void AC_DroneShowManager::write_screenplay_log_messages(uint8_t seq_no, sb_scree
 
         pkt.scene = static_cast<uint8_t>(i);
         
-        scene = sb_screenplay_get_scene_ptr(screenplay, i);
+        scene = sb_screenplay_get_scene_ptr(&_screenplay, i);
         time_axis = scene ? sb_screenplay_scene_get_time_axis(scene) : nullptr;
         if (time_axis == nullptr) {
             break;

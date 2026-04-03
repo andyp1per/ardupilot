@@ -450,6 +450,11 @@ void AC_DroneShowManager::notify_drone_show_mode_entered_stage(DroneShowModeStag
     // Force-update preflight checks so we see the errors immediately if we
     // switched to the "waiting for start time" stage
     _update_preflight_check_result(/* force = */ true);
+    
+    // If we have just started the takeoff, log the current time axis configuration
+    // because the first one is typically not logged (since the motors are not armed
+    // when we receive it)
+    write_screenplay_log_messages();
 }
 
 void AC_DroneShowManager::notify_drone_show_mode_exited()
