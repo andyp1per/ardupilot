@@ -439,7 +439,9 @@ void AC_DroneShowManager::notify_drone_show_mode_entered_stage(DroneShowModeStag
     // If we have just started the takeoff, log the current time axis configuration
     // because the first one is typically not logged (since the motors are not armed
     // when we receive it)
-    write_screenplay_log_messages();
+    if (stage == DroneShow_Takeoff) {
+        write_screenplay_log_messages();
+    }
 }
 
 void AC_DroneShowManager::notify_drone_show_mode_exited()
