@@ -7,6 +7,35 @@
 #include <AP_Logger/AP_Logger.h>
 #include <AP_DAL/AP_DAL.h>
 
+/*
+ * RP2350 dual-core EKF covariance offload.
+ * side-channel async version ===================================================================== On RP2350 with RP_CORE1_START=TRUE, CovariancePrediction() is dispatched to Core1 via the zero-mutex side-channel mechanism rather than the blocking c1_run_sync_locked() FIFO path.
+ * Protocol (replacing the old blocking FIFO dispatch): 1.
+ * Before covariance: call c1_att_barrier() to drain any in-flight side-channel job from the previous cycle (typically the attitude inner-loop dispatch from update_flight_mode).
+ * Because update_flight_mode runs AFTER read_AHRS in the scheduler, the previous cycle's attitude job is dispatched roughly 250-300 us before read_AHRS runs, and attitude computation finishes in ~242 us.
+ * 2.
+ * Fire covariance to Core1 via c1_att_dispatch_async() (side-channel, no mutex, no FIFO done token).
+ * 3.
+ * the old blocking c1_run_sync_locked(): ~ 300 us per covariance call (overlap with runYawEstimatorPrediction) At ~59 covariance calls/s (47.6% of 124Hz loops) = ~143 us/cycle avg.
+ * Fallback: if c1_att_dispatch_async() returns false (side-channel occupied, e.g.
+ */
+#if defined(RP_CORE1_START) && RP_CORE1_START == TRUE
+#include <AP_HAL_ChibiOS/hwdef/common/stm32_util.h>
+
+/* Pointer to 'this' passed via file scope so the zero-arg static method wrapper
+ * can call the instance method.  Set with a DMB fence before every dispatch. */
+NavEKF3_core *_c1_cov_core;
+
+/*
+ * NavEKF3_core::c1_covariance_entry().
+ * A static member function has the same ABI as a free void(*)(void) function, so it can be passed directly to c1_att_dispatch_async() or c1_run_sync_locked().
+ */
+void NavEKF3_core::c1_covariance_entry(void)
+{
+    _c1_cov_core->CovariancePrediction(nullptr);
+}
+#endif  /* RP_CORE1_START */
+
 // constructor
 NavEKF3_core::NavEKF3_core(NavEKF3 *_frontend, AP_DAL &_dal) :
     dal(_dal),
@@ -457,7 +486,6 @@ void NavEKF3_core::InitialiseVariablesMag()
     needEarthBodyVarReset = false;
     magFusionSel = MagFuseSel::NOT_FUSING;
 }
-
 /*
 Initialise the states from accelerometer data. This assumes measured acceleration 
 is dominated by gravity. If this assumption is not true then the EKF will require
@@ -623,6 +651,8 @@ void NavEKF3_core::CovarianceInit()
 *                 UPDATE FUNCTIONS                      *
 ********************************************************/
 // Update Filter States - this should be called whenever new IMU data is available
+// __RAMFUNC2__: runs from SRAM on RP2350 to bypass 16KB XIP cache (65.7% CPU in read_AHRS)
+__RAMFUNC2__
 void NavEKF3_core::UpdateFilter(bool predict)
 {
     // don't run filter updates if states have not been initialised
@@ -648,12 +678,21 @@ void NavEKF3_core::UpdateFilter(bool predict)
         // Predict states using IMU data from the delayed time horizon
         UpdateStrapdownEquationsNED();
 
-        // Predict the covariance growth
+// Predict the covariance growth.
+// On RP2350: synchronous dispatch to Core1 via FIFO+mutex (c1_run_sync_locked).
+// the cov_barrier() wait after runYawEstimatorPrediction adds ~191-283 µs of chThdSleep spinning to the main loop critical path, which apparently offsets the ~300 µs saved from covariance overlap.
+// if yaw_est is moved to Core1 too, making the cov_barrier wait ~0 µs instead of ~191 µs).
+#if defined(RP_CORE1_START) && RP_CORE1_START == TRUE
+        _c1_cov_core = this;
+        __DMB();  /* ensure _c1_cov_core pointer is visible to Core1 before dispatch */
+        c1_run_sync_locked(NavEKF3_core::c1_covariance_entry);
+#else
         CovariancePrediction(nullptr);
+#endif
 
         // Run the IMU prediction step for the GSF yaw estimator algorithm
         // using IMU and optionally true airspeed data.
-        // Must be run before SelectMagFusion() to provide an up to date yaw estimate
+        // Must be run before SelectMagFusion() to provide an up to date yaw estimate.
         runYawEstimatorPrediction();
 
         // Update states using  magnetometer or external yaw sensor data
@@ -741,6 +780,7 @@ void NavEKF3_core::correctDeltaVelocity(Vector3F &delVel, ftype delVelDT, uint8_
  * the vehicle when each observation is fused. This attitude error is then used to correct
  * the quaternion.
 */
+__RAMFUNC2__
 void NavEKF3_core::UpdateStrapdownEquationsNED()
 {
     // update the quaternion states by rotating from the previous attitude through
@@ -817,6 +857,7 @@ void NavEKF3_core::UpdateStrapdownEquationsNED()
  * "Recursive Attitude Estimation in the Presence of Multi-rate and Multi-delay Vector Measurements"
  * A Khosravian, J Trumpf, R Mahony, T Hamel, Australian National University
 */
+__RAMFUNC2__
 void NavEKF3_core::calcOutputStates()
 {
     // apply corrections to the IMU data
@@ -1006,6 +1047,7 @@ void NavEKF3_core::calcOutputStates()
  * Argument rotVarVecPtr is pointer to a vector defining the earth frame uncertainty variance of the quaternion states
  * used to perform a reset of the quaternion state covariances only. Set to null for normal operation.
 */
+__RAMFUNC2__
 void NavEKF3_core::CovariancePrediction(Vector3F *rotVarVecPtr)
 {
     ftype daxVar;       // X axis delta angle noise variance rad^2
