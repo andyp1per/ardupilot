@@ -1,0 +1,25 @@
+# NWBLUE_PROH757 bootloader hwdef
+# Module-fixed pins live in ../CubeNode/hwdef-bl.inc
+
+include ../CubeNode/hwdef-bl.inc
+
+# board ID. See Tools/AP_Bootloader/board_types.txt
+APJ_BOARD_ID AP_HW_NWBLUE_PROH757
+
+# bootloader is installed at zero offset
+FLASH_RESERVE_START_KB 0
+
+# the H757 has 128k sectors; 2 sectors for BL
+FLASH_BOOTLOADER_LOAD_KB 256
+
+# FMU bootloader does not need CAN-based firmware update; drop CAN1 pins
+# and CAN1 peripheral inherited from the CubeNode module inc to avoid pulling
+# in AP_Bootloader can.cpp (which is hard-wired for AP_Periph canard build
+# flags and fails to compile with CANARD_MULTI_IFACE / CANARD_ENABLE_DEADLINE).
+undef PD0 PD1 CAN1
+
+# bootloader serial debug on TELEM1 (UART7)
+PE7 UART7_RX UART7
+PE8 UART7_TX UART7
+
+SERIAL_ORDER OTG1 UART7
