@@ -21,9 +21,9 @@
 #include "flash.h"
 #include "watchdog.h"
 #include "board.h"
-#include "board_rp2350.h"
 
 #if defined(RP2350)
+#include "board_rp2350.h"
 #undef STM32_HW
 #endif
 

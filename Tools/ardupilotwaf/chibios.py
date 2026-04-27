@@ -622,6 +622,7 @@ def configure(cfg):
     env.CH_ROOT = srcpath('modules/ChibiOS')
     env.CC_ROOT = srcpath('modules/CrashDebug/CrashCatcher')
     env.AP_HAL_ROOT = srcpath('libraries/AP_HAL_ChibiOS')
+    env.AP_HAL_PICO_ROOT = srcpath('libraries/AP_HAL_Pico')
     env.BUILDDIR = bldpath('modules/ChibiOS')
     env.BUILDROOT = bldpath('')
     env.SRCROOT = srcpath('')
@@ -637,6 +638,7 @@ def configure(cfg):
     env.CH_ROOT_REL = os.path.relpath(env.CH_ROOT, env.BUILDROOT)
     env.CC_ROOT_REL = os.path.relpath(env.CC_ROOT, env.BUILDROOT)
     env.AP_HAL_REL = os.path.relpath(env.AP_HAL_ROOT, env.BUILDROOT)
+    env.AP_HAL_PICO_REL = os.path.relpath(env.AP_HAL_PICO_ROOT, env.BUILDROOT)
     env.BUILDDIR_REL = os.path.relpath(env.BUILDDIR, env.BUILDROOT)
 
     mk_custom = srcpath('libraries/AP_HAL_ChibiOS/hwdef/%s/chibios_board.mk' % env.BOARD)
@@ -731,7 +733,7 @@ def build(bld):
     
     bld(
         # create the file modules/ChibiOS/include_dirs
-        rule="touch Makefile && BUILDDIR=${BUILDDIR_REL} BUILDROOT=${BUILDROOT} CRASHCATCHER=${CC_ROOT_REL} CHIBIOS=${CH_ROOT_REL} AP_HAL=${AP_HAL_REL} ${CHIBIOS_BUILD_FLAGS} ${CHIBIOS_BOARD_NAME} ${MAKE} pass -f '${BOARD_MK}'",
+        rule="touch Makefile && BUILDDIR=${BUILDDIR_REL} BUILDROOT=${BUILDROOT} CRASHCATCHER=${CC_ROOT_REL} CHIBIOS=${CH_ROOT_REL} AP_HAL=${AP_HAL_REL} AP_HAL_PICO=${AP_HAL_PICO_REL} ${CHIBIOS_BUILD_FLAGS} ${CHIBIOS_BOARD_NAME} ${MAKE} pass -f '${BOARD_MK}'",
         group='dynamic_sources',
         target=bld.bldnode.find_or_declare('modules/ChibiOS/include_dirs')
     )
@@ -758,7 +760,7 @@ def build(bld):
     if bld.env.ENABLE_CRASHDUMP:
         ch_task = bld(
             # build libch.a from ChibiOS sources and hwdef.h
-            rule="BUILDDIR='${BUILDDIR_REL}' BUILDROOT='${BUILDROOT}' CRASHCATCHER='${CC_ROOT_REL}' CHIBIOS='${CH_ROOT_REL}' AP_HAL=${AP_HAL_REL} ${CHIBIOS_BUILD_FLAGS} ${CHIBIOS_BOARD_NAME} ${HAL_MAX_STACK_FRAME_SIZE} '${MAKE}' -j%u lib -f '${BOARD_MK}'" % bld.options.jobs,
+            rule="BUILDDIR='${BUILDDIR_REL}' BUILDROOT='${BUILDROOT}' CRASHCATCHER='${CC_ROOT_REL}' CHIBIOS='${CH_ROOT_REL}' AP_HAL=${AP_HAL_REL} AP_HAL_PICO=${AP_HAL_PICO_REL} ${CHIBIOS_BUILD_FLAGS} ${CHIBIOS_BOARD_NAME} ${HAL_MAX_STACK_FRAME_SIZE} '${MAKE}' -j%u lib -f '${BOARD_MK}'" % bld.options.jobs,
             group='dynamic_sources',
             source=common_src,
             target=[bld.bldnode.find_or_declare('modules/ChibiOS/libch.a'), bld.bldnode.find_or_declare('modules/ChibiOS/libcc.a')]
@@ -766,7 +768,7 @@ def build(bld):
     else:
         ch_task = bld(
             # build libch.a from ChibiOS sources and hwdef.h
-            rule="BUILDDIR='${BUILDDIR_REL}' BUILDROOT='${BUILDROOT}' CHIBIOS='${CH_ROOT_REL}' AP_HAL=${AP_HAL_REL} ${CHIBIOS_BUILD_FLAGS} ${CHIBIOS_BOARD_NAME} ${HAL_MAX_STACK_FRAME_SIZE} '${MAKE}' -j%u lib -f '${BOARD_MK}'" % bld.options.jobs,
+            rule="BUILDDIR='${BUILDDIR_REL}' BUILDROOT='${BUILDROOT}' CHIBIOS='${CH_ROOT_REL}' AP_HAL=${AP_HAL_REL} AP_HAL_PICO=${AP_HAL_PICO_REL} ${CHIBIOS_BUILD_FLAGS} ${CHIBIOS_BOARD_NAME} ${HAL_MAX_STACK_FRAME_SIZE} '${MAKE}' -j%u lib -f '${BOARD_MK}'" % bld.options.jobs,
             group='dynamic_sources',
             source=common_src,
             target=bld.bldnode.find_or_declare('modules/ChibiOS/libch.a')

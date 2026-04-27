@@ -1475,7 +1475,12 @@ INCLUDE common.ld
                 linker = 'common_mixf.ld'
             else:
                 linker = 'common_extf.ld'
-        shutil.copy(os.path.join(dirpath, "../common", linker), outpath)
+        src = os.path.join(dirpath, "../common", linker)
+        if not os.path.exists(src):
+            # RP2350 linker scripts live in AP_HAL_Pico/hwdef/common/. Fallback
+            # is removed once PicoHWDef overrides this method.
+            src = os.path.join(dirpath, "../../../AP_HAL_Pico/hwdef/common", linker)
+        shutil.copy(src, outpath)
 
     def get_USB_IDs(self):
         '''return tuple of USB VID/PID'''

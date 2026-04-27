@@ -141,7 +141,6 @@ CSRC = $(sort $(ALLCSRC))
 
 CSRC += $(HWDEF)/common/stubs.c \
         $(HWDEF)/common/board.c \
-        $(HWDEF)/common/board_rp2350.c \
         $(HWDEF)/common/usbcfg.c \
         $(HWDEF)/common/usbcfg_dualcdc.c \
         $(HWDEF)/common/usbcfg_common.c \

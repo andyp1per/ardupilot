@@ -69,6 +69,7 @@ endif
 
 # ############################################################################# Architecture or project specific options
 HWDEF = $(AP_HAL)/hwdef
+PICO_HWDEF = $(AP_HAL_PICO)/hwdef
 # Stack size to be allocated to the Cortex-M process stack. This stack is
 # the stack used by the main() thread.
 ifeq ($(USE_PROCESS_STACKSIZE),)
@@ -150,7 +151,7 @@ CSRC = $(sort $(ALLCSRC))
 
 CSRC += $(HWDEF)/common/stubs.c \
         $(HWDEF)/common/board.c \
-        $(HWDEF)/common/board_rp2350.c \
+        $(PICO_HWDEF)/common/board_rp2350.c \
         $(HWDEF)/common/usbcfg.c \
         $(HWDEF)/common/usbcfg_dualcdc.c \
         $(HWDEF)/common/usbcfg_common.c \
@@ -203,7 +204,7 @@ ASMSRC = $(ALLASMSRC)
 ASMXSRC = $(ALLXASMSRC)
 
 INCDIR = $(CHIBIOS)/os/license \
-         $(ALLINC) $(HWDEF)/common
+         $(ALLINC) $(HWDEF)/common $(PICO_HWDEF)/common
 
 ifneq ($(CRASHCATCHER),)
 INCDIR += $(CRASHCATCHER)/include
