@@ -17,7 +17,7 @@
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
 
-using namespace ChibiOS;
+using namespace Pico;
 
 extern const AP_HAL::HAL &hal;
 

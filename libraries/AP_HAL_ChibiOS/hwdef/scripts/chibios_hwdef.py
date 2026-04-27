@@ -1789,7 +1789,7 @@ INCLUDE common.ld
                 sdev += 1
             elif dev.startswith('PIOUART'):
                 f.write(
-                    '#define HAL_SERIAL%s_DRIVER ChibiOS::PIORXDriver serial%sDriver(%u)\n'
+                    '#define HAL_SERIAL%s_DRIVER Pico::PIORXDriver serial%sDriver(%u)\n'
                     % (idx, idx, pio_idx))
                 pio_idx += 1
                 # Note: sdev intentionally NOT incremented — PIORXDriver has its own instance index

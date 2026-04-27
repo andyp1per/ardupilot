@@ -21,7 +21,7 @@
  */
 #pragma once
 
-#include "AP_HAL_ChibiOS.h"
+#include "AP_HAL_Pico.h"
 
 #if defined(HAL_HAVE_PIO_UARTS) && HAL_HAVE_PIO_UARTS > 0
 
@@ -127,7 +127,7 @@ static const uint16_t k_pio_uart_rx_sbus_pgm[PIO_UART_RX_SBUS_PROG_LEN] = {
 // --------------------------------------------------------------------------- PIORXDriver class.
 // inherits AP_HAL::UARTDriver ---------------------------------------------------------------------------
 
-namespace ChibiOS {
+namespace Pico {
 
 class PIORXDriver final : public AP_HAL::UARTDriver {
 public:
@@ -198,6 +198,6 @@ private:
     static void _calc_clkdiv(uint32_t baud, uint32_t &int_div, uint32_t &frac_div);
 };
 
-} // namespace ChibiOS
+} // namespace Pico
 
 #endif // HAL_HAVE_PIO_UARTS

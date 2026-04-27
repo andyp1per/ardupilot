@@ -40,7 +40,7 @@
 #include <hwdef.h>
 
 #if defined(HAL_HAVE_PIO_UARTS) && HAL_HAVE_PIO_UARTS
-#include "PIOUART.h"
+#include <AP_HAL_Pico/PIOUART.h>
 #endif
 
 // Driver-class macro indirections. Each HAL slot defaults to the ChibiOS::

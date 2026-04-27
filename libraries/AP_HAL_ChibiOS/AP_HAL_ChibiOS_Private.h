@@ -17,4 +17,3 @@
 #include "Flash.h"
 #include "DSP.h"
 #include "WSPIDevice.h"
-#include "PIOUART.h"
