@@ -19,7 +19,7 @@
  */
 #pragma once
 
-#include "AP_HAL_ChibiOS.h"
+#include "AP_HAL_Pico.h"
 
 #if defined(HAL_RCIN_IS_GPIO)
 
@@ -29,7 +29,7 @@
 #define SOFTSIG_MAX_SIGNAL_TRANSITIONS 128
 #endif
 
-class ChibiOS::SoftSigReaderRP2350 {
+class Pico::SoftSigReaderRP2350 {
 public:
     SoftSigReaderRP2350() {}
     CLASS_NO_COPY(SoftSigReaderRP2350);

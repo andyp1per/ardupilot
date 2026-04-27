@@ -30,7 +30,7 @@
 #endif
 
 #if defined(HAL_RCIN_IS_GPIO)
-#include "SoftSigReaderRP2350.h"
+#include <AP_HAL_Pico/SoftSigReaderRP2350.h>
 #endif
 
 #ifndef RC_INPUT_MAX_CHANNELS
@@ -80,6 +80,6 @@ private:
 #endif
 
 #if defined(HAL_RCIN_IS_GPIO)
-    ChibiOS::SoftSigReaderRP2350 sig_reader;
+    Pico::SoftSigReaderRP2350 sig_reader;
 #endif
 };

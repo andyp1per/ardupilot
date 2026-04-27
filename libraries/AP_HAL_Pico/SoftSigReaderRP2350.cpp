@@ -19,7 +19,7 @@
 
 #if defined(HAL_RCIN_IS_GPIO)
 
-using namespace ChibiOS;
+using namespace Pico;
 
 /*
   ISR-context callback invoked by ChibiOS PAL on every GPIO edge.
