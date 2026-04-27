@@ -200,6 +200,12 @@ define AP_FLASH_STORAGE_QUAD_PAGE 1
 
 define HAL_HAVE_SAFETY_SWITCH 0
 define HAL_WITH_MCU_MONITORING 1
+
+# AP_HAL_Pico driver substitutions: these macros are consumed in
+# HAL_ChibiOS_Class.cpp to swap in RP2350-specific subclasses for selected
+# HAL slots. Each macro expands to the C++ type name of the static driver
+# instance; the AP_HAL_Pico headers are pulled in under #if defined(RP2350).
+define HAL_UTIL_DRIVER Pico::Util
 define HAL_HAVE_IMU_HEATER 0
 define HAL_LOGGING_BACKEND_DEFAULT_ENABLED 0
 # Run FAST_TASKs every other tick (~200Hz) to free alternate ticks for GCS/logger/UART

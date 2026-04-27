@@ -111,6 +111,12 @@ public:
     // set armed state
     void set_soft_armed(const bool b) override;
 
+protected:
+    // Fill buf with the 12-byte unique device identifier. Default impl reads
+    // STM32's UDID region; subclasses (e.g. Pico::Util) override to source the
+    // ID from a different mechanism such as RP2350 OTP.
+    virtual void _read_unique_id(uint8_t buf[12]);
+
 private:
 #if HAL_USE_PWM == TRUE
     struct ToneAlarmPwmGroup {

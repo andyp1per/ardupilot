@@ -43,6 +43,10 @@
 #include <AP_HAL_Pico/PIOUART.h>
 #endif
 
+#if defined(RP2350)
+#include <AP_HAL_Pico/Util.h>
+#endif
+
 // Driver-class macro indirections. Each HAL slot defaults to the ChibiOS::
 // implementation; a board's hwdef may override e.g.
 //   #define HAL_GPIO_DRIVER Pico::GPIO
