@@ -790,6 +790,12 @@ def build(bld):
 # boardInit (defined T in ArduPilot's board.o) is used as the pull handle.
     if board_uses_rp2350_bootsel(bld.env.BOARD):
         bld.env.LINKFLAGS += ['-Wl,--undefined=boardInit']
+# AP_HAL_Pico's RP2350 fault handlers (HardFault_Handler, BusFault_Handler,
+# UsageFault_Handler, MemManage_Handler) are strong overrides of ChibiOS' weak
+# defaults, but live in a static archive that the linker won't pull in unless
+# something references it. Pull them in via fault_capture (which they tail-call)
+# since that symbol is unique to AP_HAL_Pico/system_pico.cpp.
+        bld.env.LINKFLAGS += ['-Wl,--undefined=fault_capture']
     # list of functions that will be wrapped to move them out of libc into our
     # own code
     wraplist = ['sscanf', 'fprintf', 'snprintf', 'vsnprintf', 'vasprintf', 'asprintf', 'vprintf', 'scanf', 'printf']
