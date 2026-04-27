@@ -156,6 +156,17 @@ PB0  TIM3_CH3 TIM3 PWM(7) GPIO(56) BIDIR
 PB1  TIM3_CH4 TIM3 PWM(8) GPIO(57)
 PB10 TIM2_CH3 TIM2 PWM(9) GPIO(58)
 
+# === CAN ===
+# Enable CAN driver 1 by default so DroneCAN peripherals (GPS, compass,
+# ESCs, etc.) work out of the box without the user having to set
+# CAN_P1_DRIVER manually.
+define HAL_CAN_DRIVER_DEFAULT 1
+
+# === Notify LEDs ===
+# Enable on-board LEDs + standard external I2C/NeoPixel LED probing
+# (bits 0,1,2,6,7,8 = 455) plus DroneCAN RGB LEDs (bit 5 = 32).
+define DEFAULT_NTF_LED_TYPES 487
+
 # === Battery monitor defaults ===
 define HAL_BATT_VOLT_PIN  5
 define HAL_BATT_CURR_PIN  12
