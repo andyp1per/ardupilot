@@ -57,6 +57,12 @@ define DEFAULT_SERIAL6_PROTOCOL SerialProtocol_MSP_DisplayPort
 define DEFAULT_SERIAL7_PROTOCOL SerialProtocol_MAVLink2
 define DEFAULT_SERIAL8_PROTOCOL SerialProtocol_GPS
 
+# === OSD ===
+# No analog (MAX7456) OSD on this carrier - default to MSP DisplayPort,
+# which the firmware drives over SERIAL6 (USART6 on the VTX connector J9).
+define OSD_ENABLED 1
+define HAL_OSD_TYPE_DEFAULT 5
+
 # === I2C ===
 
 # I2C3 - on-board magnetometer (IIS2MDC)

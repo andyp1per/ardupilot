@@ -13,6 +13,7 @@ Metzler LLC and built around the
  - microSD card slot on SDMMC2
  - 6 UARTs plus USB
  - 9 PWM / DShot outputs (4 motor + 5 AUX)
+ - MSP DisplayPort OSD support for HD VTX (no analog / MAX7456 OSD chip on board)
  - CAN1 for DroneCAN peripherals
  - USB-C
  - RGB notify LED + amber status LED
@@ -149,6 +150,19 @@ protocols the UART4 TX pin is also brought out on J11 pin 3.
 
  - :ref:`SERIAL4_PROTOCOL<SERIAL4_PROTOCOL>` defaults to 23 (RC Input)
  - :ref:`SERIAL4_OPTIONS<SERIAL4_OPTIONS>` = 0 for CRSF/ELRS (default), 4 for SRXL2, 15 for FPort
+
+## OSD Support
+
+The NWBLUE_PROH757 has no analog (MAX7456) OSD chip. OSD is provided over MSP
+DisplayPort to an HD VTX (DJI O3, Walksnail, HDZero, etc.) on the J9 VTX
+connector. Defaults:
+
+ - :ref:`OSD_TYPE<OSD_TYPE>` = 5 (MSP DisplayPort)
+ - :ref:`SERIAL6_PROTOCOL<SERIAL6_PROTOCOL>` = 42 (MSP DisplayPort)
+
+If you are connecting an analog VTX instead, change `SERIAL6_PROTOCOL` to
+`SerialProtocol_SmartAudio` (37) or `SerialProtocol_Tramp` (44) and either
+disable the OSD (`OSD_TYPE = 0`) or use a separate analog OSD module.
 
 ## PWM Output
 
