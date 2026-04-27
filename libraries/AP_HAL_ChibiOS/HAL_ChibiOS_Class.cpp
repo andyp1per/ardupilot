@@ -43,6 +43,39 @@
 #include "PIOUART.h"
 #endif
 
+// Driver-class macro indirections. Each HAL slot defaults to the ChibiOS::
+// implementation; a board's hwdef may override e.g.
+//   #define HAL_GPIO_DRIVER Pico::GPIO
+// to substitute a subclass at HAL singleton construction time without
+// touching this file.
+#ifndef HAL_ANALOGIN_DRIVER
+#define HAL_ANALOGIN_DRIVER ChibiOS::AnalogIn
+#endif
+#ifndef HAL_GPIO_DRIVER
+#define HAL_GPIO_DRIVER ChibiOS::GPIO
+#endif
+#ifndef HAL_I2C_DEVICE_MANAGER_DRIVER
+#define HAL_I2C_DEVICE_MANAGER_DRIVER ChibiOS::I2CDeviceManager
+#endif
+#ifndef HAL_RCINPUT_DRIVER
+#define HAL_RCINPUT_DRIVER ChibiOS::RCInput
+#endif
+#ifndef HAL_RCOUTPUT_DRIVER
+#define HAL_RCOUTPUT_DRIVER ChibiOS::RCOutput
+#endif
+#ifndef HAL_SCHEDULER_DRIVER
+#define HAL_SCHEDULER_DRIVER ChibiOS::Scheduler
+#endif
+#ifndef HAL_SPI_DEVICE_MANAGER_DRIVER
+#define HAL_SPI_DEVICE_MANAGER_DRIVER ChibiOS::SPIDeviceManager
+#endif
+#ifndef HAL_STORAGE_DRIVER
+#define HAL_STORAGE_DRIVER ChibiOS::Storage
+#endif
+#ifndef HAL_UTIL_DRIVER
+#define HAL_UTIL_DRIVER ChibiOS::Util
+#endif
+
 #ifndef DEFAULT_SERIAL0_BAUD
 #define SERIAL0_BAUD 115200
 #else
@@ -78,19 +111,19 @@ static Empty::UARTDriver serial9Driver;
 #endif
 
 #if HAL_USE_I2C == TRUE && defined(HAL_I2C_DEVICE_LIST)
-static ChibiOS::I2CDeviceManager i2cDeviceManager;
+static HAL_I2C_DEVICE_MANAGER_DRIVER i2cDeviceManager;
 #else
 static Empty::I2CDeviceManager i2cDeviceManager;
 #endif
 
 #if HAL_USE_SPI == TRUE
-static ChibiOS::SPIDeviceManager spiDeviceManager;
+static HAL_SPI_DEVICE_MANAGER_DRIVER spiDeviceManager;
 #else
 static Empty::SPIDeviceManager spiDeviceManager;
 #endif
 
 #if HAL_USE_ADC == TRUE && !defined(HAL_DISABLE_ADC_DRIVER)
-static ChibiOS::AnalogIn analogIn;
+static HAL_ANALOGIN_DRIVER analogIn;
 #else
 static Empty::AnalogIn analogIn;
 #endif
@@ -98,19 +131,19 @@ static Empty::AnalogIn analogIn;
 #ifdef HAL_USE_EMPTY_STORAGE
 static Empty::Storage storageDriver;
 #else
-static ChibiOS::Storage storageDriver;
+static HAL_STORAGE_DRIVER storageDriver;
 #endif
-static ChibiOS::GPIO gpioDriver;
-static ChibiOS::RCInput rcinDriver;
+static HAL_GPIO_DRIVER gpioDriver;
+static HAL_RCINPUT_DRIVER rcinDriver;
 
 #if HAL_USE_PWM == TRUE
-static ChibiOS::RCOutput rcoutDriver;
+static HAL_RCOUTPUT_DRIVER rcoutDriver;
 #else
 static Empty::RCOutput rcoutDriver;
 #endif
 
-static ChibiOS::Scheduler schedulerInstance;
-static ChibiOS::Util utilInstance;
+static HAL_SCHEDULER_DRIVER schedulerInstance;
+static HAL_UTIL_DRIVER utilInstance;
 static Empty::OpticalFlow opticalFlowDriver;
 
 #if AP_SIM_ENABLED
