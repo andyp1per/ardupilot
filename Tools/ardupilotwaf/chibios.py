@@ -23,6 +23,7 @@ import hal_common
 
 # sys.path already set up at the top of boards.py
 import chibios_hwdef
+import pico_hwdef
 
 _dynamic_env_data = {}
 def _load_dynamic_env_data(bld):
@@ -712,7 +713,8 @@ def generate_hwdef_h(env):
     if env.HWDEF_EXTRA:
         hwdef.append(env.HWDEF_EXTRA)
 
-    hwdef_obj = chibios_hwdef.ChibiOSHWDef(
+    parser_cls = pico_hwdef.PicoHWDef if board_uses_rp2350_bootsel(env.BOARD) else chibios_hwdef.ChibiOSHWDef
+    hwdef_obj = parser_cls(
         outdir=hwdef_out,
         bootloader=bootloader_flag,
         signed_fw=bool(env.AP_SIGNED_FIRMWARE),
