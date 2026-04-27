@@ -160,8 +160,9 @@ The board has 9 PWM / DShot outputs grouped by timer:
  - PWM 9   in group 4 (TIM2) — AUX on PWM AUX connector
 
 Channels within the same group must use the same output rate. If any channel
-in a group uses DShot, all channels in that group must use DShot. The four
-motor outputs on TIM1 (PWM 1–4) support bi-directional DShot.
+in a group uses DShot, all channels in that group must use DShot. PWM 1–8
+(motors and the PWM AUX connector) support bi-directional DShot. PWM 9 is on
+TIM2 and runs DShot without bi-directional telemetry.
 
 ## Battery Monitoring
 
