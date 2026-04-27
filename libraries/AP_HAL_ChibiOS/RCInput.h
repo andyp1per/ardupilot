@@ -29,10 +29,6 @@
 #include "SoftSigReaderInt.h"
 #endif
 
-#if defined(HAL_RCIN_IS_GPIO)
-#include <AP_HAL_Pico/SoftSigReaderRP2350.h>
-#endif
-
 #ifndef RC_INPUT_MAX_CHANNELS
 #define RC_INPUT_MAX_CHANNELS 18
 #endif
@@ -56,7 +52,11 @@ public:
         return _rx_link_quality;
     }
 
-    void _timer_tick(void);
+    virtual void _timer_tick(void);
+
+protected:
+    bool _init;
+    bool pulse_input_enabled;
 
 private:
     uint16_t _rc_values[RC_INPUT_MAX_CHANNELS] = {0};
@@ -67,9 +67,6 @@ private:
     int16_t _rssi = -1;
     int16_t _rx_link_quality = -1;
     uint32_t _rcin_timestamp_last_signal;
-    bool _init;
-
-    bool pulse_input_enabled;
 
 #if defined(HAL_USE_ICU) && (HAL_USE_ICU == TRUE)
     ChibiOS::SoftSigReader sig_reader;
@@ -77,9 +74,5 @@ private:
 
 #if defined(HAL_USE_EICU) && (HAL_USE_EICU == TRUE)
     ChibiOS::SoftSigReaderInt sig_reader;
-#endif
-
-#if defined(HAL_RCIN_IS_GPIO)
-    Pico::SoftSigReaderRP2350 sig_reader;
 #endif
 };

@@ -44,6 +44,7 @@
 #endif
 
 #if defined(RP2350)
+#include <AP_HAL_Pico/RCInput.h>
 #include <AP_HAL_Pico/Util.h>
 #endif
 
