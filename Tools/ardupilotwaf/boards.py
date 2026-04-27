@@ -1144,6 +1144,11 @@ class chibios(Board):
             'AP_HAL_ChibiOS',
         ]
 
+        if self._is_rp2350():
+            env.AP_LIBRARIES += [
+                'AP_HAL_Pico',
+            ]
+
         # make board name available for USB IDs
         env.CHIBIOS_BOARD_NAME = 'HAL_BOARD_NAME="%s"' % self.name
         env.HAL_MAX_STACK_FRAME_SIZE = 'HAL_MAX_STACK_FRAME_SIZE=%d' % 1300 # set per Wframe-larger-than, ensure its same
@@ -1373,6 +1378,10 @@ class chibios(Board):
 
     def get_name(self):
         return self.name
+
+    def _is_rp2350(self):
+        name = self.name.lower()
+        return 'pico2' in name or name == 'laurel'
 
 class LinuxBoard(Board):
     '''an abstract base class for Linux boards to inherit from'''
