@@ -24,6 +24,11 @@ PE8 UART7_TX UART7
 
 SERIAL_ORDER OTG1 UART7
 
+# Bootloader status LED (PC0 - on-board amber LED, active low).
+# The BL flashes this during programming and SD-card flashing.
+PC0 LED_BOOTLOADER OUTPUT OPENDRAIN HIGH
+define HAL_LED_ON 0
+
 # === microSD flashing (SDMMC2) ===
 # Allow firmware updates to be loaded from a file on the microSD card.
 
