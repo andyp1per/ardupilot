@@ -162,7 +162,7 @@ CSRC += $(HWDEF)/common/stubs.c \
         $(HWDEF)/common/bouncebuffer.c \
         $(HWDEF)/common/watchdog.c \
         $(HWDEF)/common/sysperf.c \
-        $(HWDEF)/Pico2/c1_main.c
+        $(PICO_HWDEF)/Pico2/c1_main.c
 
 ifeq ($(USE_USB_MSD),yes)
 CSRC += $(CHIBIOS)/os/various/scsi_bindings/lib_scsi.c \
