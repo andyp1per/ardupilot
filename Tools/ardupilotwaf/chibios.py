@@ -641,7 +641,7 @@ def configure(cfg):
     env.AP_HAL_PICO_REL = os.path.relpath(env.AP_HAL_PICO_ROOT, env.BUILDROOT)
     env.BUILDDIR_REL = os.path.relpath(env.BUILDDIR, env.BUILDROOT)
 
-    mk_custom = srcpath('libraries/AP_HAL_ChibiOS/hwdef/%s/chibios_board.mk' % env.BOARD)
+    mk_custom = find_board_hwdef(env, 'chibios_board.mk')
     mk_common = srcpath('libraries/AP_HAL_ChibiOS/hwdef/common/chibios_board.mk')
     # see if there is a board specific make file
     if os.path.exists(mk_custom):
@@ -681,18 +681,26 @@ def configure(cfg):
         env.DEFINES += [ 'CANARD_MULTI_IFACE=1' ]
     setup_optimization(cfg.env)
 
+def find_board_hwdef(env, leaf):
+    '''Locate <leaf> for env.BOARD across the ChibiOS and Pico hwdef trees.'''
+    chibios_path = os.path.join(env.SRCROOT, 'libraries/AP_HAL_ChibiOS/hwdef/%s/%s' % (env.BOARD, leaf))
+    pico_path = os.path.join(env.SRCROOT, 'libraries/AP_HAL_Pico/hwdef/%s/%s' % (env.BOARD, leaf))
+    if os.path.exists(pico_path):
+        return pico_path
+    return chibios_path
+
 def generate_hwdef_h(env):
     '''run chibios_hwdef.py'''
     if env.BOOTLOADER:
         if len(env.HWDEF) == 0:
-            env.HWDEF = os.path.join(env.SRCROOT, 'libraries/AP_HAL_ChibiOS/hwdef/%s/hwdef-bl.dat' % env.BOARD)
+            env.HWDEF = find_board_hwdef(env, 'hwdef-bl.dat')
         else:
             # update to using hwdef-bl.dat
             env.HWDEF = env.HWDEF.replace('hwdef.dat', 'hwdef-bl.dat')
         bootloader_flag = True
     else:
         if len(env.HWDEF) == 0:
-            env.HWDEF = os.path.join(env.SRCROOT, 'libraries/AP_HAL_ChibiOS/hwdef/%s/hwdef.dat' % env.BOARD)
+            env.HWDEF = find_board_hwdef(env, 'hwdef.dat')
         bootloader_flag = False
 
     hwdef_script = os.path.join(env.SRCROOT, 'libraries/AP_HAL_ChibiOS/hwdef/scripts/chibios_hwdef.py')

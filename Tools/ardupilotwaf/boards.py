@@ -663,6 +663,9 @@ Board = BoardMeta('Board', Board.__bases__, dict(Board.__dict__))
 def add_dynamic_boards_chibios():
     '''add boards based on existence of hwdef.dat in subdirectories for ChibiOS'''
     add_dynamic_boards_from_hwdef_dir(chibios, 'libraries/AP_HAL_ChibiOS/hwdef')
+    # RP2350 boards live under AP_HAL_Pico/hwdef but still use the chibios
+    # board class (CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS); discover them too.
+    add_dynamic_boards_from_hwdef_dir(chibios, 'libraries/AP_HAL_Pico/hwdef')
 
 def add_dynamic_boards_linux():
     '''add boards based on existence of hwdef.dat in subdirectories for '''

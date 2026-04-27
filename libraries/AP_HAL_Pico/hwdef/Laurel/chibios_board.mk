@@ -140,7 +140,7 @@ CSRC += $(HWDEF)/common/stubs.c \
 				$(HWDEF)/common/bouncebuffer.c \
 				$(HWDEF)/common/watchdog.c \
 				$(HWDEF)/common/sysperf.c \
-				$(HWDEF)/Laurel/c1_main.c
+				$(PICO_HWDEF)/Laurel/c1_main.c
 
 ifeq ($(USE_FATFS),yes)
 # Use ArduPilot's FatFS disk I/O shim so get_fattime() continues to come
