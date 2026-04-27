@@ -18,6 +18,7 @@ _board = None
 
 # modify our search path:
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../libraries/AP_HAL_ChibiOS/hwdef/scripts'))
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../libraries/AP_HAL_Pico/hwdef/scripts'))
 import chibios_hwdef
 import build_options
 
