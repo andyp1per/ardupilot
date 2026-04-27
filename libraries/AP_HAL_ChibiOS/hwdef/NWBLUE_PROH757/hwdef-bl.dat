@@ -10,7 +10,7 @@ APJ_BOARD_ID AP_HW_NWBLUE_PROH757
 FLASH_RESERVE_START_KB 0
 
 # the H757 has 128k sectors; 2 sectors for BL
-FLASH_BOOTLOADER_LOAD_KB 256
+FLASH_BOOTLOADER_LOAD_KB 128
 
 # FMU bootloader does not need CAN-based firmware update; drop CAN1 pins
 # and CAN1 peripheral inherited from the CubeNode module inc to avoid pulling
