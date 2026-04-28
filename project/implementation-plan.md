@@ -1,5 +1,129 @@
 # Implementation Plan
 
+## Status (2026-04-28)
+
+The plan below was written as a forward-looking 7-step PR series. In practice,
+the port was first built as a single large extension to AP_HAL_ChibiOS that
+covered most of Steps 1–5 in one go, and a follow-on refactor (15 commits, this
+working branch `rp2350-v5`) then restructured the result into a sibling
+AP_HAL_Pico library via C++ subclassing and hwdef relocation. The board boots
+on real Laurel hardware. The original step-by-step plan is preserved below
+unchanged for reference; this section overlays current status.
+
+### Architectural pivot
+
+The original plan picked Approach B from `approach-comparison.md` (clean-room
+AP_HAL_Pico that duplicates portable wrapper code rather than #ifdef-pollute
+AP_HAL_ChibiOS). What actually shipped is a **subclass-based hybrid**:
+
+- **AP_HAL_Pico exists as a sibling library** to AP_HAL_ChibiOS, with its own
+  `hwdef/`, `hwdef/scripts/`, and `hwdef/common/` trees.
+- **Drivers in AP_HAL_Pico inherit from `ChibiOS::*` classes** rather than
+  duplicating them. Where RP2350-specific behaviour is small (`ChibiOS::Util`
+  OTP read, `ChibiOS::RCInput` GPIO pulse capture) we virtualize one or two
+  helpers in the base and override in `Pico::*`.
+- **No new `HAL_BOARD_PICO=14`.** Pico boards stay on
+  `CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS` and select Pico subclasses through
+  `HAL_<DRIVER>_DRIVER` macros consumed by `HAL_ChibiOS_Class.cpp` (default
+  `ChibiOS::Foo`, hwdef can override to `Pico::Foo`).
+- **`chibios_hwdef.py` is shared**, with a `PicoHWDef(ChibiOSHWDef)` no-op
+  subclass installed as the seam for future RP2350-specific parser logic.
+  `boards.py` routes RP2350 boards to `PicoHWDef` and globs both hwdef trees
+  for board discovery; `chibios.py` exports `AP_HAL_PICO` to make so per-board
+  `chibios_board.mk` files can reference `$(PICO_HWDEF)/...`.
+
+**Why the pivot:** the Explore-driven analyses on this branch (see the
+`approach-comparison.md` and the in-session driver/parser surveys) showed that
+~70–95% of the would-be-duplicated code was actually shared verbatim with
+ChibiOS, and that the RP2350-specific code was concentrated in 4–5 self-
+contained methods plus scattered guard branches. Subclassing those methods
+buys most of the separation benefit at a fraction of the duplication cost.
+The trade-off accepted: a residual surface of `#if defined(RP2350)` branches
+remains in AP_HAL_ChibiOS (`GPIO`, `AnalogIn`, `SPIDevice`, parts of
+`Scheduler`, `I2CDevice`, `RCOutput`) and ~470 lines of `is_rp_mcu()` checks
+remain in `chibios_hwdef.py`. These can be lifted later as `PicoHWDef`
+overrides, but doing so requires base-class virtualization that we cannot
+verify against STM32 boards on this branch.
+
+### Step status
+
+| Step | Original scope | Status | Notes |
+|---|---|---|---|
+| 1 | ChibiOS submodule update | ✅ done | Submodule pinned to a WIP RP2350 fork (`ea79e129ef`). Lacks AP-specific patches and the EICU LLD, so STM32 boards on this branch don't build. Real upstream submodule sync is a separate piece of work. |
+| 2 | Bootloader | ✅ done | `Tools/bootloaders/Pico2_bl.{bin,hex}` and `Laurel_bl.{bin,hex}` committed. UF2 + picotool upload path wired in `chibios.py`. |
+| 3a | HAL skeleton + Pico2 demo | ✅ done | Built as direct AP_HAL_ChibiOS extension first; then re-shaped this branch into the AP_HAL_Pico subclass library (commits `24e027f0d0`, `0c4a646470`, `51018abd79`). |
+| 3b | XIP flash and memory model | ✅ done | RP2350 linker scripts (`common_rp2350_smp.ld`), `__RAMFUNC__` / `__RAMFUNC2__` infrastructure, `.ramtext` placement for hot paths. |
+| 4a | SPI bus | ✅ done | RP2350 PL022 clock derivation lives inline in `ChibiOS::SPIDevice` (deferred subclass extraction — too interleaved with cross-platform changes). |
+| 4b | IMU (ICM-42688P) | ✅ done | Standard ArduPilot Invensensev3 backend over the RP2350 SPI driver. |
+| 4c | I2C bus | ✅ done | RP2350 baud config inline in `ChibiOS::I2CDevice` (deferred extraction). |
+| 4d | Barometer (DPS310) | ✅ done | Standard AP_Baro DPS280/DPS310 backend over I2C. Board boots and sees baro. |
+| 4e | Flash + storage | ✅ done | `AP_FlashStorage` over RP2350 QSPI EFL. Quad-page mode (`AP_FLASH_STORAGE_QUAD_PAGE`) for 4KB sector layout. |
+| 4f | Hardware UARTs | ✅ done | ChibiOS SIO driver (`SIOD0`, `SIOD1`). RP2350 funcsel handling lives in `ChibiOS::UARTDriver` — **next refactor target** (pull into `Pico::UARTDriver` subclass, similar pattern to `Pico::RCInput`). |
+| 4g | PIO UART | ⚠️ partial | `Pico::PIORXDriver` relocated to AP_HAL_Pico (commit `c1b6671da8`). TX confirmed working on hardware; RX still under hardware verification per `Laurel/FEATURE_GAP.md`. |
+| 4h | PWM output | ⚠️ partial | Basic PWM/OneShot via ChibiOS PWM driver works on Pico boards. RP2350-specific bits in `ChibiOS::RCOutput` are incomplete (`pico impl todo` markers in DShot paths). **Clean-room `Pico::RCOutput` (PWM/OneShot only) is on the roadmap** — see "Remaining work". |
+| 4i | ADC | ✅ done | RP2350 single-SAR round-robin mode wired in `ChibiOS::AnalogIn` (deferred extraction). RP2350 internal temperature sensor reading replaces STM32 vrefint path. |
+| 4j | RC input (CRSF) | ⚠️ depends on 4g | `Pico::SoftSigReaderRP2350` (GPIO-edge capture, used by Pico2) and `Pico::RCInput` (PIO-UART CRSF path used by Laurel) both relocated to AP_HAL_Pico (commits `abb474f1ee`, `4143a80ce0`). Awaiting end-to-end CRSF receiver test. |
+| 4k | SD card + filesystem | ✅ done | SPI-mode MMC/SD via FatFS; `sdcard.cpp` retry/bounce-buffer hardening from this branch is platform-agnostic. |
+| 5 | Laurel board flying | ⚠️ partial | Board boots cleanly on hardware; full sensor-to-motor flight loop not yet validated. |
+| 6a–g | Additional peripherals | ❌ not started | DShot via PIO, WS2812, OSD, dual-core 400 Hz target — all future. |
+| 7a–o | Full HAL fidelity | ❌ not started except 7c (watchdog), 7d (crash dump), 7b (system_id via OTP — `Pico::Util` from commit `1c958323d2`), 7c-fault-handlers (relocated by commit `d2c3c01b45`). |
+
+### Refactor work added by this branch (not in original plan)
+
+15 commits, two phases:
+
+- **C++ subclass series (8 commits)** — `24e027f0d0` through `d2c3c01b45`:
+  introduce `AP_HAL_Pico` library, `HAL_<DRIVER>_DRIVER` macro indirections in
+  `HAL_ChibiOS_Class.cpp`, relocate `PIOUART` and `SoftSigReaderRP2350`,
+  subclass `Util` and `RCInput`, relocate the `__RAMFUNC2__` RP2350 fault
+  handler block out of `system.cpp`.
+- **hwdef relocation series (7 commits)** — `c7cd7a9d0b` through `b57973d10f`:
+  add `PicoHWDef(ChibiOSHWDef)` placeholder, move `PICO2.py`,
+  `board_rp2350.{c,h}`, `rp2350_mcuconf.h`, `common_rp2350_smp.ld`, the Laurel
+  board, and the Pico2 board into `libraries/AP_HAL_Pico/hwdef/`. Wire
+  `chibios.py` / `boards.py` to discover boards across both trees and route
+  RP2350 boards through `PicoHWDef`.
+
+After both phases, the only RP2350 footprint left in AP_HAL_ChibiOS is small
+`#if defined(RP2350)` branches inside shared `.cpp` files (GPIO, AnalogIn,
+SPIDevice, I2CDevice, parts of Scheduler/RCOutput) plus the `is_rp_mcu()`
+checks in `chibios_hwdef.py`.
+
+### Remaining work (priority-ordered)
+
+1. **`Pico::UARTDriver` subclass** — biggest remaining outage. The hardware
+   UART driver in `ChibiOS::UARTDriver` carries RP2350-specific FUNCSEL info
+   in `SerialDef`, the `rp_dma_channel_t*` DMA pointer abstraction, USB CDC
+   diagnostics, and a `drop_unopened_usb_tx_backlog()` method. Lifts cleanly
+   in the same shape as `Pico::RCInput` once base methods are virtualized.
+2. **Clean-room `Pico::RCOutput` (PWM/OneShot only) + revert RCOutput
+   intrusions in AP_HAL_ChibiOS** — deferred from this branch's refactor as
+   too large to do safely without a working PWM bring-up. ~400–500 LOC of new
+   driver code; existing in-base RP2350 stubs are no-ops in the DShot paths.
+   See deferred commits 13/14 from the C++ subclass series.
+3. **`chibios_hwdef.py` virtualization (Option C)** — extract the ~470 lines
+   of `is_rp_mcu()` branches into `PicoHWDef` overrides via virtual hooks in
+   the base parser. Cleanly removes the residual RP2350 footprint from
+   AP_HAL_ChibiOS, but is high-risk without STM32 verification on this
+   branch. See `approach-comparison.md` follow-up analysis.
+4. **Remaining peripheral / fidelity work** — Steps 6a–6g (DShot via PIO,
+   WS2812, OSD, dual-core, 400 Hz target) and Steps 7a–7o (production-quality
+   HAL surface). All future, all unchanged from the original plan.
+
+### Verification posture
+
+- Both `Laurel` and `Pico2` builds are exercised after every refactor commit;
+  binary text size is byte-identical to the pre-refactor baseline (Laurel
+  1398884, Pico2 1371972) — the refactor produces no functional delta on
+  RP2350.
+- **No STM32 verification on this branch.** The pinned ChibiOS submodule
+  lacks the EICU LLD that ArduPilot's `SoftSigReaderInt` needs, so MatekF405
+  and other STM32 boards do not build. Any change to shared
+  `AP_HAL_ChibiOS::*` files or `chibios_hwdef.py` is "by inspection" until
+  the submodule is reconciled with upstream and STM32 builds are restored.
+
+---
+
 ## Strategy: Incremental Mergeable PRs
 
 Each step produces a PR that can be reviewed and merged independently. This

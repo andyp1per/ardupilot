@@ -36,6 +36,7 @@ review. See [implementation-plan.md](implementation-plan.md).
 
 | Document | Description |
 |---|---|
+| [executive-summary.md](executive-summary.md) | Non-technical summary of progress and posture (updated as work proceeds) |
 | [approach-comparison.md](approach-comparison.md) | Pros/cons of separate HAL vs extending AP_HAL_ChibiOS |
 | [rp2350b-chip-analysis.md](rp2350b-chip-analysis.md) | RP2350B capabilities, ChibiOS driver status |
 | [architecture.md](architecture.md) | HAL architecture and key design decisions |
