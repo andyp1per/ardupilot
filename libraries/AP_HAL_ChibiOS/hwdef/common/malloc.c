@@ -476,7 +476,8 @@ thread_t *thread_create_alloc(size_t size,
     }
     return NULL;
 }
-#endif
+
+#endif  // CH_CFG_USE_DYNAMIC
 
 /*
   return heap information
