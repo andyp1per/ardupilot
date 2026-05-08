@@ -696,9 +696,8 @@ define AP_COMPASS_PROBING_ENABLED 1
 # executes tasks dispatched by c1_run_sync() in board.c.
 define CH_CFG_SMP_MODE FALSE
 
-# Enable core1 bare-metal startup: hal_lld_init() calls start_core1()
-# which sends the ROM handshake then jumps to _crt0_c1_entry → c1_main().
-define RP_CORE1_START TRUE
+# Force single-core experiment: keep core1 parked and run all work on core0.
+define RP_CORE1_START FALSE
 
 # Overclock the RP2350 from the default 150 MHz to 250 MHz.
 # The PLL_SYS VCO is already set to 1500 MHz in rp_clocks.h.
