@@ -694,10 +694,10 @@ define AP_COMPASS_PROBING_ENABLED 1
 # no NVIC setup.  All ChibiOS threads live on core0.  Core1 is launched
 # by hal_lld via start_core1() (gated on RP_CORE1_START=TRUE below) and
 # executes tasks dispatched by c1_run_sync() in board.c.
-define CH_CFG_SMP_MODE FALSE
+define CH_CFG_SMP_MODE TRUE
 
 # Force single-core experiment: keep core1 parked and run all work on core0.
-define RP_CORE1_START FALSE
+define RP_CORE1_START TRUE
 
 # Overclock the RP2350 from the default 150 MHz to 250 MHz.
 # The PLL_SYS VCO is already set to 1500 MHz in rp_clocks.h.

@@ -122,9 +122,12 @@ OSAL_IRQ_HANDLER(Vector9C) {
 /* Disable and clear QSPI IO IRQ non-secure line. */
 OSAL_IRQ_HANDLER(VectorA0) {
     OSAL_IRQ_PROLOGUE();     nvicDisableVector(24U);     nvicClearPending(24U);     OSAL_IRQ_EPILOGUE(); }
-/* Disable and clear SIO FIFO IRQ. */
+/* Disable and clear SIO FIFO IRQ — only when not using the SMP port.
+ * port_rp2.mk/chcoresmp.c owns VectorA4 when CH_CFG_SMP_MODE == TRUE. */
+#if CH_CFG_SMP_MODE == FALSE
 OSAL_IRQ_HANDLER(VectorA4) {
     OSAL_IRQ_PROLOGUE();     nvicDisableVector(25U);     nvicClearPending(25U);     OSAL_IRQ_EPILOGUE(); }
+#endif
 /* Disable and clear SIO bell IRQ. */
 OSAL_IRQ_HANDLER(VectorA8) {
     OSAL_IRQ_PROLOGUE();     nvicDisableVector(26U);     nvicClearPending(26U);     OSAL_IRQ_EPILOGUE(); }

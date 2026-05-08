@@ -124,9 +124,10 @@ ALLCSRC := $(filter-out $(CHIBIOS)/os/hal/boards/RP_PICO2_RP2350/board.c,$(ALLCS
 include $(CHIBIOS)/os/hal/osal/rt-nil/osal.mk
 # RTOS files (optional).
 include $(CHIBIOS)/os/rt/rt.mk
-# Single-core port: no chcoresmp.c, no smp/rp2/ include dir, no PORT_CORES_NUMBER=2.
-# Tridge noted that port_rp2.mk carries SMP overhead even when CH_CFG_SMP_MODE=FALSE.
-include $(CHIBIOS)/os/common/ports/ARMv8-M-ML-ALT/compilers/GCC/mk/port.mk
+# SMP port: includes chcoresmp.c (hardware spinlock + inter-core FIFO) and
+# sets PORT_CORES_NUMBER=2.  CH_CFG_SMP_MODE=TRUE activates spinlocks in
+# chSysLock/chSysUnlock so we measure real inter-core overhead.
+include $(CHIBIOS)/os/common/ports/ARMv8-M-ML-ALT/compilers/GCC/mk/port_rp2.mk
 # Other files (optional).
 #include $(CHIBIOS)/test/rt/test.mk
 include $(CHIBIOS)/os/hal/lib/streams/streams.mk
@@ -161,7 +162,8 @@ CSRC += $(HWDEF)/common/stubs.c \
         $(HWDEF)/common/stm32_util.c \
         $(HWDEF)/common/bouncebuffer.c \
         $(HWDEF)/common/watchdog.c \
-        $(HWDEF)/common/sysperf.c
+        $(HWDEF)/common/sysperf.c \
+        $(HWDEF)/Pico2/c1_main.c
 
 ifeq ($(USE_USB_MSD),yes)
 CSRC += $(CHIBIOS)/os/various/scsi_bindings/lib_scsi.c \
@@ -256,7 +258,7 @@ CPPWARN = -Wall -Wextra -Wundef
 # List all user C define here, like -D_DEBUG=1
 UDEFS = $(ENV_UDEFS) $(FATFS_FLAGS) -DHAL_BOARD_NAME=\"$(HAL_BOARD_NAME)\" \
   -DHAL_MAX_STACK_FRAME_SIZE=$(HAL_MAX_STACK_FRAME_SIZE) \
-  -DCRT0_EXTRA_CORES_NUMBER=0
+  -DCRT0_EXTRA_CORES_NUMBER=1
 
 # Single-core demo: disable core 1 startup code
 #UDEFS = -DCRT0_VTOR_INIT=1 -DNDEBUG
@@ -280,8 +282,8 @@ ifneq ($(AP_BOARD_START_TIME),)
  UDEFS += -DAP_BOARD_START_TIME=$(AP_BOARD_START_TIME)
 endif
 
-# Single-core experiment: no core1 trampoline generation.
-UADEFS = -DCRT0_EXTRA_CORES_NUMBER=0
+# SMP: generate _crt0_c1_entry trampoline for bare-metal core1 FIFO dispatcher.
+UADEFS = -DCRT0_EXTRA_CORES_NUMBER=1
 
 ifeq ($(COPY_VECTORS_TO_RAM),yes)
  UADEFS += -DCRT0_INIT_VECTORS=1

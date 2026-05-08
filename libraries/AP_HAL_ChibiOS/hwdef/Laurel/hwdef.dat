@@ -327,9 +327,9 @@ define OSD_ENABLED                         1
 define HAL_OSD_TYPE_DEFAULT                1
 ROMFS_WILDCARD libraries/AP_OSD/fonts/font*.bin
 
-define CH_CFG_SMP_MODE FALSE
+define CH_CFG_SMP_MODE TRUE
 # Force single-core experiment: keep core1 parked and run all work on core0.
-define RP_CORE1_START FALSE
+define RP_CORE1_START TRUE
 # CPU clock: 375 MHz (1500 MHz VCO / POSTDIV1=4 / POSTDIV2=1 = 375 MHz).
 # The on-chip VREG is raised to 1.30 V (VSEL=0x0f) in software BEFORE the
 # PLL is switched — see rp2350_vreg_init() in rp_clocks.c.  1.30 V supports
