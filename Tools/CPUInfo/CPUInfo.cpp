@@ -6,7 +6,7 @@
 #define AP_MATH_ALLOW_DOUBLE_FUNCTIONS 1
 
 #ifndef CPUINFO_ENABLE_EKF_TEST
-#define CPUINFO_ENABLE_EKF_TEST 0
+#define CPUINFO_ENABLE_EKF_TEST 1
 #endif
 
 #include <cmath>
@@ -149,12 +149,14 @@ static void show_sizes(void)
 
     SET_SECTION("print_NaN");
     cpuinfo_printf("printing NaN: %f\n", (double)sqrtf(-1.0f));
+#if !defined(STM32F4)   // divide by zero seems not to work on F4
     hal.scheduler->delay(50);
     SET_SECTION("print_PosInf");
     cpuinfo_printf("printing +Inf: %f\n", (double)(1.0f/0.0f));
     hal.scheduler->delay(50);
     SET_SECTION("print_NegInf");
     cpuinfo_printf("printing -Inf: %f\n", (double)(-1.0f/0.0f));
+#endif
 }
 
 #define TENTIMES(x) do { x; x; x; x; x; x; x; x; x; x; } while (0)
