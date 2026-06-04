@@ -313,6 +313,9 @@ public:
     // return time in microseconds of last update() call
     uint32_t get_last_update_usec(void) const { return _last_update_usec; }
 
+    // microseconds timestamp of the most recent raw gyro sample for an instance
+    uint64_t get_gyro_last_sample_us(uint8_t instance) const { return _gyro_last_sample_us[instance]; }
+
     // for killing an IMU for testing purposes
     void kill_imu(uint8_t imu_idx, bool kill_it);
 
