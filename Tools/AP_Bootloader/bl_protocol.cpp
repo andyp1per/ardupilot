@@ -254,15 +254,6 @@ jump_to_app()
     // Persist jump_to_app progress/failure codes for SWD post-mortem.
     WATCHDOG->SCRATCH[3] = 0xA0000001U;
 #endif
-#if defined(HAL_RP2350) || defined(RP2350)
-/*
- * RP2350 app images may start with a picobin/imagedef header at APP_START_ADDRESS and place the real ARM vector table at +0x80.
- * Some picobin header words are validly 0xFFFFFFFF padding, so the generic "first 8 words must be non-0xFFFFFFFF" check used by STM32 targets can falsely reject a good RP2350 image and leave the board stuck in BL mode.
- */
-    const uint32_t app_vectors =
-        ((APP_START_ADDRESS & 0xFFU) == 0U) ? (APP_START_ADDRESS + 0x80U) : APP_START_ADDRESS;
-    const uint32_t *const app_vtor = (const uint32_t *)app_vectors;
-#endif
 
 #if AP_CHECK_FIRMWARE_ENABLED
     const auto ok = check_good_firmware();
@@ -293,16 +284,14 @@ jump_to_app()
      */
 #if defined(HAL_RP2350) || defined(RP2350)
 /*
- * RP2350: validate only the real vector table SP/Reset words.
- * Picobin lead words can include 0xFFFFFFFF padding by design.
+ * RP2350: the vector table is at APP_START_ADDRESS (vectors-first layout).
+ * app_base[0] = initial SP, app_base[1] = Reset_Handler — neither is 0xFFFFFFFF
+ * for a valid image, so the standard lead-word check applies.
  */
-    if (app_vtor[0] == 0xffffffffU || app_vtor[1] == 0xffffffffU) {
-#if defined(HAL_RP2350) || defined(RP2350)
+    if (app_base[0] == 0xffffffffU || app_base[1] == 0xffffffffU) {
         WATCHDOG->SCRATCH[3] = 0xA0000004U;
-#endif
         goto exit;
     }
-    app_base = app_vtor;
 #else
     for (uint8_t i=0; i<RESERVE_LEAD_WORDS; i++) {
         if (app_base[i] == 0xffffffff) {
