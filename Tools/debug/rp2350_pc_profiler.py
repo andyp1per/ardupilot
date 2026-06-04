@@ -1,0 +1,400 @@
+#!/usr/bin/env python3
+# AP_FLAKE8_CLEAN
+"""
+Statistical PC profiler for the RP2350 ArduPilot port.
+
+Samples the Cortex-M33 DWT Program Counter Sample Register (PCSR, 0xE000101C)
+over an existing OpenOCD TCL RPC connection while the target runs at full
+speed. Reading PCSR does not halt the core, so sampling is non-intrusive and
+representative of real timing - unlike halt/read/resume profilers.
+
+Each sample's PC is attributed to a function using the ELF symbol table, then
+functions are ranked by sample count (a proxy for exclusive CPU time). Samples
+are bucketed by memory region so XIP-flash-resident hot code (the code that
+thrashes the 16 KB XIP cache) is separated from code already relocated to SRAM.
+
+The main output is a ranked table plus a set of ready-to-paste lines for
+libraries/AP_HAL_ChibiOS/hwdef/common/rp2350_ramfunc2_registry.txt covering the
+hottest XIP-resident functions not already relocated.
+
+Prerequisites:
+  - OpenOCD already running and attached to the target, exposing its TCL RPC
+    port (the project's invocation uses tcl_port 50001).
+  - The matching unstripped ELF (build/<board>/bin/arducopter), ideally a
+    --debug build so source file/line attribution works.
+  - arm-none-eabi-nm and arm-none-eabi-c++filt on PATH (or pass --nm/--cppfilt).
+
+Example:
+  Tools/debug/rp2350_pc_profiler.py --elf build/Laurel/bin/arducopter \\
+      --tcl-port 50001 --samples 30000
+
+Sampling core1 (where the EKF/PID/attitude dispatch runs) needs OpenOCD to
+select that core first; pass --target-select rp2350.cpu1 (name depends on the
+OpenOCD board config; run 'targets' in the OpenOCD telnet console to list).
+"""
+
+import argparse
+import os
+import re
+import socket
+import subprocess
+import sys
+import time
+from bisect import bisect_right
+
+# Cortex-M33 debug registers.
+DEMCR = 0xE000EDFC       # Debug Exception and Monitor Control Register
+DEMCR_TRCENA = 1 << 24   # enables DWT/ITM, required before PCSR is valid
+DWT_PCSR = 0xE000101C    # Program Counter Sample Register
+PCSR_INVALID = 0xFFFFFFFF  # returned when no valid sample is available
+
+# RP2350 address map (only the ranges we categorise).
+XIP_BASE = 0x10000000
+XIP_END = 0x20000000
+SRAM_BASE = 0x20000000
+SRAM_END = 0x20090000
+ROM_BASE = 0x00000000
+ROM_END = 0x00008000
+
+TCL_TERM = b'\x1a'  # OpenOCD TCL RPC command/response terminator (Ctrl-Z)
+
+
+class OpenOCDError(Exception):
+    pass
+
+
+class OpenOCDTcl:
+    """Minimal OpenOCD TCL RPC client (command terminated by 0x1a)."""
+
+    def __init__(self, host, port, timeout=5.0):
+        try:
+            self.sock = socket.create_connection((host, port), timeout=timeout)
+        except OSError as e:
+            raise OpenOCDError(
+                "could not connect to OpenOCD TCL RPC at %s:%d (%s). Is OpenOCD "
+                "running with a 'tcl_port'?" % (host, port, e))
+        self.sock.settimeout(timeout)
+        self.buf = b''
+
+    def cmd(self, command):
+        self.sock.sendall(command.encode() + TCL_TERM)
+        while TCL_TERM not in self.buf:
+            chunk = self.sock.recv(4096)
+            if not chunk:
+                raise OpenOCDError("OpenOCD closed the connection")
+            self.buf += chunk
+        resp, _, self.buf = self.buf.partition(TCL_TERM)
+        return resp.decode(errors='replace').strip()
+
+    def read_word(self, addr):
+        # 'mdw' prints e.g. "0xe000101c: deadbeef"; grab the trailing hex word.
+        resp = self.cmd("mdw 0x%08x" % addr)
+        m = re.search(r':\s*([0-9a-fA-F]{8})', resp)
+        if not m:
+            raise OpenOCDError("unexpected mdw response: %r" % resp)
+        return int(m.group(1), 16)
+
+    def write_word(self, addr, value):
+        self.cmd("mww 0x%08x 0x%08x" % (addr, value))
+
+    def close(self):
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+
+class SymbolTable:
+    """Function address ranges parsed from arm-none-eabi-nm."""
+
+    def __init__(self, elf, nm='arm-none-eabi-nm', cppfilt='arm-none-eabi-c++filt',
+                 repo_root=None):
+        self.repo_root = repo_root
+        self.starts = []     # sorted function start addresses
+        self.entries = []    # parallel: (start, end, mangled, file)
+        self._parse(elf, nm)
+        self._demangle(cppfilt)
+
+    def _parse(self, elf, nm):
+        try:
+            out = subprocess.check_output(
+                [nm, '--print-size', '--numeric-sort', '--line-numbers', elf],
+                text=True, stderr=subprocess.DEVNULL)
+        except (OSError, subprocess.CalledProcessError) as e:
+            raise OpenOCDError("failed to run nm on %s: %s" % (elf, e))
+
+        raw = []  # (addr, size_or_None, name, file)
+        for line in out.splitlines():
+            # "addr [size] type name[\tfile:line]"
+            parts = line.split('\t', 1)
+            fileinfo = parts[1].strip() if len(parts) > 1 else ''
+            cols = parts[0].split()
+            if len(cols) == 4:
+                addr_s, size_s, typ, name = cols
+                size = int(size_s, 16)
+            elif len(cols) == 3:
+                addr_s, typ, name = cols
+                size = None
+            else:
+                continue
+            if typ not in 'tTwW':  # functions only
+                continue
+            raw.append((int(addr_s, 16), size, name, self._relpath(fileinfo)))
+
+        raw.sort(key=lambda r: r[0])
+        for i, (addr, size, name, fil) in enumerate(raw):
+            if size:
+                end = addr + size
+            elif i + 1 < len(raw):
+                end = raw[i + 1][0]   # fall back to gap until next symbol
+            else:
+                end = addr + 4
+            self.starts.append(addr)
+            self.entries.append((addr, end, name, fil))
+
+    def _relpath(self, fileinfo):
+        if not fileinfo or ':' not in fileinfo:
+            return ''
+        path = fileinfo.rsplit(':', 1)[0]
+        if self.repo_root and os.path.isabs(path):
+            try:
+                return os.path.relpath(path, self.repo_root)
+            except ValueError:
+                return path
+        return path
+
+    def _demangle(self, cppfilt):
+        names = [e[2] for e in self.entries]
+        try:
+            proc = subprocess.run([cppfilt], input='\n'.join(names),
+                                  text=True, capture_output=True, check=True)
+            self.demangled = proc.stdout.splitlines()
+        except (OSError, subprocess.CalledProcessError):
+            self.demangled = names  # degrade gracefully to mangled names
+        if len(self.demangled) != len(self.entries):
+            self.demangled = names
+
+    def lookup(self, pc):
+        """Return index of the function containing pc, or None."""
+        i = bisect_right(self.starts, pc) - 1
+        if i < 0:
+            return None
+        start, end, _, _ = self.entries[i]
+        if start <= pc < end:
+            return i
+        return None
+
+
+def region_of(pc):
+    if pc == PCSR_INVALID:
+        return 'invalid'
+    if XIP_BASE <= pc < XIP_END:
+        return 'xip'
+    if SRAM_BASE <= pc < SRAM_END:
+        return 'sram'
+    if ROM_BASE <= pc < ROM_END:
+        return 'rom'
+    return 'other'
+
+
+def strip_signature(demangled):
+    """'Foo::bar(int, float)' -> 'Foo::bar' to match the registry format."""
+    return re.sub(r'\(.*', '', demangled).strip()
+
+
+def load_registry(path):
+    """Return the set of demangled symbols already in the RAMFUNC2 registry."""
+    symbols = set()
+    if not os.path.exists(path):
+        return symbols
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#') or '|' not in line:
+                continue
+            symbols.add(line.split('|', 1)[1].strip())
+    return symbols
+
+
+def sample(ocd, n_samples, duration, progress=True):
+    """Collect PC samples; stop at n_samples or after duration seconds."""
+    samples = []
+    t0 = time.time()
+    last = t0
+    while True:
+        samples.append(ocd.read_word(DWT_PCSR))
+        now = time.time()
+        if n_samples and len(samples) >= n_samples:
+            break
+        if duration and (now - t0) >= duration:
+            break
+        if progress and (now - last) >= 1.0:
+            last = now
+            sys.stderr.write("\r  sampled %d (%.0f/s)..." %
+                             (len(samples), len(samples) / (now - t0)))
+            sys.stderr.flush()
+    if progress:
+        sys.stderr.write("\r" + " " * 50 + "\r")
+    return samples, time.time() - t0
+
+
+def build_report(samples, elapsed, syms, registry, top, threshold):
+    total = len(samples)
+    region_counts = {}
+    func_counts = {}     # index -> count
+    unknown = 0
+    for pc in samples:
+        region_counts[region_of(pc)] = region_counts.get(region_of(pc), 0) + 1
+        if pc == PCSR_INVALID:
+            continue
+        idx = syms.lookup(pc)
+        if idx is None:
+            unknown += 1
+        else:
+            func_counts[idx] = func_counts.get(idx, 0) + 1
+
+    lines = []
+    lines.append("# RP2350 PC profile")
+    lines.append("")
+    lines.append("samples: %d over %.1fs (%.0f samples/s)" %
+                 (total, elapsed, total / elapsed if elapsed else 0))
+    lines.append("")
+    lines.append("## Region breakdown")
+    for region in ('xip', 'sram', 'rom', 'other', 'invalid'):
+        c = region_counts.get(region, 0)
+        lines.append("  %-8s %8d  %5.1f%%" % (region, c, 100.0 * c / total if total else 0))
+    valid = total - region_counts.get('invalid', 0)
+    lines.append("  %-8s %8d  (samples landing outside any known function)" %
+                 ('no-sym', unknown))
+    lines.append("")
+    lines.append("Note: 'xip' = code running from flash via the 16 KB XIP cache "
+                 "(relocation target);")
+    lines.append("      'sram' = code already resident in SRAM (e.g. RAMFUNC2).")
+    lines.append("")
+
+    ranked = sorted(func_counts.items(), key=lambda kv: kv[1], reverse=True)
+
+    def fmt_rows(items):
+        rows = []
+        for idx, c in items:
+            start, _, _, fil = syms.entries[idx]
+            name = strip_signature(syms.demangled[idx])
+            pct = 100.0 * c / valid if valid else 0
+            rows.append("  %5.1f%% %6d  %-5s 0x%08x  %s" %
+                        (pct, c, region_of(start), start, name))
+        return rows
+
+    lines.append("## Top %d functions (by exclusive samples, valid only)" % top)
+    lines.extend(fmt_rows(ranked[:top]))
+    lines.append("")
+
+    # Registry suggestions: hottest XIP-resident functions not already relocated.
+    suggestions = []
+    for idx, c in ranked:
+        start, _, _, fil = syms.entries[idx]
+        if region_of(start) != 'xip':
+            continue
+        pct = 100.0 * c / valid if valid else 0
+        if pct < threshold:
+            break
+        name = strip_signature(syms.demangled[idx])
+        if name in registry:
+            continue
+        suggestions.append((pct, fil, name))
+
+    lines.append("## RAMFUNC2 registry suggestions (XIP-resident, >= %.1f%%, not yet relocated)" % threshold)
+    if not suggestions:
+        lines.append("  (none above threshold - hot path may already be in SRAM)")
+    else:
+        lines.append("# paste into rp2350_ramfunc2_registry.txt (path|symbol):")
+        for pct, fil, name in suggestions:
+            if not fil:
+                lines.append("# %.1f%% (no source path from nm) %s" % (pct, name))
+            else:
+                lines.append("%s|%s    # %.1f%%" % (fil, name, pct))
+    lines.append("")
+    return "\n".join(lines)
+
+
+def main():
+    here = os.path.dirname(os.path.abspath(__file__))
+    default_root = os.path.abspath(os.path.join(here, '..', '..'))
+    default_registry = os.path.join(
+        default_root, 'libraries/AP_HAL_ChibiOS/hwdef/common/rp2350_ramfunc2_registry.txt')
+
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--elf', default=os.path.join(default_root, 'build/Laurel/bin/arducopter'),
+                    help='ELF with symbols (default: build/Laurel/bin/arducopter)')
+    ap.add_argument('--host', default='localhost', help='OpenOCD host')
+    ap.add_argument('--tcl-port', type=int, default=50001,
+                    help='OpenOCD TCL RPC port (project default 50001)')
+    ap.add_argument('--samples', type=int, default=20000,
+                    help='number of PC samples to collect (0 = use --duration)')
+    ap.add_argument('--duration', type=float, default=0.0,
+                    help='sample for this many seconds instead of a fixed count')
+    ap.add_argument('--top', type=int, default=30, help='functions to list')
+    ap.add_argument('--threshold', type=float, default=1.0,
+                    help='minimum %% of valid samples for a registry suggestion')
+    ap.add_argument('--target-select', default=None,
+                    help="OpenOCD target to select first, e.g. rp2350.cpu1 for core1")
+    ap.add_argument('--registry', default=default_registry,
+                    help='RAMFUNC2 registry to diff suggestions against')
+    ap.add_argument('--repo-root', default=default_root,
+                    help='repo root for making source paths relative')
+    ap.add_argument('--nm', default='arm-none-eabi-nm')
+    ap.add_argument('--cppfilt', default='arm-none-eabi-c++filt')
+    ap.add_argument('--out', default=None, help='also write the report to this file')
+    ap.add_argument('--raw-out', default=None, help='write raw sampled PCs (hex, one per line)')
+    args = ap.parse_args()
+
+    if not os.path.exists(args.elf):
+        sys.exit("ELF not found: %s (build the board first, or pass --elf)" % args.elf)
+
+    sys.stderr.write("loading symbols from %s ...\n" % args.elf)
+    syms = SymbolTable(args.elf, nm=args.nm, cppfilt=args.cppfilt, repo_root=args.repo_root)
+    registry = load_registry(args.registry)
+    sys.stderr.write("  %d functions, %d already in registry\n" %
+                     (len(syms.entries), len(registry)))
+
+    ocd = OpenOCDTcl(args.host, args.tcl_port)
+    try:
+        if args.target_select:
+            ocd.cmd("targets %s" % args.target_select)
+        # Ensure DWT is enabled so PCSR returns valid samples.
+        demcr = ocd.read_word(DEMCR)
+        if not (demcr & DEMCR_TRCENA):
+            ocd.write_word(DEMCR, demcr | DEMCR_TRCENA)
+            sys.stderr.write("enabled DEMCR.TRCENA for PCSR sampling\n")
+
+        n = args.samples if not args.duration else 0
+        sys.stderr.write("sampling DWT_PCSR (target must be running)...\n")
+        samples, elapsed = sample(ocd, n, args.duration)
+    finally:
+        ocd.close()
+
+    invalid = sum(1 for pc in samples if pc == PCSR_INVALID)
+    if samples and invalid == len(samples):
+        sys.stderr.write("WARNING: every sample was invalid (0xFFFFFFFF). The "
+                         "target is probably halted, or PCSR is unavailable on "
+                         "the selected core. Resume the target and retry.\n")
+
+    if args.raw_out:
+        with open(args.raw_out, 'w') as f:
+            f.write('\n'.join("0x%08x" % pc for pc in samples))
+
+    report = build_report(samples, elapsed, syms, registry, args.top, args.threshold)
+    print(report)
+    if args.out:
+        with open(args.out, 'w') as f:
+            f.write(report + "\n")
+        sys.stderr.write("wrote %s\n" % args.out)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except OpenOCDError as e:
+        sys.exit("error: %s" % e)
+    except KeyboardInterrupt:
+        sys.exit("\ninterrupted")
