@@ -373,17 +373,18 @@ jump_to_app()
 
 #if defined(HAL_RP2350) || defined(RP2350)
 /*
- * RP2350: determine the ARM vector table address, handling all three cases: (a) APP_START_ADDRESS is the picobin imagedef base (low byte == 0x00, e.g.
- * 0x10010000): the imagedef block occupies the first 0x80 bytes
- * the real ARM vector table (initial SP + Reset_Handler) is at +0x80.
- * (b) APP_START_ADDRESS already points to the vector table (low byte == 0x80, e.g.
- * (c) APP_START_ADDRESS not defined in hwdef-bl.dat: the fallback formula above may produce either value
- * the low-byte mask handles both without requiring the caller to know which variant is in use.
+ * Detect the flash layout by reading the first word at APP_START_ADDRESS:
+ *   - Vectors-first: word[0] is the initial SP, an SRAM address (0x20xxxxxx on RP2350).
+ *     APP_START_ADDRESS already points to the vector table; use it directly.
+ *   - Imagedef-first: word[0] is the PICOBIN block marker (0xffffded3).
+ *     The real ARM vector table (SP + Reset_Handler) is at APP_START_ADDRESS + 0x80.
+ * This is robust regardless of how APP_START_ADDRESS is defined in hwdef-bl.dat,
+ * and regardless of whether the low byte of APP_START_ADDRESS is 0x00 or 0x80.
  */
-    app_base = (const uint32_t *)(
-        ((APP_START_ADDRESS & 0xFFU) == 0U)
-            ? APP_START_ADDRESS + 0x80U   /* imagedef base: skip to vector table */
-            : APP_START_ADDRESS);         /* low byte 0x80: already at vector table */
+    if (*(const uint32_t *)APP_START_ADDRESS == 0xffffded3U) {
+        app_base = (const uint32_t *)(APP_START_ADDRESS + 0x80U);
+    }
+#endif
     __set_MSPLIM(0);
     __set_PSPLIM(0);
 
@@ -412,7 +413,6 @@ jump_to_app()
 #endif
         NVIC_SystemReset();  /* triggers SYSRESETREQ — NOTREACHED */
     }
-#endif
 
 #if defined(AP_DEBUG_BUILD) || defined(DEBUG_BUILD)
     DEV_PRINTF("BL: WATCHDOG scratch check done, about to disable interrupts\n");
