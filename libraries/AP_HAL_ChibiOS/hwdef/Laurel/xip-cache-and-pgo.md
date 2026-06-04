@@ -66,14 +66,39 @@ Output:
 Usage (OpenOCD must already be running with a `tcl_port`):
 
 ```bash
-# core0 (ChibiOS main loop)
+# core0 (ChibiOS main loop), with intra-function hot-kernel analysis
 Tools/debug/rp2350_pc_profiler.py --elf build/Laurel/bin/arducopter \
-    --tcl-port 50001 --samples 30000 --out /tmp/prof_core0.md
+    --tcl-port 50001 --samples 30000 --by-line 20 --out /tmp/prof_core0.md
 
 # core1 (EKF / PID / attitude dispatch) - must select that core first
 Tools/debug/rp2350_pc_profiler.py --target-select rp2350.cpu1 \
     --samples 30000 --out /tmp/prof_core1.md
 ```
+
+### Hot-kernel analysis (`--by-line N`)
+
+Function-level ranking decides *what* to relocate, but relocating a whole
+function to SRAM bypasses the cache for all of it - including any cold body
+(prearm/error/init blocks) bundled in the same function. That wastes SRAM. The
+DWT samples are full-resolution PCs, so `--by-line N` re-bins each of the top N
+XIP/SRAM functions at 8-byte cache-line granularity and reports:
+
+- the hot kernel size = distinct 8-byte lines covering `--kernel-pct` (default
+  90%) of the function's samples, as bytes and as a fraction of function size;
+- a verdict: SPLIT CANDIDATE (large function, small kernel - relocate hot blocks
+  only / hot-cold split) vs relocate whole (uniformly hot);
+- the top source lines (via addr2line) so the hot kernel is identifiable.
+
+This is what tells us whether function-granularity selection is over-relocating.
+A function that is uniformly hot relocates whole with no waste; a large function
+with a tiny kernel should be split (or left in XIP and PGO-reordered) rather than
+relocated whole.
+
+Note on soft-float: the M33 has no double-precision FPU, so libgcc routines
+(`__aeabi_dadd`, `__subdf3`, ...) tend to rank hot. They have no source path, so
+the `path|symbol` registry cannot place them - they would need a symbol-based
+linker section pick if relocation proves worthwhile. Prefer eliminating doubles
+on the hot path (use float literals/math) where possible.
 
 Workflow to iterate the SRAM working set:
 1. Fly/replay a representative workload on the bench (idle bench under-counts the

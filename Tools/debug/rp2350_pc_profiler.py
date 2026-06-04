@@ -238,20 +238,31 @@ def sample(ocd, n_samples, duration, progress=True):
     return samples, time.time() - t0
 
 
-def build_report(samples, elapsed, syms, registry, top, threshold):
+def tally(samples, syms):
+    """Attribute samples to regions and functions, keeping per-function PC histograms."""
     total = len(samples)
     region_counts = {}
-    func_counts = {}     # index -> count
+    func_counts = {}      # idx -> total count
+    func_pc_hist = {}     # idx -> {pc: count}
     unknown = 0
     for pc in samples:
-        region_counts[region_of(pc)] = region_counts.get(region_of(pc), 0) + 1
+        r = region_of(pc)
+        region_counts[r] = region_counts.get(r, 0) + 1
         if pc == PCSR_INVALID:
             continue
         idx = syms.lookup(pc)
         if idx is None:
             unknown += 1
-        else:
-            func_counts[idx] = func_counts.get(idx, 0) + 1
+            continue
+        func_counts[idx] = func_counts.get(idx, 0) + 1
+        h = func_pc_hist.setdefault(idx, {})
+        h[pc] = h.get(pc, 0) + 1
+    valid = total - region_counts.get('invalid', 0)
+    return region_counts, func_counts, func_pc_hist, unknown, valid, total
+
+
+def build_report(t, elapsed, syms, registry, top, threshold):
+    region_counts, func_counts, func_pc_hist, unknown, valid, total = t
 
     lines = []
     lines.append("# RP2350 PC profile")
@@ -263,7 +274,6 @@ def build_report(samples, elapsed, syms, registry, top, threshold):
     for region in ('xip', 'sram', 'rom', 'other', 'invalid'):
         c = region_counts.get(region, 0)
         lines.append("  %-8s %8d  %5.1f%%" % (region, c, 100.0 * c / total if total else 0))
-    valid = total - region_counts.get('invalid', 0)
     lines.append("  %-8s %8d  (samples landing outside any known function)" %
                  ('no-sym', unknown))
     lines.append("")
@@ -316,6 +326,98 @@ def build_report(samples, elapsed, syms, registry, top, threshold):
     return "\n".join(lines)
 
 
+def addr2line_map(addr2line_bin, elf, addrs, repo_root):
+    """Map instruction addresses to 'relpath:line' via addr2line (stdin-fed)."""
+    uniq = sorted(set(addrs))
+    if not uniq:
+        return {}
+    try:
+        proc = subprocess.run([addr2line_bin, '-e', elf],
+                              input='\n'.join('0x%x' % a for a in uniq),
+                              text=True, capture_output=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return {}
+    result = {}
+    for a, raw in zip(uniq, proc.stdout.splitlines()):
+        loc = raw.strip().split(' (')[0]  # drop ' (discriminator N)'
+        if ':' in loc:
+            path, _, lineno = loc.rpartition(':')
+        else:
+            path, lineno = loc, '0'
+        if repo_root and os.path.isabs(path):
+            try:
+                path = os.path.relpath(path, repo_root)
+            except ValueError:
+                pass
+        result[a] = '%s:%s' % (path, lineno)
+    return result
+
+
+def hot_kernel_section(t, syms, addr2line_bin, elf, repo_root,
+                       n_funcs, kernel_pct, top_lines=5):
+    """Per-function intra-function hotness: how concentrated are the samples?
+
+    Reveals functions whose samples cluster in a small kernel inside a much
+    larger body - relocating those whole to SRAM wastes space, so they are
+    better split (relocate hot blocks only / -freorder-blocks-and-partition).
+    """
+    _, func_counts, func_pc_hist, _, valid, _ = t
+    ranked = sorted(func_counts.items(), key=lambda kv: kv[1], reverse=True)
+    selected = [(idx, c) for idx, c in ranked
+                if region_of(syms.entries[idx][0]) in ('xip', 'sram')][:n_funcs]
+
+    want = []
+    for idx, _ in selected:
+        want.extend(func_pc_hist.get(idx, {}).keys())
+    loc = addr2line_map(addr2line_bin, elf, want, repo_root)
+
+    lines = []
+    lines.append("## Hot-kernel analysis (top %d XIP/SRAM functions, %.0f%% coverage)"
+                 % (len(selected), kernel_pct))
+    lines.append("# kernel = distinct 8-byte cache lines covering %.0f%% of a function's "
+                 "samples." % kernel_pct)
+    lines.append("# small kernel in a large function => whole-function SRAM relocation "
+                 "wastes space (split candidate).")
+    lines.append("")
+    for idx, c in selected:
+        start, end, _, _ = syms.entries[idx]
+        size = end - start
+        name = strip_signature(syms.demangled[idx])
+        region = region_of(start)
+        pct = 100.0 * c / valid if valid else 0
+        hist = func_pc_hist.get(idx, {})
+
+        line_hist = {}
+        for pc, n in hist.items():
+            ln = pc & ~7  # 8-byte cache line
+            line_hist[ln] = line_hist.get(ln, 0) + n
+        need = c * kernel_pct / 100.0
+        acc = 0
+        kernel_lines = 0
+        for v in sorted(line_hist.values(), reverse=True):
+            acc += v
+            kernel_lines += 1
+            if acc >= need:
+                break
+        kernel_bytes = kernel_lines * 8
+        conc = (kernel_bytes / size) if size else 1.0
+        split = size >= 256 and conc <= 0.5
+        verdict = "SPLIT CANDIDATE" if split else "relocate whole"
+
+        lines.append("  %-44s %5.1f%% %6d samp  size %5dB  [%s]" %
+                     (name[:44], pct, c, size, region))
+        lines.append("     kernel %dB (%.0f%% of function) covers %.0f%% of samples -> %s" %
+                     (kernel_bytes, 100.0 * conc, kernel_pct, verdict))
+        src_counts = {}
+        for pc, n in hist.items():
+            s = loc.get(pc, '?')
+            src_counts[s] = src_counts.get(s, 0) + n
+        for s, n in sorted(src_counts.items(), key=lambda kv: kv[1], reverse=True)[:top_lines]:
+            lines.append("        %6d  %s" % (n, s))
+        lines.append("")
+    return "\n".join(lines)
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     default_root = os.path.abspath(os.path.join(here, '..', '..'))
@@ -336,6 +438,12 @@ def main():
     ap.add_argument('--top', type=int, default=30, help='functions to list')
     ap.add_argument('--threshold', type=float, default=1.0,
                     help='minimum %% of valid samples for a registry suggestion')
+    ap.add_argument('--by-line', type=int, default=0, metavar='N',
+                    help='also show intra-function hot-kernel analysis for the top N '
+                         'XIP/SRAM functions (0 = off)')
+    ap.add_argument('--kernel-pct', type=float, default=90.0,
+                    help='%% of a function''s samples that define its hot kernel')
+    ap.add_argument('--addr2line', default='arm-none-eabi-addr2line')
     ap.add_argument('--target-select', default=None,
                     help="OpenOCD target to select first, e.g. rp2350.cpu1 for core1")
     ap.add_argument('--registry', default=default_registry,
@@ -383,7 +491,11 @@ def main():
         with open(args.raw_out, 'w') as f:
             f.write('\n'.join("0x%08x" % pc for pc in samples))
 
-    report = build_report(samples, elapsed, syms, registry, args.top, args.threshold)
+    t = tally(samples, syms)
+    report = build_report(t, elapsed, syms, registry, args.top, args.threshold)
+    if args.by_line:
+        report += "\n" + hot_kernel_section(t, syms, args.addr2line, args.elf,
+                                            args.repo_root, args.by_line, args.kernel_pct)
     print(report)
     if args.out:
         with open(args.out, 'w') as f:
