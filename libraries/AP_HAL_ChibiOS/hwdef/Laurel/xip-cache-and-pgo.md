@@ -44,6 +44,45 @@ Caveats:
 Verification: builds and links clean for Laurel (`./waf copter`, 34 s);
 `rp2350_xip_cache_stats` present in the ELF at `0x101863b0`.
 
+## Step 0b - gyro-to-attitude latency (core0 -> core1 handoff)
+
+Current Laurel defaults run `FSTRATE_ENABLE 1`: the rate thread is active and
+pinned to core1 (this supersedes the older 1-khz note that recorded
+FSTRATE_ENABLE 0). So the high-rate attitude/PID loop is `rate_thread.cpp` on
+core1, consuming IMU samples that the SPI0 read thread produces on core0. That
+cross-core handoff - not flash contention - is the coupling on the control path.
+Note SPI0 (PL022, IMU) and the QMI/XIP flash are separate controllers on
+separate pins; there is no direct SPI-vs-XIP bus contention.
+
+To decide whether moving the IMU read thread to core1 (and routing its SPI DMA
+IRQ there) is worth it, `perf_report` now emits a second line:
+
+```
+RTlat: glat=NN/MMus rtc=KKus
+```
+
+- `glat` avg/max = gyro-to-attitude latency: at the moment the rate controller
+  finishes, the age of the freshest IMU sample (timestamped on core0 at SPI
+  read via `AP_InertialSensor::get_gyro_last_sample_us`). avg is mean latency,
+  max is worst-case (jitter). Captures producer jitter + handoff + compute.
+- `rtc` avg = rate controller compute time on core1 (the `rate_controller_run_dt`
+  call).
+
+Implementation: `rate_thread.cpp` measures both per cycle and calls
+`copter_rate_timing_record()`; `Copter::perf_report` averages and resets each
+window. RP2350-guarded; the shared fast-rate buffer is untouched (only a
+read-only INS getter was added).
+
+Interpreting it for the core1-IMU-relocation decision:
+
+- High `glat` jitter (max >> avg) with low `rtc` => core1 is waiting on the
+  sample; producer/handoff jitter is on the critical path. Moving the IMU read
+  to core1 and/or pipelining (1-cycle lag, double-buffer) should help.
+- High `rtc` (and `glat` tracking `rtc`) => core1 is compute/XIP bound. SRAM
+  relocation (Step 1) is the win; moving the IMU thread will not help.
+- `glat - rtc` approximates the pre-compute latency (sample staleness +
+  scheduling), i.e. the part a handoff change could actually remove.
+
 ## Step 1 - SWD statistical PC profiler
 
 `Tools/debug/rp2350_pc_profiler.py` - standalone, stdlib-only (plus
@@ -125,6 +164,8 @@ target. The OpenOCD `profile` command is a fallback if PCSR reads misbehave.
 | core0 XIP / SRAM / invalid sample split | TBD | profiler region breakdown |
 | core1 XIP / SRAM / invalid sample split | TBD | profiler region breakdown |
 | `read_AHRS` AVG us | TBD | current ~4220 us baseline (FEATURE_GAP) |
+| `glat` avg/max us (armed) | TBD | gyro-to-attitude latency + jitter |
+| `rtc` avg us (armed) | TBD | rate controller compute on core1 |
 | free SRAM | TBD | headroom for more relocation |
 
 ## Decision gate for Step 2 (full PGO)
