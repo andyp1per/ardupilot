@@ -220,3 +220,26 @@ Promoting them to SRAM frees those lines for other threads too (shared cache).
       `AC_PID` (called from rate controller)
 - [ ] Consider promoting `AP_InertialSensor_Invensensev3::read_fifo` higher
       priority — it feeds SPI0 and currently sits at 94%
+
+
+
+In the RP2350 Datasheet, RXDELAY is a crucial QSPI Memory Interface (QMI) parameter. It delays the sampling clock of incoming QSPI/SPI data to compensate for round-trip propagation delays, measured in units of half a system clock cycle.How it WorksAt high frequencies or with longer routing traces, data launched by the external Flash/PSRAM may arrive late at the RP2350's GPIO pads. If data setup and hold times are violated, you will get corrupted bytes or bit shifts. Adjusting RXDELAY shifts the RP2350's internal read capture window forward in time, aligning it perfectly with the incoming data stream.Where to Configure RXDELAYYou will find RXDELAY within the QMI registers (specifically M0_TIMING and M1_TIMING):Direct Mode / Boot (e.g., Flashing): Governed by DIRECT_CSR.RXDELAY.Sub-Bank/Window Settings: Configured via M0_TIMING.RXDELAY and M1_TIMING.RXDELAY.Common ConfigurationsTypical values for RXDELAY depend on your system clock and QMI clock divisor (CLKDIV):Standard / Default (e.g., 133MHz Core, 1:2 or 1:3 Divider): Often set to 0x2 or 0x3 (2 to 3 half-clock cycles).High-Speed / Overclocked (e.g., \(150\text{ MHz} +\)): Many developers scale RXDELAY to exactly match the divisor. For example, when running with CLKDIV at \(4\), RXDELAY is often set to \(4\).
+
+
+Good — RXDELAY is in units of half a sysclk cycle, not a full cycle. That changes the math significantly.
+
+
+
+At 375 MHz: 1 half-cycle = 1.333 ns
+
+Flash (W25Q64JVXGIM) drives data on SCK falling edge, valid ≤ 6 ns later (tCLQV). RP2350 default samples on rising edge, RXDELAY shifts that sample point forward by N × 1.333 ns.
+
+CLKDIV	SCK	Rising edge	RXDELAY needed (≥ tCLQV)	Capture point	Hold margin
+3	125 MHz, period 8 ns	4.0 ns	N×1.333 ≥ 2.0 → N≥2	4.0 + 2×1.333 = 6.67 ns ✓	1.33 ns
+4	93.75 MHz, period 10.67 ns	5.33 ns	N×1.333 ≥ 0.67 → N≥1	5.33 + 2×1.333 = 8.0 ns ✓	2.67 ns
+Current CLKDIV=4 RXDELAY=4: capture at 5.33 + 5.33 = 10.67 ns — exactly at the next falling edge. That's a bug regardless of speed.
+
+CLKDIV=3, RXDELAY=2 gives 125 MHz SCK (within W25Q64JVXGIM's 133 MHz fast-read spec) with a 1.33 ns hold margin — tight but correct per datasheet. That's the aggressive option.
+
+Reviewed and updated hwdef.dat+9-6
+Done. SCK 62.5 → 125 MHz (+100%
