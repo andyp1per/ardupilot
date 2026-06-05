@@ -107,6 +107,10 @@ PA44 I2C0_SDA I2C0
 PB0 OTG_FS_DM OTG1
 PB1 OTG_FS_DP OTG1
 
+# Debug pins
+PC0 SWCLK SWD
+PC1 SWDIO SWD
+
 # SWD debug pins intentionally not declared in the application hwdef.
 # Laurel routes SWDIO on GPIO1, which is also the ICM42688 CS line.
 # Declaring SWD here can leave the pin muxed away from GPIO CS behavior,
