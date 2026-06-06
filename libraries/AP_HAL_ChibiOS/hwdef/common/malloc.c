@@ -498,6 +498,7 @@ thread_t *thread_create_alloc_affinity(size_t size, const char *name, tprio_t pr
     if (wbase == NULL) return NULL;
 
     void *wend = (uint8_t *)wbase + size;
+    __thd_stackfill((uint8_t *)wbase, (uint8_t *)wend);
     thread_descriptor_t td = __THD_DECL_DATA(name, wbase, wend, prio, pf, arg, oip);
 
     chSysLock();
