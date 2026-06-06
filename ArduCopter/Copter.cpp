@@ -785,16 +785,16 @@ void Copter::perf_report()
     const uint32_t rate_hz = ins.get_raw_gyro_rate_hz() / ins.get_rate_decimation();
     const float c1_pct = hal.scheduler->get_core1_load_pct();
     if (c1_pct >= 0.0f) {
-        hal.console->printf("Perf: main=%.0fHz rate=%uHz c0=%.0f%% c1=%.0f%%\n",
+        hal.console->printf("Perf: main=%.0fHz rate=%uHz core1load:%.0f%% core2load:%.0f%%\n",
                             main_hz, (unsigned)rate_hz, load_pct, c1_pct);
         gcs().send_text(MAV_SEVERITY_INFO,
-                        "Perf: main=%.0fHz rate=%uHz c0=%.0f%% c1=%.0f%%",
+                        "Perf: main=%.0fHz rate=%uHz core1load:%.0f%% core2load:%.0f%%",
                         main_hz, (unsigned)rate_hz, load_pct, c1_pct);
     } else {
-        hal.console->printf("Perf: main=%.0fHz rate=%uHz load=%.0f%%\n",
+        hal.console->printf("Perf: main=%.0fHz rate=%uHz core1load:%.0f%%\n",
                             main_hz, (unsigned)rate_hz, load_pct);
         gcs().send_text(MAV_SEVERITY_INFO,
-                        "Perf: main=%.0fHz rate=%uHz load=%.0f%%",
+                        "Perf: main=%.0fHz rate=%uHz core1load:%.0f%%",
                         main_hz, (unsigned)rate_hz, load_pct);
     }
 }
