@@ -259,9 +259,15 @@ void Copter::rate_controller_thread()
         } else if (running_slow > 0) {
             running_slow--;
         }
+        // On SMP builds the rate thread runs on core1, independent of core0 load.
+        // Count every iteration; only single-core builds gate on core0 overrun.
+#if defined(CH_CFG_SMP_MODE) && CH_CFG_SMP_MODE == TRUE
+        rate_loop_count++;
+#else
         if (AP::scheduler().get_extra_loop_us() == 0) {
             rate_loop_count++;
         }
+#endif
 
         // run the rate controller on all available samples
         // it is important not to drop samples otherwise the filtering will be fubar
@@ -364,7 +370,12 @@ void Copter::rate_controller_thread()
                 || target_rate_decimation > rate_decimation)) {
             last_rate_check_ms = now_ms;
             const uint32_t att_rate = ins.get_raw_gyro_rate_hz()/rate_decimation;
-            if (running_slow > 5 || AP::scheduler().get_extra_loop_us() > 0
+            // On SMP builds the rate thread owns core1 exclusively — core0 overrun
+            // (extra_loop_us) does not constrain core1 scheduling capacity.
+            if (running_slow > 5
+#if !(defined(CH_CFG_SMP_MODE) && CH_CFG_SMP_MODE == TRUE)
+                || AP::scheduler().get_extra_loop_us() > 0
+#endif
 #if HAL_LOGGING_ENABLED
                 || AP::logger().in_log_download()
 #endif
