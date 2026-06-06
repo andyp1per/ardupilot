@@ -371,8 +371,8 @@ define RP_VREG_VSEL 15
 #   Datasheet rule: RXDELAY=CLKDIV+1 when sysclk>>200MHz for extra margin.
 # CLKDIV=6 RXDELAY=7: 62.5 MHz SCK, +1 RXDELAY margin for 375 MHz. WORKS.
 # Must be applied before PLL switch (see rp_clocks.c).
-define RP_QMI_CLKDIV 5
-define RP_QMI_RXDELAY 4
+define RP_QMI_CLKDIV 4
+define RP_QMI_RXDELAY 3
 # define AP_XIP_PROFILER_ENABLED 1
 
 # Board-specific notes:
