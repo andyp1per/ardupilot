@@ -617,15 +617,20 @@ void AP_AHRS::update(bool skip_ins_update)
     // loop-time-remaining and opt-out of their full update if there
     // isn't enough time left.  Copy back their results while we are
     // at it.
-    configured_backend->update();
-    *configured_estimates = {};
-    configured_backend->get_results(*configured_estimates);
-    // if we don't have an origin, maybe set one:
-    try_set_common_origin(*configured_backend, *configured_estimates);
+    if (!backend_updated_elsewhere(*configured_backend)) {
+        configured_backend->update();
+        *configured_estimates = {};
+        configured_backend->get_results(*configured_estimates);
+        // if we don't have an origin, maybe set one:
+        try_set_common_origin(*configured_backend, *configured_estimates);
+    }
 
     for (auto &backend_and_estimates : backends_and_estimates) {
         if (&backend_and_estimates.backend == configured_backend) {
             // already updated
+            continue;
+        }
+        if (backend_updated_elsewhere(backend_and_estimates.backend)) {
             continue;
         }
 #if defined(RP2350) && AP_AHRS_DCM_ENABLED
@@ -707,6 +712,36 @@ void AP_AHRS::update_notify_from_filter_status(const nav_filter_status &status)
     AP_Notify::flags.gps_glitching = status.flags.gps_glitching;
     AP_Notify::flags.have_pos_abs = status.flags.horiz_pos_abs;
 }
+
+// true if this backend is updated outside the main AHRS update, so the
+// main update must leave it alone
+bool AP_AHRS::backend_updated_elsewhere(const AP_AHRS_Backend &backend) const
+{
+#if defined(RP2350) && HAL_NAVEKF3_AVAILABLE
+    return _ekf_runs_in_thread && &backend == &ekf3;
+#else
+    (void)backend;
+    return false;
+#endif
+}
+
+#if defined(RP2350) && HAL_NAVEKF3_AVAILABLE
+/*
+  Called from the EKF thread on core1. ekf3.update() is the expensive
+  prediction/correction step and only writes EKF-internal state, so it runs
+  unlocked. Publishing the results takes _rsem briefly to serialise against
+  core0 reading the same estimates.
+ */
+void AP_AHRS::update_EKF3_from_thread(void)
+{
+    ekf3.update();
+
+    WITH_SEMAPHORE(_rsem);
+    ekf3_estimates = {};
+    ekf3.get_results(ekf3_estimates);
+    try_set_common_origin(ekf3, ekf3_estimates);
+}
+#endif  // defined(RP2350) && HAL_NAVEKF3_AVAILABLE
 
 void AP_AHRS::reset()
 {
