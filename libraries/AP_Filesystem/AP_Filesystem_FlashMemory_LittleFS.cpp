@@ -783,8 +783,12 @@ bool AP_Filesystem_FlashMemory_LittleFS::nand_read_id(uint32_t &id)
     uint8_t cmd = JEDEC_DEVICE_ID;
     dev->transfer(&cmd, 1, buf, 4);
 #endif
-#if AP_FILESYSTEM_LITTLEFS_FLASH_TYPE == AP_FILESYSTEM_FLASH_WSPI_NAND
+#if AP_FILESYSTEM_LITTLEFS_USE_WSPI
+    // WSPI read window is pre-shifted: buf[0]=Device ID, buf[1]=Manufacturer ID
     id = (static_cast<uint32_t>(buf[1]) << 16) | (static_cast<uint32_t>(buf[0]) << 8);
+#elif AP_FILESYSTEM_LITTLEFS_FLASH_TYPE == AP_FILESYSTEM_FLASH_WSPI_NAND
+    // MT29 on plain SPI: buf[0]=dummy, buf[1]=Manufacturer, buf[2]=Device (2-byte ID)
+    id = (static_cast<uint32_t>(buf[1]) << 16) | (static_cast<uint32_t>(buf[2]) << 8);
 #else
     id = (static_cast<uint32_t>(buf[1]) << 16) | (static_cast<uint32_t>(buf[2]) << 8) | buf[3];
 #endif
