@@ -155,6 +155,13 @@ bool WSPIDevice::acquire_bus(bool acquire)
                               device_desc.mode;
 #endif
             wspiStart(wspi_devices[device_desc.bus].driver, &bus.wspicfg);
+#if HAL_USE_QUADSPI && defined(HAL_QSPI1_USE_BANK2)
+            // The H7 QUADSPI exposes two banks behind one peripheral and the
+            // ChibiOS LLD only ever drives bank 1. This board wires the chip to
+            // bank 2, so select it via FSEL once the LLD has written CR. Safe
+            // here as the peripheral is idle, and it persists until stop.
+            wspi_devices[device_desc.bus].driver->qspi->CR |= QUADSPI_CR_FSEL;
+#endif
         }
     } else {
         wspiReleaseBus(wspi_devices[device_desc.bus].driver);

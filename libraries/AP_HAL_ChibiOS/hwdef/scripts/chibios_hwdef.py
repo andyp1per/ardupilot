@@ -1706,6 +1706,13 @@ INCLUDE common.ld
                 '#define HAL_WSPI%u_CONFIG { &WSPID%u, %u}\n'
                 % (n, n, n))
         f.write('#define HAL_WSPI_BUS_LIST %s\n\n' % ','.join(devlist))
+        # The H7 QUADSPI exposes two banks behind one peripheral and the ChibiOS
+        # LLD only drives bank 1. A chip wired to bank 2 (BK2 chip-select pin)
+        # needs FSEL set, which the HAL does when this is defined.
+        for label in self.bylabel:
+            if label.startswith('QUADSPI') and 'BK2_NCS' in label:
+                f.write('#define HAL_QSPI1_USE_BANK2 1\n')
+                break
         self.write_WSPI_table(f)
 
     def write_check_firmware(self, f):
