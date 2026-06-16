@@ -142,12 +142,11 @@ PE15 VTX_PWR OUTPUT HIGH GPIO(81)
 define RELAY2_PIN_DEFAULT 81
 
 # ----------------- Dataflash -----------------
-# MT29F4G01ABAFD SPI NAND (4Gbit) on SPI6, used for the LittleFS filesystem.
-# The chip keyword selects the family; transport (SPI here) is derived from the
-# SPIDEV declaration. Speeds kept conservative for bring-up - can be raised.
-# QUADSPI device for MT29F1 NAND flash
+# MT29F4G01ABAFD SPI NAND (4Gbit, 512MB) on QUADSPI bank 2, used for the
+# LittleFS filesystem. The chip keyword selects the family; the WSPI transport
+# is derived from the QSPIDEV declaration.
 # Format: QSPIDEV name bus mode speed size_pow2 ncs_clk_delay
-# size_pow2=29 for 512MB (2^29 = 512M), ncs_clk_delay=1
+# size_pow2=29 for 512MB (2^29), ncs_clk_delay=1
 QSPIDEV dataflash QUADSPI1 MODE3 50*MHZ 29 1
 DATAFLASH littlefs:mt29fxx
 
