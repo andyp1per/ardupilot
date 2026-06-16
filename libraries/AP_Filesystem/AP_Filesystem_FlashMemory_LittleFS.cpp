@@ -764,8 +764,8 @@ bool AP_Filesystem_FlashMemory_LittleFS::nand_read_id(uint32_t &id)
 {
     uint8_t buf[4] {};
 #if AP_FILESYSTEM_LITTLEFS_USE_WSPI
-    // cmd(0x9F) + addr(0x00) + 8 dummy cycles shifts the read window by one byte,
-    // so buf[0]=Device ID, buf[1]=Manufacturer ID
+    // cmd(0x9F) + one address byte (0x00) clocks the single dummy byte the chip
+    // emits before the ID, so buf[0]=Manufacturer ID, buf[1]=Device ID
     const AP_HAL::Device::CommandHeader hdr {
         .cmd = JEDEC_DEVICE_ID,
         .cfg = AP_HAL::WSPI::CFG_CMD_MODE_ONE_LINE |
@@ -773,7 +773,6 @@ bool AP_Filesystem_FlashMemory_LittleFS::nand_read_id(uint32_t &id)
                AP_HAL::WSPI::CFG_ADDR_SIZE_8 |
                AP_HAL::WSPI::CFG_DATA_MODE_ONE_LINE,
         .addr = 0x00,
-        .dummy = 8,
     };
     wspi_dev->set_cmd_header(hdr);
     if (!wspi_dev->transfer(nullptr, 0, buf, 2)) {
@@ -784,8 +783,8 @@ bool AP_Filesystem_FlashMemory_LittleFS::nand_read_id(uint32_t &id)
     dev->transfer(&cmd, 1, buf, 4);
 #endif
 #if AP_FILESYSTEM_LITTLEFS_USE_WSPI
-    // WSPI read window is pre-shifted: buf[0]=Device ID, buf[1]=Manufacturer ID
-    id = (static_cast<uint32_t>(buf[1]) << 16) | (static_cast<uint32_t>(buf[0]) << 8);
+    // buf[0]=Manufacturer ID, buf[1]=Device ID
+    id = (static_cast<uint32_t>(buf[0]) << 16) | (static_cast<uint32_t>(buf[1]) << 8);
 #elif AP_FILESYSTEM_LITTLEFS_FLASH_TYPE == AP_FILESYSTEM_FLASH_WSPI_NAND
     // MT29 on plain SPI: buf[0]=dummy, buf[1]=Manufacturer, buf[2]=Device (2-byte ID)
     id = (static_cast<uint32_t>(buf[1]) << 16) | (static_cast<uint32_t>(buf[2]) << 8);
