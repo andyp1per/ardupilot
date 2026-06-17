@@ -110,7 +110,8 @@ Tools/debug/rp2350_pc_profiler.py --elf build/Laurel/bin/arducopter \
     --tcl-port 50001 --samples 30000 --by-line 20 --out /tmp/prof_core0.md
 
 # core1 (EKF / PID / attitude dispatch) - must select that core first
-Tools/debug/rp2350_pc_profiler.py --target-select rp2350.cpu1 \
+# (Raspberry Pi OpenOCD rp2350.cfg names the cores rp2350.cm0/rp2350.cm1)
+Tools/debug/rp2350_pc_profiler.py --target-select rp2350.cm1 \
     --samples 30000 --out /tmp/prof_core1.md
 ```
 
