@@ -176,3 +176,32 @@ still low AND a meaningful fraction of samples remain in XIP. If relocation
 alone drives the hit rate high, the size mismatch (130 KB path vs 16 KB cache)
 means in-flash reordering has little left to win and Step 2 is not worth the
 build-system cost.
+
+### Step 2 method: instrumentation PGO, not AutoFDO; stay on GCC 10
+
+Decision (verified against the pinned `arm-none-eabi-gcc` 10.2.1,
+`10-2020-q4-major`):
+
+- Use instrumentation `-fprofile-generate`/`-fprofile-use`. It compiles and
+  links for cortex-m33 today; libgcov is in the toolchain and the counters
+  (`__gcov0.*`) plus dump runtime (`__gcov_dump_one`, `__gcov_exit`) land in BSS
+  at named symbols. The counters are therefore snapshot-able over the existing
+  OpenOCD/SWD link and the `.gcda` reconstructed offline - no filesystem or
+  semihosting needed, and it reuses the Step 1 profiler's infrastructure.
+- Rejected AutoFDO (`-fauto-profile`). The flag is accepted by GCC 10, but the
+  profile-generation side is blocked: `create_gcov` consumes Linux perf.data
+  with LBR branch records, which Cortex-M33 does not have. The PCSR sampler only
+  yields flat IP samples (no branch history), so AutoFDO would mean hand-rolling
+  a PCSR->AFDO converter for a line-frequency-only profile - weaker than the
+  exact edge counts instrumentation gives, which is what the hot/cold split
+  decision (see `--by-line`) actually needs.
+- Do not upgrade GCC for this. Instrumentation PGO is fully supported on 10.2.1.
+  AutoFDO's weakness is the missing branch trace on Cortex-M, which no GCC
+  version fixes. Upgrading diverges from the toolchain ArduPilot pins and
+  validates the whole port against, for no profile-side gain.
+- Open risk to de-risk before committing Step 2: the only unproven link is
+  reconstructing a valid `.gcda` from a BSS counter snapshot. Prototype that
+  round trip on a Laurel build first.
+- Reconsider AutoFDO only as a fast-follow if the instrumented build's timing
+  overhead proves to misrepresent the real armed/flight workload; even then,
+  prove `create_gcov`/AFDO feasibility before any GCC bump.
