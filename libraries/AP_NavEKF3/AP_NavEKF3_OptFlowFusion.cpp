@@ -23,9 +23,11 @@
 void NavEKF3_core::SelectFlowFusion()
 {
 #if EK3_FEATURE_OPTFLOW_AGL_KF
-    // Update the IMU-aided AGL KF when enabled. It integrates each step's IMU
+    // Update the IMU-aided AGL KF when either consumer is enabled: optflow scaling
+    // or fusing its velocity as a velD observation. It integrates each step's IMU
     // data, so it runs ahead of the load levelling below, which skips a step
-    if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow)) {
+    if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) ||
+        frontend->option_is_enabled(NavEKF3::Option::AglKfVelForVelD)) {
         UpdateAglKf();
     }
 #endif
