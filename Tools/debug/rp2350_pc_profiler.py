@@ -29,8 +29,9 @@ Example:
       --tcl-port 50001 --samples 30000
 
 Sampling core1 (where the EKF/PID/attitude dispatch runs) needs OpenOCD to
-select that core first; pass --target-select rp2350.cpu1 (name depends on the
-OpenOCD board config; run 'targets' in the OpenOCD telnet console to list).
+select that core first; pass --target-select rp2350.cm1 (the Raspberry Pi
+OpenOCD rp2350.cfg names the cores rp2350.cm0/rp2350.cm1; run 'targets' in the
+OpenOCD telnet console to confirm the names for your build).
 """
 
 import argparse
@@ -445,7 +446,7 @@ def main():
                     help='%% of a function''s samples that define its hot kernel')
     ap.add_argument('--addr2line', default='arm-none-eabi-addr2line')
     ap.add_argument('--target-select', default=None,
-                    help="OpenOCD target to select first, e.g. rp2350.cpu1 for core1")
+                    help="OpenOCD target to select first, e.g. rp2350.cm1 for core1")
     ap.add_argument('--registry', default=default_registry,
                     help='RAMFUNC2 registry to diff suggestions against')
     ap.add_argument('--repo-root', default=default_root,
