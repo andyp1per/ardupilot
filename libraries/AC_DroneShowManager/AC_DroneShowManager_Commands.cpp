@@ -272,7 +272,7 @@ bool AC_DroneShowManager::_handle_geofence_setup_packet(void* data, uint8_t leng
         // Packet too short
         return false;
     }
-    
+
     CustomPackets::simple_geofence_setup_header_t* geofence_setup = static_cast<CustomPackets::simple_geofence_setup_header_t*>(data);
     DroneShow_FenceConfig fence_config;
     CustomPackets::acknowledgment_t* ack_packet = reinterpret_cast<CustomPackets::acknowledgment_t*>(reply + 1);
@@ -322,7 +322,7 @@ bool AC_DroneShowManager::_handle_start_time_configuration_packet(void* data, ui
     // We are liberal in what we accept so any negative value is treated as
     // "clear start time", while any value greater than or equal to GPS_WEEK_LENGTH_SEC
     // (604800) is treated as "do not change start time".
-    // 
+    //
     // Since May 2026 we added support for setting the start time in millisecond
     // precision. The millisecond part is transmitted separately in the optional part
     // of the start time configuration packet, for backward compatibility reasons.
@@ -337,6 +337,7 @@ bool AC_DroneShowManager::_handle_start_time_configuration_packet(void* data, ui
         // Try to set the start time since the range is valid
         uint16_t millisecond_offset;
 
+        // Do we have the optional v3 extensino part?
         if (length >= sizeof(CustomPackets::start_config_t)) {
             // Optional millisecond part is present in the packet; use it if it's valid
             // Only the 10 least significant bits are used. Remaining bits are ignored;
