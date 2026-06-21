@@ -339,6 +339,9 @@ bool AP_Arming::all_checks_enabled() const
 
 void AP_Arming::check_failed(const AP_Arming::Check check, bool report, const char *fmt, ...) const
 {
+    if (last_failed_prearm_check == Check::NONE) {
+        last_failed_prearm_check = check;
+    }
     if (!report) {
         return;
     }
@@ -1706,6 +1709,8 @@ bool AP_Arming::pre_arm_checks(bool report)
     }
 #endif
 
+    last_failed_prearm_check = Check::NONE;
+
     bool checks_result = hardware_safety_check(report)
 #if HAL_HAVE_IMU_HEATER
         &  heater_min_temperature_checks(report)
@@ -1785,6 +1790,9 @@ bool AP_Arming::pre_arm_checks(bool report)
 
     if (!checks_result && last_prearm_checks_result) { // check went from true to false
         report_immediately = true;
+    }
+    if (checks_result) {
+        last_failed_prearm_check = Check::NONE;
     }
     last_prearm_checks_result = checks_result;
 
