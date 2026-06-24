@@ -744,9 +744,15 @@ void AP_AHRS::update_EKF3_from_thread(void)
 {
     ekf3.update();
 
+    // Pre-compute results from Core1-private EKF state - no lock needed.
+    // ekf3 state is only written by this thread (Core1); Core0 only reads
+    // the shared ekf3_estimates struct under _rsem, never ekf3 directly.
+    AP_AHRS_Backend::Estimates new_ekf3_estimates{};
+    ekf3.get_results(new_ekf3_estimates);
+
+    // Publish into shared AHRS state - brief lock, minimal work.
     WITH_SEMAPHORE(_rsem);
-    ekf3_estimates = {};
-    ekf3.get_results(ekf3_estimates);
+    ekf3_estimates = new_ekf3_estimates;
     try_set_common_origin(ekf3, ekf3_estimates);
 }
 #endif  // defined(RP2350) && HAL_NAVEKF3_AVAILABLE
