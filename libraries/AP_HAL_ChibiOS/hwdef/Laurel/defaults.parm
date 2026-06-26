@@ -1,40 +1,36 @@
 # Laurel defaults tuned for the onboard ICM42688P sensor stack.
 #
-# IMU / rate-loop split — targeting 1 kHz backend and ~333 Hz rate control:
+# IMU / rate-loop split — 1 kHz backend, 1 kHz rate thread on core1:
 #
-#   INS_GYRO_RATE=0  → get_fast_sampling_rate()=1, and Laurel keeps the
-#     Invensensev3 SPI FIFO path enabled at the base 1000 Hz backend rate.
-#     Per-sample filter work stays in the IMU interrupt path; ins.update() in
-#     the main loop just reads aggregated output instead of draining queued
-#     samples per iteration (which was causing the 73 Hz main-loop stall).
+#   INS_GYRO_RATE=0  → get_fast_sampling_rate()=1, Invensensev3 SPI FIFO at
+#     1000 Hz backend rate.
 #
 #   FSTRATE_ENABLE=1 (FAST_RATE_DYNAMIC): rate thread active, pinned to core1
-#     via ChibiOS SMP thread affinity (THD_DESCRIPTOR_AFFINITY + &ch1).
-#     IMU sample read → rate PID → motors output all run on core1.
-#     SPI IRQs remain on core0 (core that started the SPI driver); rate thread
-#     consumes from FastRateBuffer and writes PWM registers directly.
+#     via ChibiOS SMP thread affinity.
 #
-#   FSTRATE_DIV=3: rate thread runs at 1000 Hz / 3 ≈ 333 Hz.
-#
-#   SCHED_LOOP_RATE=150: EKF, attitude target, GCS, logging at 150 Hz.
-#     The rate thread remains decoupled from the main loop and now runs at
-#     about 333 Hz independently (FSTRATE_DIV=3) to reduce SPI/backend load.
+#   FSTRATE_DIV=1: rate thread runs at 1000 Hz / 1 = 1000 Hz. DO NOT CHANGE.
+#     Any value > 1 divides the rate thread frequency (DIV=3 gives 333 Hz).
+#     1 kHz on core1 is required. FSTRATE_DIV=1 is non-negotiable.
 #
 #   INS_FAST_SAMPLE=1: enables fast-sample window for the rate thread (required
 #     for AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW).
-SCHED_LOOP_RATE 150
+SCHED_LOOP_RATE 400
 INS_FAST_SAMPLE 1
 INS_GYRO_RATE 0
-FSTRATE_DIV 3
+FSTRATE_DIV 1
 FSTRATE_ENABLE 1
 
-# Enable watchdog by default.
-BRD_OPTIONS 1
+# Bit 0: watchdog. Bit 2: allow INTERNAL_USE_ONLY params via MAVLink (needed for
+# Mission Planner to write BARO_1_GND_PRESS and other calibration params).
+BRD_OPTIONS 5 @READONLY
 
-# Laurel bring-up default: avoid hard pre-arm failure when filesystem logging
-# backend cannot initialise (e.g. no/unstable SPI microSD path).
-# 0 = no logger backend enabled by default.
-LOG_BACKEND_TYPE 0
+# No compass hardware on Laurel — disable to suppress pre-arm warnings.
+COMPASS_ENABLE 0 @READONLY
+
+# 1 = file (SD card via SPI FATFS). SD card is present on Laurel (SPI1,
+# GPIO24-27, CS=GPIO25). Set @READONLY so a stale stored 0 never silently
+# disables logging after reflash.
+LOG_BACKEND_TYPE 1 @READONLY
 
 # Quad-X frame with 4 motors (matches the 4 PWM outputs on GPIO28-31).
 FRAME_CLASS 1
@@ -45,16 +41,15 @@ FRAME_TYPE 1
 # Serial port protocol defaults.
 # SERIAL1 (UART0 / DVTX connector): MSP DisplayPort is compiled-in default.
 # SERIAL2 (UART1 / GPS connector): GPS is compiled-in default.
-# SERIAL3 (PIOUART0 / CRSF-ELRS port, GPIO20/21): enable RCIN by default so
-#   PIOUART0 is initialised and the PIO state machine configures GPIO20/21
-#   FUNCSEL=6(PIO0) at boot.  Without a receiver plugged in, the board simply
-#   shows "PreArm: RC not found" (normal behaviour).
-SERIAL3_PROTOCOL 23
+# SERIAL3 (PIOUART0 / CRSF-ELRS port, GPIO20/21): disabled - GPIO21 is used
+#   for PPM RC input via SoftSigReaderRP2350 GPIO edge capture.
+SERIAL3_PROTOCOL -1
 
 # SERIAL4 (PIOUART1 / AUX port, GPIO34/35): MAVLink2 by default so the
 # spare UART connector is ready for a telemetry radio or GCS link.
 # Protocol 2 enables PIOUART1 PIO1 state machines (GPIO34/35 FUNCSEL=7).
 SERIAL4_PROTOCOL 2
+SERIAL4_BAUD 57
 #BATT_AMP_PERVLT 1.0
 #BATT_VOLT_MULT 1.0
 
@@ -66,3 +61,19 @@ EK3_IMU_MASK 1
 # the "TasksV2\n" header — the TaskInfo array isn't allocated until the next
 # scheduler loop, so every FTP get @SYS/tasks.txt returns an empty file.
 SCHED_OPTIONS 1
+
+
+# 2 = ublox serial (GPS1_TYPE was GPS_TYPE in older ArduPilot)
+GPS1_TYPE 2
+# GPS_DRV_OPTIONS bit 2: cap ublox baud at 115200 instead of 230400.
+# Preferring 115200 for GPS as less overhead and more proven on this hardware.
+GPS_DRV_OPTIONS 4
+SERIAL2_BAUD 115 @READONLY
+
+# Throttle FS threshold. Laurel idle is ~994-1006 µs with jitter dipping to ~972;
+# 925 gives headroom below that while still catching genuine receiver FS (≤900 µs).
+FS_THR_VALUE 925 @READONLY
+
+# Board is mounted upside-down (ROLL_180). @READONLY forces this even if storage
+# has a stale 0 — without it, a stored value of 0 silently wins over the default.
+AHRS_ORIENTATION 8 @READONLY

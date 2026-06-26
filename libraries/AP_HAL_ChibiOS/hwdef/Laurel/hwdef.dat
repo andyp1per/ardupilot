@@ -48,7 +48,8 @@ FLASH_RESERVE_START_KB 64
 # __RAMFUNC2__
 additions.  Bumped to 0x4000 (16 KB) for headroom.
 # threads.new2.txt: 16168/16384 (98.7%) — bump again to 0x6000 (24 KB).
-MAIN_STACK 0x6000
+# ISR stack at 98% (24208/24576). Removed ~4 KB from RAMFUNC2 and added it here to give ISR stack headroom.
+MAIN_STACK 0x9800
 
 # USB setup
 USB_STRING_MANUFACTURER "ArduPilot"
@@ -124,7 +125,12 @@ PA9 UART1_RX UART1
 
 # PIOUARTs - CRSF/ELRS and AUX
 PA20 PIOUART0_TX INPUT FLOATING
+# PA21 reassigned to PPM RC input (SoftSigReaderRP2350 GPIO edge capture)
 PA21 PIOUART0_RX INPUT FLOATING
+
+# PPM RC input on GPIO21 (PA21)
+define HAL_RCIN_IS_GPIO 1
+define HAL_RCIN_GPIO_LINE 21
 PA34 PIOUART1_TX INPUT FLOATING
 PA35 PIOUART1_RX INPUT FLOATING
 
@@ -163,6 +169,9 @@ define AP_NOTIFY_GPIO_LED_2_ENABLED 1
 # HAL_PWM_ALARM_GPIO_LINE and board.c sets FUNCSEL=4 (PWM) at boot.
 PA5  PWM2_B TIM2 LOW ALARM
 define AP_NOTIFY_TONEALARM_ENABLED 1
+# Define Laurel-specific count tones for pre-arm failures so common bring-up
+# faults can be identified without a console link.
+define AP_NOTIFY_LAUREL_TONE_COUNT_PREARM 1
 # Lock the PWM tone frequency to the transducer's rated drive frequency.
 # toneAlarm_set_buzzer_tone() uses this to override the musical note frequency
 # while preserving the on/off timing pattern for audible notifications.
@@ -206,7 +215,7 @@ define AP_FLASH_STORAGE_QUAD_PAGE 1
 define HAL_HAVE_SAFETY_SWITCH 0
 define HAL_WITH_MCU_MONITORING 1
 define HAL_HAVE_IMU_HEATER 0
-define HAL_LOGGING_BACKEND_DEFAULT_ENABLED 0
+define HAL_LOGGING_BACKEND_DEFAULT_ENABLED 1
 # DO NOT CHANGE AP_SCHEDULER_FAST_TASK_MODULO NO MATTER WHAT.
 # Reducing EKF/FAST_TASK frequency is not an acceptable workaround.
 # Look for improvements elsewhere (ramfunc, dual-core, etc).
@@ -224,11 +233,11 @@ define HAL_OS_FATFS_IO 1
 define MMC_CONNECT_IDLE_TIMEOUT_MS 20
 # On SPI-only card detection (no dedicated CD GPIO), avoid repeated long
 # connect attempts when no card is fitted.
-define HAL_SDCARD_SPI_INIT_TRIES 1
+define HAL_SDCARD_SPI_INIT_TRIES 3
 # SD mount retry: outer Scheduler gate and inner sdcard_retry() gate.
 # Keep both long to avoid SPI bus stalls from repeated failed card probes.
 define HAL_FS_MOUNT_RETRY_MS 30000
-define HAL_SDCARD_RETRY_INTERVAL_MS 30000
+define HAL_SDCARD_RETRY_INTERVAL_MS 1000
 
 # Battery and RSSI channels on RP2350 ADC inputs.
 define HAL_BATT_MONITOR_DEFAULT 4

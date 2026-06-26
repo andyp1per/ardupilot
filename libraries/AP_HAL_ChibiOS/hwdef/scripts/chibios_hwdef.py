@@ -1091,6 +1091,11 @@ class ChibiOSHWDef(hwdef.HWDef):
             f.write('#ifndef CRT0_AREAS_NUMBER\n#define CRT0_AREAS_NUMBER 4\n#endif\n')
             f.write('#define __FASTRAMFUNC__ __attribute__ ((__section__(".fastramfunc")))\n')
             f.write('#define PORT_IRQ_ATTRIBUTES __FASTRAMFUNC__\n')
+        elif self.is_rp_mcu():
+            # RP2350 uses CRT0_AREAS_NUMBER=6 to enable startup copy for:
+            # ram0 (main SRAM), ram4 (Scratch X / SRAM8), ram5 (Scratch Y / SRAM9).
+            # ram1-ram3 are zero-length stubs in the linker script; their init is a no-op.
+            f.write('#ifndef CRT0_AREAS_NUMBER\n#define CRT0_AREAS_NUMBER 6\n#endif\n')
         else:
             f.write('#ifndef CRT0_AREAS_NUMBER\n#define CRT0_AREAS_NUMBER 1\n#endif\n')
 
@@ -1423,7 +1428,22 @@ class ChibiOSHWDef(hwdef.HWDef):
             ram0_len -= ram_reserve_start
         if ext_flash_length == 0 or self.is_bootloader_fw():
             self.env_vars['HAS_EXTERNAL_FLASH_SECTIONS'] = 0
-            f.write('''/* generated ldscript.ld */
+            if self.is_rp_mcu():
+                # RP2350 adds Scratch X (SRAM8, 0x20080000) and Scratch Y (SRAM9, 0x20081000)
+                # to the MEMORY map so common_rp2350_smp.ld can place .ram4_init/.ram5_init there.
+                f.write('''/* generated ldscript.ld */
+MEMORY
+{
+    flash : org = 0x%08x, len = %uK
+    ram0  : org = 0x%08x, len = %u
+    ram4  : org = 0x20080000, len = 4k
+    ram5  : org = 0x20081000, len = 4k
+}
+
+INCLUDE common.ld
+''' % (flash_base, flash_length, ram0_start, ram0_len))
+            else:
+                f.write('''/* generated ldscript.ld */
 MEMORY
 {
     flash : org = 0x%08x, len = %uK
@@ -1571,10 +1591,15 @@ INCLUDE common.ld
             sck_pin = self.bylabel['SPI%s_SCK' % n]
             sck_line = self.make_pal_line(sck_pin.port, sck_pin.pin)
             if self.mcu_series.startswith('PICO2'):
-# RP2350: DMA is managed internally by the SPIv1 LLD driver (channels assigned via RP_DMA_CHANNEL_ID_ANY in rp2350_mcuconf.h).
-# SPIDriverInfo fields: {driver, busid, dma_ch_tx=0, dma_ch_rx=0, sck_line}
+# RP2350 has 16 dedicated DMA channels (none shared between peripherals).
+# ChibiOS SPIv1 LLD allocates them internally via RP_DMA_CHANNEL_ID_ANY.
+# SHARED_DMA_NONE tells ArduPilot's Shared_DMA framework to leave SPI DMA alone.
+# DO NOT use real channel numbers here: Shared_DMA would then call dma_deallocate/
+# spiStop on an SPI bus that another peripheral happened to share the "same" slot,
+# killing active ChibiOS MMC-SPI transfers (SD card) mid-flight and hanging the
+# AP_Logger IO thread permanently.
                 f.write(
-                    '#define HAL_SPI%u_CONFIG { &SPID%u, %u, 0, 0, %s }\n'
+                    '#define HAL_SPI%u_CONFIG { &SPID%u, %u, SHARED_DMA_NONE, SHARED_DMA_NONE, %s }\n'
                     % (n, n, n, sck_line))
             else:
                 f.write(
@@ -1945,10 +1970,10 @@ INCLUDE common.ld
                         "#define HAL_%s_CONFIG { (BaseSequentialStream*) &SIOD%u, %u, false, "
                         % (dev, n, n))
                     if not self.intdefines.get('HAL_UART_NODMA', 0):
-# dma_rx/dma_tx set to false: RP2350 SIO UART DMA is not yet validated on hardware
-# enabling it causes Shared_DMA::call_wait() deadlock in UARTDriver::_begin() during AP_SerialManager::init().
+# dma_rx=true: RP2350 SIO UART RX uses direct dmaChannelAllocI() (no Shared_DMA), safe during init.
+# dma_tx=false: TX DMA uses Shared_DMA which causes call_wait() deadlock during AP_SerialManager::init().
                         f.write(
-                            "false, STM32_UART_%s_RX_DMA_CHAN, %s, "
+                            "true, STM32_UART_%s_RX_DMA_CHAN, %s, "
                             "false, STM32_UART_%s_TX_DMA_CHAN, %s, "
                             % (dev, rp_uart_treq_rx[n], dev, rp_uart_treq_tx[n]))
                     else:

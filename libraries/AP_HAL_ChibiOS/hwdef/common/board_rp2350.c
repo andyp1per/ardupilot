@@ -278,12 +278,12 @@ void pico2_gpio_init(void)
 
 #if defined(HAL_GPIO_PIN_SPI0_SCK)
     palSetLineMode(HAL_GPIO_PIN_SPI0_SCK, PAL_MODE_ALTERNATE_SPI);
-    palSetLineMode(HAL_GPIO_PIN_SPI0_RX, PAL_MODE_ALTERNATE_SPI);
-    palSetLineMode(HAL_GPIO_PIN_SPI0_TX, PAL_MODE_ALTERNATE_SPI);
+    palSetLineMode(HAL_GPIO_PIN_SPI0_RX,  PAL_MODE_ALTERNATE_SPI | PAL_RP_PAD_PUE);
+    palSetLineMode(HAL_GPIO_PIN_SPI0_TX,  PAL_MODE_ALTERNATE_SPI);
 #endif
 #if defined(HAL_GPIO_PIN_SPI1_SCK)
-    palSetLineMode(HAL_GPIO_PIN_SPI1_SCK, PAL_MODE_ALTERNATE_SPI);
-    palSetLineMode(HAL_GPIO_PIN_SPI1_MISO, PAL_MODE_ALTERNATE_SPI);
+    palSetLineMode(HAL_GPIO_PIN_SPI1_SCK,  PAL_MODE_ALTERNATE_SPI);
+    palSetLineMode(HAL_GPIO_PIN_SPI1_MISO, PAL_MODE_ALTERNATE_SPI | PAL_RP_PAD_PUE);
     palSetLineMode(HAL_GPIO_PIN_SPI1_MOSI, PAL_MODE_ALTERNATE_SPI);
 #endif
 
@@ -304,6 +304,14 @@ void pico2_gpio_init(void)
     palSetLine(HAL_GPIO_PIN_MPU_CS);
     palSetLineMode(HAL_GPIO_PIN_MPU_CS, PAL_MODE_OUTPUT_PUSHPULL);
 #endif
+#if defined(HAL_GPIO_PIN_ICM42688_CS)
+    palSetLine(HAL_GPIO_PIN_ICM42688_CS);
+    palSetLineMode(HAL_GPIO_PIN_ICM42688_CS, PAL_MODE_OUTPUT_PUSHPULL);
+#endif
+#if defined(HAL_GPIO_PIN_AT7456E_CS)
+    palSetLine(HAL_GPIO_PIN_AT7456E_CS);
+    palSetLineMode(HAL_GPIO_PIN_AT7456E_CS, PAL_MODE_OUTPUT_PUSHPULL);
+#endif
 #if defined(HAL_GPIO_PIN_BARO_EXT_CS)
     palSetLine(HAL_GPIO_PIN_BARO_EXT_CS);
     palSetLineMode(HAL_GPIO_PIN_BARO_EXT_CS, PAL_MODE_OUTPUT_PUSHPULL);
@@ -311,6 +319,10 @@ void pico2_gpio_init(void)
 #if defined(HAL_GPIO_PIN_GYRO_EXT_CS)
     palSetLine(HAL_GPIO_PIN_GYRO_EXT_CS);
     palSetLineMode(HAL_GPIO_PIN_GYRO_EXT_CS, PAL_MODE_OUTPUT_PUSHPULL);
+#endif
+#if defined(HAL_GPIO_PIN_SDCARD_CS)
+    palSetLine(HAL_GPIO_PIN_SDCARD_CS);
+    palSetLineMode(HAL_GPIO_PIN_SDCARD_CS, PAL_MODE_OUTPUT_PUSHPULL);
 #endif
 
 #if defined(HAL_GPIO_PIN_LED_BLUE)
@@ -409,5 +421,41 @@ void rp2350_board_init(void)
     adcRPGpioInit(42U);
 #endif
 }
+
+#if defined(RP_CORE1_START) && RP_CORE1_START == TRUE
+/*
+ * XIP-lockout protocol: Core0 parks Core1 before any flash erase/program.
+ * Core0 sets c1_xip_lock=1 and rings Core1's SIO doorbell (IRQ26).
+ * Core1's c1_xip_lockout_handler (SRAM) saves NVIC, sets lock=2, spins.
+ * Core0 waits for lock==2, proceeds, then clears lock=0 to release Core1.
+ * c1_xip_lock_ready gates the protocol until Core1 has armed IRQ26.
+ */
+volatile uint32_t c1_xip_lock = 0U;
+volatile uint32_t c1_xip_lock_ready = 0U;
+
+void rpEflBeforeXipOff(void)
+{
+    if (!c1_xip_lock_ready) {
+        return;
+    }
+    c1_xip_lock = 1U;
+    __DSB();
+    /* Ring Core1's SIO doorbell — triggers c1_xip_lockout_handler (IRQ26) */
+    SIO->DOORBELL_OUT_SET = 1U;
+    /* Wait up to 10 ms for Core1 to park itself (10 000 µs at 1 MHz TIMERAWL) */
+    const uint32_t deadline = TIMER0->TIMERAWL + 10000U;
+    while (c1_xip_lock != 2U) {
+        if ((int32_t)(TIMER0->TIMERAWL - deadline) >= 0) {
+            break;  /* timeout — proceed; Core1 may not have responded */
+        }
+    }
+}
+
+void rpEflAfterXipOn(void)
+{
+    c1_xip_lock = 0U;
+    __DSB();
+}
+#endif /* RP_CORE1_START */
 
 #endif // RP2350

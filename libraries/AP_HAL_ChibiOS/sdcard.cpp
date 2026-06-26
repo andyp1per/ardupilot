@@ -34,8 +34,12 @@ static HAL_Semaphore sem;
 #endif
 static bool sdcard_running;
 static uint32_t sdcard_last_fail_ms;
+static uint32_t sdcard_retry_interval_ms;
 #ifndef HAL_SDCARD_RETRY_INTERVAL_MS
 #define HAL_SDCARD_RETRY_INTERVAL_MS 2000U
+#endif
+#ifndef HAL_SDCARD_RETRY_INTERVAL_MAX_MS
+#define HAL_SDCARD_RETRY_INTERVAL_MAX_MS 30000U
 #endif
 #endif
 
@@ -146,7 +150,7 @@ bool sdcard_init()
     if (device == nullptr) {
         device = AP_HAL::get_HAL().spi->get_device_ptr("sdcard");
         if (!device) {
-            printf("No sdcard SPI device found\n");
+            hal.console->printf("No sdcard SPI device found\n");
             sdcard_running = false;
             return false;
         }
@@ -159,23 +163,73 @@ bool sdcard_init()
     mmcconfig.hscfg = &highspeed;
     mmcconfig.lscfg = &lowspeed;
 
+#if defined(RP2350) && defined(HAL_GPIO_PIN_SDCARD_CS)
+    /*
+     * The ChibiOS MMC-SPI driver calls spiStart/spiSelect/spiSend/spiReceive
+     * directly through the ChibiOS SPI HAL, bypassing the ArduPilot SPI hooks.
+     * lowspeed/highspeed must therefore be fully initialised for SPI_SELECT_MODE_PAD
+     * and the RP2350 PL022 hardware (SSPCR0/SSPCPSR).
+     *
+     * SPI clock = CLK_PERI = CLK_SYS = 375 MHz (Laurel PLL config).
+     * f_SPI = CLK_PERI / (SSPCPSR * (1 + SCR)).
+     * SCR is 8-bit [15:8] in SSPCR0 (max 255); SSPCPSR must be even in [2,254].
+     *
+     * lowspeed  ~399 kHz: SSPCPSR=4, SCR=234 → 375e6/(4*235) = 398.9 kHz
+     * highspeed ~ 25 MHz: SSPCPSR=2, SCR=7   → 375e6/(2*8)   = 23.4  MHz
+     *
+     * SSPCR0 layout: SCR[15:8] | CPHA[7] | CPOL[6] | FRF[5:4]=00 | DSS[3:0]=7
+     * MODE0 => CPOL=0, CPHA=0 => no extra bits.
+     */
+    lowspeed.ssport  = PAL_PORT(HAL_GPIO_PIN_SDCARD_CS);
+    lowspeed.sspad   = (uint16_t)PAL_PAD(HAL_GPIO_PIN_SDCARD_CS);
+    lowspeed.SSPCR0  = (234U << 8U) | 0x07U;
+    lowspeed.SSPCPSR = 4U;
+    highspeed.ssport  = PAL_PORT(HAL_GPIO_PIN_SDCARD_CS);
+    highspeed.sspad   = (uint16_t)PAL_PAD(HAL_GPIO_PIN_SDCARD_CS);
+    highspeed.SSPCR0  = (7U << 8U) | 0x07U;
+    highspeed.SSPCPSR = 2U;
+#endif
+
     /*
       try up to 3 times to init microSD interface
      */
     const uint8_t tries = (uint8_t)HAL_SDCARD_SPI_INIT_TRIES;
+
+#if defined(RP2350) && CH_CFG_SMP_MODE == TRUE
+    /*
+     * HAL_CORE_SPI1 controls which core the SPI1 bus thread runs on.
+     * sdcard_init() always runs on core0. If the SPI1 bus thread (on core1)
+     * has already called spiStart(SPID1) — allocating DMA on core1 — then
+     * mmcConnect's spiStart would be a no-op (SPID1 already SPI_READY) but
+     * the DMA IRQs would fire on core1 while the waiting thread is on core0.
+     * Fix: stop SPID1 here so mmcConnect re-starts it from core0, routing
+     * DMA IRQs to core0 where sdcard_init blocks.
+     * Requires dmaChannelFreeI to safely free channels from the non-owning
+     * core (see rp_dma.c fix).
+     */
+    {
+        SPIDriver *spip = mmcconfig.spip;
+        if (spip->state == SPI_READY) {
+            spiStop(spip);
+        }
+    }
+#endif
+
     for (uint8_t i=0; i<tries; i++) {
         mmcStart(&MMCD1, &mmcconfig);
-
         if (mmcConnect(&MMCD1) == HAL_FAILED) {
             mmcStop(&MMCD1);
             continue;
         }
-        if (f_mount(&SDC_FS, "/", 1) != FR_OK) {
+        FRESULT res = f_mount(&SDC_FS, "/", 1);
+        if (res != FR_OK) {
+            hal.console->printf("SDCard f_mount failed res=%u (try %u/%u slowdown=%u)\n",
+                   (unsigned)res, (unsigned)(i+1), (unsigned)tries, (unsigned)sd_slowdown);
             mmcDisconnect(&MMCD1);
             mmcStop(&MMCD1);
             continue;
         }
-        printf("Successfully mounted SDCard (slowdown=%u)\n", (unsigned)sd_slowdown);
+        hal.console->printf("Successfully mounted SDCard (slowdown=%u)\n", (unsigned)sd_slowdown);
         return true;
     }
 #endif
@@ -220,11 +274,15 @@ bool sdcard_retry(void)
         // Avoid repeated long probe sequences when no card is present.
         // Boot paths can call retry_mount() many times in a tight loop.
         const uint32_t now_ms = AP_HAL::millis();
-        if ((now_ms - sdcard_last_fail_ms) < HAL_SDCARD_RETRY_INTERVAL_MS) {
+        const uint32_t interval = (sdcard_retry_interval_ms != 0)
+                                  ? sdcard_retry_interval_ms
+                                  : HAL_SDCARD_RETRY_INTERVAL_MS;
+        if ((now_ms - sdcard_last_fail_ms) < interval) {
             return false;
         }
         if (sdcard_init()) {
             sdcard_last_fail_ms = 0;
+            sdcard_retry_interval_ms = 0;
 #if AP_FILESYSTEM_FILE_WRITING_ENABLED
 // create APM directory without re-entering AP::FS()
 // callers may already hold the FATFS backend mutex on targets where mutexes are non-recursive.
@@ -233,6 +291,17 @@ bool sdcard_retry(void)
 #endif
         } else {
             sdcard_last_fail_ms = now_ms;
+            // exponential backoff: 1 s → 2 s → 4 s … → 30 s max
+            // fast early retries catch the SD card power-on delay (~1–2 s);
+            // the cap avoids hammering the SPI bus when no card is present.
+            if (sdcard_retry_interval_ms == 0) {
+                sdcard_retry_interval_ms = HAL_SDCARD_RETRY_INTERVAL_MS;
+            } else {
+                sdcard_retry_interval_ms = sdcard_retry_interval_ms * 2;
+                if (sdcard_retry_interval_ms > HAL_SDCARD_RETRY_INTERVAL_MAX_MS) {
+                    sdcard_retry_interval_ms = HAL_SDCARD_RETRY_INTERVAL_MAX_MS;
+                }
+            }
         }
     }
     return sdcard_running;
