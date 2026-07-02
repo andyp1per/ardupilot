@@ -967,13 +967,14 @@ void Copter::one_hz_loop()
 #endif  // AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW_ENABLED
 
 #if defined(RP2350)
-    // EKF thread: runs NavEKF3::UpdateFilter() on core1 concurrently with core0's
-    // main scheduler. Lower priority than rate thread so PID math is never starved.
-    // read_AHRS() on core0 reads cached EKF output instead of running the filter itself.
+    // EKF thread: runs NavEKF3::UpdateFilter() on core0, leaving core1 dedicated
+    // to the rate loop. The EKF's ~130 KB working set thrashes the shared XIP
+    // cache; keeping it off core1 lets the (small) rate hot path stay cache/RAM
+    // resident and deterministic. read_AHRS() reads cached EKF output.
     if (!started_ekf_thread) {
         bool ekf_ok = hal.scheduler->thread_create_pinned_to_core(
                       FUNCTOR_BIND_MEMBER(&Copter::ekf_thread, void),
-                      "ekf", 12288, AP_HAL::Scheduler::PRIORITY_IO, 1, 1);
+                      "ekf", 12288, AP_HAL::Scheduler::PRIORITY_IO, 1, 0);
         if (ekf_ok) {
             started_ekf_thread = true;
             AP::ahrs().set_ekf_runs_in_thread(true);
