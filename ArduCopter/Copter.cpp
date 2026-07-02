@@ -880,13 +880,18 @@ void Copter::perf_report()
     // core) as STATUSTEXT lines; addresses are attributed to functions offline.
     rp2350_pc_sampler_init_core0();
     {
-        char pbuf[240];
-        rp2350_pc_sampler_dump(1, 12, pbuf, sizeof(pbuf));
-        for (const char *p = pbuf; *p != '\0'; ) {
-            const char *nl = strchr(p, '\n');
-            const int len = nl ? (int)(nl - p) : (int)strlen(p);
-            if (len > 0) {
-                gcs().send_text(MAV_SEVERITY_INFO, "PROFc1 %.*s", len, p);
+        // send_text uses AP's cut-down vsnprintf, which has no %.*s; terminate
+        // each line in place and send it with plain %s.
+        char pbuf[320];
+        rp2350_pc_sampler_dump(1, 16, pbuf, sizeof(pbuf));
+        char *p = pbuf;
+        while (*p != '\0') {
+            char *nl = strchr(p, '\n');
+            if (nl != nullptr) {
+                *nl = '\0';
+            }
+            if (*p != '\0') {
+                gcs().send_text(MAV_SEVERITY_INFO, "PROFc1 %s", p);
             }
             if (nl == nullptr) {
                 break;
