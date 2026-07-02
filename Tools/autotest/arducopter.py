@@ -16413,6 +16413,64 @@ RTL_ALT_M 111
         self.wait_mode('RTL')
         self.wait_disarmed()
 
+
+    def setup_RealFlight_vehicle(self, model, home):
+        '''
+        Restart the SITL for RealFlight. RealFlight must already be running and
+        the correct airport and model must be loaded.
+        '''
+        defaults_filepath = self.model_defaults_filepath(model)
+        extra_params = 'default_params/realflight-autotest-extra.parm'
+        defaults_filepath.append(os.path.join(testdir, extra_params))
+        self.customise_SITL_commandline(
+            [],
+            model=f"flightaxis:{self.realflight_address}",
+            defaults_filepath=defaults_filepath,
+            wipe=True,
+            sitl_home=home,
+        )
+
+    def RealFlightHover(self, model, home):
+        '''
+        Perform a simple hover test in RealFlight. Useful for generating logs
+        for comparative analysis.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+
+        # Log fullrate attitude for PID Review Tool
+        self.set_parameters({
+            "LOG_BITMASK": 0x10FFFF,
+        })
+        self.setup_RealFlight_vehicle(model, home)
+
+        self.wait_ready_to_arm()
+        self.change_mode("LOITER")
+        self.arm_vehicle()
+        self.set_rc(3, 2000)
+        self.wait_altitude(8, 12, relative=True)
+        self.set_rc(3, 1500)
+        stick_deflections = [
+            (2000, 1500, "Roll right"),
+            (1500, 1500, "Center"),
+            (1000, 1500, "Roll left"),
+            (1500, 1500, "Center"),
+            (1500, 2000, "Pitch forward"),
+            (1500, 1500, "Center"),
+            (1500, 1000, "Pitch back"),
+            (1500, 1500, "Center"),
+        ]
+        n_iterations = 2
+        for i in range(n_iterations):
+            print(f"Control input cycle: {i+1}/{n_iterations}")
+            for roll, pitch, msg in stick_deflections:
+                self.progress(f"{msg}")
+                self.set_rc(1, roll)
+                self.set_rc(2, pitch)
+                self.delay_sim_time(0.5)
+        self.change_mode("LAND")
+        self.wait_disarmed(timeout=120)
+
     def LUAConfigProfile(self):
         '''test the config_profiles.lua example script'''
         self.customise_SITL_commandline(
@@ -16808,6 +16866,10 @@ return update, 1000
             self.MISSION_OPTION_CLEAR_MISSION_AT_BOOT,
             self.SafetySwitch,
             self.RCProtocolFailsafe,
+            Test(self.RealFlightHover, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             self.BrakeZ,
             self.MAV_CMD_DO_FLIGHTTERMINATION,
             self.MAV_CMD_DO_LAND_START,
@@ -16928,7 +16990,7 @@ return update, 1000
         return ret
 
     def disabled_tests(self):
-        return {
+        ret = {
             "Parachute": "See https://github.com/ArduPilot/ardupilot/issues/4702",
             "GroundEffectCompensation_takeOffExpected": "Flapping",
             "GroundEffectCompensation_touchDownExpected": "Flapping",
@@ -16937,6 +16999,9 @@ return update, 1000
             "SMART_RTL_Repeat": "Currently fails due to issue with loop detection",
             "RTLStoppingDistanceSpeed": "Currently fails due to vehicle going off-course",
         }
+        if not self.realflight_address:
+            ret["RealFlightHover"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+        return ret
 
 
 class AutoTestCopterTests1a(AutoTestCopter):
