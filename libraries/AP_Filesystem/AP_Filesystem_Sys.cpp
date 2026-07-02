@@ -29,6 +29,12 @@
 
 extern const AP_HAL::HAL& hal;
 
+#if defined(RP2350) && defined(AP_RP2350_PC_SAMPLER_ENABLED)
+// Investigation-only: full per-core PC-sampler histogram (see
+// AP_HAL_ChibiOS/rp2350_pc_sampler.cpp). Strip before upstreaming.
+void rp2350_pc_sampler_dump_full(ExpandingString &str, unsigned core);
+#endif
+
 struct SysFileList {
     const char* name;
 };
@@ -36,6 +42,9 @@ struct SysFileList {
 static const SysFileList sysfs_file_list[] = {
     {"threads.txt"},
     {"tasks.txt"},
+#if defined(RP2350) && defined(AP_RP2350_PC_SAMPLER_ENABLED)
+    {"pcprof.txt"},
+#endif
     {"dma.txt"},
     {"memory.txt"},
     {"uarts.txt"},
@@ -121,6 +130,12 @@ int AP_Filesystem_Sys::open(const char *fname, int flags, bool allow_absolute_pa
         // 87 bytes/line: 108 * 87 = 9396 bytes + 8 byte header = ~9.4 KB.
         // Reserve a single contiguous block to avoid fragmented realloc fails.
         r.str->reserve(120 * 100);
+#if defined(RP2350) && defined(AP_RP2350_PC_SAMPLER_ENABLED)
+    } else if (strcmp(fname, "pcprof.txt") == 0) {
+        // Top ~512 PCs at ~14 bytes/token; one modest block that fits the tight
+        // runtime heap (~20 KB free after EKF init).
+        r.str->reserve(512 * 14);
+#endif
     } else if (strcmp(fname, "memory.txt") == 0 ||
                strcmp(fname, "uarts.txt") == 0 ||
                strcmp(fname, "timers.txt") == 0) {
@@ -264,6 +279,11 @@ bool AP_Filesystem_Sys::ensure_generated(struct rfile &r)
     else if (strcmp(fname, "persistent.parm") == 0) {
         hal.util->load_persistent_params(*r.str);
     }
+#if defined(RP2350) && defined(AP_RP2350_PC_SAMPLER_ENABLED)
+    else if (strcmp(fname, "pcprof.txt") == 0) {
+        rp2350_pc_sampler_dump_full(*r.str, 1);  // core1 (EKF/rate)
+    }
+#endif
 
     if (r.str->has_failed_allocation()) {
         errno = ENOMEM;
