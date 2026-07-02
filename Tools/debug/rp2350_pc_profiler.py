@@ -327,6 +327,92 @@ def build_report(t, elapsed, syms, registry, top, threshold):
     return "\n".join(lines)
 
 
+# Region bases for the on-chip PROFc1 dump tags (see rp2350_pc_sampler.cpp).
+PROFC1_TAG_BASE = {'F': 0x10010000, 'S': 0x20000000, 'C': 0x20080000, 'o': 0}
+PROFC1_TOKEN = re.compile(r'([FSCo])([0-9a-fA-F]+):(\d+)')
+PROFC1_N = re.compile(r'\bn=(\d+)')
+
+
+def parse_profc1_text(text):
+    """Parse pasted 'PROFc1' MAVLink lines into ({address: count}, total_n).
+
+    Only lines mentioning PROF are considered, so diagnostic lines like 'C1:...'
+    cannot be misread as tokens. The firmware hash accumulates since boot, so
+    across several pasted cycles we keep the max count per address and max n."""
+    hist = {}
+    total = 0
+    for line in text.splitlines():
+        if 'PROF' not in line:
+            continue
+        m = PROFC1_N.search(line)
+        if m:
+            total = max(total, int(m.group(1)))
+        for tag, off, cnt in PROFC1_TOKEN.findall(line):
+            addr = PROFC1_TAG_BASE[tag] + int(off, 16)
+            cnt = int(cnt)
+            if cnt > hist.get(addr, 0):
+                hist[addr] = cnt
+    return hist, total
+
+
+def build_histogram_report(hist, total_n, syms, registry, top):
+    """Aggregate the emitted top-PC histogram by function and rank it."""
+    emitted = sum(hist.values()) or 1
+    func_count = {}
+    unknown = 0
+    for addr, c in hist.items():
+        idx = syms.lookup(addr)
+        if idx is None:
+            unknown += c
+            continue
+        func_count[idx] = func_count.get(idx, 0) + c
+    ranked = sorted(func_count.items(), key=lambda kv: kv[1], reverse=True)
+    denom = total_n if total_n else emitted
+
+    L = []
+    L.append("# RP2350 PROFc1 histogram attribution (core1)")
+    L.append("")
+    L.append("n (all samples): %d   emitted top-PC sum: %d   distinct PCs: %d   no-symbol: %d"
+             % (total_n, emitted, len(hist), unknown))
+    L.append("")
+    L.append("## Hot functions (from the emitted top PCs, aggregated)")
+    L.append("   %tot  %emit     cnt  region  address      size  function")
+    for idx, c in ranked[:top]:
+        start, end, _, _ = syms.entries[idx]
+        name = strip_signature(syms.demangled[idx])
+        note = "  [RAMFUNC2]" if name in registry else ""
+        L.append("  %5.1f%% %5.1f%% %7d  %-5s 0x%08x %5d  %s%s"
+                 % (100.0 * c / denom, 100.0 * c / emitted, c,
+                    region_of(start), start, end - start, name, note))
+    L.append("")
+    L.append("  %tot = share of all core1 samples (n); %emit = share of emitted top PCs.")
+    L.append("  [RAMFUNC2] = already resident in SRAM.")
+    L.append("")
+
+    L.append("## RAMFUNC2 candidates (xip-resident, not yet relocated)")
+    sugg = []
+    for idx, c in ranked:
+        start, end, _, fil = syms.entries[idx]
+        if region_of(start) != 'xip':
+            continue
+        name = strip_signature(syms.demangled[idx])
+        if name in registry:
+            continue
+        sugg.append((c, fil, name, end - start))
+    if not sugg:
+        L.append("  (none - the emitted hot PCs are already in SRAM)")
+    else:
+        L.append("# paste into rp2350_ramfunc2_registry.txt (path|symbol):")
+        for c, fil, name, size in sugg:
+            pct = 100.0 * c / denom
+            if fil:
+                L.append("%s|%s    # %.1f%% of n, %d B" % (fil, name, pct, size))
+            else:
+                L.append("# %.1f%% of n, %d B (no source path) %s" % (pct, size, name))
+    L.append("")
+    return "\n".join(L)
+
+
 def addr2line_map(addr2line_bin, elf, addrs, repo_root):
     """Map instruction addresses to 'relpath:line' via addr2line (stdin-fed)."""
     uniq = sorted(set(addrs))
@@ -455,6 +541,9 @@ def main():
     ap.add_argument('--cppfilt', default='arm-none-eabi-c++filt')
     ap.add_argument('--out', default=None, help='also write the report to this file')
     ap.add_argument('--raw-out', default=None, help='write raw sampled PCs (hex, one per line)')
+    ap.add_argument('--histogram', default=None, metavar='FILE',
+                    help="attribute a pasted on-chip PROFc1 dump ('-' for stdin) "
+                         "instead of SWD sampling")
     args = ap.parse_args()
 
     if not os.path.exists(args.elf):
@@ -465,6 +554,19 @@ def main():
     registry = load_registry(args.registry)
     sys.stderr.write("  %d functions, %d already in registry\n" %
                      (len(syms.entries), len(registry)))
+
+    if args.histogram is not None:
+        text = sys.stdin.read() if args.histogram == '-' else open(args.histogram).read()
+        hist, total_n = parse_profc1_text(text)
+        if not hist:
+            sys.exit("no PROFc1 tokens found in input")
+        report = build_histogram_report(hist, total_n, syms, registry, args.top)
+        print(report)
+        if args.out:
+            with open(args.out, 'w') as f:
+                f.write(report + "\n")
+            sys.stderr.write("wrote %s\n" % args.out)
+        return
 
     ocd = OpenOCDTcl(args.host, args.tcl_port)
     try:
