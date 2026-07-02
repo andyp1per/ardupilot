@@ -16,6 +16,21 @@
 /*
  * RP2350 timer-driven statistical PC sampler. See rp2350_pc_sampler.h for the
  * mechanism and rationale.
+ *
+ * Samples are kept at full PC resolution in a per-core open-addressing hash
+ * table, not a bucketed array: the LTO build packs functions into many small
+ * (tens of bytes) sections, so coarse address bins cannot be attributed to a
+ * single function. Exact PCs map one-to-one to functions offline via nm.
+ *
+ * The alarm IRQs are ChibiOS zero-latency interrupts (priority 0), so the
+ * kernel BASEPRI cannot mask them: sampling is uniform across thread, ISR and
+ * critical-section time. A priority equal to or above the kernel would be
+ * blocked inside every critical section and pile the deferred samples onto
+ * chSysUnlock, badly biasing the profile. Each handler is a bare naked stub
+ * (no OS calls) that reads the interrupted PC from whichever stack the
+ * exception used (EXC_RETURN bit 2 selects MSP vs PSP) and returns straight to
+ * the interrupted context. The ST LLD ISRs for these two alarms are suppressed
+ * (ST_TIMER_ALARM2/3_SUPPRESS_ISR) so these strong symbols own the vectors.
  */
 
 #include <ch.h>
@@ -35,37 +50,33 @@
  */
 #define PROF_INTERVAL_US   197u
 
-/* 512-byte address buckets (fine enough to separate most functions). */
-#define PROF_SHIFT         9u
+/* Per-core PC hash table: 4096 slots holds the hot working set with a low load
+ * factor (few hundred to ~1k distinct hot PCs), so probe chains stay short. */
+#define PROF_HASH_BITS     12u
+#define PROF_HASH_SIZE     (1u << PROF_HASH_BITS)
+#define PROF_HASH_MASK     (PROF_HASH_SIZE - 1u)
+#define PROF_PROBE_MAX     8u
 
-/* Address regions that hold executable code, each mapped onto a contiguous
- * slice of the flat per-core histogram. Spans cover the linked extents with
- * headroom: flash .text (~1.42 MB), the __RAMFUNC2__ SRAM block, and the two
- * 4 KB scratch banks used by the scratchx/scratchy registries. */
+/* Code regions, used only to classify PCs for the summary line. Bases:
+ * F=XIP flash text, S=SRAM ramfunc, C=scratch banks (ram4/ram5). */
 static const struct {
     uint32_t base;
-    uint32_t nbuckets;
-    uint32_t off;
+    uint32_t span;
     char     tag;
 } prof_regions[] = {
-    { 0x10010000u, 2816u, 0u,           'F' },  /* XIP flash text            */
-    { 0x20000000u,  256u, 2816u,        'S' },  /* SRAM ramfunc              */
-    { 0x20080000u,   16u, 2816u + 256u, 'C' },  /* scratch banks (ram4/ram5) */
+    { 0x10010000u, 0x160000u, 'F' },
+    { 0x20000000u, 0x020000u, 'S' },
+    { 0x20080000u, 0x002000u, 'C' },
 };
 #define PROF_NREGIONS   (sizeof(prof_regions) / sizeof(prof_regions[0]))
-#define PROF_NBUCKETS   (2816u + 256u + 16u)
-
-/* Valid process-stack range for the PSP guard (ram0 plus scratch banks). */
-#define PROF_PSP_MIN    0x20000000u
-#define PROF_PSP_MAX    0x20081fe0u
 
 #define PROF_DUMP_MAX   16u
 
 struct prof_core {
-    uint16_t hist[PROF_NBUCKETS];  /* saturating per-bucket sample counts */
-    uint32_t total;                /* samples with a valid stacked PC     */
-    uint32_t other;                /* PC outside every code region        */
-    uint32_t bad;                  /* PSP outside the valid stack range   */
+    uint32_t pc[PROF_HASH_SIZE];   /* key; 0 = empty slot (no code PC is 0) */
+    uint16_t cnt[PROF_HASH_SIZE];  /* saturating sample count               */
+    uint32_t total;                /* samples taken                         */
+    uint32_t dropped;              /* not-code PC or probe chain full       */
 };
 
 static struct prof_core prof[2];
@@ -73,52 +84,87 @@ static bool inited_core0;
 static bool inited_core1;
 
 /*
- * Alarm callback, invoked from the ST LLD TIMER0 ALARMn handler (ALARM2 on
- * core0, ALARM3 on core1) after it has acknowledged the interrupt. Reads the
- * interrupted thread's PC from the exception frame (frame word 6 = PSP+0x18,
- * a fixed offset even with FPU lazy stacking) and buckets it, then re-arms.
+ * Record one sample and re-arm the alarm. Called (tail-branched) from the naked
+ * vector stubs with the interrupted PC in the first argument and the alarm
+ * index in the second; on entry LR still holds EXC_RETURN, so this function's
+ * ordinary return performs the exception return to the interrupted context.
  *
- * Placed in SRAM (.ramtext) so this ~5 kHz ISR never stalls on an XIP cache
- * miss; it only uses inlined intrinsics and memory-mapped registers, so it
- * makes no calls into flash.
+ * SRAM-resident (.ramtext) so this ~5 kHz path never stalls on an XIP miss; it
+ * only uses inlined intrinsics and memory-mapped registers - no flash calls.
  */
-__attribute__((noinline, section(".ramtext")))
-static void pc_sampler_cb(unsigned alarm)
+extern "C" __attribute__((used, noinline, section(".ramtext")))
+void rp2350_pc_sampler_sink(uint32_t addr, uint32_t alarm)
 {
-    /* Schedule the next sample. INTE stays set; the LLD already cleared INTR. */
+    /* Ack this alarm and schedule the next sample (INTE stays set). */
+    TIMER0->INTR = (1u << alarm);
     TIMER0->ALARM[alarm] = TIMER0->TIMERAWL + PROF_INTERVAL_US;
 
     const unsigned core = (unsigned)port_get_core_id() & 1u;
     struct prof_core *pc = &prof[core];
+    pc->total++;
 
-    const uint32_t psp = __get_PSP();
-    if (psp < PROF_PSP_MIN || psp > PROF_PSP_MAX) {
-        pc->bad++;
+    addr &= ~1u;                       /* drop the thumb bit */
+    if (addr < 0x10000000u) {          /* ROM/poison: not attributable code */
+        pc->dropped++;
         return;
     }
 
-    const uint32_t addr = ((const uint32_t *)psp)[6];
-    pc->total++;
-    for (unsigned r = 0; r < PROF_NREGIONS; r++) {
-        const uint32_t rel = addr - prof_regions[r].base;
-        if (rel < (prof_regions[r].nbuckets << PROF_SHIFT)) {
-            uint16_t *b = &pc->hist[prof_regions[r].off + (rel >> PROF_SHIFT)];
-            if (*b != 0xFFFFu) {
-                (*b)++;
+    uint32_t idx = (addr * 2654435761u) >> (32u - PROF_HASH_BITS);
+    for (unsigned probe = 0; probe < PROF_PROBE_MAX; probe++) {
+        const uint32_t slot = (idx + probe) & PROF_HASH_MASK;
+        const uint32_t key = pc->pc[slot];
+        if (key == addr) {
+            if (pc->cnt[slot] != 0xFFFFu) {
+                pc->cnt[slot]++;
             }
             return;
         }
+        if (key == 0u) {
+            pc->pc[slot] = addr;
+            pc->cnt[slot] = 1u;
+            return;
+        }
     }
-    pc->other++;
+    pc->dropped++;
 }
 
-/* Arm one free alarm and enable its IRQ on the calling core. */
+/*
+ * Bare zero-latency handlers for the two free TIMER0 alarms (IRQ2 -> Vector48
+ * on core0, IRQ3 -> Vector4C on core1). EXC_RETURN bit 2 selects the stack the
+ * exception frame is on; the stacked PC is at frame offset 0x18 (fixed even
+ * with FPU lazy stacking). Tail-call the sink with (PC, alarm); LR is untouched
+ * so the sink's return is the exception return.
+ */
+extern "C" __attribute__((naked, used, section(".ramtext"))) void Vector48(void)
+{
+    __asm volatile(
+        "tst    lr, #4\n"
+        "ite    eq\n"
+        "mrseq  r0, msp\n"
+        "mrsne  r0, psp\n"
+        "ldr    r0, [r0, #0x18]\n"
+        "mov    r1, #2\n"
+        "b      rp2350_pc_sampler_sink\n");
+}
+extern "C" __attribute__((naked, used, section(".ramtext"))) void Vector4C(void)
+{
+    __asm volatile(
+        "tst    lr, #4\n"
+        "ite    eq\n"
+        "mrseq  r0, msp\n"
+        "mrsne  r0, psp\n"
+        "ldr    r0, [r0, #0x18]\n"
+        "mov    r1, #3\n"
+        "b      rp2350_pc_sampler_sink\n");
+}
+
+/* Arm one free alarm (INTE via the atomic SET alias to avoid a cross-core RMW
+ * race on the shared register). */
 static void sampler_arm(unsigned alarm)
 {
-    stSetCallback(alarm, pc_sampler_cb);
-    TIMER0->INTR = (1u << alarm);                          /* drop any stale latch */
+    TIMER0->INTR = (1u << alarm);
     TIMER0->ALARM[alarm] = TIMER0->TIMERAWL + PROF_INTERVAL_US;
-    TIMER0->SET.INTE = (1u << alarm);                      /* atomic, no RMW race  */
+    TIMER0->SET.INTE = (1u << alarm);
 }
 
 void rp2350_pc_sampler_init_core0(void)
@@ -128,7 +174,8 @@ void rp2350_pc_sampler_init_core0(void)
     }
     inited_core0 = true;
     sampler_arm(2);
-    nvicEnableVector(RP_TIMER0_IRQ2_NUMBER, RP_IRQ_TIMER0_ALARM2_PRIORITY);
+    /* Priority 0: a zero-latency IRQ, unmaskable by the kernel BASEPRI. */
+    nvicEnableVector(RP_TIMER0_IRQ2_NUMBER, 0);
 }
 
 void rp2350_pc_sampler_init_core1(void)
@@ -138,21 +185,21 @@ void rp2350_pc_sampler_init_core1(void)
     }
     inited_core1 = true;
     sampler_arm(3);
-    nvicEnableVector(RP_TIMER0_IRQ3_NUMBER, RP_IRQ_TIMER0_ALARM3_PRIORITY);
+    nvicEnableVector(RP_TIMER0_IRQ3_NUMBER, 0);
 }
 
-/* Map a flat bucket index back to its region tag and byte offset from the
- * region base. */
-static char bucket_addr(unsigned idx, uint32_t *off)
+/* Region tag for an address, and its offset from the region base, for the
+ * dump tokens. Returns 'o' (other) when outside every code region. */
+static char region_of(uint32_t addr, uint32_t *off)
 {
     for (unsigned r = 0; r < PROF_NREGIONS; r++) {
-        if (idx - prof_regions[r].off < prof_regions[r].nbuckets) {
-            *off = (idx - prof_regions[r].off) << PROF_SHIFT;
+        if (addr - prof_regions[r].base < prof_regions[r].span) {
+            *off = addr - prof_regions[r].base;
             return prof_regions[r].tag;
         }
     }
-    *off = 0;
-    return '?';
+    *off = addr;
+    return 'o';
 }
 
 /* Minimal append helpers - keep one byte spare for the terminating NUL. */
@@ -209,52 +256,54 @@ uint32_t rp2350_pc_sampler_dump(unsigned core, unsigned maxn,
     }
     const struct prof_core *pc = &prof[core];
 
-    /* Single pass: per-region sample sums and a descending top-N list. */
-    uint32_t rsum[PROF_NREGIONS] = {};
-    uint16_t top_idx[PROF_DUMP_MAX];
+    /* Single pass over the hash table: per-region sample sums (F/S) and a
+     * descending top-N of the hottest individual PCs. */
+    uint32_t fsum = 0, ssum = 0;
+    uint32_t top_pc[PROF_DUMP_MAX];
     uint16_t top_cnt[PROF_DUMP_MAX];
     unsigned ntop = 0;
-    for (unsigned i = 0; i < PROF_NBUCKETS; i++) {
-        const uint16_t c = pc->hist[i];
-        if (c == 0) {
+    for (unsigned i = 0; i < PROF_HASH_SIZE; i++) {
+        const uint32_t addr = pc->pc[i];
+        const uint16_t c = pc->cnt[i];
+        if (addr == 0u || c == 0u) {
             continue;
         }
-        for (unsigned r = 0; r < PROF_NREGIONS; r++) {
-            if (i - prof_regions[r].off < prof_regions[r].nbuckets) {
-                rsum[r] += c;
-                break;
-            }
+        if (addr - prof_regions[0].base < prof_regions[0].span) {
+            fsum += c;
+        } else if (addr - prof_regions[1].base < prof_regions[1].span) {
+            ssum += c;
         }
         if (ntop < maxn || (maxn > 0 && c > top_cnt[maxn - 1])) {
             unsigned j = (ntop < maxn) ? ntop++ : (maxn - 1);
             while (j > 0 && top_cnt[j - 1] < c) {
                 top_cnt[j] = top_cnt[j - 1];
-                top_idx[j] = top_idx[j - 1];
+                top_pc[j] = top_pc[j - 1];
                 j--;
             }
             top_cnt[j] = c;
-            top_idx[j] = (uint16_t)i;
+            top_pc[j] = addr;
         }
     }
 
     const uint32_t total = pc->total ? pc->total : 1;
+    const uint32_t osum = (total > fsum + ssum) ? (total - fsum - ssum) : 0;
     uint32_t used = 0;
     used = put_str(buf, used, buflen, "n=");
     used = put_dec(buf, used, buflen, pc->total);
     used = put_str(buf, used, buflen, " F=");
-    used = put_dec(buf, used, buflen, (uint32_t)((uint64_t)rsum[0] * 100u / total));
+    used = put_dec(buf, used, buflen, (uint32_t)((uint64_t)fsum * 100u / total));
     used = put_str(buf, used, buflen, "% S=");
-    used = put_dec(buf, used, buflen, (uint32_t)((uint64_t)rsum[1] * 100u / total));
+    used = put_dec(buf, used, buflen, (uint32_t)((uint64_t)ssum * 100u / total));
     used = put_str(buf, used, buflen, "% o=");
-    used = put_dec(buf, used, buflen, (uint32_t)((uint64_t)pc->other * 100u / total));
+    used = put_dec(buf, used, buflen, (uint32_t)((uint64_t)osum * 100u / total));
     used = put_ch(buf, used, buflen, '%');
 
-    /* Hot buckets as region-tagged offset:count tokens, wrapped near 40 chars
-     * so each line fits a MAVLink STATUSTEXT. */
+    /* Hot PCs as region-tagged offset:count tokens (full resolution), wrapped
+     * near 40 chars so each line fits a MAVLink STATUSTEXT. */
     uint32_t line = 999;  /* force a newline before the first token */
-    for (unsigned k = 0; k < ntop && used + 18u < buflen; k++) {
+    for (unsigned k = 0; k < ntop && used + 20u < buflen; k++) {
         uint32_t off = 0;
-        const char tag = bucket_addr(top_idx[k], &off);
+        const char tag = region_of(top_pc[k], &off);
         if (line >= 40) {
             used = put_ch(buf, used, buflen, '\n');
             line = 0;
