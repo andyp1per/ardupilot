@@ -229,6 +229,12 @@ define AP_INERTIALSENSOR_ALLOW_NO_SENSORS 1
 # histograms from perf_report. See Laurel/xip-cache-and-pgo.md. Off for
 # release builds; strip before upstreaming.
 define AP_RP2350_PC_SAMPLER_ENABLED 1
+
+# The PC sampler owns TIMER0 ALARM2 (core0) and ALARM3 (core1) with its own
+# zero-latency vectors; suppress the ChibiOS ST-LLD handlers for those two
+# alarms (the SMP scheduler only uses ALARM0/ALARM1) so there is no clash.
+define ST_TIMER_ALARM2_SUPPRESS_ISR
+define ST_TIMER_ALARM3_SUPPRESS_ISR
 define HAL_MAIN_LOOP_STUCK_THRESHOLD_MS 1200
 # Enable SPI microSD via the shared SPI1 bus. Storage parameters remain on
 # XIP flash; FATFS is for logs/files only.
