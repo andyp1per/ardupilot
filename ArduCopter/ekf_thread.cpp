@@ -20,11 +20,12 @@
 #pragma GCC optimize("O2")
 
 /*
-  EKF thread — runs NavEKF3::UpdateFilter() on core1, below the rate thread
-  in priority, so PID math is never starved.
+  EKF thread - runs NavEKF3::UpdateFilter() on core0, leaving core1 dedicated to
+  the rate loop. The EKF's large working set thrashes the shared XIP cache, so
+  keeping it off core1 lets the small rate hot path stay cache/RAM resident.
 
   Design:
-  - core0 calls signal_ekf_thread() immediately after AP_InertialSensor::update()
+  - signal_ekf_thread() is called immediately after AP_InertialSensor::update()
     each scheduler tick, waking this thread with fresh delta-angle/velocity data.
   - This thread calls AP_AHRS::update_EKF3_from_thread() which:
       1. Runs ekf3.update() (~2ms) without holding _rsem.
