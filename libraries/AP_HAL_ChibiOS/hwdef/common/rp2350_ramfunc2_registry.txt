@@ -360,3 +360,73 @@ modules/ChibiOS/os/hal/ports/common/ARMCMx/nvic.c|nvicDisableVector
 (profiled)|ChibiOS::BinarySemaphore::signal
 modules/ChibiOS/os/rt/src/chstats.c|__stats_stop_measure_crit_isr
 (profiled)|Empty::OpticalFlow::push_gyro
+
+# Core1 rate/IMU path, second pass: the residual flash functions the first
+# pass exposed (Vector3 math, ByteBuffer, SPI/DMA glue, TCal, AP_Logger
+# gates, motor mixing tail). ~3.5 KB.
+(profiled)|AP_Logger::should_log
+(profiled)|SRV_Channels::cork
+(profiled)|AP_Logger::log_while_disarmed
+(profiled)|AP_InertialSensor_TCal::correct_sensor
+(profiled)|AP_Motors::AP_Motors_limit::set_all
+(profiled)|AP_BattMonitor::voltage_resting_estimate
+(profiled)|AP_MotorsMatrix::thrust_compensation
+(profiled)|AP_BattMonitor_Backend::voltage_resting_estimate
+modules/ChibiOS/os/hal/src/hal_spi_v1.inc|spiStop
+(profiled)|AP_InertialSensor_TCal::correct_gyro
+modules/ChibiOS/os/rt/src/chsem.c|chSemWaitS
+modules/ChibiOS/os/hal/src/hal_spi_v1.inc|spiStart
+(profiled)|std::enable_if<std::is_floating_point<std::common_type<float, float>::type>::value, bool>::type is_equal<float, float>
+(profiled)|AP_MotorsMulticopter::output_rpyt
+(profiled)|void Functor<void>::method_wrapper<AP_InertialSensor_Invensensev3, &AP_InertialSensor_Invensensev3::read_fifo>
+libraries/AP_HAL_ChibiOS/hwdef/common/watchdog.c|rp2350_was_watchdog_reset
+libraries/AP_HAL_ChibiOS/hwdef/common/bouncebuffer.c|bouncebuffer_setup_write
+(profiled)|Vector3<float>::operator*=
+(profiled)|AP_Logger::in_log_persistance
+(profiled)|ChibiOS::Shared_DMA::unlock
+(profiled)|AP_MotorsMulticopter::output_boost_throttle
+(profiled)|ByteBuffer::write
+(profiled)|Vector3<float>::is_inf
+libraries/AP_HAL_ChibiOS/hwdef/common/bouncebuffer.c|bouncebuffer_finish_write
+(profiled)|Vector3<float>::operator+
+(profiled)|ChibiOS::SPIDevice::set_speed
+(profiled)|ChibiOS::BinarySemaphore::wait_blocking
+(profiled)|ChibiOS::SPIDevice::set_chip_select
+(profiled)|AP_MotorsMulticopter::update_external_limits
+(profiled)|ByteBuffer::readptr
+(profiled)|Vector3<float>::is_nan
+(profiled)|ByteBuffer::reserve
+(profiled)|AP_InertialSensor_TCal::correct_accel
+modules/ChibiOS/os/rt/src/chsem.c|chSemWait
+(profiled)|ChibiOS::SPIDevice::transfer_fullduplex
+modules/ChibiOS/os/hal/ports/RP/LLD/TIMERv1/hal_st_lld.c|Vector44
+(profiled)|AC_AttitudeControl_Multi::get_rate_yaw_pid
+(profiled)|ChibiOS::Util::safety_switch_state
+(profiled)|AP::srv
+(profiled)|AP_SerialManager::protocol_match
+(profiled)|AP::battery
+modules/ChibiOS/os/rt/src/chthreads.c|chThdSuspendTimeoutS
+(profiled)|AP_InertialSensor::set_rate_decimation
+(profiled)|ByteBuffer::commit
+(profiled)|AP_Volz_Protocol::update
+(profiled)|AP_FETtecOneWire::init_uart
+(profiled)|Vector3<float>::operator-
+(profiled)|AP_SerialManager::find_serial
+(profiled)|AP_FETtecOneWire::init
+(profiled)|SRV_Channels::push
+(profiled)|AP_SBusOut::update
+(profiled)|AP_RobotisServo::update
+(profiled)|AP_BLHeli::update_telemetry
+(profiled)|AP::serialmanager
+(profiled)|AP_SerialManager::find_protocol_instance
+modules/ChibiOS/os/rt/src/chthreads.c|chThdSleep
+(profiled)|AP_FETtecOneWire::update
+(profiled)|AP_InertialSensor_Backend::update_accel_filters
+
+# DO NOT relocate the libc helpers memcpy, memset, __udivmoddi4 or
+# __aeabi_uldivmod. They profile hot on core1 (~4.4% of active time) but must
+# stay in flash: the compiler lowers struct/array init in early boot into
+# implicit calls to them, and those run before rp_clock_init() copies .ramtext
+# to SRAM (rp_clocks.c). Relocating them executes uninitialised SRAM and the FC
+# double-faults at boot. To claw back their cost, remove the calls (e.g. use
+# 32-bit micros() deltas to avoid __udivmoddi4) rather than move the symbol.
