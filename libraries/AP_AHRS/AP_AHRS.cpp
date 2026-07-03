@@ -465,10 +465,7 @@ void AP_AHRS::update(bool skip_ins_update)
     }
 
     // support locked access functions to AHRS data
-    // On RP2350: _rsem is deferred until after update_DCM() — see below.
-#if !defined(RP2350)
     WITH_SEMAPHORE(_rsem);
-#endif
 
     // see if we have to restore home after a watchdog reset:
     if (!_checked_watchdog_home) {
@@ -516,12 +513,6 @@ void AP_AHRS::update(bool skip_ins_update)
         update_EKF2();
 #endif
     }
-
-#if defined(RP2350)
-    // Re-acquire _rsem after update_DCM(): EKF3 ran on Core1 so the lock window
-    // is ~200µs here vs ~2000µs if held across update_DCM().
-    WITH_SEMAPHORE(_rsem);
-#endif
 
 #if AP_MODULE_SUPPORTED
     // call AHRS_update hook if any
