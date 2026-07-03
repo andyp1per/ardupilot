@@ -369,21 +369,24 @@ define RP_CORE1_START TRUE
 # core0 was given the XIP cache. This cuts the overclock from 2.5x to 1.5x the
 # 150 MHz spec. A 1500 MHz VCO cannot divide to 225 (1500/225 is non-integer),
 # so the VCO drops to 900 MHz (FBDIV 75) and POSTDIV 4x1 gives 225 MHz.
-# The on-chip VREG is raised to 1.30 V (VSEL=0x0f) before the PLL switch (see
-# rp2350_vreg_init() in rp_clocks.c). That is over-spec for 225 MHz (1.30 V
-# supports ~384 MHz) but harmless; lowering it is a separate step.
+# The on-chip VREG is set to 1.15 V (VSEL=0x0c) before the PLL switch (see
+# rp2350_vreg_init() in rp_clocks.c). 1.15 V supports ~312 MHz, giving 225 MHz
+# a comfortable margin while dropping the chip well below the 1.30 V it needed
+# when overclocked to 375 MHz. Stock 1.10 V (~276 MHz) would also cover 225 MHz.
 # Previous attempts:
 #   300 MHz at default 1.1 V (2026-04-12): LOCKUP - VREG not initialized first.
 #   375 MHz at 1.30 V: stable, but a 2.5x overclock.
+#   225 MHz at 1.30 V: stable (clock-drop verified before lowering voltage).
 define RP_PLL_SYS_VCO_FREQ 900000000
 define RP_PLL_SYS_POSTDIV1 4
 define RP_PLL_SYS_POSTDIV2 1
 # Report the true core clock. Cosmetic on RP2350 (HAL_EXPECTED_SYSCLOCK is not
 # enforced here) but keeps logs/tools reporting 225 MHz, not the PICO2 default.
 MCU_CLOCKRATE_MHZ 225
-# On-chip VREG voltage select: 0x0f = 1.30 V (datasheet Table 481, VREG.VSEL).
-# This is raised in rp_clocks.c before PLL_SYS is started.
-define RP_VREG_VSEL 15
+# On-chip VREG voltage select: 0x0c = 1.15 V (datasheet Table 481, VREG.VSEL),
+# ~312 MHz cap. Applied in rp_clocks.c before PLL_SYS is started. Stock is
+# 0x0b/1.10 V (~276 MHz cap), which would also cover 225 MHz.
+define RP_VREG_VSEL 12
 
 # QMI flash timing (re-derived for 225 MHz; 375 MHz history kept below).
 # Formula: sample_from_falling = (CLKDIV + RXDELAY) / (2 × sysclk)
