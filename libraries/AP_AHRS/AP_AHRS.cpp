@@ -595,10 +595,7 @@ void AP_AHRS::update(bool skip_ins_update)
     }
 
     // support locked access functions to AHRS data
-    // On RP2350: _rsem is deferred until after the backend updates - see below.
-#if !defined(RP2350)
     WITH_SEMAPHORE(_rsem);
-#endif
 
     // see if we have to restore home after a watchdog reset:
     if (!_checked_watchdog_home) {
@@ -654,14 +651,6 @@ void AP_AHRS::update(bool skip_ins_update)
         // if we don't have an origin, maybe set one:
         try_set_common_origin(backend_and_estimates.backend, backend_and_estimates.estimates);
     }
-
-
-#if defined(RP2350)
-    // Re-acquire _rsem after the backend updates: EKF3 ran on Core1, so the
-    // lock window here is ~200us rather than the ~2000us it would be if held
-    // across the DCM update.
-    WITH_SEMAPHORE(_rsem);
-#endif
 
     update_configured_ekf_type();
     update_active_EKF_type();
