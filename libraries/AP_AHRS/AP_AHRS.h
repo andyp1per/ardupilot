@@ -843,19 +843,6 @@ private:
     float _sin_pitch;
     float _sin_yaw;
 
-    // true if a backend is updated outside the main AHRS update
-    bool backend_updated_elsewhere(const AP_AHRS_Backend &backend) const;
-
-#if defined(RP2350) && HAL_NAVEKF3_AVAILABLE
-public:
-    // Called by the EKF thread on core1 to run NavEKF3 and copy results.
-    void update_EKF3_from_thread(void);
-    // Enable EKF-in-thread mode: the main update leaves NavEKF3 alone.
-    void set_ekf_runs_in_thread(bool v) { _ekf_runs_in_thread = v; }
-private:
-    bool _ekf_runs_in_thread;
-#endif  // defined(RP2350) && HAL_NAVEKF3_AVAILABLE
-
     uint8_t _ekf_flags; // bitmask from Flags enumeration
 
     /*
