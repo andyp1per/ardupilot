@@ -195,12 +195,6 @@ void Copter::rate_controller_thread()
     uint32_t last_rate_increase_ms = 0;
     uint32_t last_c1_report_ms = now_ms;
     uint32_t c1_rate_ticks = 0;
-    uint32_t c1_ekf_ticks = 0;
-#if defined(RP2350)
-    uint8_t  ekf_decim = 2;  // minimum 2: see adaptive algorithm comment below
-    uint8_t  ekf_decim_count = 0;
-    uint32_t ekf_prev_total_dur_us = 0;
-#endif
 #if HAL_LOGGING_ENABLED
     uint32_t last_rtdt_log_ms = now_ms;
 #endif
@@ -323,16 +317,6 @@ void Copter::rate_controller_thread()
         // immediately output the new motor values
         if (run_decimated_callback(rates.main_loop_rate, main_loop_count)) {
             main_loop_count = 0;
-#if defined(RP2350)
-            // Signal EKF at main-loop rate, further decimated by ekf_decim.
-            // Wind-back is decided in the 10s C1 report block below using
-            // accumulated duty-cycle — not instantaneous noisy measurements.
-            if (++ekf_decim_count >= ekf_decim) {
-                ekf_decim_count = 0;
-                signal_ekf_thread();
-                c1_ekf_ticks++;
-            }
-#endif
         }
         motors_output(main_loop_count == 0);
 
@@ -470,42 +454,11 @@ void Copter::rate_controller_thread()
         if (now_ms - last_c1_report_ms >= 10000) {
             const uint32_t elapsed_ms  = now_ms - last_c1_report_ms;
             const uint32_t rate_hz     = (c1_rate_ticks * 1000) / elapsed_ms;
-            const uint32_t ekf_hz      = (c1_ekf_ticks  * 1000) / elapsed_ms;
-            const uint32_t ekf_dur     = _ekf_last_duration_us;
 
-            // Duty cycle = EKF CPU used / elapsed window (both in µs).
-            // _ekf_total_duration_us wraps; delta arithmetic handles wrapping.
-            const uint32_t total_dur   = _ekf_total_duration_us;
-            const uint32_t dur_delta   = total_dur - ekf_prev_total_dur_us;
-            ekf_prev_total_dur_us      = total_dur;
-            const uint32_t duty_pct    = dur_delta / (elapsed_ms * 10);  // = dur_delta/elapsed_µs*100
-
-            // Wind-back: step ±1 to avoid oscillation.
-            // Target: 25-50% EKF duty on core1.
-            // Minimum ekf_decim=2: prevents EKF from speeding up beyond ~164 Hz when
-            // Core0 gets faster (e.g. from DCM rate reduction). Without this floor,
-            // the adaptive algorithm drives ekf_decim to 1 (329 Hz EKF), increasing
-            // SMP spinlock contention until Core0 slows back down — a feedback loop
-            // that cancels any Core0 optimisation. Cap at 2 to break the loop.
-            if (duty_pct > 50 && ekf_decim < 8) {
-                ekf_decim++;
-                gcs().send_text(MAV_SEVERITY_WARNING, "EKF CPU %u%% (>50), decim->%u",
-                                (unsigned)duty_pct, (unsigned)ekf_decim);
-            } else if (duty_pct < 25 && ekf_decim > 2) {
-                ekf_decim--;
-                gcs().send_text(MAV_SEVERITY_INFO, "EKF CPU %u%% (<25), decim->%u",
-                                (unsigned)duty_pct, (unsigned)ekf_decim);
-            }
-
-            hal.console->printf("C1: rate=%uHz ekf=%uHz ekf_dur=%uus ekf_duty=%u%% decim=%u\n",
-                                (unsigned)rate_hz, (unsigned)ekf_hz, (unsigned)ekf_dur,
-                                (unsigned)duty_pct, (unsigned)ekf_decim);
-            gcs().send_text(MAV_SEVERITY_INFO, "C1: rate=%uHz ekf=%uHz ekf_dur=%uus ekf_duty=%u%% decim=%u",
-                            (unsigned)rate_hz, (unsigned)ekf_hz, (unsigned)ekf_dur,
-                            (unsigned)duty_pct, (unsigned)ekf_decim);
+            hal.console->printf("C1: rate=%uHz\n", (unsigned)rate_hz);
+            gcs().send_text(MAV_SEVERITY_INFO, "C1: rate=%uHz", (unsigned)rate_hz);
             last_c1_report_ms = now_ms;
             c1_rate_ticks = 0;
-            c1_ekf_ticks  = 0;
         }
 #endif
 
