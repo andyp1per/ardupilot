@@ -364,20 +364,28 @@ define CH_CFG_SMP_MODE TRUE
 define HAL_ENABLE_THREAD_STATISTICS TRUE
 # SMP: start core1 for dual-core dispatch (c1_main.c FIFO dispatcher).
 define RP_CORE1_START TRUE
-# CPU clock: 375 MHz (1500 MHz VCO / POSTDIV1=4 / POSTDIV2=1 = 375 MHz).
-# The on-chip VREG is raised to 1.30 V (VSEL=0x0f) in software BEFORE the
-# PLL is switched — see rp2350_vreg_init() in rp_clocks.c.  1.30 V supports
-# up to ~384 MHz per community testing (MichaelBell/power.py MicroPython gist)
-# and requires no DISABLE_VOLTAGE_LIMIT flag.
+# CPU clock: 225 MHz (900 MHz VCO / POSTDIV1=4 / POSTDIV2=1).
+# Walked down from 375 MHz once the core1 rate path was relocated to SRAM and
+# core0 was given the XIP cache. This cuts the overclock from 2.5x to 1.5x the
+# 150 MHz spec. A 1500 MHz VCO cannot divide to 225 (1500/225 is non-integer),
+# so the VCO drops to 900 MHz (FBDIV 75) and POSTDIV 4x1 gives 225 MHz.
+# The on-chip VREG is raised to 1.30 V (VSEL=0x0f) before the PLL switch (see
+# rp2350_vreg_init() in rp_clocks.c). That is over-spec for 225 MHz (1.30 V
+# supports ~384 MHz) but harmless; lowering it is a separate step.
 # Previous attempts:
-#   300 MHz at default 1.1 V (2026-04-12): LOCKUP — VREG not initialized first.
+#   300 MHz at default 1.1 V (2026-04-12): LOCKUP - VREG not initialized first.
+#   375 MHz at 1.30 V: stable, but a 2.5x overclock.
+define RP_PLL_SYS_VCO_FREQ 900000000
 define RP_PLL_SYS_POSTDIV1 4
 define RP_PLL_SYS_POSTDIV2 1
+# Report the true core clock. Cosmetic on RP2350 (HAL_EXPECTED_SYSCLOCK is not
+# enforced here) but keeps logs/tools reporting 225 MHz, not the PICO2 default.
+MCU_CLOCKRATE_MHZ 225
 # On-chip VREG voltage select: 0x0f = 1.30 V (datasheet Table 481, VREG.VSEL).
 # This is raised in rp_clocks.c before PLL_SYS is started.
 define RP_VREG_VSEL 15
 
-# QMI flash timing for 375 MHz operation.
+# QMI flash timing (re-derived for 225 MHz; 375 MHz history kept below).
 # Formula: sample_from_falling = (CLKDIV + RXDELAY) / (2 × sysclk)
 # Constraints (must hold at BOTH 375 MHz app speed and 150 MHz dummy-read speed):
 #   setup: sample >= tCLQV (6 ns)  →  CLKDIV + RXDELAY >= 4.5  →  sum >= 5
@@ -406,8 +414,14 @@ define RP_VREG_VSEL 15
 #   Datasheet rule: RXDELAY=CLKDIV+1 when sysclk>>200MHz for extra margin.
 # CLKDIV=6 RXDELAY=7: 62.5 MHz SCK, +1 RXDELAY margin for 375 MHz. WORKS.
 # Must be applied before PLL switch (see rp_clocks.c).
+#
+# At 225 MHz sysclk (half_cycle = 2.222 ns) the setup margin is far more
+# forgiving. CLKDIV=3 RXDELAY=2: SCK = 75 MHz, sample = (3+2)x2.222 = 11.1 ns,
+# setup margin 5.1 ns, hold margin 2.2 ns. Both healthy - and strictly better
+# than the 375 MHz CLKDIV=3/RXDELAY=3 case (hold = 0). 75 MHz SCK is well under
+# the W25Q64's 133 MHz limit.
 define RP_QMI_CLKDIV 3
-define RP_QMI_RXDELAY 3
+define RP_QMI_RXDELAY 2
 # define AP_XIP_PROFILER_ENABLED 1
 
 # Board-specific notes:
