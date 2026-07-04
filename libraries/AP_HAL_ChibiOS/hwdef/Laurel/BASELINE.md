@@ -148,6 +148,17 @@ init), so a disarmed bench with the notch off never exercises it. The coeff
 `AP_Vehicle` path. `NotchFilter<float>::apply` (the PID notch) also stays until
 its core0 use is ruled out. See `rp2350_scratchy_registry.txt`.
 
+Scratch Y only helps fetch-bound code, and that is a narrow set. The motor
+mixing (`AP_MotorsMatrix::output_armed_stabilizing` and friends) is the biggest
+core1 consumer (~2.1% armed) and is core1-exclusive on this config, so it looked
+like the best target - but moving it to Scratch Y showed no improvement (~2.1%
+either way). It is a large, data-heavy function (thrust factors, per-motor
+loops, saturation math): its time is compute and data access, and the data stays
+in striped SRAM regardless, so contention-free instruction fetch buys nothing.
+The lesson: Scratch Y pays off for tight, fetch-bound loops like the rate PID and
+not for big data-heavy functions, even when they dominate core1. Reverted; it
+stays in RAMFUNC2.
+
 ## Open items
 
 - Flight validation: the numbers above are bench-only (disarmed).

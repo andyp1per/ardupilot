@@ -24,3 +24,8 @@ libraries/AC_PID/AC_PID.cpp|AC_PID::get_ff
 libraries/AP_InertialSensor/AP_InertialSensor_Backend.cpp|AP_InertialSensor_Backend::apply_gyro_filters
 libraries/Filter/NotchFilter.h|NotchFilter<Vector3<float>>::apply
 libraries/Filter/HarmonicNotchFilter.h|HarmonicNotchFilter<Vector3<float>>::apply
+#
+# NOT the motor mixing. AP_MotorsMatrix output_armed_stabilizing/output_to_motors/
+# check_for_failed_motor are core1-only and the biggest core1 consumer (~2.1% armed), but moving
+# them here showed no improvement - they are data-heavy mixing math (thrust factors, per-motor
+# loops), not fetch-bound, so the dedicated I-code bus does nothing. They stay in RAMFUNC2.
