@@ -44,6 +44,7 @@ static const SysFileList sysfs_file_list[] = {
     {"tasks.txt"},
 #if defined(RP2350) && defined(AP_RP2350_PC_SAMPLER_ENABLED)
     {"pcprof.txt"},
+    {"pcprof0.txt"},
 #endif
     {"dma.txt"},
     {"memory.txt"},
@@ -128,7 +129,8 @@ int AP_Filesystem_Sys::open(const char *fname, int flags, bool allow_absolute_pa
         // Reserve a single contiguous block to avoid fragmented realloc fails.
         r.str->reserve(120 * 100);
 #if defined(RP2350) && defined(AP_RP2350_PC_SAMPLER_ENABLED)
-    } else if (strcmp(fname, "pcprof.txt") == 0) {
+    } else if (strcmp(fname, "pcprof.txt") == 0 ||
+               strcmp(fname, "pcprof0.txt") == 0) {
         // Top ~512 PCs at ~14 bytes/token; one modest block that fits the tight
         // runtime heap (~20 KB free after EKF init).
         r.str->reserve(512 * 14);
@@ -289,7 +291,10 @@ bool AP_Filesystem_Sys::ensure_generated(struct rfile &r)
     }
 #if defined(RP2350) && defined(AP_RP2350_PC_SAMPLER_ENABLED)
     else if (strcmp(fname, "pcprof.txt") == 0) {
-        rp2350_pc_sampler_dump_full(*r.str, 1);  // core1 (EKF/rate)
+        rp2350_pc_sampler_dump_full(*r.str, 1);  // core1 (rate/IMU)
+    }
+    else if (strcmp(fname, "pcprof0.txt") == 0) {
+        rp2350_pc_sampler_dump_full(*r.str, 0);  // core0 (main loop/EKF)
     }
 #endif
 
