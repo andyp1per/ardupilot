@@ -108,6 +108,9 @@ libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.cpp|AC_AttitudeControl_Mul
 # rate_controller_run (44 B wrapper) stays in main SRAM; it's a trivial dispatcher.
 libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.cpp|AC_AttitudeControl_Multi::rate_controller_run  # 42 B (sram)
 libraries/AP_InertialSensor/AP_InertialSensor.cpp|AP_InertialSensor::wait_for_sample  # 412 B (sram)
+# output_to_motors/output_armed_stabilizing (and check_for_failed_motor below): core1-only, but
+# tested in Scratch Y with no improvement - data-heavy mixing math is not fetch-bound, so the
+# dedicated I-code bus does not help. Keep in RAMFUNC2. See rp2350_scratchy_registry.txt.
 libraries/AP_Motors/AP_MotorsMatrix.cpp|AP_MotorsMatrix::output_to_motors  # 214 B (sram)
 libraries/AP_Motors/AP_MotorsMatrix.cpp|AP_MotorsMatrix::output_armed_stabilizing  # 932 B (sram)
 libraries/AP_Motors/AP_MotorsMulticopter.cpp|AP_MotorsMulticopter::output  # 86 B (sram)
