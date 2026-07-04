@@ -117,6 +117,31 @@ The remaining core0 levers are production-only (dropping
 `coreNload%` telemetry, which reads the idle thread's `.stats.cumulative`) or
 bench-only (USB `Vector78`/`sduSOFHookI`, absent in flight).
 
+## Core1 Scratch Y (SRAM9)
+
+Where core0 gains nothing from relocation, core1 does - because Scratch Y
+(SRAM9) is core1's dedicated I-code bus and attacks fetch contention, not cache
+misses. It had been left empty, and a note claimed a rate-PID test showed "no
+improvement". That test was invalid: `c1_main.c` writes `c1_vtable` to the SRAM9
+base (0x20081000) at runtime, but it was never reserved in the linker, so any
+code placed there had its first 256 B corrupted by the vtable copy. The linker
+now reserves that block and starts relocated code at 0x20081100.
+
+With that fixed, the rate-thread fast half was moved from contended striped
+`.ramtext` into Scratch Y: `rate_controller_run_dt` and `AC_PID::update_all`
+(plus `update_i`; `get_ff` inlines). These are core1-exclusive - the scalar
+`AC_PID` is used only by the rate controllers, while position control uses
+`AC_PID_2D`/`AC_P_2D`/`AC_PID_Basic`/`AC_P_1D`. Result: rate-controller compute
+(`rtc`) dropped 17 -> 14 us, repeatably. The win is bounded because Scratch Y
+relieves only instruction fetch; the PID data stays in striped SRAM.
+
+The rule for Scratch Y is core1-EXCLUSIVE only: if core0 also runs a function
+parked there it reaches SRAM9 over the fabric and contends with core1's
+dedicated fetch. The IMU read+filter runs on core1 (`HAL_CORE_SPI0=1`), so the
+harmonic-notch apply chain is also core1-only (the earlier "dual-core" note was
+wrong) and is the phase-2 candidate - its biquad loops are heavier compute than
+the PID, so more of its time is fetch. See `rp2350_scratchy_registry.txt`.
+
 ## Open items
 
 - Flight validation: the numbers above are bench-only (disarmed).
