@@ -331,6 +331,7 @@ def build_report(t, elapsed, syms, registry, top, threshold):
 PROFC1_TAG_BASE = {'F': 0x10010000, 'S': 0x20000000, 'C': 0x20080000, 'o': 0}
 PROFC1_TOKEN = re.compile(r'([FSCo])([0-9a-fA-F]+):(\d+)')
 PROFC1_N = re.compile(r'\bn=(\d+)')
+PROFC1_CORE = re.compile(r'PROF\s*c(\d)')
 
 
 def parse_profc1_text(text):
@@ -355,7 +356,7 @@ def parse_profc1_text(text):
     return hist, total
 
 
-def build_histogram_report(hist, total_n, syms, registry, top):
+def build_histogram_report(hist, total_n, syms, registry, top, core=1):
     """Aggregate the emitted top-PC histogram by function and rank it."""
     emitted = sum(hist.values()) or 1
     func_count = {}
@@ -370,7 +371,7 @@ def build_histogram_report(hist, total_n, syms, registry, top):
     denom = total_n if total_n else emitted
 
     L = []
-    L.append("# RP2350 PROFc1 histogram attribution (core1)")
+    L.append("# RP2350 PROFc%d histogram attribution (core%d)" % (core, core))
     L.append("")
     L.append("n (all samples): %d   emitted top-PC sum: %d   distinct PCs: %d   no-symbol: %d"
              % (total_n, emitted, len(hist), unknown))
@@ -385,7 +386,7 @@ def build_histogram_report(hist, total_n, syms, registry, top):
                  % (100.0 * c / denom, 100.0 * c / emitted, c,
                     region_of(start), start, end - start, name, note))
     L.append("")
-    L.append("  %tot = share of all core1 samples (n); %emit = share of emitted top PCs.")
+    L.append("  %%tot = share of all core%d samples (n); %%emit = share of emitted top PCs." % core)
     L.append("  [RAMFUNC2] = already resident in SRAM.")
     L.append("")
 
@@ -560,7 +561,9 @@ def main():
         hist, total_n = parse_profc1_text(text)
         if not hist:
             sys.exit("no PROFc1 tokens found in input")
-        report = build_histogram_report(hist, total_n, syms, registry, args.top)
+        m = PROFC1_CORE.search(text)
+        core = int(m.group(1)) if m else 1
+        report = build_histogram_report(hist, total_n, syms, registry, args.top, core)
         print(report)
         if args.out:
             with open(args.out, 'w') as f:
