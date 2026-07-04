@@ -16,12 +16,11 @@ libraries/AC_PID/AC_PID.cpp|AC_PID::update_all
 libraries/AC_PID/AC_PID.cpp|AC_PID::update_i
 libraries/AC_PID/AC_PID.cpp|AC_PID::get_ff
 #
-# Phase 2 candidates - the gyro filter fast half. apply_gyro_filters runs the harmonic notch
-# and gyro LPF per sample; it is called from AP_InertialSensor_Invensensev3::read_fifo on the
-# SPI0 device-bus thread, which is pinned to core1 (HAL_CORE_SPI0=1). So on this config the notch
-# apply chain is core1-only, NOT dual-core as an earlier note here claimed. Add once the rate-PID
-# move above is confirmed (needs INS_HNTCH configured to exercise on the bench):
-#libraries/AP_InertialSensor/AP_InertialSensor_Backend.cpp|AP_InertialSensor_Backend::apply_gyro_filters
-#libraries/Filter/NotchFilter.h|NotchFilter<Vector3<float>>::apply
-#libraries/Filter/HarmonicNotchFilter.h|HarmonicNotchFilter<Vector3<float>>::apply
-#libraries/Filter/HarmonicNotchFilter.h|HarmonicNotchFilter<Vector3<float>>::update
+# Gyro filter fast half (core1 only): apply_gyro_filters runs the harmonic notch and gyro LPF per
+# sample, called from AP_InertialSensor_Invensensev3::read_fifo on the SPI0 device-bus thread,
+# pinned to core1 (HAL_CORE_SPI0=1). The Vector3 notch apply is reached only through this path.
+# Only exercised when INS_HNTCH is configured. HarmonicNotchFilter::update (coeff recalc) stays in
+# RAMFUNC2 - it is the slow half and is also reachable from the core0 AP_Vehicle path.
+libraries/AP_InertialSensor/AP_InertialSensor_Backend.cpp|AP_InertialSensor_Backend::apply_gyro_filters
+libraries/Filter/NotchFilter.h|NotchFilter<Vector3<float>>::apply
+libraries/Filter/HarmonicNotchFilter.h|HarmonicNotchFilter<Vector3<float>>::apply

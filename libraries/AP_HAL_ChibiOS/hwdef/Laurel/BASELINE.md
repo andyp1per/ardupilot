@@ -138,9 +138,15 @@ relieves only instruction fetch; the PID data stays in striped SRAM.
 The rule for Scratch Y is core1-EXCLUSIVE only: if core0 also runs a function
 parked there it reaches SRAM9 over the fabric and contends with core1's
 dedicated fetch. The IMU read+filter runs on core1 (`HAL_CORE_SPI0=1`), so the
-harmonic-notch apply chain is also core1-only (the earlier "dual-core" note was
-wrong) and is the phase-2 candidate - its biquad loops are heavier compute than
-the PID, so more of its time is fetch. See `rp2350_scratchy_registry.txt`.
+gyro-notch apply chain is also core1-only (the earlier "dual-core" note was
+wrong). That chain - `apply_gyro_filters` and `NotchFilter<Vector3>`/
+`HarmonicNotchFilter<Vector3>` apply - was moved to Scratch Y next. It is
+verified core1-exclusive and boot-safe, but not yet perf-measured: the notch
+only runs when `INS_HNTCH_ENABLE=1` is set at boot (the filters allocate at
+init), so a disarmed bench with the notch off never exercises it. The coeff
+`update` (slow half) stays in RAMFUNC2 - it is reachable from the core0
+`AP_Vehicle` path. `NotchFilter<float>::apply` (the PID notch) also stays until
+its core0 use is ruled out. See `rp2350_scratchy_registry.txt`.
 
 ## Open items
 

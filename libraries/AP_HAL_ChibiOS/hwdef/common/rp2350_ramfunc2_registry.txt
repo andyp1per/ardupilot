@@ -42,17 +42,14 @@ libraries/AP_InertialSensor/AP_InertialSensor_Backend.cpp|AP_InertialSensor_Back
 # via SMP XIP cache corruption. tanf slow-path still hits flash but only when cutoff actually changes.
 libraries/AP_Math/LowPassFilter.h|LowPassFilter2p<Vector3<float>>::set_cutoff_frequency  # 164 B (sram)
 libraries/AP_Math/LowPassFilter.h|LowPassFilter2p<float>::set_cutoff_frequency  # 164 B (sram)
-# apply_gyro_filters: called per-gyro-sample (1 kHz) from SPI thread; calls HarmonicNotchFilter::apply chain
-# Moving to SRAM eliminates 260+94+308+108 = 770 B of per-sample XIP pressure from core0 SPI thread.
-libraries/AP_InertialSensor/AP_InertialSensor_Backend.cpp|AP_InertialSensor_Backend::apply_gyro_filters  # 260 B (sram)
-# NotchFilter<Vector3f>::apply (308 B) + NotchFilter<float>::apply (108 B): the inner biquad compute loop.
-# Called at 1 kHz by apply_gyro_filters on core0, and indirectly by HarmonicNotchFilter::apply.
-# NotchFilter and HarmonicNotchFilter apply/update: called from BOTH cores (core0 SPI thread and
-# core1 rate thread), so keeping in main SRAM (RAMFUNC2) where both cores get shared fast access.
-# Scratch Y caused cross-core contention on SRAM9's AHB port.
-libraries/Filter/NotchFilter.h|NotchFilter<Vector3<float>>::apply  # 308 B (sram)
+# The gyro-notch apply chain (apply_gyro_filters + NotchFilter<Vector3>::apply +
+# HarmonicNotchFilter<Vector3>::apply) moved to Scratch Y - it runs per gyro sample only on core1
+# (IMU SPI0 device-bus thread, HAL_CORE_SPI0=1). See rp2350_scratchy_registry.txt.
+# NotchFilter<float>::apply (PID target/error notch) stays here pending a check of whether the
+# core0 position-control PIDs use it; keep it in shared SRAM until then.
 libraries/Filter/NotchFilter.h|NotchFilter<float>::apply  # 108 B (sram)
-libraries/Filter/HarmonicNotchFilter.h|HarmonicNotchFilter<Vector3<float>>::apply  # 94 B (sram)
+# HarmonicNotchFilter::update (coeff recalc, 100-500 Hz) stays: the slow half, reachable from the
+# core0 AP_Vehicle path as well as the core1 rate thread. The per-sample apply is the win.
 libraries/Filter/HarmonicNotchFilter.h|HarmonicNotchFilter<Vector3<float>>::update  # 352 B (sram)
 # update_dynamic_notch (252 B) + update_throttle_notch (204 B): called at 500 Hz from rate thread core1.
 # Previously in FLASH — both cores share the 16 KB XIP cache, causing cache evictions to stall core1.
