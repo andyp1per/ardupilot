@@ -105,12 +105,9 @@ modules/ChibiOS/os/hal/lib/streams/chprintf.c|chvprintf
 modules/ChibiOS/os/hal/lib/streams/chprintf.c|chprintf
 libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.cpp|AC_AttitudeControl_Multi::update_throttle_gain_boost  # 140 B (sram)
 libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.cpp|AC_AttitudeControl_Multi::update_throttle_rpy_mix  # 260 B (sram)
-# rate_controller_run_dt + AC_PID::update_all: core1-only at 1 kHz, but keeping in RAMFUNC2 (main SRAM)
-# rather than Scratch Y (SRAM9) because the Scratch Y dedicated bus only helps core1's I-CODE path;
-# data-path accesses (shared struct fields) still go through AXI fabric regardless.
-# Measured: Scratch Y placement showed no rate improvement vs RAMFUNC2. RAMFUNC2 avoids XIP pressure.
-libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.cpp|AC_AttitudeControl_Multi::rate_controller_run_dt  # 346 B (sram)
-libraries/AC_PID/AC_PID.cpp|AC_PID::update_all  # 632 B (sram)
+# rate_controller_run_dt + AC_PID::update_all/update_i/get_ff moved to Scratch Y (SRAM9,
+# core1-dedicated bus) - see rp2350_scratchy_registry.txt. All core1-exclusive. Scratch Y relieves
+# only instruction-fetch contention; the PID data still lives in striped SRAM, so the gain is bounded.
 # rate_controller_run (44 B wrapper) stays in main SRAM; it's a trivial dispatcher.
 libraries/AC_AttitudeControl/AC_AttitudeControl_Multi.cpp|AC_AttitudeControl_Multi::rate_controller_run  # 42 B (sram)
 libraries/AP_InertialSensor/AP_InertialSensor.cpp|AP_InertialSensor::wait_for_sample  # 412 B (sram)
@@ -266,7 +263,6 @@ modules/ChibiOS/os/rt/src/chstats.c|__stats_ctxswc
 modules/ChibiOS/os/hal/ports/RP/LLD/DMAv1/rp_dma.c|Vector6C
 (profiled)|AP_MotorsMulticopter::update_throttle_filter
 (profiled)|AP_AHRS::get_air_density_ratio
-(profiled)|AC_PID::update_i
 (profiled)|ChibiOS::Shared_DMA::lock_core
 (profiled)|ChibiOS::Semaphore::check_owner
 (profiled)|ChibiOS::Semaphore::take
@@ -298,7 +294,6 @@ modules/ChibiOS/os/hal/ports/RP/LLD/SPIv1/hal_spi_lld.c|spi_lld_serve_tx_interru
 (profiled)|Vector3<float>::operator+=
 modules/ChibiOS/os/hal/ports/RP/LLD/DMAv1/rp_dma.c|serve_interrupt
 modules/ChibiOS/os/hal/ports/RP/LLD/DMAv1/rp_dma.c|dmaChannelFreeI
-(profiled)|AC_PID::get_ff
 (profiled)|DerivativeFilter<float,
 (profiled)|ChibiOS::DeviceBus::bus_thread
 (profiled)|AP_InertialSensor::set_accel_peak_hold
