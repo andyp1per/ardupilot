@@ -13,9 +13,12 @@ The phases follow the order in which a board comes to life: a firmware foundatio
 Objective: port the ChibiOS real-time operating system that ArduPilot runs on to the STM32H573, and deliver a buildable ArduPilot firmware and bootloader that boots reliably on the board.
 
 Delivered:
-- ChibiOS RTOS ported to the STM32H573 and its ARMv8-M / Cortex-M33 core: kernel, startup, context switching, and interrupt handling for an architecture generation newer than ArduPilot's existing STM32 targets. This is the foundational layer the entire firmware depends on, and the largest single piece of enabling work in the project.
-- Clock tree, internal flash, and core system peripherals configured for the H573.
-- NucleoH573 board definition and a documented, repeatable build for both the bootloader and the main firmware.
+- ChibiOS RTOS ported to the STM32H573 and its ARMv8-M / Cortex-M33 core: kernel, ARMv8-M startup and vector table, context switching, and interrupt handling, on the ChibiOS 21.11.5 kernel line. This is an architecture generation newer than ArduPilot's existing STM32 targets, and the largest single piece of enabling work in the project.
+- Device configuration (mcuconf) for the STM32H573, selecting and enabling the on-chip peripherals the firmware uses.
+- Clock tree configured for the H573: HSE, the HSI48 oscillator, and the PLL settings, including the constraints required to clock the USB peripheral correctly.
+- Internal flash driver for the H573's 8 KB sector layout.
+- Core system peripheral configuration: independent watchdog (IWDG), ADC and analog inputs, GPIO/PAL line setup, system timer, and peripheral clocking.
+- NucleoH573 board definition (hwdef) and a documented, repeatable build for both the bootloader and the main firmware.
 - Firmware boots to a known-good state on the Nucleo, demonstrated on the board.
 
 Acceptance:
@@ -29,8 +32,8 @@ Value: ArduPilot's operating system and firmware foundation running on the STM32
 Objective: full USB device support with firmware upload over USB using the standard ArduPilot workflow, delivered through a working ArduPilot bootloader.
 
 Delivered:
-- USB device enumerates on a host as an ArduPilot serial (CDC) device.
-- The ArduPilot bootloader accepts firmware upload over USB via the standard ArduPilot tooling, and the uploaded firmware runs.
+- USB device clocking and power brought up for the H573 USB peripheral, and a USB CDC (serial) device that enumerates on a host as an ArduPilot serial port.
+- ArduPilot bootloader on the H5, including the upload protocol, H5 device/MCU identifiers, and silicon-revision handling, self-programming the board over USB via the standard ArduPilot tooling.
 - A validated ArduPilot firmware kernel. The bootloader is itself a full ArduPilot firmware image that shares the RTOS, HAL, USB stack, clocking, and flash handling with the main firmware, so a bootloader that enumerates and self-programs over USB proves this entire shared foundation works, not merely the upload path.
 - USB serial link available to the main firmware for host communication.
 
