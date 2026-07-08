@@ -44,7 +44,7 @@ Value: the board is programmed and communicated with over a single USB cable usi
 
 Objective: bring up the DMA-driven peripheral set and sensors, up to an arming-capable firmware on the bench.
 
-Much of the low-level driver work for these peripherals is carried by the ChibiOS HAL peripheral port for the STM32H5, which provides the SPI, I2C, timer, DMA, and FDCAN driver foundation. This phase is therefore primarily the integration and validation of ArduPilot's sensor and peripheral stack on top of that proven driver layer, which substantially reduces the risk in the most hardware-intensive part of the work.
+Much of the low-level driver work for these peripherals is provided by the ChibiOS HAL peripheral support for the STM32H5, covering SPI, I2C, timers, DMA, and FDCAN. This phase is largely the integration and validation of ArduPilot's sensor and peripheral stack on that driver foundation, with the high-throughput DMA data path the main item to prove out on the hardware.
 
 Delivered, in priority order:
 - High-throughput DMA data path established on the H5, underpinning the sensor and communications peripherals.
