@@ -257,10 +257,10 @@ SPIDEV imu2 SPI4 DEVID1 IMU2_CS MODE3 2*MHZ 16*MHZ
 # ----------------- IMU Configuration ---------
 
 # dual ICM-45686 IMUs
-IMU Invensensev3 SPI:imu1 ROTATION_NONE
-IMU Invensensev3 SPI:imu2 ROTATION_YAW_180
+IMU Invensensev3 SPI:imu1 ROTATION_ROLL_180_YAW_90
+IMU Invensensev3 SPI:imu2 ROTATION_ROLL_180_YAW_135
 
-define HAL_DEFAULT_INS_FAST_SAMPLE 7
+define HAL_DEFAULT_INS_FAST_SAMPLE 3
 
 # ----------------- Barometer -----------------
 
