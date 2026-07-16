@@ -1,11 +1,11 @@
 # hw definition file for processing by chibios_hwdef.py
-# for ABSI Aerospace & Defense Flight Controller bootloader
+# for FLOWTECH H7 Wing Flight Controller bootloader
 
 # MCU class and specific type
 MCU STM32H7xx STM32H743xx
 
 # board ID for firmware
-APJ_BOARD_ID AP_HW_ABSIFC
+APJ_BOARD_ID AP_HW_FLOWTECH_H7_WING
 
 # crystal frequency - 8MHz external oscillator
 OSCILLATOR_HZ 8000000
