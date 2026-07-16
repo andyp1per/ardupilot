@@ -55,25 +55,41 @@ The dedicated per-IMU regulators are a substantial improvement over the shared r
 
 ---
 
-### 2. Second Battery Monitoring - ADC3 LIMITATION
+### 2. Second Battery Monitoring - PARTS NOT POPULATED
 
 **Location:** SCH-FLOWTECH-Flight_Control-MCU.SchDoc, ADC section
 
-**Issue:** The ICD allocates PC2 (ADC3_INP0) and PC3 (ADC3_INP1) for BATTERY2_V and BATTERY2_I, and both are carried on J1 (pins 47 and 49).
+**Correction:** an earlier revision of this review claimed PC2/PC3 could not be read on the 100-pin package, and cited datasheet "Note 7". That was wrong on both counts, and the hwdef comment that repeated it has been fixed. Note 7 concerns VREF+ on the TFBGA100 package and is unrelated. The pins work.
 
-**Problem:** Per [STM32H743 Datasheet](https://www.st.com/resource/en/datasheet/stm32h743vi.pdf) Table 10 "STM32H743xI pin and ball definitions" (page 90), on the STM32H743VIT6 (100-pin LQFP package):
-- PC0 = ADC1_INP10 / ADC2_INP10 / ADC3_INP10 (available)
-- PC1 = ADC1_INP11 / ADC2_INP11 / ADC3_INP11 (available)
-- PC2 = ADC3_INP0 only (NOT available on 100-pin, see Note 7)
-- PC3 = ADC3_INP1 only (NOT available on 100-pin, see Note 7)
+Per [STM32H743 Datasheet](https://www.st.com/resource/en/datasheet/stm32h743vi.pdf) Table 10 "Pin and ball definitions":
+- On LQFP100, PC2_C is pin 17 and PC3_C is pin 18. The plain PC2/PC3 pads are not bonded on any LQFP package - only on the largest BGA - so this is not a 100-pin limitation.
+- PC2_C/PC3_C carry **Note 6**: "There is a direct path between Pxy_C and Pxy pins/balls, through an analog switch. Pxy alternate functions are available on Pxy_C when the analog switch is closed."
+- PC2's function list is `ADC123_INP12` and PC3's is `ADC12_INP13`. With the switch closed - its reset state, and ArduPilot never writes `SYSCFG_PMCR` - `ADC1_INP12`/`ADC1_INP13` reach the pads.
+- ArduPilot's own pin database agrees: `STM32H743xx.py` maps PC2 to ADC1 channel 12 and PC3 to channel 13, and does not list either under ADC3. In-tree precedent: CUAV-7-Nano reads `PC2 BATT_VOLTAGE_SENS ADC1` on a shipping H743 in exactly this configuration.
 
-**Impact:** Second battery monitoring cannot be implemented via analog ADC with the current pin assignments on the 100-pin package. The signals are routed but cannot be read. Note that the Power Distribution Board also lists the second battery parts (TVS, op-amps, shunt, ideal-diode controllers) as optional and does not populate them by default, so this is currently a paper feature at both ends.
+**Actual issue:** the Power Distribution Board lists the second battery parts (TVS, voltage and current op-amps, shunt, ideal-diode controllers) under "Components required for dual battery support" and does not populate them. The signals reach the MCU and could be read; there is simply nothing driving them.
 
-**Recommendation:** Either move BATTERY2_V/BATTERY2_I to spare ADC1-capable pins in a future revision, or drop them from the ICD and use a DroneCAN battery monitor. The hwdef currently documents DroneCAN as the second battery path.
+**Recommendation:** no silicon change needed. Either populate the PDB parts on variants that want a second analog battery - the hwdef has the two ADC lines ready to uncomment, giving `BATT2_VOLT_PIN` 12 and `BATT2_CURR_PIN` 13 - or drop the feature from the ICD and use a DroneCAN battery monitor, which is what the board documents today.
 
 ---
 
-### 3. CAN Termination - JUMPER SELECTABLE (IMPROVED IN A.1)
+### 3. Servo Rail Voltage Not Monitored - RECOMMENDED FOR A WING
+
+**Location:** SCH-FLOWTECH-Flight_Control-MCU.SchDoc, ADC section; PDB V_Servo rail
+
+**Issue:** V-Servo (5V/6V at 8A) feeds the control surfaces, but no sense line for it reaches the MCU. Only the battery, the 5V V-MCU rail and the 4-in-1 ESC current are monitored.
+
+**Impact:** ArduPilot has first-class support for this and the board cannot use any of it. Without a pin labelled `FMU_SERVORAIL_VCC_SENS`, `chibios_hwdef.py` does not emit `HAL_HAVE_SERVO_VOLTAGE`, so:
+- :ref:`BRD_VSERVO_MIN<BRD_VSERVO_MIN>` is inert - the servo rail prearm check in `AP_Arming::board_voltage_checks()` compiles out.
+- MAVLink `POWER_STATUS.Vservo` reports zero.
+
+This matters more on a fixed-wing than on most airframes: the servo rail is the one that sags when several surfaces load up simultaneously, and a BEC drooping under transient load is a classic cause of in-flight resets that `BRD_VSERVO_MIN` exists to catch on the ground. 32 in-tree boards implement it.
+
+**Recommendation:** bring V-Servo to a spare ADC1 pin through a divider on a future revision, and label it `FMU_SERVORAIL_VCC_SENS` in the hwdef. Sizing must cope with the 6V setting: a 3:1 divider gives 2.0V at 6V, comfortably inside VREF+. Note the two candidate pins, PC2 and PC3, are the ones the ICD assigns to the unpopulated second battery, so if dual analog batteries are not going to be built, one of them is free for this.
+
+---
+
+### 4. CAN Termination - JUMPER SELECTABLE (IMPROVED IN A.1)
 
 **Location:** SCH-FLOWTECH-Flight_Control-CAN_XCVR.SchDoc
 
@@ -85,14 +101,6 @@ Per [TCAN3414 Datasheet](https://www.ti.com/lit/ds/symlink/tcan3414.pdf) Section
 **Status:** A.1 added the R17 jumper, so termination can now be lifted for a mid-bus node without removing the termination resistors themselves. This addresses the substance of the original finding.
 
 **Remaining consideration:** Termination is still a solder-time choice rather than a runtime one. The best solution is a GPIO-controlled MOSFET switch on the termination, allowing users to enable/disable it via ArduPilot parameters without hardware modification. This is standard practice on professional flight controllers and is worth considering for a future revision.
-
----
-
-### 4. MCU Internal Monitoring - PACKAGE LIMITATION
-
-`HAL_WITH_MCU_MONITORING` requires ADC3 internal channels for MCU temperature, VREF, and VBAT monitoring. ADC3 is not available on the 100-pin LQFP package (STM32H743VIT6). This is a package limitation, not a design error, and the define is correctly left off in the hwdef.
-
-**Recommendation for a future revision:** Consider the 144-pin or 176-pin STM32H743 package to gain access to ADC3 for internal monitoring.
 
 ---
 
@@ -145,15 +153,27 @@ Per [TCAN3414 Datasheet](https://www.ti.com/lit/ds/symlink/tcan3414.pdf) Section
 
 ~~**Issue:** The board lacked rail voltage monitoring.~~
 
-**Status:** Resolved in V3R7. PC4 (ADC1_INP4) monitors V-MCU through a 10k/10k 0.1% divider buffered by a TLV333IDCKR, giving 2.5V at a 5V rail. The hwdef declares this as `VDD_5V_SENS ... SCALE(2)`.
+**Status:** Resolved in V3R7. PC4 (ADC1_INP4) monitors V-MCU through a 10k/10k 0.1% divider buffered by a TLV333IDCKR, giving 2.5V at a 5V rail. The hwdef declares this as `VDD_5V_SENS ... SCALE(2)`, which the generator turns into `ANALOG_VCC_5V_PIN 4` and `HAL_HAVE_BOARD_VOLTAGE 1`. ArduPilot reports it as `POWER_STATUS.Vcc` and prearm-checks it against :ref:`BRD_VBUS_MIN<BRD_VBUS_MIN>`.
 
-The 3.3V rails are not monitored. They are now generated locally by three AP7361C-33 regulators, so a divider on one of them would need a spare ADC1 pin, of which none remain.
+The 3.3V rails are not monitored. They are generated locally by three AP7361C-33 regulators, so a divider on one would need an ADC1 pin. The only unassigned ones are PC2/PC3, which are better spent on the servo rail (finding 3) if the second battery is not being populated.
 
 ---
 
 ## Observations - No Action Needed
 
-### 11. IMU Data Ready Interrupts - NOT USED
+### 11. MCU Internal Monitoring - ALREADY WORKING
+
+**Correction:** an earlier revision of this review claimed MCU monitoring was unavailable because "ADC3 is not available on the 100-pin LQFP package", and recommended moving to a 144-pin or 176-pin part to gain it. That was wrong, and the recommendation would have bought nothing.
+
+`HAL_WITH_MCU_MONITORING` uses ADC3's **internal** channels - VSENSE (ch18), VREFINT (ch19) and VBAT (ch17). Internal channels are not bonded to pins, so no package can affect them. The define is set in the MCU definition itself (`STM32H743xx.py`, `DEFINES` block), not per board, and it is present in this board's generated `hwdef.h`. MCU temperature and VREF monitoring are already live and logged.
+
+**What is true about the package:** ADC3's *external* inputs are unavailable, because ArduPilot maps them exclusively to port F and port H pins (PF3-PF10, PH2-PH5), and neither port is bonded on LQFP100. That constrains nothing on this design, which uses ADC1 throughout.
+
+**Recommendation:** none. No action, and no reason to change package.
+
+---
+
+### 12. IMU Data Ready Interrupts - NOT USED
 
 The IMU interrupt signals are routed to the MCU but commented out in the hwdef:
 - PB2: IMU1_INT1
@@ -165,7 +185,7 @@ ArduPilot uses FIFO-based IMU access rather than interrupt-driven sampling. DRDY
 
 ---
 
-### 12. Barometer Interrupt - NOT CONNECTED
+### 13. Barometer Interrupt - NOT CONNECTED
 
 The BMP390 has a DRDY/INT pin shown as BAR_INT. Per the ICD it was removed in V3R3, and in A.1 the net is not routed to any MCU pin (PD4, which previously carried it, is now SD_DETECT).
 
@@ -173,7 +193,7 @@ The BMP390 has a DRDY/INT pin shown as BAR_INT. Per the ICD it was removed in V3
 
 ---
 
-### 13. PWM Group Allocation
+### 14. PWM Group Allocation
 
 **Current Timer Allocation:**
 | Timer | Channels | PWM Outputs | Notes |

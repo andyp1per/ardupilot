@@ -154,11 +154,11 @@ PC0 BATT_VOLTAGE_SENS ADC1 SCALE(1)
 PC1 BATT_CURRENT_SENS ADC1 SCALE(1)
 
 # Battery 2 monitoring (on PDB connector)
-# NOTE: PC2/PC3 are ADC3-only inputs (ADC3_INP0/INP1) which are not
-# available on the 100-pin LQFP package (STM32H743VIT6). Use DroneCAN
-# battery monitor on CAN2 instead for second battery monitoring.
-# PC2 BATT2_VOLTAGE_SENS ADC3 SCALE(1)
-# PC3 BATT2_CURRENT_SENS ADC3 SCALE(1)
+# The schematic labels these ADC3_INP0/INP1, but ADC1_INP12/INP13 reach the
+# same PC2_C/PC3_C pads through the analog switch, which is closed at reset.
+# Left off because the PDB ships without the battery 2 sense parts fitted.
+# PC2 BATT2_VOLTAGE_SENS ADC1 SCALE(1)
+# PC3 BATT2_CURRENT_SENS ADC1 SCALE(1)
 
 # V-MCU monitoring (5V rail with 2:1 voltage divider)
 PC4 VDD_5V_SENS ADC1 SCALE(2)

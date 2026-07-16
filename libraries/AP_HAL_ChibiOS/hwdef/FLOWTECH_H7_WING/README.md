@@ -171,12 +171,14 @@ gives 25mV/A and the 40.0 A/V scale. The shunt is rated for 90A continuous and
 
 ### Second Battery
 
-The ICD allocates PC2 and PC3 for Battery 2 voltage and current. These are ADC3-only
-inputs and ADC3 is not bonded out on the 100-pin LQFP package (STM32H743VIT6), so
-they cannot be used. The PDB also ships without the parts needed for a second analog
-battery. Use a DroneCAN battery monitor instead:
+PC2 and PC3 carry Battery 2 voltage and current over J1, but the Power Distribution
+Board ships without the parts a second analog battery needs, so the inputs are left
+disabled in the hwdef. Use a DroneCAN battery monitor instead:
 
  - :ref:`BATT2_MONITOR<BATT2_MONITOR>` = 8 (DroneCAN)
+
+On a board that does populate them, uncomment the two ADC lines in the hwdef and set
+:ref:`BATT2_MONITOR<BATT2_MONITOR>` = 4 with `BATT2_VOLT_PIN` 12 and `BATT2_CURR_PIN` 13.
 
 ## Analog inputs
 
@@ -259,8 +261,8 @@ regulators, giving IMU1, IMU2 and the remaining sensors and MCU their own suppli
 | EN_SPST | PA8 | SPST relay enable (GPIO 83) |
 | BATTERY1_V | PC0 | Battery 1 voltage sense |
 | BATTERY1_I | PC1 | Battery 1 current sense |
-| BATTERY2_V | PC2 | Battery 2 voltage sense (ADC3, unusable, see above) |
-| BATTERY2_I | PC3 | Battery 2 current sense (ADC3, unusable, see above) |
+| BATTERY2_V | PC2 | Battery 2 voltage sense (see above) |
+| BATTERY2_I | PC3 | Battery 2 current sense (see above) |
 | I2C_SCL | PB10 | I2C2 clock |
 | I2C_SDA | PB11 | I2C2 data |
 | FDCAN2_TX | PB13 | CAN2 transmit |
