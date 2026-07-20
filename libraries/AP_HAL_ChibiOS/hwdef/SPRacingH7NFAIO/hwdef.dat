@@ -27,7 +27,7 @@ FLASH_RESERVE_START_KB 128
 
 # use last 2 pages for flash storage
 define HAL_STORAGE_SIZE 32768
-define STORAGE_FLASH_PAGE 14
+STORAGE_FLASH_PAGE 14
 
 # TIM5 is used for motors, so use TIM2 for the system clock
 STM32_ST_USE_TIMER 2
@@ -183,9 +183,9 @@ BARO BMP581 I2C:0:0x76
 BARO DPS310 I2C:0:0x76
 
 # ----------------- Compass -------------------
-COMPASS LIS2MDL I2C:0:0x1E false ROTATION_NONE
-define AP_COMPASS_LIS2MDL_ENABLED 1
-define AP_COMPASS_LIS2MDL_EXTERNAL_BUS_PROBING_ENABLED 0
+COMPASS IIS2MDC I2C:0:0x1E false ROTATION_NONE
+define AP_COMPASS_IIS2MDC_ENABLED 1
+define AP_COMPASS_IIS2MDC_EXTERNAL_BUS_PROBING_ENABLED 0
 
 # optional built-in compass on I2C1, plus external compasses, are auto-probed
 define ALLOW_ARM_NO_COMPASS
