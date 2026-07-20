@@ -14,6 +14,12 @@ OSCILLATOR_HZ 8000000
 
 MCU_CLOCKRATE_MHZ 480
 
+# QUADSPI here is a NAND dataflash for logging, not program flash. Without this
+# the hwdef generator assumes any QUADSPI board is execute-in-place and skips
+# stm32_clock_init(), leaving the PLL at whatever the bootloader set while the
+# firmware is built for MCU_CLOCKRATE_MHZ above.
+define HAL_XIP_ENABLED FALSE
+
 FLASH_SIZE_KB 2048
 
 # bootloader takes first sector
@@ -65,7 +71,7 @@ I2C_ORDER I2C1 I2C2
 # I2C1 (baro + optional compass)
 PB6 I2C1_SCL I2C1
 PB7 I2C1_SDA I2C1
-# I2C2
+# I2C2 
 PB10 I2C2_SCL I2C2
 PB11 I2C2_SDA I2C2
 
@@ -158,10 +164,13 @@ define HAL_OSD_TYPE_DEFAULT 1
 ROMFS_WILDCARD libraries/AP_OSD/fonts/font*.bin
 
 # ----------------- IMUs ----------------------
-SPIDEV imu1 SPI2 DEVID1 GYRO1_CS MODE3 1*MHZ 16*MHZ
-SPIDEV imu2 SPI3 DEVID1 GYRO2_CS MODE3 1*MHZ 16*MHZ
+# LSM6DSO is rated for 10MHz SPI
+SPIDEV imu1 SPI2 DEVID1 GYRO1_CS MODE3 1*MHZ 10*MHZ
+SPIDEV imu2 SPI3 DEVID1 GYRO2_CS MODE3 1*MHZ 10*MHZ
 
-# ICM42605 / ICM42688P (Invensensev3). Gyro1 = CW180, Gyro2 = CW270.
+# LSM6DSO. Gyro1 = CW180, Gyro2 = CW270.
+IMU LSM6DSO32 SPI:imu1 ROTATION_ROLL_180
+IMU LSM6DSO32 SPI:imu2 ROTATION_PITCH_180_YAW_270
 IMU Invensensev3 SPI:imu1 ROTATION_ROLL_180
 IMU Invensensev3 SPI:imu2 ROTATION_PITCH_180_YAW_270
 define HAL_DEFAULT_INS_FAST_SAMPLE 3
@@ -170,7 +179,7 @@ DMA_NOSHARE TIM5_UP TIM4_UP SPI2* SPI3*
 DMA_PRIORITY TIM5_UP TIM4_UP SPI2* SPI3*
 
 # ----------------- Baro ----------------------
-BARO BMP388 I2C:0:0x76
+BARO BMP581 I2C:0:0x76
 BARO DPS310 I2C:0:0x76
 
 # ----------------- Compass -------------------
@@ -183,6 +192,7 @@ define ALLOW_ARM_NO_COMPASS
 define AP_COMPASS_PROBING_ENABLED 1
 define HAL_I2C_INTERNAL_MASK 1
 define HAL_COMPASS_AUTO_ROT_DEFAULT 2
+define HAL_BARO_ALLOW_INIT_NO_BARO 1
 
 # Motor order implies Betaflight/X for standard ESCs
 define HAL_FRAME_TYPE_DEFAULT 12
