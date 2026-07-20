@@ -147,8 +147,7 @@ The PWM is in 5 groups:
 
 Channels within the same group need to use the same output rate. If any channel
 in a group uses DShot then all channels in the group need to use DShot. Channels
-1-13 support DShot, channels 1-8 support bi-directional DShot. Channels 14-16 are
-PWM only.
+1-13 support DShot and bi-directional DShot. Channels 14-16 are PWM only.
 
 ## Battery Monitoring
 
@@ -161,10 +160,10 @@ The default battery parameters are:
  - :ref:`BATT_MONITOR<BATT_MONITOR>` = 4
  - :ref:`BATT_VOLT_PIN<BATT_VOLT_PIN__AP_BattMonitor_Analog>` = 10
  - :ref:`BATT_CURR_PIN<BATT_CURR_PIN__AP_BattMonitor_Analog>` = 11
- - :ref:`BATT_VOLT_MULT<BATT_VOLT_MULT__AP_BattMonitor_Analog>` = 11.5
+ - :ref:`BATT_VOLT_MULT<BATT_VOLT_MULT__AP_BattMonitor_Analog>` = 11.9
  - :ref:`BATT_AMP_PERVLT<BATT_AMP_PERVLT__AP_BattMonitor_Analog>` = 40.0
 
-Voltage is divided 105k/10k on the PDB and buffered, giving the 11.5 multiplier.
+Voltage is divided and buffered on the PDB.
 Current is sensed with a 500uOhm 10W shunt and an INA186A2 at a gain of 50, which
 gives 25mV/A and the 40.0 A/V scale. The shunt is rated for 90A continuous and
 120A burst.
