@@ -1,0 +1,5 @@
+# The New Pixel is based on the Light Dynamix motherboard
+
+include ../lightdynamix-motherboard/hwdef-bl.dat
+
+APJ_BOARD_ID AP_HW_Dynamix_PIXELMB
