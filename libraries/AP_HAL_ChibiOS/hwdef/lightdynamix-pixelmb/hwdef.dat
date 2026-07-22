@@ -1,0 +1,7 @@
+# The New Pixel is based on the Light Dynamix motherboard
+
+include ../lightdynamix-motherboard/hwdef.dat
+
+APJ_BOARD_ID AP_HW_Dynamix_PIXELMB
+
+define ADVANCED_FAILSAFE 1
