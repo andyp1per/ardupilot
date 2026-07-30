@@ -2,6 +2,8 @@
 
 include ../lightdynamix-motherboard/hwdef.dat
 
+undef PA2 PA3 PD12 PD13
+
 APJ_BOARD_ID AP_HW_Dynamix_PIXELMB
 
 define ADVANCED_FAILSAFE 1
