@@ -30,16 +30,16 @@ APJ_BOARD_ID AP_HW_RASPBERRYPI_LAUREL
 # timing thresholds for thread-profiling warnings.
 OSCILLATOR_HZ 12000000
 
-# 8MB boot/XIP flash: W25Q64JVXGIM (Winbond, 133 MHz max, QSPI, chip-select = QSPI_SS / pin75 — dedicated HW pin, QMI-controlled)
-# 16MB blackbox flash: W25Q128JVPIM (Winbond, 133 MHz max, SPI, chip-select = PA0 / GPIO0 / pin77)
-FLASH_SIZE_KB 8192
-# The ChibiOS EFLv1 driver defaults RP_FLASH_SIZE to 4MB; override it to the
-# actual flash capacity so efl_lld_program and block-erase accept 8MB offsets.
+# 4MB boot/XIP flash (Winbond, 133 MHz max, QSPI, chip-select = QSPI_SS / pin75 -
+# dedicated HW pin, QMI-controlled). This is the only flash on the board.
+FLASH_SIZE_KB 4096
+# Tie RP_FLASH_SIZE to the hwdef flash size so efl_lld_program and block-erase
+# bounds-check against the real part rather than the ChibiOS default.
 define RP_FLASH_SIZE (BOARD_FLASH_SIZE * 1024U)
 # Flash layout:
 #   Bootloader: 0x10000000-0x10007FFF (32KB)
 #   Parameter storage: 0x10008000-0x1000FFFF (32KB)
-#   App: 0x10010000-0x107FFFFF
+#   App: 0x10010000-0x103FFFFF
 FLASH_RESERVE_START_KB 64
 
 # GPIO IRQ handling and early bring-up on RP2350 benefit from a larger MSP.
@@ -205,8 +205,8 @@ SPIDEV sdcard   SPI1 DEVID3 SDCARD_CS   MODE0 400*KHZ 25*MHZ
 undef HAL_CHIBIOS_ARCH_FMUV3
 define AP_FEATURE_BOARD_DETECT 0
 
-# Main parameter storage remains on the RP2350 XIP flash. The second QSPI flash
-# used for Betaflight blackbox logging is not yet modelled by the RP2350 hwdef.
+# Parameter storage lives in the 32KB region below the app, inside the 64KB
+# reserve at the bottom of the XIP flash.
 define HAL_STORAGE_SIZE 8192
 define HAL_WITH_RAMTRON 0
 STORAGE_FLASH_PAGE 8
@@ -437,11 +437,8 @@ define RP_QMI_RXDELAY 2
 #   chip-select on PA25 (microSD).
 # - SPI1 is a hardware either-or choice: microSD or hardware OSD. This target
 #   selects microSD and keeps the hardware OSD SPI device disabled.
-# - The secondary W25Q128JVPIM blackbox flash (Winbond, 128 Mbit) on Laurel
-#   uses chip-select PA0 (GPIO0, pin77). The SPI bus it shares is not yet
-#   confirmed from schematic; it is not yet represented in
-#   the RP2350 hwdef path, so only main XIP flash storage plus microSD are
-#   currently enabled.
+# - There is no secondary blackbox flash on this board revision; parameter
+#   storage uses the boot XIP flash and logs go to the microSD card.
 
 # Sensors
 define HAL_INS_ALLOW_NO_SENSORS 1
