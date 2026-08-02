@@ -5,8 +5,10 @@ the original Laurel carrier with a substantially different pinout: the IMU, the
 microSD socket, the motor outputs and the barometer bus have all moved, and the
 secondary blackbox flash has been removed.
 
-Pin assignments in this target follow the vendor GPIO assignment sheet. Do not
-cross-reference the original `Laurel` hwdef for pin numbers - only the clock,
+Pin assignments in this target were taken from the R2 Rev C schematic, which is
+the authority where it disagrees with the vendor GPIO assignment sheet - it does
+so on the ESC channel order and on both regulator enables. Do not
+cross-reference the original `Laurel` hwdef for pin numbers; only the clock,
 QMI flash timing and SMP configuration are shared between the two.
 
 ## Features
@@ -14,8 +16,8 @@ QMI flash timing and SMP configuration are shared between the two.
  - MCU - RP2350B dual-core Cortex-M33 running at 225 MHz
  - 520 KB SRAM
  - 4 MB boot/XIP flash (QSPI, dedicated `QSPI_SS` chip-select)
- - ICM42688P IMU on SPI0
- - DPS310 barometer on the internal I2C0 bus
+ - TDK ICM-56686 IMU on SPI0
+ - DPS368 barometer on the internal I2C0 bus (address 0x76)
  - microSD card slot (SPI mode) for logging
  - 2 hardware UARTs plus 2 PIO UARTs
  - 2 I2C buses (internal barometer, external GPS/compass)
@@ -57,8 +59,11 @@ currently supported.
 
 Four PWM outputs on GPIO6-9, in two groups:
 
- - PWM 1-2 in group1 (PWM slice 3)
- - PWM 3-4 in group2 (PWM slice 4)
+ - PWM 1-2 in group1 (PWM slice 4, GPIO9 and GPIO8)
+ - PWM 3-4 in group2 (PWM slice 3, GPIO7 and GPIO6)
+
+The ESC connector is wired in descending order - DSHOT1 is GPIO9 and DSHOT4 is
+GPIO6 - so the ArduPilot channel numbers run opposite to the GPIO numbers.
 
 Channels within a group share an output rate. The board sheet labels these
 DSHOT1-4, but bidirectional DShot is not yet supported by the RP2350 port and
@@ -101,10 +106,10 @@ compiled-in default for that port.
 
 ## VTX power control
 
-The 9 V rail feeding the VID connector is switched by GPIO19, and the 5 V
-peripheral rail by GPIO18. Both enables are active-LOW on this revision. The
-5 V rail is enabled at boot; the 9 V rail is held off until the power tree has
-been validated on this hardware.
+The 9 V rail feeding the VID connector is switched by GPIO18, and the 5 V
+peripheral rail by GPIO19. Both drive an MP4334 EN pin with a pull-down, so
+they are active HIGH. The 5 V rail is enabled at boot; the 9 V rail is held off
+until the power tree has been validated on this hardware.
 
 ## Logging
 
@@ -133,3 +138,4 @@ with any ArduPilot ground station using the `*.apj` firmware files.
 | RGB LED (GPIO2) | Serial LED output not supported on RP2350 |
 | Battery scaling | Placeholder factors carried from Laurel v1 |
 | IMU rotation | `ROTATION_NONE`; set `AHRS_ORIENTATION` to match your mounting |
+| ICM-56686 IMU | Not recognised by `AP_InertialSensor_Invensensev3::check_whoami()` |
