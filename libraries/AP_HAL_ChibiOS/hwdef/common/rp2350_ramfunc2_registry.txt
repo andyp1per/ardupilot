@@ -428,3 +428,23 @@ modules/ChibiOS/os/rt/src/chthreads.c|chThdSleep
 # to SRAM (rp_clocks.c). Relocating them executes uninitialised SRAM and the FC
 # double-faults at boot. To claw back their cost, remove the calls (e.g. use
 # 32-bit micros() deltas to avoid __udivmoddi4) rather than move the symbol.
+
+# newlib single-precision trig, from a core0 PC-sampler run on Laurelv2.
+# The AHRS/EKF math on core0 keeps these in the XIP working set: atan2f 0.4%,
+# kernel_cosf/kernel_sinf/sinf 0.2% each, atanf 0.1% of all core0 samples,
+# ~1.3% together and all flash-resident. cosf is included for symmetry with
+# sinf rather than on its own sample count.
+# Unlike memcpy/memset these are not reachable from early boot, so there is no
+# .ramtext copy-order hazard.
+# Deliberately not relocated: __ieee754_rem_pio2f and __kernel_rem_pio2f are
+# the large-argument reduction path and did not profile, and tanf is only
+# reached when a filter cutoff actually changes.
+# newlib is not built with -ffunction-sections, so these have to be picked as
+# whole archive members rather than by symbol. Each member holds one function.
+(archive)|lib_a-ef_atan2.o   # __ieee754_atan2f, 344 B
+(archive)|lib_a-wf_atan2.o   # atan2f wrapper, 4 B
+(archive)|lib_a-sf_atan.o    # atanf, 432 B
+(archive)|lib_a-kf_cos.o     # __kernel_cosf, 260 B
+(archive)|lib_a-kf_sin.o     # __kernel_sinf, 144 B
+(archive)|lib_a-sf_sin.o     # sinf, 140 B
+(archive)|lib_a-sf_cos.o     # cosf, 136 B
