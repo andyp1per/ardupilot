@@ -16,7 +16,7 @@ that.
 | Pinout | Verified against R2 Rev C schematic |
 | Build | `./waf configure --board Laurelv2 && ./waf copter` |
 | Bootloader | Built, board ID 1215 |
-| IMU | Working on hardware, accel calibration completes |
+| IMU | Working on hardware; fitted part varies, see below |
 | Barometer | DPS368 detected on I2C0 at 0x76 |
 | microSD logging | Working on hardware |
 | Parameter storage | Working, accel cal persists across reboot |
@@ -26,14 +26,32 @@ that.
 
 ## The IMU
 
-The schematic names the part TDK ICM-56686. That is the same silicon as the
-ICM-45686, so it reports `0xE9` at register `0x72` and
-`AP_InertialSensor_Invensensev3::check_whoami()` picks it up through the
-ICM-456xy path with no driver change. The hwdef labels the device `icm45686`
-to match what the driver actually detects.
+The board line does not carry a single part. The R2 Rev C schematic shows a TDK
+ICM-56686; earlier samples carry an ICM42688P. The hwdef therefore names the
+SPI device `imu1` rather than after any part, following the convention most
+boards already use.
 
-If it ever fails to probe, the first thing to check is which WHOAMI register
-responds: `0x75` for the ICM-426xx family, `0x72` for the ICM-456xy family.
+This needs no hwdef change to switch, because Invensensev3 probes both WHOAMI
+registers - `0x75` for the ICM-426xx family, `0x72` for ICM-456xy - and
+configures whichever it finds.
+
+An actual ICM-56686 is a different chip, not a rebadged ICM-45686, and would
+need driver work rather than a hwdef edit. Its register map diverges from the
+ICM-45686 that ArduPilot's ICM-456xy path assumes: `PWR_MGMT0` at `0x14`
+rather than `0x10`, `ACCEL_CONFIG0` at `0x1F` rather than `0x1B`,
+`GYRO_CONFIG0` at `0x20` rather than `0x1C`. Note ArduPilot reads `FIFO_DATA`
+at `0x14`, which is `PWR_MGMT0` on the ICM-56686, so the maps cannot be used
+interchangeably. There is a Betaflight driver on the `accgyro_spi_icm56686`
+branch of `mjs1441/betaflight` to model any such work on.
+
+To confirm which part is fitted, read `INS_ACC1_ID` and take the top byte
+(divide by 65536): `0x34` (52) is ICM42688, `0x3B` (59) is ICM45686.
+
+The quickest health check is the `ICM dbg:` line. Gravity magnitude should come
+to about 9.81 across the three accel axes, the gyro should sit near zero at
+rest, and `t=` should read a plausible room temperature - temperature is
+decoded from the same FIFO packet as accel and gyro, so a sane value confirms
+the packet layout and register map are right.
 
 Failure is loud here: `HAL_INS_ALLOW_NO_SENSORS` is deliberately not set. On
 Laurel v1 it was, and a failed probe silently
