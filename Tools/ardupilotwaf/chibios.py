@@ -216,7 +216,7 @@ class upload_fw_pico2(Task.Task):
 def board_uses_rp2350_bootsel(board_name):
     '''Return true for boards that use the RP2350 ROM BOOTSEL + picotool path.'''
     board = board_name.lower()
-    return 'pico2' in board or board == 'laurel'
+    return 'pico2' in board or board.startswith('laurel')
 
 class set_default_parameters(Task.Task):
     color='CYAN'
