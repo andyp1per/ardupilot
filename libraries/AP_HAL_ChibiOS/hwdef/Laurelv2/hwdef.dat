@@ -91,7 +91,7 @@ PA28 SPI1_MISO SPI1
 PA31 SPI1_MOSI SPI1
 PA29 SDCARD_CS  CS
 
-# I2C0 - onboard barometer
+# I2C0 - onboard DPS368 barometer (SDO strapped low, so address 0x76)
 #   SDA=GPIO24, SCL=GPIO25 (ALT F3).
 PA24 I2C0_SDA I2C0
 PA25 I2C0_SCL I2C0
@@ -131,12 +131,16 @@ PA16 PIOUART1_TX INPUT FLOATING
 PA17 PIOUART1_RX INPUT FLOATING
 
 # Motor outputs (PWM slices 3 and 4, ALT F4)
-# The board sheet labels these DSHOT1-4, but bidirectional DShot is not yet
+# The schematic wires the ESC connector in descending order: DSHOT1 is GPIO9
+# and DSHOT4 is GPIO6, so the ArduPilot channel numbers run the opposite way
+# to the GPIO numbers.  PWM 1-2 land on slice 4 and PWM 3-4 on slice 3, so
+# each rate group is still a single slice.
+# The sheet labels these DSHOT1-4, but bidirectional DShot is not yet
 # supported by the RP2350 port; they run as plain PWM for now.
-PA6 PWM3_A TIM3 PWM(1) GPIO(50)
-PA7 PWM3_B TIM3 PWM(2) GPIO(51)
-PA8 PWM4_A TIM4 PWM(3) GPIO(52)
-PA9 PWM4_B TIM4 PWM(4) GPIO(53)
+PA9 PWM4_B TIM4 PWM(1) GPIO(50)
+PA8 PWM4_A TIM4 PWM(2) GPIO(51)
+PA7 PWM3_B TIM3 PWM(3) GPIO(52)
+PA6 PWM3_A TIM3 PWM(4) GPIO(53)
 
 # Status indicators
 # GPIO0 = blue LED, GPIO1 = green LED.  The sheet's "n" suffix marks these
@@ -161,13 +165,15 @@ PA3 PWM1_B TIM1 LOW ALARM
 define AP_NOTIFY_TONEALARM_ENABLED 1
 define HAL_BUZZER_NOMINAL_FREQ_HZ 4000
 
-# Regulator enables.  Both are active-LOW on this revision (sheet:
-# 5V0_REG_ENn / 9V0_REG_ENn), the opposite of the original Laurel, so driving
-# the pin LOW turns the rail ON.
+# Regulator enables.  Each drives the EN pin of an MP4334 buck directly, with
+# a pull-down holding the rail off when the pin is low or floating, so both are
+# active HIGH.  Note GPIO18 is the 9V rail and GPIO19 the 5V rail - the vendor
+# GPIO sheet lists these the other way round and marks them active-low; the
+# schematic is the authority.
 # 5V is enabled at boot for peripherals; the 9V rail (VID connector) is held
 # off until the power tree is validated on this revision.
-PA18 BEC_5V_EN OUTPUT LOW
-PA19 BEC_9V_EN OUTPUT HIGH
+PA18 BEC_9V_EN OUTPUT LOW
+PA19 BEC_5V_EN OUTPUT HIGH
 
 # Analog inputs on RP2350B-only ADC pins.
 #   GPIO46 = ADC6 battery voltage, GPIO47 = ADC7 battery current,
@@ -373,4 +379,6 @@ define RP_QMI_RXDELAY 2
 
 # Sensors
 IMU Invensensev3 SPI:icm42688 ROTATION_NONE
+# The fitted part is a DPS368; it shares the DPS280/DPS310 register map and
+# reports the same product ID (0x10), so the DPS310 backend drives it.
 BARO DPS310 I2C:0:0x76

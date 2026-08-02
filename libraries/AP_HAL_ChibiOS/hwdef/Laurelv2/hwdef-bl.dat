@@ -59,7 +59,7 @@ PA45 UART0_RX UART0
 # Hold the IMU chip-select inactive while the bootloader is running.
 PA33 ICM42688_CS CS
 
-# Leave board rails disabled in the bootloader.  Both enables are active-LOW
-# on this revision, so HIGH is off.
-PA18 BEC_5V_EN OUTPUT HIGH
-PA19 BEC_9V_EN OUTPUT HIGH
+# Leave board rails disabled in the bootloader.  Both enables are active HIGH
+# (MP4334 EN with a pull-down), so LOW is off.
+PA18 BEC_9V_EN OUTPUT LOW
+PA19 BEC_5V_EN OUTPUT LOW
