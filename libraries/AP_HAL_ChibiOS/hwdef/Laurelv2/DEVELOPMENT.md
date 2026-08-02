@@ -7,8 +7,9 @@ users see it; this file is for whoever is working on the port. See
 ## Where things stand
 
 The hwdef is complete and builds, and the pinout is verified against the
-schematic. IMU, parameter storage and microSD logging are confirmed on
-hardware. The sensors and ports still marked untested below are exactly that.
+schematic. Both sensors, parameter storage and microSD logging are confirmed
+on hardware. The ports and outputs still marked untested below are exactly
+that.
 
 | Area | State |
 |-----------------------|--------------------------------------------------|
@@ -16,7 +17,7 @@ hardware. The sensors and ports still marked untested below are exactly that.
 | Build | `./waf configure --board Laurelv2 && ./waf copter` |
 | Bootloader | Built, board ID 1215 |
 | IMU | Working on hardware, accel calibration completes |
-| Barometer | DPS368 on I2C0 at 0x76, untested on hardware |
+| Barometer | DPS368 detected on I2C0 at 0x76 |
 | microSD logging | Working on hardware |
 | Parameter storage | Working, accel cal persists across reboot |
 | Serial ports | Wiring verified, protocols untested |
@@ -158,16 +159,15 @@ made a wrong-orientation fault very hard to diagnose.
 
 ## Next steps
 
-1. Confirm the DPS368 responds at 0x76.
-2. Bring up the serial ports one at a time: GPS on SERIAL2, then the PIO ports
+1. Bring up the serial ports one at a time: GPS on SERIAL2, then the PIO ports
    on SERIAL3/SERIAL4, which ship disabled.
-3. Verify motor output channel order on the bench before fitting props. The
+2. Verify motor output channel order on the bench before fitting props. The
    schematic reversed it relative to the vendor sheet and it is untested.
-4. Measure the battery voltage and current dividers and replace the v1
+3. Measure the battery voltage and current dividers and replace the v1
    placeholders in `hwdef.dat`.
-5. Determine the mounting orientation and set `AHRS_ORIENTATION` as a user
+4. Determine the mounting orientation and set `AHRS_ORIENTATION` as a user
    parameter, not a board default.
-6. Re-check the QMI flash timing if this revision fits a different flash part.
+5. Re-check the QMI flash timing if this revision fits a different flash part.
    `RP_QMI_CLKDIV 3` / `RP_QMI_RXDELAY 2` were characterised on the v1 part.
-7. Establish a fresh profiling baseline and compare against v1's numbers.
+6. Establish a fresh profiling baseline and compare against v1's numbers.
    Logging now works, so `/log-analyze` is available for this.
