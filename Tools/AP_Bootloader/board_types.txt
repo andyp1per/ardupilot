@@ -119,7 +119,6 @@ AP_HW_F4BY                             20 # value due to previous release by ven
 AP_HW_MAZZYSTARDRONE                  188
 AP_HW_RASPBERRYPI_PICO2               189
 AP_HW_RASPBERRYPI_LAUREL              190
-AP_HW_RASPBERRYPI_LAURELV2            191
 
 AP_HW_VRBRAIN_V51                    1151
 AP_HW_VRBRAIN_V52                    1152
@@ -353,6 +352,7 @@ AP_HW_SIMPLIFLYH7                    1221
 AP_HW_MUPilot                        1222
 AP_HW_HWH7                           1223
 AP_HW_BrahmaH7                       1224
+AP_HW_RASPBERRYPI_LAURELV2           1225
 
 AP_HW_ATLAS_CONTROL                  1227
 AP_HW_MatekH7A3_Wing                 1228
