@@ -7,8 +7,8 @@ users see it; this file is for whoever is working on the port. See
 ## Where things stand
 
 The hwdef is complete and builds, and the pinout is verified against the
-schematic. The IMU path is confirmed on hardware; the rest is still untested,
-so treat every "should work" below as unverified.
+schematic. IMU, parameter storage and microSD logging are confirmed on
+hardware. The sensors and ports still marked untested below are exactly that.
 
 | Area | State |
 |-----------------------|--------------------------------------------------|
@@ -17,9 +17,11 @@ so treat every "should work" below as unverified.
 | Bootloader | Built, board ID 1215 |
 | IMU | Working on hardware, accel calibration completes |
 | Barometer | DPS368 on I2C0 at 0x76, untested on hardware |
-| microSD logging | Untested on this revision |
+| microSD logging | Working on hardware |
+| Parameter storage | Working, accel cal persists across reboot |
 | Serial ports | Wiring verified, protocols untested |
 | Battery monitoring | Scale factors are placeholders from v1 |
+| Motor outputs | Untested; channel order corrected from schematic |
 
 ## The IMU
 
@@ -156,10 +158,11 @@ made a wrong-orientation fault very hard to diagnose.
 
 ## Next steps
 
-1. Confirm accel calibration persists across a reboot, which is the first real
-   exercise of the parameter storage path on this board.
-2. Confirm the DPS368 responds at 0x76.
-3. Verify microSD mount and logging.
+1. Confirm the DPS368 responds at 0x76.
+2. Bring up the serial ports one at a time: GPS on SERIAL2, then the PIO ports
+   on SERIAL3/SERIAL4, which ship disabled.
+3. Verify motor output channel order on the bench before fitting props. The
+   schematic reversed it relative to the vendor sheet and it is untested.
 4. Measure the battery voltage and current dividers and replace the v1
    placeholders in `hwdef.dat`.
 5. Determine the mounting orientation and set `AHRS_ORIENTATION` as a user
@@ -167,3 +170,4 @@ made a wrong-orientation fault very hard to diagnose.
 6. Re-check the QMI flash timing if this revision fits a different flash part.
    `RP_QMI_CLKDIV 3` / `RP_QMI_RXDELAY 2` were characterised on the v1 part.
 7. Establish a fresh profiling baseline and compare against v1's numbers.
+   Logging now works, so `/log-analyze` is available for this.
