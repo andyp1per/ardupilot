@@ -27,7 +27,9 @@ libraries/AP_AHRS/AP_AHRS_DCM.cpp|AP_AHRS_DCM::drift_correction
 libraries/AP_HAL_ChibiOS/hwdef/common/hrt.c|hrt_micros64  # 84 B (sram)
 libraries/AP_HAL_ChibiOS/hwdef/common/hrt.c|hrt_micros32
 libraries/AP_HAL_ChibiOS/hwdef/common/hrt.c|hrt_millis64  # 84 B (sram)
-libraries/AP_HAL_ChibiOS/xip_profiler.cpp|ap_xip_cs_hook
+# ap_xip_cs_hook only exists when AP_XIP_PROFILER_ENABLED is defined in the
+# board hwdef. Re-enable this line alongside that define.
+#libraries/AP_HAL_ChibiOS/xip_profiler.cpp|ap_xip_cs_hook
 libraries/AP_HAL_ChibiOS/system.cpp|fault_capture  # 108 B (sram)
 libraries/AP_HAL_ChibiOS/system.cpp|HardFault_Handler  # 20 B (sram)
 libraries/AP_HAL_ChibiOS/system.cpp|BusFault_Handler  # 20 B (sram)
@@ -121,7 +123,10 @@ libraries/AP_NavEKF3/AP_NavEKF3_Measurements.cpp|NavEKF3_core::readDeltaAngle
 #libraries/AP_NavEKF3/AP_NavEKF3_Measurements.cpp|NavEKF3_core::readBaroData
 ArduCopter/inertia.cpp|Copter::read_inertia  # 160 B (sram)
 libraries/AP_HAL_ChibiOS/UARTDriver.cpp|usb_tx_poll_drain  # 146 B (sram)
-libraries/AP_HAL_ChibiOS/UARTDriver.cpp|usb_try_write_direct
+# usb_try_write_direct is static with a single call site and is inlined into
+# ChibiOS::UARTDriver::_write, so no symbol is emitted to match. Relocating it
+# means relocating _write instead.
+#libraries/AP_HAL_ChibiOS/UARTDriver.cpp|usb_try_write_direct
 libraries/AP_HAL_ChibiOS/UARTDriver.cpp|usb_try_read_direct  # 96 B (sram)
 libraries/AP_HAL_ChibiOS/UARTDriver.cpp|ChibiOS::UARTDriver::write_pending_bytes_NODMA  # 476 B (sram)
 libraries/AP_HAL_ChibiOS/UARTDriver.cpp|ChibiOS::UARTDriver::read_bytes_NODMA  # 106 B (sram)
@@ -268,13 +273,11 @@ modules/ChibiOS/os/hal/ports/RP/LLD/DMAv1/rp_dma.c|Vector6C
 (profiled)|ChibiOS::Semaphore::take
 modules/ChibiOS/os/rt/src/chtm.c|chTMChainMeasurementToX
 (profiled)|ChibiOS::Scheduler::in_main_thread
-(profiled)|__udivmoddi4
 (profiled)|WithSemaphore::WithSemaphore
 (profiled)|AP_InertialSensor::BatchSampler::sample
 (profiled)|LowPassFilter<Vector3<float> >::apply
 (profiled)|Vector3<float>::rotate
 (profiled)|run_decimated_callback
-(profiled)|__aeabi_uldivmod
 libraries/AP_HAL_ChibiOS/hwdef/common/bouncebuffer.c|bouncebuffer_finish_read
 (profiled)|ByteBuffer::available
 libraries/AP_HAL_ChibiOS/hwdef/common/sysperf.c|sysIdleEnterMeasure
@@ -421,13 +424,22 @@ modules/ChibiOS/os/rt/src/chthreads.c|chThdSleep
 (profiled)|AP_FETtecOneWire::update
 (profiled)|AP_InertialSensor_Backend::update_accel_filters
 
-# DO NOT relocate the libc helpers memcpy, memset, __udivmoddi4 or
-# __aeabi_uldivmod. They profile hot on core1 (~4.4% of active time) but must
-# stay in flash: the compiler lowers struct/array init in early boot into
-# implicit calls to them, and those run before rp_clock_init() copies .ramtext
-# to SRAM (rp_clocks.c). Relocating them executes uninitialised SRAM and the FC
-# double-faults at boot. To claw back their cost, remove the calls (e.g. use
-# 32-bit micros() deltas to avoid __udivmoddi4) rather than move the symbol.
+# Boot-order hazard for the libc helpers. The compiler lowers struct/array init
+# in early boot into implicit calls to memcpy/memset and the 64-bit divide
+# helpers, and those run before rp_clock_init() copies .ramtext to SRAM
+# (rp_clocks.c). Relocating a helper that early boot calls executes
+# uninitialised SRAM and the FC double-faults.
+#
+# memcpy and memset ARE relocated (entries above): the copy loop in rp_clocks.c
+# was rewritten as a volatile word loop so it no longer calls them. See the
+# memcpy/memset section of hwdef/Laurel/BASELINE.md before touching that.
+#
+# __udivmoddi4 and __aeabi_uldivmod are NOT relocated and must stay in flash -
+# nothing has been done to keep them off the early-boot path. They profile hot
+# on core1 (~4.4% of active time); claw that back by removing the calls (e.g.
+# 32-bit micros() deltas) rather than by moving the symbol. They also live in
+# libgcc, which has no per-function sections, so a symbol entry silently
+# matches nothing - an (archive) entry would be needed, and would boot-fault.
 
 # newlib single-precision trig, from a core0 PC-sampler run on Laurelv2.
 # The AHRS/EKF math on core0 keeps these in the XIP working set: atan2f 0.4%,
