@@ -51,6 +51,12 @@ extern const AP_HAL::HAL& hal;
 #define HAL_FLASH_READ_FAIL_LIMIT 10
 #endif
 
+// defer all storage writes while armed. For boards where a storage write
+// stalls the control loop badly enough that it must not happen in flight.
+#ifndef AP_STORAGE_NO_WRITE_WHILE_ARMED
+#define AP_STORAGE_NO_WRITE_WHILE_ARMED 0
+#endif
+
 #ifdef USE_POSIX
 #ifndef HAL_STORAGE_SDCARD_RETRY_MS
 #define HAL_STORAGE_SDCARD_RETRY_MS 2000U
@@ -304,6 +310,15 @@ void Storage::_timer_tick(void)
     if (_initialisedType == StorageBackend::None) {
         return;
     }
+#if AP_STORAGE_NO_WRITE_WHILE_ARMED
+    if (hal.util->get_soft_armed()) {
+        // Dirty lines stay set and are flushed once disarmed, so nothing is
+        // lost by deferring. Keep _last_empty_ms fresh: a deliberate deferral
+        // is not a storage fault and must not fail the healthy() arming check.
+        _last_empty_ms = AP_HAL::millis();
+        return;
+    }
+#endif
     if (_dirty_mask.empty()) {
         _last_empty_ms = AP_HAL::millis();
         return;
