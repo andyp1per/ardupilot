@@ -213,7 +213,6 @@ define HAL_LOGGING_BACKEND_DEFAULT_ENABLED 1
 # SCHED_LOOP_RATE, paced by the INS main-loop sample; the rate loop on core1
 # is independent of the main tick.
 define AP_SCHEDULER_FAST_TASK_MODULO 1
-define HAL_BARO_ALLOW_INIT_NO_BARO 1
 
 # Investigation-only: timer-driven statistical PC sampler
 # (rp2350_pc_sampler.cpp) to guide __RAMFUNC2__ relocation.  Off for release
