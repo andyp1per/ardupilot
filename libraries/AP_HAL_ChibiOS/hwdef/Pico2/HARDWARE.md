@@ -1,10 +1,4 @@
----
-name: pico2-hardware
-description: "Raspberry Pi Pico2 / RP2350 hardware interaction for the ArduPilot port. Use when: flashing firmware via SWD or UF2; starting or restarting OpenOCD; connecting GDB to live hardware; live inspecting memory/registers; diagnosing USB CDC serial silence; adding DEV_PRINTF/print statements to trace boot crashes; diagnosing UART/GPIO FUNCSEL issues; halting vs resetting the board; using --nx with gdb; reading /dev/ttyACM* output; recovering from lost comms."
-argument-hint: "What do you need to do? (flash / gdb / openocd / uart-debug / monitor-serial / print-debug)"
----
-
-# Pico2 / RP2350 Hardware Skill
+# Pico2 / RP2350 Hardware Notes
 
 ## Repository Safety
 
