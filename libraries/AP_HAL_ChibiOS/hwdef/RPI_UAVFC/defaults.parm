@@ -1,4 +1,4 @@
-# Laurel v2 defaults for the onboard ICM42688P sensor stack.
+# RPI_UAVFC defaults for the onboard ICM42688P sensor stack.
 #
 # IMU / rate-loop split - 4 kHz gyro backend, 2 kHz rate thread on core1:
 #

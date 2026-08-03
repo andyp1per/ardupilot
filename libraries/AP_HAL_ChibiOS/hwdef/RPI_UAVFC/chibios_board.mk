@@ -1,4 +1,4 @@
-# ############################################################################# Build global options NOTE: Standalone Laurel v2 RP2350 board makefile.
+# ############################################################################# Build global options NOTE: Standalone RPI_UAVFC RP2350 board makefile.
 # #############################################################################
 
 # Compiler options here.
@@ -138,7 +138,7 @@ CSRC += $(HWDEF)/common/stubs.c \
 				$(HWDEF)/common/bouncebuffer.c \
 				$(HWDEF)/common/watchdog.c \
 				$(HWDEF)/common/sysperf.c \
-				$(HWDEF)/Laurelv2/c1_main.c
+				$(HWDEF)/RPI_UAVFC/c1_main.c
 
 ifeq ($(USE_USB_MSD),yes)
 CSRC += $(CHIBIOS)/os/various/scsi_bindings/lib_scsi.c \

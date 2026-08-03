@@ -1,7 +1,7 @@
 # hw definition file for processing by chibios_hwdef.py
-# for Laurel v2 board based on the Raspberry Pi RP2350B (QFN-80)
+# for RPI_UAVFC board based on the Raspberry Pi RP2350B (QFN-80)
 
-# Laurel v2 is a revision of the Laurel carrier with a completely different
+# RPI_UAVFC is a revision of the Laurel carrier with a completely different
 # pinout to the original: the IMU moves to GPIO32-35, the microSD to GPIO28-31,
 # the motor outputs to GPIO6-9, and the barometer to its own I2C bus on
 # GPIO24/25.  Pin assignments here follow the vendor GPIO assignment sheet.
@@ -11,7 +11,7 @@
 # MCU class and specific type
 MCU PICO2 PICO2
 
-# Laurel v2 uses the RP2350B QFN-80 package: ADC external inputs are GPIO40-47
+# RPI_UAVFC uses the RP2350B QFN-80 package: ADC external inputs are GPIO40-47
 # and the internal temperature sensor is ADC channel 8.
 define RP2350B_QFN80 1
 
@@ -23,7 +23,7 @@ define HAL_WITH_EKF_DOUBLE 0
 define HAL_EKF_IMU_MASK_DEFAULT 1
 
 # board ID. See Tools/AP_Bootloader/board_types.txt
-APJ_BOARD_ID AP_HW_RASPBERRYPI_LAURELV2
+APJ_BOARD_ID AP_HW_RPI_UAVFC
 
 # 12 MHz crystal (same as all standard Pico/Pico2W modules).
 # NOTE: on RP2350 this value is emitted as STM32_HSECLK and does NOT directly
@@ -248,7 +248,7 @@ define HAL_SDCARD_RETRY_INTERVAL_MS 1000
 
 # Battery and RSSI channels on RP2350 ADC inputs.  Pin numbers are the ADC
 # channel index (GPIO40 = 0 ... GPIO47 = 7); verify against HAL_ANALOG_PINS in
-# build/Laurelv2/hwdef.h after a configure.
+# build/RPI_UAVFC/hwdef.h after a configure.
 define HAL_BATT_MONITOR_DEFAULT 4
 define HAL_BATT_VOLT_PIN 6
 define HAL_BATT_CURR_PIN 7
@@ -307,7 +307,7 @@ define DISABLE_WATCHDOG                    1
 define HAL_MONITOR_THREAD_ENABLED 0
 define HAL_USE_WSPI                        FALSE
 
-# Port roles chosen to match the Laurel v2 carrier wiring.
+# Port roles chosen to match the RPI_UAVFC carrier wiring.
 define DEFAULT_SERIAL1_PROTOCOL            SerialProtocol_MSP_DisplayPort
 define DEFAULT_SERIAL2_PROTOCOL            SerialProtocol_GPS
 define DEFAULT_SERIAL3_PROTOCOL            SerialProtocol_RCIN

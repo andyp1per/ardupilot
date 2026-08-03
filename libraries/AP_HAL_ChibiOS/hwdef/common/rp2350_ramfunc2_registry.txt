@@ -441,7 +441,7 @@ modules/ChibiOS/os/rt/src/chthreads.c|chThdSleep
 # libgcc, which has no per-function sections, so a symbol entry silently
 # matches nothing - an (archive) entry would be needed, and would boot-fault.
 
-# newlib single-precision trig, from a core0 PC-sampler run on Laurelv2.
+# newlib single-precision trig, from a core0 PC-sampler run on RPI_UAVFC.
 # The AHRS/EKF math on core0 keeps these in the XIP working set: atan2f 0.4%,
 # kernel_cosf/kernel_sinf/sinf 0.2% each, atanf 0.1% of all core0 samples,
 # ~1.3% together and all flash-resident. cosf is included for symmetry with

@@ -1,9 +1,9 @@
 # hw definition file for processing by chibios_hwdef.py
-# bootloader for the Laurel v2 RP2350B board
+# bootloader for the RPI_UAVFC RP2350B board
 
 MCU PICO2 PICO2
 
-APJ_BOARD_ID AP_HW_RASPBERRYPI_LAURELV2
+APJ_BOARD_ID AP_HW_RPI_UAVFC
 
 OSCILLATOR_HZ 12000000
 

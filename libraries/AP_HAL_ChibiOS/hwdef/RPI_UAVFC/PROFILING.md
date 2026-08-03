@@ -1,4 +1,4 @@
-# Laurel v2 profiling
+# RPI_UAVFC profiling
 
 How to measure where CPU time goes on this board and how to act on the result.
 `DEVELOPMENT.md` covers bring-up state and the architecture these tools serve.
@@ -52,7 +52,7 @@ discount the saturated entries.
 
 ### Baselines
 
-Laurel v2, measured armed with CRSF RC and motors running, at 225 MHz / 4 kHz /
+RPI_UAVFC, measured armed with CRSF RC and motors running, at 225 MHz / 4 kHz /
 2 kHz / 200 Hz:
 
  - core0 load 44-47%, core1 load 37-42%
@@ -80,7 +80,7 @@ the EKF needs the whole table:
 Pull both with an FTP get from your GCS, then attribute them:
 
 ```
-Tools/debug/rp2350_pc_profiler.py --histogram <file> --elf build/Laurelv2/bin/arducopter
+Tools/debug/rp2350_pc_profiler.py --histogram <file> --elf build/RPI_UAVFC/bin/arducopter
 ```
 
 Pass `-` instead of a filename to read from stdin. Which core the dump came
@@ -94,7 +94,7 @@ OpenOCD TCL RPC connection. Reading PCSR does not halt the core, so this is
 non-intrusive and reflects real timing, unlike halt/read/resume profilers.
 
 ```
-Tools/debug/rp2350_pc_profiler.py --elf build/Laurelv2/bin/arducopter \
+Tools/debug/rp2350_pc_profiler.py --elf build/RPI_UAVFC/bin/arducopter \
     --tcl-port 50001 --samples 30000
 ```
 
