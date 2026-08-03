@@ -459,11 +459,7 @@ bool Storage::_flash_write(uint16_t line)
 bool Storage::_flash_write_data(uint8_t sector, uint32_t offset, const uint8_t *data, uint16_t length)
 {
 #ifdef STORAGE_FLASH_PAGE
-#if AP_FLASH_STORAGE_QUAD_PAGE
-    sector *= 4;
-#elif AP_FLASH_STORAGE_DOUBLE_PAGE
-    sector *= 2;
-#endif
+    sector *= AP_FLASH_STORAGE_PAGES_PER_SECTOR;
     size_t base_address = hal.flash->getpageaddr(_flash_page+sector);
     for (uint8_t i=0; i<STORAGE_FLASH_RETRIES; i++) {
         EXPECT_DELAY_MS(1);
@@ -500,17 +496,14 @@ bool Storage::_flash_read_data(uint8_t sector, uint32_t offset, uint8_t *data, u
         return true;
     }
 
-#if AP_FLASH_STORAGE_QUAD_PAGE
-    sector *= 4;
-#elif AP_FLASH_STORAGE_DOUBLE_PAGE
-    sector *= 2;
-#endif
+    sector *= AP_FLASH_STORAGE_PAGES_PER_SECTOR;
 
     const uint32_t page = _flash_page + sector;
     const size_t base_address = hal.flash->getpageaddr(page);
-    const uint32_t page_size = hal.flash->getpagesize(page);
+    // bound against the whole aggregated sector, not the first page of it
+    const uint32_t sector_size = hal.flash->getpagesize(page)*AP_FLASH_STORAGE_PAGES_PER_SECTOR;
     if (base_address == 0 || base_address == SIZE_MAX ||
-        offset > page_size || length > page_size || (offset + length) > page_size) {
+        offset > sector_size || length > sector_size || (offset + length) > sector_size) {
         _flash_read_fail_count++;
         if (_flash_read_fail_count > HAL_FLASH_READ_FAIL_LIMIT) {
             _flash_read_disabled = true;
@@ -537,30 +530,19 @@ bool Storage::_flash_read_data(uint8_t sector, uint32_t offset, uint8_t *data, u
 bool Storage::_flash_erase_sector(uint8_t sector)
 {
 #ifdef STORAGE_FLASH_PAGE
-#if AP_FLASH_STORAGE_QUAD_PAGE
-    sector *= 4;
-#elif AP_FLASH_STORAGE_DOUBLE_PAGE
-    sector *= 2;
-#endif
+    sector *= AP_FLASH_STORAGE_PAGES_PER_SECTOR;
     // erasing a page can take long enough that USB may not initialise properly if it happens
     // while the host is connecting. Only do a flash erase if we have been up for more than 4s
     for (uint8_t i=0; i<STORAGE_FLASH_RETRIES; i++) {
         // a sector erase stops the whole MCU so set up a long expected delay
         EXPECT_DELAY_MS(1000);
-#if AP_FLASH_STORAGE_QUAD_PAGE
-        if (hal.flash->erasepage(_flash_page+sector)   && hal.flash->erasepage(_flash_page+sector+1) &&
-            hal.flash->erasepage(_flash_page+sector+2) && hal.flash->erasepage(_flash_page+sector+3)) {
+        bool ok = true;
+        for (uint8_t p=0; ok && p<AP_FLASH_STORAGE_PAGES_PER_SECTOR; p++) {
+            ok = hal.flash->erasepage(_flash_page+sector+p);
+        }
+        if (ok) {
             return true;
         }
-#elif AP_FLASH_STORAGE_DOUBLE_PAGE
-        if (hal.flash->erasepage(_flash_page+sector) && hal.flash->erasepage(_flash_page+sector+1)) {
-            return true;
-        }
-#else
-        if (hal.flash->erasepage(_flash_page+sector)) {
-            return true;
-        }
-#endif
         hal.scheduler->delay(1);
     }
     return false;
