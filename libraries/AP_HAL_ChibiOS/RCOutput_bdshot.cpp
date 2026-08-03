@@ -747,14 +747,26 @@ uint32_t RCOutput::bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t 
         return INVALID_ERPM;
     }
 
+    return bdshot_decode_gcr(value);
+}
+#pragma GCC pop_options
+
+// update ESC telemetry information. Returns true if valid eRPM data was decoded.
+#endif // !defined(RP2350)
+
+/*
+  GCR word to eRPM. See the declaration in RCOutput.h for why this is shared.
+ */
+uint32_t RCOutput::bdshot_decode_gcr(uint32_t gcr21)
+{
     static const uint32_t decode[32] = {
         0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 10, 11, 0, 13, 14, 15,
         0, 0, 2, 3, 0, 5, 6, 7, 0, 0, 8, 1, 0, 4, 12, 0 };
 
-    uint32_t decodedValue = decode[value & 0x1fU];
-    decodedValue |= decode[(value >> 5U) & 0x1fU] << 4U;
-    decodedValue |= decode[(value >> 10U) & 0x1fU] << 8U;
-    decodedValue |= decode[(value >> 15U) & 0x1fU] << 12U;
+    uint32_t decodedValue = decode[gcr21 & 0x1fU];
+    decodedValue |= decode[(gcr21 >> 5U) & 0x1fU] << 4U;
+    decodedValue |= decode[(gcr21 >> 10U) & 0x1fU] << 8U;
+    decodedValue |= decode[(gcr21 >> 15U) & 0x1fU] << 12U;
 
     uint32_t csum = decodedValue;
     csum = csum ^ (csum >> 8U); // xor bytes
@@ -763,14 +775,9 @@ uint32_t RCOutput::bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t 
     if ((csum & 0xfU) != 0xfU) {
         return INVALID_ERPM;
     }
-    decodedValue >>= 4;
 
-    return decodedValue;
+    return decodedValue >> 4;
 }
-#pragma GCC pop_options
-
-// update ESC telemetry information. Returns true if valid eRPM data was decoded.
-#endif // !defined(RP2350)
 
 bool RCOutput::bdshot_decode_telemetry_from_erpm(uint16_t encodederpm, uint8_t chan)
 {
