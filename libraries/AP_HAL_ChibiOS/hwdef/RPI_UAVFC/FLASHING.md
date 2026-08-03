@@ -1,10 +1,4 @@
----
-name: flash-debug-hardware
-description: "Flashing and debugging Laurel or Pico2 (RP2350) hardware for the ArduPilot port. Use when: flashing app firmware via OpenOCD SWD or UF2; starting or restarting OpenOCD; connecting GDB to live hardware; live inspecting memory/registers; diagnosing USB CDC serial silence; adding DEV_PRINTF/print statements to trace boot crashes; halting vs resetting the board; reading /dev/ttyACM* output; recovering from lost comms; choosing between Laurel and Pico2 flash paths."
-argument-hint: "Board and action? (laurel-flash / pico2-flash / openocd / gdb / uart-debug / monitor-serial / print-debug)"
----
-
-# Flashing and Debugging Laurel / Pico2 (RP2350) Hardware
+# Flashing and Debugging RPI_UAVFC / Laurel / Pico2 (RP2350) Hardware
 
 ## Repository Safety
 
@@ -97,7 +91,7 @@ pkill -f openocd
 
 ### Laurel — App Firmware via OpenOCD SWD (preferred / always works)
 
-**IMPORTANT:** Flash the `.bin` file at `0x10010000` (app offset = `FLASH_RESERVE_START_KB 64`).
+**IMPORTANT:** Flash the `.bin` file at `0x10020000` (app offset = `FLASH_RESERVE_START_KB 128`).
 Do **NOT** use `arducopter_with_bl.hex` — it contains segments at the STM32 address 0x08000000
 that cause verify failures on RP2350.
 
@@ -113,7 +107,7 @@ If `uploader.py` is already stuck, use OpenOCD to reset the target, then flash v
   -s ~/openocd-pico/scripts \
   -f interface/cmsis-dap.cfg \
   -f target/rp2350.cfg \
-  -c "adapter speed 5000; program build/Laurel/bin/arducopter.bin verify reset exit 0x10010000"
+  -c "adapter speed 5000; program build/RPI_UAVFC/bin/arducopter.bin verify reset exit 0x10020000"
 ```
 
 Expected output ends with:
