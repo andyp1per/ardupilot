@@ -363,7 +363,10 @@ private:
         bool have_up_dma; // can we do DMAR outputs for DShot?
         uint8_t dma_up_stream_id;
         uint8_t dma_up_channel;
-#ifdef HAL_WITH_BIDIR_DSHOT
+// RP2350 receives telemetry in the PIO state machine, so it has no
+// per-channel input-capture DMA to describe and hwdef.h emits no initialiser
+// for these. Leaving them in would silently absorb the alt_functions values.
+#if defined(HAL_WITH_BIDIR_DSHOT) && !defined(RP2350)
         struct {
             bool have_dma;
             uint8_t stream_id;
