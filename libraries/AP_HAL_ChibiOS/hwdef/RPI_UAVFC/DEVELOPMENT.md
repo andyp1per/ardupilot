@@ -1,6 +1,6 @@
-# Laurel v2 development notes
+# RPI_UAVFC development notes
 
-Working notes for the Laurel v2 bring-up. `README.md` describes the board as
+Working notes for the RPI_UAVFC bring-up. `README.md` describes the board as
 users see it; this file is for whoever is working on the port. See
 `PROFILING.md` for the performance instrumentation.
 
@@ -14,7 +14,7 @@ still marked untested below are exactly that.
 | Area | State |
 |-----------------------|--------------------------------------------------|
 | Pinout | Verified against R2 Rev C schematic |
-| Build | `./waf configure --board Laurelv2 && ./waf copter` |
+| Build | `./waf configure --board RPI_UAVFC && ./waf copter` |
 | Bootloader | Built, board ID 1215 |
 | IMU | Working on hardware; fitted part varies, see below |
 | Barometer | DPS368 detected on I2C0 at 0x76 |
@@ -209,9 +209,9 @@ arrival rather than letting it free-run against the backend is the thing to try.
 ## Build and flash
 
 ```
-./waf configure --board Laurelv2
+./waf configure --board RPI_UAVFC
 ./waf copter
-python3 Tools/scripts/build_bootloaders.py Laurelv2   # only if hwdef-bl changes
+python3 Tools/scripts/build_bootloaders.py RPI_UAVFC   # only if hwdef-bl changes
 ```
 
 The board build path is gated on the board name: `board_uses_rp2350_bootsel()`
@@ -250,7 +250,7 @@ flushes on disarm.
 
 Editing `hwdef.dat` requires a reconfigure. `./waf copter` on its own will not
 regenerate `hwdef.h`, and the build will silently succeed without the change.
-Check the define landed in `build/Laurelv2/hwdef.h` if a hwdef edit appears to
+Check the define landed in `build/RPI_UAVFC/hwdef.h` if a hwdef edit appears to
 have no effect.
 
 `defaults.parm` deliberately does not set `AHRS_ORIENTATION`, `FRAME_CLASS`,
