@@ -252,9 +252,10 @@ define HAL_SDCARD_RETRY_INTERVAL_MS 1000
 define HAL_BATT_MONITOR_DEFAULT 4
 define HAL_BATT_VOLT_PIN 6
 define HAL_BATT_CURR_PIN 7
-# Divider not yet characterised on this revision; carried over from Laurel v1
-# and must be re-measured against a known VBAT before use.
-define HAL_BATT_VOLT_SCALE 10.52
+# Measured 21.99 V against a 23.1 V bench supply with the v1 value of 10.52,
+# which puts the divider on the usual 11.1 ratio.
+define HAL_BATT_VOLT_SCALE 11.1
+# Still the v1 placeholder; measure against a known load before relying on it.
 define HAL_BATT_CURR_SCALE 1.0
 define BOARD_RSSI_ANA_PIN 0
 

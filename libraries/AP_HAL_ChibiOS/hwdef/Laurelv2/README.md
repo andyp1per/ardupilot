@@ -78,12 +78,12 @@ The default battery parameters are:
  - :ref:`BATT_MONITOR<BATT_MONITOR>` = 4
  - :ref:`BATT_VOLT_PIN<BATT_VOLT_PIN__AP_BattMonitor_Analog>` = 6 (GPIO46)
  - :ref:`BATT_CURR_PIN<BATT_CURR_PIN__AP_BattMonitor_Analog>` = 7 (GPIO47)
- - :ref:`BATT_VOLT_MULT<BATT_VOLT_MULT__AP_BattMonitor_Analog>` = 10.52
+ - :ref:`BATT_VOLT_MULT<BATT_VOLT_MULT__AP_BattMonitor_Analog>` = 11.1
  - :ref:`BATT_AMP_PERVLT<BATT_AMP_PERVLT__AP_BattMonitor_Analog>` = 1.0
 
-The scale factors are carried over from the original Laurel and have not been
-characterised on this revision. Measure them against a known battery voltage
-and current before relying on them.
+The voltage multiplier was checked against a bench supply and matches the usual
+11.1 divider ratio. The current scale is still the placeholder carried over from
+the original Laurel; measure it against a known load before relying on it.
 
 ## Analog RSSI input
 
@@ -136,5 +136,5 @@ with any ArduPilot ground station using the `*.apj` firmware files.
 | SBUS pad (GPIO41) | Needs an inverted UART; not currently supported |
 | ESC telemetry (GPIO5) | Can only reach UART1 RX, which the GPS owns |
 | RGB LED (GPIO2) | Serial LED output not supported on RP2350 |
-| Battery scaling | Placeholder factors carried from Laurel v1 |
+| Battery current scaling | Placeholder factor carried from Laurel v1 |
 | IMU rotation | `ROTATION_NONE`; set `AHRS_ORIENTATION` to match your mounting |
