@@ -1870,11 +1870,6 @@ AP_InertialSensor::_init_gyro()
     // record calibration complete
     _calibrating_gyro = false;
 
-    // republish: the samples taken above are in board frame, and a consumer
-    // reading them before the next update sees an unrotated vector. DCM's
-    // startup alignment does exactly that, and only checks the magnitude.
-    update();
-
     // stop flashing leds
     AP_Notify::flags.initialising = false;
     AP_Notify::flags.gyro_calibrated = true;
