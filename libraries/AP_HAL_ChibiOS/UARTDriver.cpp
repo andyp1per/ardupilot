@@ -539,10 +539,25 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
                                             3,   // IRQ priority
                                             (rp_dmaisr_t)rxbuff_full_irq,
                                             (void *)this);
-                    osalDbgAssert(rxdma, "DMA channel alloc failed");
-                    // Set source to UART RX data register (fixed/not-incremented)
-                    dmaChannelSetSourceX(rxdma,
-                        (uint32_t)&((SIODriver*)sdef.serial)->uart->UARTDR);
+                    if (rxdma == nullptr) {
+                        // hwdef assigns fixed channel numbers, but the RP SPI and ADC
+                        // drivers take RP_DMA_CHANNEL_ID_ANY and start earlier, so the
+                        // assigned channel is usually gone by now. TREQ selects the
+                        // peripheral, so any free channel serves just as well.
+                        rxdma = dmaChannelAllocI(RP_DMA_CHANNEL_ID_ANY,
+                                                3,
+                                                (rp_dmaisr_t)rxbuff_full_irq,
+                                                (void *)this);
+                    }
+                    if (rxdma != nullptr) {
+                        // Set source to UART RX data register (fixed/not-incremented)
+                        dmaChannelSetSourceX(rxdma,
+                            (uint32_t)&((SIODriver*)sdef.serial)->uart->UARTDR);
+                    } else {
+                        // leaving RXDMAE set with no channel behind it just overruns
+                        // the FIFO in silence
+                        rx_dma_enabled = false;
+                    }
                     chSysUnlock();
                 }
                 _device_initialised = true;
@@ -692,10 +707,18 @@ void UARTDriver::dma_tx_allocate(Shared_DMA *ctx)
                              3,  // IRQ priority
                              (rp_dmaisr_t)tx_complete,
                              (void *)this);
-    osalDbgAssert(txdma, "DMA channel alloc failed");
-    // Set destination to UART TX data register (fixed/not-incremented)
-    dmaChannelSetDestinationX(txdma,
-        (uint32_t)&((SIODriver*)sdef.serial)->uart->UARTDR);
+    if (txdma == nullptr) {
+        // see the RX path: the assigned channel is usually already taken
+        txdma = dmaChannelAllocI(RP_DMA_CHANNEL_ID_ANY,
+                                 3,
+                                 (rp_dmaisr_t)tx_complete,
+                                 (void *)this);
+    }
+    if (txdma != nullptr) {
+        // Set destination to UART TX data register (fixed/not-incremented)
+        dmaChannelSetDestinationX(txdma,
+            (uint32_t)&((SIODriver*)sdef.serial)->uart->UARTDR);
+    }
     chSysUnlock();
 #endif // HAL_USE_SERIAL / HAL_USE_SIO
 }
