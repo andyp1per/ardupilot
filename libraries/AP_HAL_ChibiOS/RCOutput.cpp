@@ -1771,9 +1771,23 @@ void RCOutput::dshot_send(pwm_group &group, rcout_timer_t cycle_start_us, rcout_
         uint8_t chan = group.chan[i];
         if (group.is_chan_enabled(i)) {
 #ifdef HAL_WITH_BIDIR_DSHOT
+#if defined(RP2350)
+            /*
+              The state machine collects the reply on its own, so what is
+              waiting now is the answer to the previous frame - a full cycle of
+              settling time, which is more than the ~30us the ESC takes.
+             */
+            if (is_bidir_dshot_enabled(group)) {
+                uint16_t erpm;
+                if (PicoDShot::read_telemetry(chan, erpm)) {
+                    bdshot_decode_telemetry_from_erpm(erpm, chan);
+                }
+            }
+#else
             if (group.bdshot.enabled) {
                 bdshot_decode_telemetry_from_erpm(group.bdshot.erpm[i], chan);
             }
+#endif
 #endif
             const uint32_t servo_chan_mask = 1U<<(chan+chan_offset);
 
