@@ -759,14 +759,30 @@ uint32_t RCOutput::bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t 
  */
 uint32_t RCOutput::bdshot_decode_gcr(uint32_t gcr21)
 {
-    static const uint32_t decode[32] = {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 10, 11, 0, 13, 14, 15,
-        0, 0, 2, 3, 0, 5, 6, 7, 0, 0, 8, 1, 0, 4, 12, 0 };
+    /*
+      0xff marks a quintet GCR never emits. This table used 0 for that, which
+      is indistinguishable from the legitimate 0 at index 25, so a corrupt
+      quintet silently became nibble 0 and only the checksum stood between it
+      and a bad eRPM - and a four bit checksum lets roughly one in sixteen
+      through.
+     */
+    static const uint8_t decode[32] = {
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff,    9,   10,   11, 0xff,   13,   14,   15,
+        0xff, 0xff,    2,    3, 0xff,    5,    6,    7,
+        0xff,    0,    8,    1, 0xff,    4,   12, 0xff };
 
-    uint32_t decodedValue = decode[gcr21 & 0x1fU];
-    decodedValue |= decode[(gcr21 >> 5U) & 0x1fU] << 4U;
-    decodedValue |= decode[(gcr21 >> 10U) & 0x1fU] << 8U;
-    decodedValue |= decode[(gcr21 >> 15U) & 0x1fU] << 12U;
+    const uint8_t n0 = decode[gcr21 & 0x1fU];
+    const uint8_t n1 = decode[(gcr21 >> 5U) & 0x1fU];
+    const uint8_t n2 = decode[(gcr21 >> 10U) & 0x1fU];
+    const uint8_t n3 = decode[(gcr21 >> 15U) & 0x1fU];
+
+    if ((n0 | n1 | n2 | n3) > 0x0fU) {
+        return INVALID_ERPM;
+    }
+
+    uint32_t decodedValue = (uint32_t(n3) << 12U) | (uint32_t(n2) << 8U)
+                          | (uint32_t(n1) << 4U)  | uint32_t(n0);
 
     uint32_t csum = decodedValue;
     csum = csum ^ (csum >> 8U); // xor bytes
