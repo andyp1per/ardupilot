@@ -328,18 +328,36 @@ def build_report(t, elapsed, syms, registry, top, threshold):
 
 
 # Region bases for the on-chip PROFc1 dump tags (see rp2350_pc_sampler.cpp).
+# The F base is the app's XIP text start, which moves with FLASH_RESERVE_START_KB,
+# so it is read back from the ELF rather than assumed.
 PROFC1_TAG_BASE = {'F': 0x10010000, 'S': 0x20000000, 'C': 0x20080000, 'o': 0}
+
+
+def elf_flash_base(elf, nm='arm-none-eabi-nm', default=0x10010000):
+    """Address of __vectors_base__, the XIP text start the F tag is relative to."""
+    try:
+        out = subprocess.check_output([nm, elf], text=True, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.CalledProcessError):
+        return default
+    for line in out.splitlines():
+        cols = line.split()
+        if len(cols) == 3 and cols[2] == '__vectors_base__':
+            return int(cols[0], 16)
+    return default
 PROFC1_TOKEN = re.compile(r'([FSCo])([0-9a-fA-F]+):(\d+)')
 PROFC1_N = re.compile(r'\bn=(\d+)')
 PROFC1_CORE = re.compile(r'PROF\s*c(\d)')
 
 
-def parse_profc1_text(text):
+def parse_profc1_text(text, flash_base=None):
     """Parse pasted 'PROFc1' MAVLink lines into ({address: count}, total_n).
 
     Only lines mentioning PROF are considered, so diagnostic lines like 'C1:...'
     cannot be misread as tokens. The firmware hash accumulates since boot, so
     across several pasted cycles we keep the max count per address and max n."""
+    bases = dict(PROFC1_TAG_BASE)
+    if flash_base is not None:
+        bases['F'] = flash_base
     hist = {}
     total = 0
     for line in text.splitlines():
@@ -349,7 +367,7 @@ def parse_profc1_text(text):
         if m:
             total = max(total, int(m.group(1)))
         for tag, off, cnt in PROFC1_TOKEN.findall(line):
-            addr = PROFC1_TAG_BASE[tag] + int(off, 16)
+            addr = bases[tag] + int(off, 16)
             cnt = int(cnt)
             if cnt > hist.get(addr, 0):
                 hist[addr] = cnt
@@ -558,7 +576,7 @@ def main():
 
     if args.histogram is not None:
         text = sys.stdin.read() if args.histogram == '-' else open(args.histogram).read()
-        hist, total_n = parse_profc1_text(text)
+        hist, total_n = parse_profc1_text(text, elf_flash_base(args.elf, args.nm))
         if not hist:
             sys.exit("no PROFc1 tokens found in input")
         m = PROFC1_CORE.search(text)
