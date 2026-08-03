@@ -27,7 +27,7 @@ namespace ChibiOS {
   them, so a block gives four channels; see RCOutput_pico.cpp for why only one
   of the two programs can be resident at a time.
  */
-class PicoDShot {
+class RCOutput_pico {
 public:
     // one state machine per channel, four per PIO block
     static constexpr uint8_t MAX_CHANNELS = 4;
@@ -63,10 +63,20 @@ private:
     static void load_program(bool bidir);
     static void start_sm(uint8_t chan, uint8_t gpio);
 
+    /*
+      A run of n samples is worth n/samples_per_bit bits, but the boundaries
+      are not at the half-way points - a run has to be long enough that it
+      rounds up. Build the thresholds once so the inner loop is three compares.
+     */
+    static void set_transitions(float bits_per_sample);
+
     static bool     _initialised;
     static bool     _bidir;
     static uint32_t _chan_mask;
     static uint8_t  _gpio[MAX_CHANNELS];
+
+    // sample counts at which a run becomes 1, 2, 3 or 4 bits long
+    static uint8_t  _len_transition[4];
 };
 
 } // namespace ChibiOS
