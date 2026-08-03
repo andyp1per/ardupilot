@@ -75,6 +75,13 @@ void RCOutput::set_bidir_dshot_mask(uint32_t mask)
 #define TOGGLE_PIN_CH_DEBUG(pin, channel) do {} while (0)
 #endif
 
+/*
+  Everything from here to the eRPM decode below drives DShot telemetry with a
+  timer in input-capture mode and a DMAR burst. RP2350 has neither; it
+  collects the reply in the PIO state machine instead (RCOutput_pico.cpp) and
+  only needs the decode itself, which is shared.
+ */
+#if !defined(RP2350)
 bool RCOutput::bdshot_setup_group_ic_DMA(pwm_group &group)
 {
     // check if already allocated
@@ -763,6 +770,8 @@ uint32_t RCOutput::bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t 
 #pragma GCC pop_options
 
 // update ESC telemetry information. Returns true if valid eRPM data was decoded.
+#endif // !defined(RP2350)
+
 bool RCOutput::bdshot_decode_telemetry_from_erpm(uint16_t encodederpm, uint8_t chan)
 {
     if (encodederpm == INVALID_ERPM) {

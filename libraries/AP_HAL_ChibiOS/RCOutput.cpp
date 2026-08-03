@@ -1759,7 +1759,9 @@ void RCOutput::dshot_send(pwm_group &group, rcout_timer_t cycle_start_us, rcout_
 
     // only the timer thread releases the locks
     group.dshot_waiter = rcout_thread_ctx;
-#ifdef HAL_WITH_BIDIR_DSHOT
+#if defined(HAL_WITH_BIDIR_DSHOT) && !defined(RP2350)
+    // rearms the input-capture DMA; the PIO state machine needs no equivalent,
+    // it wraps back to waiting for the next frame on its own
     bdshot_prepare_for_next_pulse(group);
 #endif
     bool safety_on = hal.util->safety_switch_state() == AP_HAL::Util::SAFETY_DISARMED;
