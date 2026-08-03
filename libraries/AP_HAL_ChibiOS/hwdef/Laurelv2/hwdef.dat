@@ -310,12 +310,10 @@ define HAL_USE_WSPI                        FALSE
 # Port roles chosen to match the Laurel v2 carrier wiring.
 define DEFAULT_SERIAL1_PROTOCOL            SerialProtocol_MSP_DisplayPort
 define DEFAULT_SERIAL2_PROTOCOL            SerialProtocol_GPS
-# PIOUART ports stay disabled by default during bring-up: floating RX inputs on
-# unconnected headers can generate high-rate IRQ traffic that starves startup.
-# Enable at runtime once wiring is validated:
-#   SERIAL3_PROTOCOL=23 (RCIN) with a CRSF/ELRS receiver attached
-#   SERIAL4_PROTOCOL=2  (MAVLink2) with an AUX telemetry link attached
-define DEFAULT_SERIAL3_PROTOCOL            SerialProtocol_None
+define DEFAULT_SERIAL3_PROTOCOL            SerialProtocol_RCIN
+# SERIAL4 stays disabled by default: a floating RX input on an unconnected
+# header can generate high-rate IRQ traffic that starves startup. Set
+# SERIAL4_PROTOCOL=2 for a MAVLink telemetry link once wiring is validated.
 define DEFAULT_SERIAL4_PROTOCOL            SerialProtocol_None
 
 define PAL_USE_CALLBACKS                   TRUE

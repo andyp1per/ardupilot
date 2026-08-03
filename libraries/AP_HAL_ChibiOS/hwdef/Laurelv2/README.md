@@ -32,20 +32,18 @@ hardware UARTs, so the sheet's UART2 and UART3 are served by PIO UARTs.
  - SERIAL0 -> USB (MAVLink2)
  - SERIAL1 -> UART0, GPIO44/45, DVTX connector (DisplayPort, DMA-enabled)
  - SERIAL2 -> UART1, GPIO36/37, GPS connector (GPS, DMA-enabled)
- - SERIAL3 -> PIOUART0, GPIO42/43, RADIO connector (Spare)
+ - SERIAL3 -> PIOUART0, GPIO42/43, RADIO connector (RC Input)
  - SERIAL4 -> PIOUART1, GPIO16/17, VID connector (Spare)
 
-Both PIO ports default to `SerialProtocol_None`. A floating RX input on an
+SERIAL4 defaults to `SerialProtocol_None`. A floating RX input on an
 unconnected header can generate enough IRQ traffic to stall startup, so enable
-them only once wiring is confirmed:
-
- - :ref:`SERIAL3_PROTOCOL<SERIAL3_PROTOCOL>` = 23 with a CRSF/ELRS receiver attached
- - :ref:`SERIAL4_PROTOCOL<SERIAL4_PROTOCOL>` = 2 for a MAVLink telemetry link
+it only once wiring is confirmed: set
+:ref:`SERIAL4_PROTOCOL<SERIAL4_PROTOCOL>` = 2 for a MAVLink telemetry link.
 
 ## RC Input
 
-RC input is expected on SERIAL3 (the RADIO connector, GPIO42/43). Set
-:ref:`SERIAL3_PROTOCOL<SERIAL3_PROTOCOL>` = 23 to enable it.
+RC input is on SERIAL3 (the RADIO connector, GPIO42/43), which defaults to
+:ref:`SERIAL3_PROTOCOL<SERIAL3_PROTOCOL>` = 23.
 
  - CRSF requires :ref:`SERIAL3_OPTIONS<SERIAL3_OPTIONS>` = 0
  - FPort requires :ref:`SERIAL3_OPTIONS<SERIAL3_OPTIONS>` = 15
