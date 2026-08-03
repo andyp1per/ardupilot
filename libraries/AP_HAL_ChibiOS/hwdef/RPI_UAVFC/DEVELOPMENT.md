@@ -251,8 +251,9 @@ matters.
 common one, and it hardcodes the path to `c1_main.c`. Both files are per-board
 copies; if you create another revision, copy and fix the path.
 
-For flashing and SWD debugging use the `flash-debug-hardware` skill rather than
-hand-rolling OpenOCD invocations.
+For flashing and SWD debugging see `FLASHING.md`, which has the working
+OpenOCD invocation and the flash layout. Note OpenOCD here is a native Windows
+binary run from WSL, so it cannot see WSL paths - stage images under `/mnt/c`.
 
 ### Diagnostics that cost real time
 
