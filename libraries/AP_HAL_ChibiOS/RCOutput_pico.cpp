@@ -29,6 +29,7 @@
 // PIOUART.h carries the PIO register bit-field constants for this port; they
 // are not in rp2350.h. Nothing else is taken from it.
 #include "PIOUART.h"
+#include "RCOutput.h"
 
 // Not in PIOUART.h because the UART programs have no use for it. RP2350
 // SHIFTCTRL puts FJOIN_TX at bit 30 and FJOIN_RX at 31.
@@ -307,13 +308,6 @@ void RCOutput_pico::write_frame(uint8_t chan, uint16_t frame)
   ----------------------------------------------------------------------------
  */
 
-// 5-bit GCR quintet to nibble. 0xff marks a quintet that cannot occur.
-static const uint8_t k_gcr_decode[32] = {
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0x09, 0x0a, 0x0b, 0xff, 0x0d, 0x0e, 0x0f,
-    0xff, 0xff, 0x02, 0x03, 0xff, 0x05, 0x06, 0x07,
-    0xff, 0x00, 0x08, 0x01, 0xff, 0x04, 0x0c, 0xff
-};
 
 // 18 PIO cycles per sample at 75MHz against a 1/(5/4 * 600000) telemetry bit
 #define SAMPLES_TO_BITS ((18.0f / 75.0f) / (1.0f / 0.75f))
@@ -437,25 +431,15 @@ bool RCOutput_pico::read_telemetry(uint8_t chan, uint16_t &encoded)
         gcr20 |= 1U << (pad - 1U);
     }
 
-    const uint8_t n3 = k_gcr_decode[(gcr20 >> 15) & 0x1F];
-    const uint8_t n2 = k_gcr_decode[(gcr20 >> 10) & 0x1F];
-    const uint8_t n1 = k_gcr_decode[(gcr20 >> 5) & 0x1F];
-    const uint8_t n0 = k_gcr_decode[gcr20 & 0x1F];
-    if ((n0 | n1 | n2 | n3) > 0x0F) {
+    /*
+      From here the decode is identical to the timer path, so it is shared:
+      quintet table, checksum, and dropping the checksum nibble.
+     */
+    const uint32_t erpm = RCOutput::bdshot_decode_gcr(gcr20);
+    if (erpm == RCOutput::INVALID_ERPM) {
         return false;
     }
-
-    const uint16_t value = (n3 << 12) | (n2 << 8) | (n1 << 4) | n0;
-
-    uint16_t csum = value;
-    csum ^= csum >> 8;
-    csum ^= csum >> 4;
-    if ((csum & 0xF) != 0xF) {
-        return false;
-    }
-
-    // the caller wants the 12-bit eRPM field; the low nibble is the checksum
-    encoded = value >> 4;
+    encoded = uint16_t(erpm);
     return true;
 }
 

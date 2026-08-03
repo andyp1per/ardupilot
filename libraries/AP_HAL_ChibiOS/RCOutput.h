@@ -350,7 +350,6 @@ private:
     // input capture is expecting TELEM_IC_SAMPLE (16) ticks per transition (22) so the maximum
     // value of the counter in CCR registers is 16*22 == 352, so must be 16-bit
     static const uint16_t GCR_TELEMETRY_BUFFER_LEN = GCR_TELEMETRY_BIT_LEN*sizeof(dmar_uint_t);
-    static const uint16_t INVALID_ERPM = 0xffffU;
     static const uint16_t ZERO_ERPM = 0x0fffU;
 
     struct pwm_group {
@@ -762,6 +761,18 @@ private:
     static uint32_t bdshot_decode_telemetry_packet(dmar_uint_t* buffer, uint32_t count);
     static uint32_t bdshot_decode_telemetry_packet_f1(dmar_uint_t* buffer, uint32_t count, bool reversed);
     bool bdshot_decode_telemetry_from_erpm(uint16_t erpm, uint8_t chan);
+public:
+    /*
+      Turn an assembled 21-bit GCR telemetry word into a 12-bit eRPM value, or
+      INVALID_ERPM if a quintet or the checksum does not hold. Shared by the two
+      receive paths: a timer in input-capture mode measures edge times, the PIO
+      oversamples the line, but from the GCR word on the decode is the same.
+     */
+    static uint32_t bdshot_decode_gcr(uint32_t gcr21);
+
+    // returned by bdshot_decode_gcr() when the word does not decode
+    static const uint16_t INVALID_ERPM = 0xffffU;
+private:
     bool bdshot_decode_dshot_telemetry(pwm_group& group, uint8_t chan);
     static uint8_t bdshot_find_next_ic_channel(const pwm_group& group);
     static void bdshot_dma_ic_irq_callback(void *p, uint32_t flags);
