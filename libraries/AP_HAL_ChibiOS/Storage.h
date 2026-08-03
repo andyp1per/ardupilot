@@ -47,6 +47,12 @@
 static_assert(CH_STORAGE_SIZE % CH_STORAGE_LINE_SIZE == 0,
               "Storage is not multiple of line size");
 
+// defer all storage writes while armed. For boards where a storage write
+// stalls the control loop badly enough that it must not happen in flight.
+#ifndef AP_STORAGE_NO_WRITE_WHILE_ARMED
+#define AP_STORAGE_NO_WRITE_WHILE_ARMED 0
+#endif
+
 /*
   on boards with 8k sector sizes we double up to treat pairs of sectors as one
  */
@@ -116,6 +122,13 @@ private:
     bool _flash_read_disabled;
     uint32_t _last_re_init_ms;
     uint32_t _last_empty_ms;
+
+#if AP_STORAGE_NO_WRITE_WHILE_ARMED
+    bool _was_armed;
+    // ticks still allowed for draining the pre-arm queue, bounding the drain
+    // against something that keeps dirtying lines after we arm
+    uint16_t _arm_flush_budget;
+#endif
 
 #ifdef STORAGE_FLASH_PAGE
     AP_FlashStorage _flash{_buffer,
