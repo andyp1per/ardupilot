@@ -712,8 +712,7 @@ AP_InertialSensor *AP_InertialSensor::_singleton = nullptr;
 
 AP_InertialSensor::AP_InertialSensor() :
     _board_orientation(ROTATION_NONE),
-    _log_raw_bit(-1),
-    _gyro_cal_save_pending(false)
+    _log_raw_bit(-1)
 {
     if (_singleton) {
         AP_HAL::panic("Too many inertial sensors");
@@ -1400,15 +1399,6 @@ AP_InertialSensor::init_gyro()
 {
     _init_gyro();
 
-#if defined(RP2350)
-    // During early Pico2 boot we defer parameter queueing until the scheduler
-    // reports full system init, to isolate startup-reset sensitivity.
-    if (!hal.scheduler->is_system_initialized()) {
-        _gyro_cal_save_pending = true;
-        return;
-    }
-#endif
-
     // save calibration
     _save_gyro_calibration();
 }
@@ -2024,14 +2014,6 @@ void AP_InertialSensor::update(void)
     _last_update_usec = AP_HAL::micros();
     
     _have_sample = false;
-
-#if defined(RP2350)
-    if (_gyro_cal_save_pending && hal.scheduler->is_system_initialized()) {
-        // Deferred startup save: queue once the platform has completed init.
-        _save_gyro_calibration();
-        _gyro_cal_save_pending = false;
-    }
-#endif
 
 #if HAL_INS_TEMPERATURE_CAL_ENABLE
     if (tcal_learning && !temperature_cal_running()) {
