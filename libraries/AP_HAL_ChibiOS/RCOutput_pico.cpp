@@ -140,17 +140,18 @@ static const uint16_t k_dshot600_bidir_pgm[] = {
 static_assert((RP_CLK_SYS_FREQ % DSHOT600_BIDIR_PIO_HZ) == 0,
               "bidirectional DShot needs a system clock that is a multiple of 75MHz");
 
-bool     PicoDShot::_initialised;
-bool     PicoDShot::_bidir;
-uint32_t PicoDShot::_chan_mask;
-uint8_t  PicoDShot::_gpio[PicoDShot::MAX_CHANNELS];
+bool     RCOutput_pico::_initialised;
+bool     RCOutput_pico::_bidir;
+uint32_t RCOutput_pico::_chan_mask;
+uint8_t  RCOutput_pico::_gpio[RCOutput_pico::MAX_CHANNELS];
+uint8_t  RCOutput_pico::_len_transition[4];
 
 /*
   Load one of the two programs at offset 0, stopping every state machine first.
   Called again when the direction changes, which is why the instruction memory
   is rewritten rather than appended to.
  */
-void PicoDShot::load_program(bool bidir)
+void RCOutput_pico::load_program(bool bidir)
 {
     PIO_TypeDef *pio = DSHOT_PIO;
 
@@ -170,7 +171,7 @@ void PicoDShot::load_program(bool bidir)
     }
 }
 
-bool PicoDShot::init(bool bidir)
+bool RCOutput_pico::init(bool bidir)
 {
     if (_initialised && _bidir == bidir) {
         return true;
@@ -199,7 +200,7 @@ bool PicoDShot::init(bool bidir)
   output and input, idles high, and wants a pull-up so the line is held while
   the ESC decides to answer.
  */
-void PicoDShot::start_sm(uint8_t chan, uint8_t gpio)
+void RCOutput_pico::start_sm(uint8_t chan, uint8_t gpio)
 {
     PIO_TypeDef *pio = DSHOT_PIO;
     const uint8_t sm = chan;
@@ -259,7 +260,7 @@ void PicoDShot::start_sm(uint8_t chan, uint8_t gpio)
     pio->CTRL |= (1U << (PIO_CTRL_SM_ENABLE_LSB + sm));
 }
 
-bool PicoDShot::add_channel(uint8_t chan, uint8_t gpio)
+bool RCOutput_pico::add_channel(uint8_t chan, uint8_t gpio)
 {
     if (!_initialised || chan >= MAX_CHANNELS) {
         return false;
@@ -276,7 +277,7 @@ bool PicoDShot::add_channel(uint8_t chan, uint8_t gpio)
   is full is deliberate: a stale frame is worse than a missed one, and at
   DShot600 the state machine is always ready well inside a rate-loop period.
  */
-void PicoDShot::write_frame(uint8_t chan, uint16_t frame)
+void RCOutput_pico::write_frame(uint8_t chan, uint16_t frame)
 {
     if (!_initialised || !(_chan_mask & (1U << chan))) {
         return;
@@ -320,14 +321,7 @@ static const uint8_t k_gcr_decode[32] = {
 #define TELEM_WORDS   4     // 4 x 32 samples
 #define TELEM_MAX_EDGES 24  // 21 data bits plus the return to idle
 
-/*
-  A run of n samples is n/samples_per_bit bits, but the boundaries are not at
-  the half-way points - the run has to be long enough that it rounds up. Build
-  the thresholds once so the inner loop is three compares.
- */
-static uint8_t k_len_transition[4];
-
-static void set_transitions(float bits_per_sample)
+void RCOutput_pico::set_transitions(float bits_per_sample)
 {
     uint8_t length = 0;
     float bits = 0.5f;
@@ -336,13 +330,13 @@ static void set_transitions(float bits_per_sample)
         bits += bits_per_sample;
         samples++;
         if ((uint8_t)bits >= length + 1) {
-            k_len_transition[length] = samples;
+            _len_transition[length] = samples;
             length++;
         }
     }
 }
 
-bool PicoDShot::read_telemetry(uint8_t chan, uint16_t &encoded)
+bool RCOutput_pico::read_telemetry(uint8_t chan, uint16_t &encoded)
 {
     if (!_initialised || !_bidir || !(_chan_mask & (1U << chan))) {
         return false;
@@ -365,7 +359,7 @@ bool PicoDShot::read_telemetry(uint8_t chan, uint16_t &encoded)
         (void)pio->RXF[sm];
     }
 
-    if (k_len_transition[0] == 0) {
+    if (_len_transition[0] == 0) {
         set_transitions(SAMPLES_TO_BITS);
     }
 
@@ -413,11 +407,11 @@ bool PicoDShot::read_telemetry(uint8_t chan, uint16_t &encoded)
     for (uint8_t i = 0; i < edges; i++) {
         const uint8_t d = diffs[i];
         uint8_t len;
-        if (d < k_len_transition[1]) {
+        if (d < _len_transition[1]) {
             len = 1;
-        } else if (d < k_len_transition[2]) {
+        } else if (d < _len_transition[2]) {
             len = 2;
-        } else if (d < k_len_transition[3]) {
+        } else if (d < _len_transition[3]) {
             len = 3;
         } else {
             return false;   // GCR never produces a run of four or more

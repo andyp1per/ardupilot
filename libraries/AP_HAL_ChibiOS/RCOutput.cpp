@@ -1205,12 +1205,12 @@ void RCOutput::set_group_mode(pwm_group &group)
         }
         {
             const bool bidir = is_bidir_dshot_enabled(group);
-            bool ok = PicoDShot::init(bidir);
+            bool ok = RCOutput_pico::init(bidir);
             for (uint8_t j = 0; ok && j < HAL_PWM_GROUP_CHANNELS; j++) {
                 if (group.chan[j] == CHAN_DISABLED) {
                     continue;
                 }
-                ok = PicoDShot::add_channel(group.chan[j], PAL_PAD(group.pal_lines[j]));
+                ok = RCOutput_pico::add_channel(group.chan[j], PAL_PAD(group.pal_lines[j]));
             }
             if (!ok) {
                 print_group_setup_error(group, "PIO DShot setup failed");
@@ -1781,7 +1781,7 @@ void RCOutput::dshot_send(pwm_group &group, rcout_timer_t cycle_start_us, rcout_
              */
             if (is_bidir_dshot_enabled(group)) {
                 uint16_t erpm;
-                if (PicoDShot::read_telemetry(chan, erpm)) {
+                if (RCOutput_pico::read_telemetry(chan, erpm)) {
                     bdshot_decode_telemetry_from_erpm(erpm, chan);
                 }
             }
@@ -1845,7 +1845,7 @@ void RCOutput::dshot_send(pwm_group &group, rcout_timer_t cycle_start_us, rcout_
             }
 #if defined(RP2350)
             // the PIO takes the packet as-is; there is no DMA buffer to fill
-            PicoDShot::write_frame(chan, packet);
+            RCOutput_pico::write_frame(chan, packet);
 #else
             fill_DMA_buffer_dshot(group.dma_buffer + i, 4, packet, group.bit_width_mul);
 #endif
