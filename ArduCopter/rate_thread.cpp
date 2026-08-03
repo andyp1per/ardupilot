@@ -193,7 +193,9 @@ void Copter::rate_controller_thread()
     uint32_t now_ms = AP_HAL::millis();
     uint32_t last_rate_check_ms = 0;
     uint32_t last_rate_increase_ms = 0;
+#if defined(RP2350) && AP_RP2350_DEBUG_REPORT_ENABLED
     uint32_t last_c1_report_ms = now_ms;
+#endif
     uint32_t c1_rate_ticks = 0;
 #if HAL_LOGGING_ENABLED
     uint32_t last_rtdt_log_ms = now_ms;
@@ -450,7 +452,7 @@ void Copter::rate_controller_thread()
         }
 #endif
 
-#if defined(RP2350)
+#if defined(RP2350) && AP_RP2350_DEBUG_REPORT_ENABLED
         if (now_ms - last_c1_report_ms >= 10000) {
             const uint32_t elapsed_ms  = now_ms - last_c1_report_ms;
             const uint32_t rate_hz     = (c1_rate_ticks * 1000) / elapsed_ms;

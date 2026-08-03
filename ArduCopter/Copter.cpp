@@ -195,7 +195,9 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK(loop_rate_logging, LOOP_RATE,    50,  75),
 #endif
     SCHED_TASK(one_hz_loop,            1,    100,  81),
+#if AP_RP2350_DEBUG_REPORT_ENABLED
     SCHED_TASK(perf_report,           0.1,   50,  82),
+#endif
     SCHED_TASK(ekf_check,             10,     75,  84),
     SCHED_TASK(check_vibration,       10,     50,  87),
     SCHED_TASK(gpsglitch_check,       10,     50,  90),
@@ -810,6 +812,7 @@ void copter_rate_timing_record(uint32_t glat_us, uint32_t ctrl_us)
 }
 #endif
 
+#if AP_RP2350_DEBUG_REPORT_ENABLED
 // perf_report - prints main loop rate, rate thread Hz and scheduler CPU load every ~30 s
 void Copter::perf_report()
 {
@@ -909,6 +912,7 @@ void Copter::perf_report()
     }
 #endif
 }
+#endif  // AP_RP2350_DEBUG_REPORT_ENABLED
 
 // one_hz_loop - runs at 1Hz
 void Copter::one_hz_loop()
