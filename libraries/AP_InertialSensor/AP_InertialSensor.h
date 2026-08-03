@@ -687,7 +687,6 @@ private:
     bool _calibrating_accel;
     bool _calibrating_gyro;
     bool _trimming_accel;
-    bool _gyro_cal_save_pending;
 
     // the delta time in seconds for the last sample
     float _delta_time;
