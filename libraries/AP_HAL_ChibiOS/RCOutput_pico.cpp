@@ -312,10 +312,16 @@ bool RCOutput_pico::add_channel(uint8_t chan, uint8_t gpio)
 }
 
 /*
-  The frame goes into the top half of the word because the programs discard the
-  first 16 bits before entering the bit loop. Dropping the frame when the FIFO
-  is full is deliberate: a stale frame is worse than a missed one, and at
-  DShot600 the state machine is always ready well inside a rate-loop period.
+  The frame goes in the LOW half of the word. Both programs open with
+  "out y, 16" to throw away the top half, and the OSR shifts left, so that
+  discard is what walks the frame up into the MSBs for the bit loop to send
+  most significant bit first. Putting the frame in the high half instead feeds
+  the discard with the frame itself and transmits sixteen zeros - a well formed
+  DShot packet meaning throttle zero, which an ESC accepts and sits on.
+
+  Dropping the frame when the FIFO is full is deliberate: a stale frame is worse
+  than a missed one, and at DShot600 the state machine is always ready well
+  inside a rate-loop period.
  */
 void RCOutput_pico::write_frame(uint8_t chan, uint16_t frame)
 {
@@ -330,7 +336,7 @@ void RCOutput_pico::write_frame(uint8_t chan, uint16_t frame)
         if (pio->FSTAT & (1U << (PIO_FSTAT_TXFULL_LSB + sm))) {
             return;
         }
-        pio->TXF[sm] = ((uint32_t)frame) << 16;
+        pio->TXF[sm] = (uint32_t)frame;
         return;
     }
 
@@ -348,7 +354,7 @@ void RCOutput_pico::write_frame(uint8_t chan, uint16_t frame)
         while (!(pio->FSTAT & (1U << (PIO_FSTAT_RXEMPTY_LSB + sm)))) {
             (void)pio->RXF[sm];
         }
-        pio->TXF[sm] = ((uint32_t)frame) << 16;
+        pio->TXF[sm] = (uint32_t)frame;
         _stall_count[chan] = 0;
         return;
     }
@@ -387,7 +393,7 @@ void RCOutput_pico::restart_sm(uint8_t chan, uint16_t frame)
     pio->CTRL |= (1U << (PIO_CTRL_SM_RESTART_LSB + sm));
     pio->SM[sm].INSTR = 0x0000U;   // jmp 0, back to the pull
 
-    pio->TXF[sm] = ((uint32_t)frame) << 16;
+    pio->TXF[sm] = (uint32_t)frame;
     pio->CTRL |= (1U << (PIO_CTRL_SM_ENABLE_LSB + sm));
 
     _stall_count[chan] = 0;
