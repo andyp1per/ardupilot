@@ -34,6 +34,7 @@
 // Not in PIOUART.h because the UART programs have no use for it. RP2350
 // SHIFTCTRL puts FJOIN_TX at bit 30 and FJOIN_RX at 31.
 #define PIO_SHIFTCTRL_FJOIN_TX (1U << 30)
+#define PIO_SHIFTCTRL_FJOIN_RX (1U << 31)
 
 using namespace ChibiOS;
 
@@ -118,6 +119,31 @@ static const uint16_t k_dshot600_bidir_pgm[] = {
 #define DSHOT600_BIDIR_WRAP       28
 
 /*
+  Points in the bidirectional program that write_frame() has to know about. The
+  program is loaded at instruction 0, so SM.ADDR is an index into the array
+  above.
+
+    0        blocked on pull, ready for a frame
+    1-14     transmitting, do not disturb
+    15       hands the line back to the ESC
+    16, 18   the two waits - where a silent ESC parks the machine
+    19-24    sampling the response
+    25-28    done, about to wrap
+ */
+#define DSHOT600_BIDIR_PC_PULL      0U
+#define DSHOT600_BIDIR_PC_WAIT_ONE  16U
+#define DSHOT600_BIDIR_PC_WAIT_ZERO 18U
+#define DSHOT600_BIDIR_PC_COMPLETE  25U
+
+/*
+  Consecutive updates parked on a wait before the machine is restarted. The
+  rcout thread runs at 1 kHz and a real ESC turnaround is tens of microseconds,
+  so two in a row is already far past normal and this costs 2 ms of output on a
+  channel whose ESC has gone quiet.
+ */
+#define DSHOT600_BIDIR_STALL_LIMIT  2U
+
+/*
   Bit periods in PIO cycles, fixed by the programs above. These set the PIO
   clock: DShot600 is 1/600000 s per bit, so the non-bidirectional program wants
   24 MHz and the bidirectional one 75 MHz.
@@ -146,6 +172,8 @@ bool     RCOutput_pico::_bidir;
 uint32_t RCOutput_pico::_chan_mask;
 uint8_t  RCOutput_pico::_gpio[RCOutput_pico::MAX_CHANNELS];
 uint8_t  RCOutput_pico::_len_transition[4];
+uint8_t  RCOutput_pico::_stall_count[RCOutput_pico::MAX_CHANNELS];
+uint32_t RCOutput_pico::_stall_restarts[RCOutput_pico::MAX_CHANNELS];
 
 /*
   Load one of the two programs at offset 0, stopping every state machine first.
@@ -295,10 +323,73 @@ void RCOutput_pico::write_frame(uint8_t chan, uint16_t frame)
     PIO_TypeDef *pio = DSHOT_PIO;
     const uint8_t sm = chan;
 
-    if (pio->FSTAT & (1U << (PIO_FSTAT_TXFULL_LSB + sm))) {
+    if (!_bidir) {
+        // no receive phase, so there is nothing to collide with
+        if (pio->FSTAT & (1U << (PIO_FSTAT_TXFULL_LSB + sm))) {
+            return;
+        }
+        pio->TXF[sm] = ((uint32_t)frame) << 16;
         return;
     }
+
+    /*
+      Bidirectional: the machine owns the line for a whole transmit-then-listen
+      cycle, so a frame can only be handed over at the two points where it is
+      not mid-cycle. Pushing anywhere else races the receive, and if the RX FIFO
+      still holds an earlier response then autopush blocks part way through
+      sampling - the telemetry comes back as one good word followed by three of
+      all ones.
+     */
+    const uint32_t pc = pio->SM[sm].ADDR;
+
+    if (pc == DSHOT600_BIDIR_PC_PULL || pc >= DSHOT600_BIDIR_PC_COMPLETE) {
+        while (!(pio->FSTAT & (1U << (PIO_FSTAT_RXEMPTY_LSB + sm)))) {
+            (void)pio->RXF[sm];
+        }
+        pio->TXF[sm] = ((uint32_t)frame) << 16;
+        _stall_count[chan] = 0;
+        return;
+    }
+
+    if (pc == DSHOT600_BIDIR_PC_WAIT_ONE || pc == DSHOT600_BIDIR_PC_WAIT_ZERO) {
+        /*
+          Parked waiting for the ESC. An ESC that never answers leaves the
+          second wait looking for a falling edge that will not come, and
+          without this the channel stops driving for good.
+         */
+        if (++_stall_count[chan] >= DSHOT600_BIDIR_STALL_LIMIT) {
+            restart_sm(chan, frame);
+        }
+        return;
+    }
+
+    // mid transmit or mid receive; let it finish
+    _stall_count[chan] = 0;
+}
+
+/*
+  Recover a state machine parked on a wait: stop it, flush both FIFOs, put it
+  back at the top of the program and give it the frame it missed.
+ */
+void RCOutput_pico::restart_sm(uint8_t chan, uint16_t frame)
+{
+    PIO_TypeDef *pio = DSHOT_PIO;
+    const uint8_t sm = chan;
+
+    pio->CTRL &= ~(1U << (PIO_CTRL_SM_ENABLE_LSB + sm));
+
+    // toggling the FIFO join flushes both halves; there is no direct flush
+    pio->SM[sm].SHIFTCTRL ^= PIO_SHIFTCTRL_FJOIN_RX;
+    pio->SM[sm].SHIFTCTRL ^= PIO_SHIFTCTRL_FJOIN_RX;
+
+    pio->CTRL |= (1U << (PIO_CTRL_SM_RESTART_LSB + sm));
+    pio->SM[sm].INSTR = 0x0000U;   // jmp 0, back to the pull
+
     pio->TXF[sm] = ((uint32_t)frame) << 16;
+    pio->CTRL |= (1U << (PIO_CTRL_SM_ENABLE_LSB + sm));
+
+    _stall_count[chan] = 0;
+    _stall_restarts[chan]++;
 }
 
 /*
