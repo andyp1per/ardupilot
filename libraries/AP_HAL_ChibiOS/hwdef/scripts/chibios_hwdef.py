@@ -2554,6 +2554,13 @@ INCLUDE common.ld
             f.write('{ %2u, %2u, %12s }, /* %s %s */ \\\n' %
                     (chan, analog, scale_str,  portpin, label))
         f.write('\n\n')
+        if self.is_rp_mcu() and len(adc_chans[0]) > 0:
+            # RP ADC pads need FUNCSEL NULL with the pulls and the input buffer
+            # off, which only adcRPGpioInit() does. Emit the GPIO numbers so the
+            # board init walks the pins actually declared above rather than a
+            # hardcoded list that silently rots when a board changes pinout.
+            gpios = sorted(int(portpin[2:]) for (_, _, _, _, portpin) in adc_chans[0])
+            f.write('#define HAL_RP_ADC_GPIOS %s\n\n' % ', '.join(str(g) for g in gpios))
         if len(adc_chans[1]) > 0:
             f.write('#define STM32_ADC_SAMPLES_SIZE 32\n')
             f.write('#define ADC12_CCR_DUAL ADC_CCR_DUAL_REG_INTERL\n')
