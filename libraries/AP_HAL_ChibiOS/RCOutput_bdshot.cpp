@@ -766,7 +766,17 @@ uint32_t RCOutput::bdshot_decode_gcr(uint32_t gcr21)
       and a bad eRPM - and a four bit checksum lets roughly one in sixteen
       through.
      */
+#if defined(RP2350)
+    /*
+      Pinned to SRAM. The relocation registries move .text only, so on RP2350 -
+      where the decode runs on core1's rate path out of Scratch Y - leaving this
+      in rodata means four XIP data reads per call, timed by whatever core0 has
+      just done to the shared cache.
+     */
+    static const uint8_t decode[32] __attribute__((section(".ramtext"))) = {
+#else
     static const uint8_t decode[32] = {
+#endif
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
         0xff,    9,   10,   11, 0xff,   13,   14,   15,
         0xff, 0xff,    2,    3, 0xff,    5,    6,    7,
