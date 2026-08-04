@@ -2391,7 +2391,11 @@ INCLUDE common.ld
             # own line around, so bidirectional support is not gated on the
             # BIDIR pin tag - that encodes an STM32 timer-pair constraint with
             # no equivalent. Use is still decided at runtime by SERVO_BLH_BDMASK.
-            f.write('#define HAL_WITH_BIDIR_DSHOT\n')
+            # Still conditional on DShot itself: the bdshot code is guarded by
+            # #ifdef HAL_WITH_BIDIR_DSHOT but reaches members declared under
+            # #if HAL_DSHOT_ENABLED, so claiming it with DShot off will not build.
+            if self.intdefines.get('HAL_DSHOT_ENABLED', 1):
+                f.write('#define HAL_WITH_BIDIR_DSHOT\n')
         else:
             if bidir is not None:
                 f.write('#define HAL_WITH_BIDIR_DSHOT\n')
