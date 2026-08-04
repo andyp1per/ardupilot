@@ -1044,7 +1044,7 @@ bool stm32_flash_write(uint32_t addr, const void *buf, uint32_t count)
  * NOR flash cells are erased to 1
  * programming with all-1s changes nothing.
  * This is safe because on erased flash 0xFF is always the initial state
- * no bits can be changed from 0→1 by any PP operation anyway.
+ * no bits can be changed from 0 to 1 by any PP operation anyway.
  */
     {
         const uint8_t *p = (const uint8_t *)buf;
@@ -1059,7 +1059,16 @@ bool stm32_flash_write(uint32_t addr, const void *buf, uint32_t count)
         }
     }
     flash_error_t err = efl_lld_program(&EFLD1, (flash_offset_t)(addr - RP_FLASH_BASE), count, (const uint8_t *)buf);
-    return err == FLASH_NO_ERROR;
+    if (err != FLASH_NO_ERROR) {
+        return false;
+    }
+    /*
+     * The QSPI driver polls only the BUSY bit, which never sets if the chip
+     * declines the page program, so it cannot tell a refused write from a
+     * completed one. Read back through XIP before reporting success,
+     * otherwise AP_FlashStorage clears its dirty mask and drops the data.
+     */
+    return memcmp((const void *)addr, buf, count) == 0;
 #elif defined(STM32F1) || defined(STM32F3)
     return stm32_flash_write_f1(addr, buf, count);
 #elif defined(STM32F4) || defined(STM32F7)
