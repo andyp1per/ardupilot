@@ -185,6 +185,17 @@ void Scheduler::init()
       descriptor by hand - same shape as thread_create_alloc_affinity().
      */
     {
+        /*
+          Lay down the canary first. chThdCreateStatic() does this for you;
+          creating from a descriptor does not, and stack_free() measures
+          headroom by counting canary words from the base - so an unfilled area
+          reads as zero free and trips a stack_overflow internal error on a
+          thread that has barely touched its stack.
+         */
+#if CH_DBG_FILL_THREADS == TRUE
+        __thd_stackfill((uint8_t *)THD_WORKING_AREA_BASE(_rcout_thread_wa),
+                        (uint8_t *)THD_WORKING_AREA_END(_rcout_thread_wa));
+#endif
         thread_descriptor_t td = __THD_DECL_DATA("rcout",
                                                  THD_WORKING_AREA_BASE(_rcout_thread_wa),
                                                  THD_WORKING_AREA_END(_rcout_thread_wa),
