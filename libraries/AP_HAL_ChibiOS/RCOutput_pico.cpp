@@ -247,9 +247,18 @@ void RCOutput_pico::start_sm(uint8_t chan, uint8_t gpio)
                         | (1U             << PIO_PINCTRL_OUT_COUNT_LSB)
                         | ((uint32_t)gpio << PIO_PINCTRL_IN_BASE_LSB);
 
-    // hand the pad to the PIO and set the idle pull for this direction
+    /*
+      Hand the pad to the PIO and set the idle pull for this direction. IE is
+      required even for output-only: the pad register is written whole, and
+      without it the bidirectional program's "wait 1 pin 0" never sees the line
+      go high and the state machine stalls after the first frame. SCHMITT and a
+      real drive strength likewise have to be asked for or they come out zero.
+     */
     palSetLineMode(PAL_LINE(IOPORT1, gpio),
                    PAL_RP_IOCTRL_FUNCSEL(DSHOT_PIO_FUNCSEL) |
+                   PAL_RP_PAD_IE |
+                   PAL_RP_PAD_SCHMITT |
+                   PAL_RP_PAD_DRIVE4 |
                    (_bidir ? PAL_RP_PAD_PUE : PAL_RP_PAD_PDE));
 
     // start at the top of the program with the pin driven
