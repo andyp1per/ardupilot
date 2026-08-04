@@ -53,8 +53,10 @@ extern const AP_HAL::HAL& hal;
 // pointer. Offset from the PIO base, as in PIOUART.cpp.
 #define PIO_GPIOBASE_OFFSET 0x168U
 
-// FUNCSEL for PIO2 on RP2350. PIO0 is 6, PIO1 is 7, PIO2 is 11.
-#define DSHOT_PIO_FUNCSEL 11U
+// FUNCSEL for PIO2 on RP2350: PIO0 is 6, PIO1 is 7, PIO2 is 8. 11 is UART_AUX,
+// which is where these pads were being routed - the state machines ran but
+// nothing reached the pin.
+#define DSHOT_PIO_FUNCSEL 8U
 
 /*
   Both programs load at offset 0, one at a time.
