@@ -2695,6 +2695,20 @@ INCLUDE common.ld
                         (gpio, enabled, pwm, self.make_pal_line(port, pin), p))
             # and write #defines for use by config code
             f.write('}\n\n')
+        if self.is_rp_mcu():
+            # RP has no port-wide ODR register to preload, so the OUTPUT
+            # HIGH/LOW level from hwdef.dat has to be applied pin by pin at
+            # board init. Emitted separately from HAL_GPIO_PINS because that
+            # macro initialises a struct whose next member is the IRQ handler.
+            levels = [(port, pin, p) for (gpio, pwm, port, pin, p, enabled) in gpios
+                      if pwm == 0 and enabled == 'true']
+            if levels:
+                f.write('#define HAL_GPIO_INIT_LEVELS { \\\n')
+                for (port, pin, p) in levels:
+                    f.write('{ %s, %u}, /* %s */ \\\n' %
+                            (self.make_pal_line(port, pin),
+                             1 if p.get_ODR_value() == 'HIGH' else 0, p))
+                f.write('}\n\n')
         f.write('// full pin define list\n')
         last_label = None
         for label in sorted(list(set(self.bylabel.keys()))):
