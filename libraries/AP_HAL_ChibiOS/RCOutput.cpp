@@ -1333,13 +1333,17 @@ void RCOutput::set_output_mode(uint32_t mask, const enum output_mode mode)
         bool needs_up_dma = mode_requires_dma(thismode);
 #if defined(RP2350)
         /*
-          DShot comes out of the PIO on this chip, not a timer DMAR burst, so
-          the group's UP DMA has nothing to do with it - requiring one here
-          downgraded every DShot request to plain PWM before set_group_mode()
-          could reach the PIO path. Serial LED and ESC passthrough do still
-          need a DMA and are still refused.
+          DShot and serial LED both come out of the PIO on this chip rather
+          than a timer DMAR burst, so the group's UP DMA has nothing to do
+          with either - requiring one here downgrades the request to plain PWM
+          before set_group_mode() can reach the PIO path. Serial ESC
+          passthrough does still need a DMA and is still refused.
+
+          mode_requires_dma() itself is deliberately left alone: set_freq_group()
+          uses it to skip the PWM clock setup, which is still the right thing
+          to do for a mode the PIO clocks itself.
          */
-        if (is_dshot_protocol(thismode)) {
+        if (is_dshot_protocol(thismode) || is_led_protocol(thismode)) {
             needs_up_dma = false;
         }
 #endif
