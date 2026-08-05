@@ -658,9 +658,9 @@ places where shared ArduPilot code assumed an STM32.
 
 ## NeoPixel, and how the PIO blocks are divided up
 
-The onboard WS2812 on GPIO2 (net `RGB_LED`, through R82) is driven by
-the NeoPixel half of `RCOutput_pico.cpp` from **PIO1**, and the block choice is
-forced rather than preferred:
+The serial LED output on GPIO2 is driven by the NeoPixel half of
+`RCOutput_pico.cpp` from **PIO1**, and the block choice is forced rather than
+preferred:
 
 | block | owner | SMs | instructions | GPIOBASE |
 |-------|--------------------------------|-----|--------------|----------|
@@ -681,6 +681,18 @@ The GPIOBASE column is the other half of it. A WS2812 pin below GPIO16 needs a
 GPIO0-31 window, which the PIOUART blocks cannot offer - they are shifted to 16
 so PIOUART0 can reach GPIO42/43. So even a free state machine on PIO0 would not
 have been usable for this pin.
+
+Correcting an earlier reading of the schematic: there is **no LED fitted on the
+board**. The section headed "WS2812 LED" on page 2 contains only connector
+**J2**, a 3-pin JST-SH compatible right-angle header with two shield pins to
+ground. `RGB_LED` leaves GPIO2, passes through R82 (27 ohm) and arrives at J2
+pin 3; pin 1 is +5V and pin 2 is ground, taken from C74's ground node. The
+vendor GPIO sheet calls GPIO2 "the onboard RGB LED", which is what the first
+version of this note and the README repeated, and it is wrong in the same way
+the sheet is wrong about the ESC order and the regulator enables.
+
+The practical consequence is that `NTF_LED_LEN` is however many LEDs are on the
+strip somebody plugs in, not 1.
 
 The program is the four-instruction ws2812 from pico-examples, by way of
 Betaflight's `light_ws2811strip_pico.c`, with T1/T2/T3 of 3/3/4 giving ten PIO
