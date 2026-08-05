@@ -2497,10 +2497,10 @@ INCLUDE common.ld
 # define HAL_IC%u_CH%u_DMA_CONFIG false, 0, 0
 #endif
 ''' % (n, i, n, i, n, i, n, i, n, i, n, i)
-                if up_shared is not None:
-                    hal_icu_cfg += '}, HAL_TIM%u_UP_SHARED, \\' % n
-                else:
-                    hal_icu_cfg += '}, \\'
+                    if up_shared is not None:
+                        hal_icu_cfg += '}, HAL_TIM%u_UP_SHARED, \\' % n
+                    else:
+                        hal_icu_cfg += '}, \\'
 
             if not self.is_rp_mcu():
                 f.write('''#if defined(STM32_TIM_TIM%u_UP_DMA_STREAM) && defined(STM32_TIM_TIM%u_UP_DMA_CHAN)
