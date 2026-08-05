@@ -3,8 +3,10 @@
 #
 # A "no symbol match" warning at link time means the entry did nothing. The
 # __stats_* entries below raise it on any build with HAL_ENABLE_THREAD_STATISTICS
-# off, which is every flight build - the symbols do not exist to match. That
-# set is expected; anything else in the warning list is not.
+# off, which is every flight build - the symbols do not exist to match. The
+# bdshot entries here and in the scratch registries likewise do not match on a
+# board without HAL_WITH_BIDIR_DSHOT. Those two sets are expected; anything
+# else in the warning list is not.
 ArduCopter/Attitude.cpp|Copter::run_rate_controller_main  # 70 B (sram)
 ArduCopter/Copter.cpp|Copter::read_AHRS  # 12 B (sram)
 ArduCopter/ekf_check.cpp|Copter::check_ekf_reset  # 140 B (sram)
@@ -22,8 +24,9 @@ ArduCopter/rate_thread.cpp|Copter::update_dynamic_notch_at_specified_rate_main  
 libraries/AC_AttitudeControl/AC_AttitudeControl.cpp|AC_AttitudeControl::update_attitude_target  # 56 B (sram)
 libraries/AC_AttitudeControl/AC_AttitudeControl.cpp|AC_AttitudeControl::thrust_vector_rotation_angles  # 418 B (sram)
 libraries/AC_AttitudeControl/AC_AttitudeControl.cpp|AC_AttitudeControl::attitude_command_model  # 152 B (sram)
-libraries/AP_AHRS/AP_AHRS.cpp|AP_AHRS::update  # 208 B (sram)
-libraries/AP_AHRS/AP_AHRS.cpp|AP_AHRS::update_EKF3  # 236 B (sram)
+# update_EKF3/update_DCM were folded into AP_AHRS::update by the backend-loop
+# rework, which is why this entry grew from 208 B to 424 B.
+libraries/AP_AHRS/AP_AHRS.cpp|AP_AHRS::update  # 424 B (sram)
 libraries/AP_AHRS/AP_AHRS_Backend.cpp|AP_AHRS::update_trig  # 48 B (sram)
 libraries/AP_AHRS/AP_AHRS_Backend.cpp|AP_AHRS::update_cd_values  # 112 B (sram)
 libraries/AP_AHRS/AP_AHRS_DCM.cpp|AP_AHRS_DCM::update  # 480 B (sram)
