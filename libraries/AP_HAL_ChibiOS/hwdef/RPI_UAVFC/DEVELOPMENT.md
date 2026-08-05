@@ -41,6 +41,7 @@ clipping, and no XIP park visible in the timing.
 | Position modes | Loiter flown, 105 s in log62; EKF fusing GPS |
 | Rate loop in flight | 2 kHz held over 247 s, dtMax 1.3 ms, no overruns |
 | Tune | Hand tune below; AUTOTUNE started, roll only, unsaved |
+| Serial LED (J2) | Mode correct, LED not yet lit; see below |
 | 9V rail (VID) | Stuck on; relay does not switch it, see below |
 
 Retracted: this section used to record that the GPS was detected but had never
@@ -724,10 +725,52 @@ ProfiLED is refused at `set_group_mode` rather than silently treated as a
 NeoPixel. It needs a second program, a 25-bit frame and a separate clock pin,
 none of which exist here.
 
-Untested on hardware as of this writing: it builds and links, but nothing has
-watched the LED light up. The first check is that `SERVO5_FUNCTION` is 120 and
-`NTF_LED_TYPES` has the NeoPixel bit, since without the latter AP_Notify never
-calls into `AP_SerialLED` at all.
+### Where the bring-up got to
+
+Flown-on-the-bench state: the output mode is now correct and the LED still does
+not light. Nothing has yet been seen on a scope or a meter.
+
+One real bug found and fixed on the way. `mode_requires_dma()` is true for LED
+protocols as well as DShot, and the RP2350 exemption in `set_output_mode()`
+only cleared it for DShot - so a NeoPixel request still demanded a UP DMA
+channel this chip never allocates, was rewritten to `MODE_PWM_NORMAL`, and
+never reached the PIO path. The symptom was the startup banner reporting `PWM`
+on output 5. That is DShot's item 1 above repeating itself, because the
+exemption's comment asserted serial LED still needed a DMA and that stopped
+being true the moment this driver landed.
+
+Note the mode switch is **lazy**: `set_serial_led_num_LEDs()` only sets
+`grp->led_mode`, and `current_mode` does not change until the first colour
+write reaches `set_serial_led_rgb_data()`. So the startup banner can
+legitimately read `PWM` even when configured correctly - it is emitted from
+`AP_Vehicle.cpp` before any LED data exists. Judge the mode from a later banner
+request, not the boot one.
+
+Next time, in order:
+
+1. **Meter the 5V on J2 pin 1.** This is the first thing to check and the most
+   likely answer. That pin is fed from the switched peripheral rail whose
+   enable polarity is still unresolved - see the OUTPUT HIGH/LOW section above. If the
+   rail is off the strip has no power at all and no amount of correct data will
+   light it. Nothing downstream is worth debugging until this reads 5 V.
+2. Confirm the three parameters actually took: `SERVO5_FUNCTION` 120,
+   `NTF_LED_TYPES` with bit 8 set, `NTF_LED_LEN` matching the strip.
+   `SERVO5_FUNCTION` is in `defaults.parm`, which only applies on a parameter
+   reset - an existing board keeps whatever it had stored.
+3. Scope GPIO2. A WS2812 frame is unmistakable: 24 bits per LED at 800 kHz,
+   1.25 us a bit. Silence means the state machine is not running or the pad is
+   not routed; a waveform means the problem is downstream of this port.
+4. If the pad is silent, suspect FUNCSEL before the program. PIO1 is FUNCSEL 7
+   on RP2350, and the DShot bring-up lost a day to exactly this - FUNCSEL 11
+   routed those pads to the aux UART, the state machines ran, and nothing
+   reached the pin.
+5. If the waveform is there but the colours are wrong, it is byte order rather
+   than timing: `SERVO5_FUNCTION` 121 selects `MODE_NEOPIXELRGB` and the driver
+   implements both orders.
+
+The PC sampler is no help here - a state machine that never starts costs no CPU
+and shows up as absence. The counters-over-SWD approach in `PROFILING.md` is
+the right instrument if it comes to that.
 
 ## DShot parameters: the two that cost a day
 
