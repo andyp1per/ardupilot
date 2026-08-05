@@ -750,9 +750,10 @@ Next time, in order:
 
 1. **Meter the 5V on J2 pin 1.** This is the first thing to check and the most
    likely answer. That pin is fed from the switched peripheral rail whose
-   enable polarity is still unresolved - see the OUTPUT HIGH/LOW section above. If the
-   rail is off the strip has no power at all and no amount of correct data will
-   light it. Nothing downstream is worth debugging until this reads 5 V.
+   enable polarity is still unresolved - see the OUTPUT HIGH/LOW section
+   above. If the rail is off the strip has no power at all and no amount of
+   correct data will light it. Nothing downstream is worth debugging until
+   this reads 5 V.
 2. Confirm the three parameters actually took: `SERVO5_FUNCTION` 120,
    `NTF_LED_TYPES` with bit 8 set, `NTF_LED_LEN` matching the strip.
    `SERVO5_FUNCTION` is in `defaults.parm`, which only applies on a parameter
