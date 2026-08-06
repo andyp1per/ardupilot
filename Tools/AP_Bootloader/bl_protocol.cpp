@@ -384,9 +384,11 @@ jump_to_app()
     if (*(const uint32_t *)APP_START_ADDRESS == 0xffffded3U) {
         app_base = (const uint32_t *)(APP_START_ADDRESS + 0x80U);
     }
-#endif
+
+    // stack limit registers are ARMv8-M only
     __set_MSPLIM(0);
     __set_PSPLIM(0);
+#endif
 
 #if defined(AP_DEBUG_BUILD) || defined(DEBUG_BUILD)
     DEV_PRINTF("BL: jump_to_app starting\n");
@@ -399,20 +401,18 @@ jump_to_app()
  * This avoids the failure mode where the app's __late_init() / halInit() tries to reinitialise peripherals that the BL left partially active, causing a crash or watchdog fire within the first 2 seconds.
  * Phase 2 (second call.
  */
+#if defined(HAL_RP2350) || defined(RP2350)
     if (WATCHDOG->SCRATCH[1] == 0xB007CA11U) {
-        /* Phase 2: XIP cache clean — clear flag and fall through to do_jump() */
+        /* Phase 2: XIP cache clean - clear flag and fall through to do_jump() */
         WATCHDOG->SCRATCH[1] = 0U;
-#if defined(HAL_RP2350) || defined(RP2350)
         WATCHDOG->SCRATCH[3] = 0xA0000008U;
-#endif
     } else {
-        /* Phase 1: first jump attempt — request a clean SYSRESETREQ reset */
-        WATCHDOG->SCRATCH[1] = 0xB007CAFEU;  /* "BOOT CAFÉ" — launch app after reset */
-#if defined(HAL_RP2350) || defined(RP2350)
+        /* Phase 1: first jump attempt - request a clean SYSRESETREQ reset */
+        WATCHDOG->SCRATCH[1] = 0xB007CAFEU;  /* launch app after reset */
         WATCHDOG->SCRATCH[3] = 0xA0000009U;
-#endif
-        NVIC_SystemReset();  /* triggers SYSRESETREQ — NOTREACHED */
+        NVIC_SystemReset();  /* triggers SYSRESETREQ - NOTREACHED */
     }
+#endif
 
 #if defined(AP_DEBUG_BUILD) || defined(DEBUG_BUILD)
     DEV_PRINTF("BL: WATCHDOG scratch check done, about to disable interrupts\n");
