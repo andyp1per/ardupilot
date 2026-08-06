@@ -499,7 +499,15 @@ thread_t *thread_create_alloc_affinity(size_t size, const char *name, tprio_t pr
 
     void *wend = (uint8_t *)wbase + size;
     __thd_stackfill((uint8_t *)wbase, (uint8_t *)wend);
-    thread_descriptor_t td = __THD_DECL_DATA(name, wbase, wend, prio, pf, arg, oip);
+    thread_descriptor_t td = {
+        .name     = name,
+        .wbase    = (stkalign_t *)wbase,
+        .wend     = (stkalign_t *)wend,
+        .prio     = prio,
+        .funcp    = pf,
+        .arg      = arg,
+        .instance = oip,
+    };
 
     chSysLock();
     thread_t *tp = chThdCreateSuspendedI(&td);
