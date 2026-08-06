@@ -201,6 +201,10 @@ private:
     rttime_t  _core1_last_cumulative;
     uint64_t  _core1_last_us;
 #endif
+#if CH_DBG_STATISTICS == TRUE && CH_CFG_SMP_MODE == TRUE
+    // accumulated idle time of core1's idle thread
+    static rttime_t core1_idle_cumulative(void);
+#endif
 
 #if CH_CFG_USE_SEMAPHORES == TRUE
     binary_semaphore_t _timer_semaphore;
