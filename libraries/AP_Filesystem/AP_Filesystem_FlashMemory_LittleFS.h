@@ -104,6 +104,10 @@ private:
 
     // Flag to denote that the underlying flash chip uses 32-bit addresses
     bool use_32bit_address;
+#if AP_FILESYSTEM_LITTLEFS_FLASH_IS_NAND
+    // Flag to denote that the chip splits its blocks over two planes
+    bool multi_plane;
+#endif
     FormatStatus format_status;
 
     int allocate_fd();
@@ -130,6 +134,7 @@ private:
     bool nand_read_status(uint8_t &status);
     bool nand_set_reg(uint8_t reg, uint8_t value);
     bool nand_page_read(uint32_t row_addr);
+    uint16_t nand_cache_column(lfs_block_t block) const;
     bool nand_read_cache(uint16_t col_addr, uint8_t *buf, uint32_t len);
     bool nand_program_load(uint16_t col_addr, const uint8_t *buf, uint32_t len);
     bool nand_program_execute(uint32_t row_addr);

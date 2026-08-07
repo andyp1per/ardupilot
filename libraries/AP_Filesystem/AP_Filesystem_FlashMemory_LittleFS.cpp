@@ -614,9 +614,9 @@ void AP_Filesystem_FlashMemory_LittleFS::mark_dead()
 #define JEDEC_ID_WINBOND_W25N02KV      0xEFAA22
 #if AP_FILESYSTEM_LITTLEFS_MT29FXX_ENABLED
 // Micron MT29FXX SPI NAND family - manufacturer 0x2C, device IDs vary by density
-#define JEDEC_ID_MICRON_MT29FXX1G        0x2C1400    // 1Gbit (128MB), 2KB page
-#define JEDEC_ID_MICRON_MT29FXX2G        0x2C2400    // 2Gbit (256MB), 2KB page
-#define JEDEC_ID_MICRON_MT29FXX4G        0x2C3400    // 4Gbit (512MB), 4KB page (MT29F4G01ABAFD)
+#define JEDEC_ID_MICRON_MT29FXX1G        0x2C1400    // 1Gbit (128MB), 2KB page, 1 plane (MT29F1G01ABAFD)
+#define JEDEC_ID_MICRON_MT29FXX2G        0x2C2400    // 2Gbit (256MB), 2KB page, 2 planes (MT29F2G01ABAGD)
+#define JEDEC_ID_MICRON_MT29FXX4G        0x2C3400    // 4Gbit (512MB), 4KB page, 1 plane (MT29F4G01ABAFD)
 #endif
 #define JEDEC_ID_CYPRESS_S25FL064L     0x016017
 #define JEDEC_ID_CYPRESS_S25FL128L     0x016018
@@ -643,6 +643,10 @@ void AP_Filesystem_FlashMemory_LittleFS::mark_dead()
 #define NAND_STATUS_WEL          0x02    // Write Enable Latch
 #define NAND_STATUS_EFAIL        0x04    // Erase Fail
 #define NAND_STATUS_PFAIL        0x08    // Program Fail
+
+// cache column address layout: [11:0] byte within the 2048+128 byte page,
+// [12] plane select, [15:13] dummy
+#define NAND_COLUMN_PLANE_SELECT 0x1000
 
 // cache opcodes: quad on a WSPI bus, single-line on SPI
 #if AP_FILESYSTEM_LITTLEFS_USE_WSPI
@@ -845,6 +849,17 @@ bool AP_Filesystem_FlashMemory_LittleFS::nand_page_read(uint32_t row_addr)
 #endif
 }
 
+// cache column for the start of a page in the given erase block. Multi-plane
+// chips have a cache register per plane - even blocks in plane 0, odd in
+// plane 1 - and pick the register from this bit, not from the row address.
+uint16_t AP_Filesystem_FlashMemory_LittleFS::nand_cache_column(lfs_block_t block) const
+{
+    if (!multi_plane) {
+        return 0;
+    }
+    return (block & 1) ? NAND_COLUMN_PLANE_SELECT : 0;
+}
+
 // clock data out of the chip's internal cache starting at a column address
 bool AP_Filesystem_FlashMemory_LittleFS::nand_read_cache(uint16_t col_addr, uint8_t *buf, uint32_t len)
 {
@@ -861,8 +876,16 @@ bool AP_Filesystem_FlashMemory_LittleFS::nand_read_cache(uint16_t col_addr, uint
     wspi_dev->set_cmd_header(hdr);
     return wspi_dev->transfer(nullptr, 0, buf, len);
 #else
+    // 16-bit column address followed by the dummy byte the chip clocks out
+    // before the data
+    const uint8_t cmd[4] {
+        NAND_CMD_READ_CACHE,
+        uint8_t(col_addr >> 8),
+        uint8_t(col_addr & 0xff),
+        0
+    };
     dev->set_chip_select(true);
-    send_command_addr(NAND_CMD_READ_CACHE, col_addr);
+    dev->transfer(cmd, sizeof(cmd), nullptr, 0);
     bool ok = dev->transfer(nullptr, 0, buf, len);
     dev->set_chip_select(false);
     return ok;
@@ -993,6 +1016,9 @@ uint32_t AP_Filesystem_FlashMemory_LittleFS::find_block_size_and_count() {
         block_count = 1024;   /* 1Gbit = 128MB, 1024 blocks of 128KB */
         break;
     case JEDEC_ID_MICRON_MT29FXX2G:
+        // the 2Gbit part splits its blocks over two planes, the 1G and 4G
+        // parts are single plane
+        multi_plane = true;
         block_count = 2048;   /* 2Gbit = 256MB, 2048 blocks of 128KB */
         break;
     case JEDEC_ID_MICRON_MT29FXX4G:
@@ -1346,7 +1372,7 @@ int AP_Filesystem_FlashMemory_LittleFS::_flashmem_read(
         }
         {
             WITH_SEMAPHORE(dev_sem);
-            if (!nand_read_cache(0, p, page_size)) {
+            if (!nand_read_cache(nand_cache_column(block), p, page_size)) {
                 return LFS_ERR_IO;
             }
         }
@@ -1406,7 +1432,7 @@ int AP_Filesystem_FlashMemory_LittleFS::_flashmem_prog(
         // EXECUTE commits it to the page at the row address.
         const uint32_t row_addr = address / page_size;
 
-        if (!nand_program_load(0, p, page_size)) {
+        if (!nand_program_load(nand_cache_column(block), p, page_size)) {
             return LFS_ERR_IO;
         }
         if (!nand_program_execute(row_addr)) {
