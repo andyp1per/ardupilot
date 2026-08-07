@@ -54,6 +54,15 @@ public:
     void start_peripheral(void);
     void stop_peripheral(void);
 
+#if defined(RP2350)
+    // apply a peripheral configuration, cycling the hardware only when
+    // something actually changed. acquire_bus() otherwise stops and restarts
+    // the bus on every transaction, which frees and reallocates both DMA
+    // channels under the global kernel spinlock.
+    void apply_config(uint32_t sspcr0, uint32_t sspcpsr,
+                      ioportid_t ssport, uint16_t sspad);
+#endif
+
 private:
     bool spi_started;
 
