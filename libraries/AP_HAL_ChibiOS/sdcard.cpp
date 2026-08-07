@@ -36,6 +36,7 @@ static HAL_Semaphore sem;
 static bool sdcard_running;
 static uint32_t sdcard_last_fail_ms;
 static uint32_t sdcard_retry_interval_ms;
+
 #ifndef HAL_SDCARD_RETRY_INTERVAL_MS
 #define HAL_SDCARD_RETRY_INTERVAL_MS 2000U
 #endif
@@ -152,12 +153,6 @@ bool sdcard_init()
         mmc_write_frame = (uint8_t*)malloc_axi_sram(MMC_WRITE_FRAME_SIZE);
     }
 
-    if (sdcard_running) {
-        sdcard_stop();
-    }
-
-    sdcard_running = true;
-
     if (device == nullptr) {
         device = AP_HAL::get_HAL().spi->get_device_ptr("sdcard");
         if (!device) {
@@ -166,6 +161,30 @@ bool sdcard_init()
             return false;
         }
     }
+
+    /*
+      Hold the SPI bus semaphore across the whole teardown and
+      reinitialisation. mmcStop()/mmcStart() stop and restart SPID1, which
+      resets the peripheral and frees and reallocates its DMA channels. Without
+      this a transfer already in flight from the logging thread finds the bus
+      gone: the driver is left in SPI_ACTIVE with no DMA and the peripheral in
+      reset, so nothing ever completes and it times out in do_transfer(),
+      raising spi_fail. Because a retry is itself triggered by a failed
+      operation, that turns one error into a burst of them.
+
+      The MMC hooks take this same semaphore, and ChibiOS mutexes are
+      recursive, so the nested takes inside mmcConnect() are safe.
+     */
+#ifndef HAL_BOOTLOADER_BUILD
+    WITH_SEMAPHORE(device->get_semaphore());
+#endif
+
+    if (sdcard_running) {
+        sdcard_stop();
+    }
+
+    sdcard_running = true;
+
     device->set_slowdown(sd_slowdown);
 
     mmcObjectInit(&MMCD1, MMCD1.buffer);
@@ -210,21 +229,21 @@ bool sdcard_init()
 #if defined(RP2350) && CH_CFG_SMP_MODE == TRUE
     /*
      * HAL_CORE_SPI1 controls which core the SPI1 bus thread runs on.
-     * sdcard_init() always runs on core0. If the SPI1 bus thread (on core1)
-     * has already called spiStart(SPID1) — allocating DMA on core1 — then
-     * mmcConnect's spiStart would be a no-op (SPID1 already SPI_READY) but
-     * the DMA IRQs would fire on core1 while the waiting thread is on core0.
-     * Fix: stop SPID1 here so mmcConnect re-starts it from core0, routing
-     * DMA IRQs to core0 where sdcard_init blocks.
-     * Requires dmaChannelFreeI to safely free channels from the non-owning
-     * core (see rp_dma.c fix).
+     * sdcard_init() always runs on core0. If the SPI1 bus thread has already
+     * started SPID1 on the other core then its DMA IRQs fire there while the
+     * thread waiting here is on core0, so the bus is stopped and left for the
+     * next acquire_bus() to start again from this core.
+     *
+     * This must go through the SPIBus, not spiStop() directly. The MMC driver
+     * cannot restart the peripheral - hal_mmc_spi.c redirects spiStart to
+     * spiStartHook, which only sets the bus speed - so the restart comes from
+     * apply_config() via acquire_bus(), and that is gated on the bus's
+     * spi_started flag. Calling spiStop() behind the SPIBus left that flag set
+     * while the driver's DMA channels were freed and the peripheral put back
+     * in reset, so start_peripheral() early-returned and every later transfer
+     * was armed against a dead peripheral, timing out in do_transfer().
      */
-    {
-        SPIDriver *spip = mmcconfig.spip;
-        if (spip->state == SPI_READY) {
-            spiStop(spip);
-        }
-    }
+    static_cast<ChibiOS::SPIDevice*>(device)->stop_bus_peripheral();
 #endif
 
     for (uint8_t i=0; i<tries; i++) {
