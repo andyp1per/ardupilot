@@ -187,8 +187,8 @@ define HAL_BUZZER_NOMINAL_FREQ_HZ 4000
 # 5V is enabled at boot for peripherals; the 9V rail (VID connector) is held
 # off until the power tree is validated on this revision.
 # some issues with production rev mean these are not relay controlled as yet
-PA18 BEC_9V_EN OUTPUT HIGH # GPIO(81)
-PA19 BEC_5V_EN OUTPUT HIGH # GPIO(82)
+PA18 BEC_5V_EN OUTPUT HIGH GPIO(81)
+PA19 BEC_9V_EN OUTPUT HIGH GPIO(82)
 
 define RELAY2_PIN_DEFAULT 81
 define RELAY3_PIN_DEFAULT 82
