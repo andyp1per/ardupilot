@@ -181,7 +181,7 @@ DMA_NOSHARE TIM5_UP TIM4_UP SPI2* SPI3*
 DMA_PRIORITY TIM5_UP TIM4_UP SPI2* SPI3*
 
 # ----------------- Baro ----------------------
-BARO BMP581 I2C:0:0x76
+BARO BMP581 I2C:0:0x47
 BARO DPS310 I2C:0:0x76
 
 # ----------------- Compass -------------------
