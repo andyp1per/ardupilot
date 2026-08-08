@@ -163,23 +163,31 @@ bool sdcard_init()
     }
 
     /*
-      Hold the SPI bus semaphore across the whole teardown and
-      reinitialisation. mmcStop()/mmcStart() stop and restart SPID1, which
-      resets the peripheral and frees and reallocates its DMA channels. Without
-      this a transfer already in flight from the logging thread finds the bus
-      gone: the driver is left in SPI_ACTIVE with no DMA and the peripheral in
-      reset, so nothing ever completes and it times out in do_transfer(),
-      raising spi_fail. Because a retry is itself triggered by a failed
-      operation, that turns one error into a burst of them.
+      Hold the SPI bus semaphore across the peripheral teardown and restart.
+      mmcStop()/mmcStart() stop and restart SPID1, which resets the peripheral
+      and frees and reallocates its DMA channels. Without this a transfer
+      already in flight from the logging thread finds the bus gone: the driver
+      is left in SPI_ACTIVE with no DMA and the peripheral in reset, so nothing
+      ever completes and it times out in do_transfer(), raising spi_fail.
+      Because a retry is itself triggered by a failed operation, that turns one
+      error into a burst of them.
 
-      The MMC hooks take this same semaphore, and ChibiOS mutexes are
-      recursive, so the nested takes inside mmcConnect() are safe.
+      It must NOT be held across f_mount(). Block reads go through the block
+      device vmt, which calls spiAcquireBus() first, and that reaches
+      acquire_bus(set, skip_cs=true) - which marks cs_forced without asserting
+      CS. The spiSelect() that follows then sees cs_forced already set and
+      early-returns, so the card is never selected and never answers. That path
+      is only reachable when the caller already owns the semaphore, because
+      acquire_bus() returns early on check_owner() otherwise.
      */
-#ifndef HAL_BOOTLOADER_BUILD
-    WITH_SEMAPHORE(device->get_semaphore());
+#ifdef HAL_BOOTLOADER_BUILD
+#define SDCARD_BUS_LOCK() (void)0
+#else
+#define SDCARD_BUS_LOCK() WITH_SEMAPHORE(device->get_semaphore())
 #endif
 
     if (sdcard_running) {
+        SDCARD_BUS_LOCK();
         sdcard_stop();
     }
 
@@ -243,19 +251,26 @@ bool sdcard_init()
      * in reset, so start_peripheral() early-returned and every later transfer
      * was armed against a dead peripheral, timing out in do_transfer().
      */
-    static_cast<ChibiOS::SPIDevice*>(device)->stop_bus_peripheral();
+    {
+        SDCARD_BUS_LOCK();
+        static_cast<ChibiOS::SPIDevice*>(device)->stop_bus_peripheral();
+    }
 #endif
 
     for (uint8_t i=0; i<tries; i++) {
-        mmcStart(&MMCD1, &mmcconfig);
-        if (mmcConnect(&MMCD1) == HAL_FAILED) {
-            mmcStop(&MMCD1);
-            continue;
+        {
+            SDCARD_BUS_LOCK();
+            mmcStart(&MMCD1, &mmcconfig);
+            if (mmcConnect(&MMCD1) == HAL_FAILED) {
+                mmcStop(&MMCD1);
+                continue;
+            }
         }
         FRESULT res = f_mount(&SDC_FS, "/", 1);
         if (res != FR_OK) {
             hal.console->printf("SDCard f_mount failed res=%u (try %u/%u slowdown=%u)\n",
                    (unsigned)res, (unsigned)(i+1), (unsigned)tries, (unsigned)sd_slowdown);
+            SDCARD_BUS_LOCK();
             mmcDisconnect(&MMCD1);
             mmcStop(&MMCD1);
             continue;
