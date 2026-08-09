@@ -1248,6 +1248,11 @@ which the busy distribution rules out outright - see the section on that below.
 measurement is the argument for it, since 91.4% of blocks are ready with no
 wait at all.
 
+**(b) was attempted and backed out.** It wedges the SPI bus on hardware. Read
+the section below before starting again - two of the three things that broke
+are not obvious from the code, and one of them invalidates the design as
+originally sketched above.
+
 **(c) PIO.** A state machine that frames blocks and handles busy autonomously,
 so the whole chunk goes out on one kick. Only if (a) and (b) fall short.
 
@@ -1380,6 +1385,75 @@ This does not rule out (b). That design still waits per block, it only moves
 the waiting off the thread, and the measurement argues for it: 91.4% of blocks
 need no wait at all, so an ISR-driven walk would usually run to completion
 without rescheduling `log_io`.
+
+### (b) ISR-driven chaining: attempted, backed out
+
+Built and run on hardware three times, wedged the board three times, reverted.
+The mechanics of chaining work; what it exposes underneath does not. Recorded
+in enough detail that the next attempt starts from here rather than from the
+sketch in the plan above.
+
+**Busy cannot be watched out of band.** The design rested on reading the MISO
+pad instead of clocking idle bytes - `IO_BANK0 GPIO[n].STATUS` bit 17
+(`INFROMPAD`) reports the pad level whatever the pin is muxed to, so a register
+read looked like a free substitute for a DMA transfer. It is not. A card in SPI
+mode releases DO **in response to clock edges**: clocking is not how busy is
+observed, it is what lets busy end. With nothing clocking, the chain sat on
+block 0 for the full 500 ms timeout, 2142 re-polls deep, on every run. This is
+the one real asymmetry with SDMMC, where DAT0 is genuinely free-running, and it
+is why the 4 KB payload-only staging that works there cannot work here.
+
+The evidence was in hand beforehand and was misread. MISO measured low with the
+card mounted and the select deasserted, which was written off as unexplained
+but irrelevant. It was the whole answer.
+
+**The validation that passed was not a validation.** A correlation counter
+compared the pad against the clocked busy byte and returned 20288 samples with
+zero disagreement. It sampled after `transfer_fullduplex()` returned, when the
+card is idle 91.4% of the time, so it was overwhelmingly comparing two ways of
+saying "not busy". The gap was noticed and an attempt was made to close it by
+sampling the frame buffer over SWD and finding 0x00 in 38% of reads - but those
+were asynchronous reads at random moments, which show busy exists, not that the
+counters ever sampled one. The check that would have caught this is a counter
+for "the clocked byte said busy", required to be non-zero. Any future
+correlation test needs that counter before its result means anything.
+
+**A chained failure must close the multi-block write.** The chain leaves the
+card mid-CMD25 with the select asserted and the driver in `BLK_WRITING`. The
+per-block path gets its cleanup for free, because `mmcSequentialWrite()`
+unselects and drops to `BLK_READY` on its own error path; a chain that breaks
+out of `mmc_write()` skips `mmcStopSequentialWrite()` and every later transfer
+fails. Symptom is `MMCD1` stuck in `BLK_STOP` or `BLK_CONNECTING` with
+`sdcard_running` still 1.
+
+**What was not solved, and is the reason it is parked.** Even with the busy
+clocked from the ISR and the cleanup in place, roughly one run in a dozen never
+completes. The thread times out, and because a transfer is left outstanding the
+driver stays in `SPI_ACTIVE` - after which `do_transfer()` and the
+`mmcConnect()` of the retry that is meant to recover it both block forever.
+That is a stuck thread and an internal error, and only a power cycle clears it.
+`poll-limit failures` stayed 0 throughout, so the ISR was not spinning on busy:
+a transfer simply stopped completing.
+
+The untested suspicion, and where to start: DMA IRQs on this part are per core.
+`INTE1` carries the SPI channels, so their completion services on core1, while
+`log_io` waits on core0. Chaining means arming the next transfer from core1's
+interrupt while the owning thread sleeps on core0 - the per-block path never
+does that, and it is the one structural difference between the design that
+works and the one that does not. Snapshot `chain.idx`, `polls`, `polling` and
+`spip->state` at the timeout, and read the SPI1 DMA channel `BUSY`,
+`READ_ERROR`, `WRITE_ERROR` and `TRANS_COUNT` while it is wedged, before
+changing anything.
+
+Three ChibiOS details worth keeping whatever the next attempt looks like. The
+`end_cb` in `SPIConfig` is available because this board builds SPIv1 - the
+`HAL_LLD_SELECT_SPI_V2` switch is undefined, and the comment in `SPIDevice.cpp`
+about v2 not having `end_cb` does not apply here. `_spi_isr_code()` calls the
+callback *before* it takes the lock, and virtual timer callbacks also run
+outside the critical section, so both must lock for themselves.
+`SPI_SUPPORTS_CIRCULAR` is FALSE on RP, so there is no `spiAbort()` to cancel a
+transfer that has gone missing - which is precisely why an outstanding transfer
+is unrecoverable and the bus stays dead.
 
 ### The write buffer is still short
 
