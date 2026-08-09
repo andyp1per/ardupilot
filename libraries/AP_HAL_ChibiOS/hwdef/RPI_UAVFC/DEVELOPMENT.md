@@ -1242,6 +1242,12 @@ path alongside. For the inter-block busy wait, note the card holds DO low
 continuously while busy with CS asserted, so the ISR can read the MISO pad
 (PA28) directly instead of clocking bytes.
 
+Note this is not the same as prebuilding one 4 KB frame and clocking it blind,
+which the busy distribution rules out outright - see the section on that below.
+(b) still waits per block; it only moves the wait off the thread. The same
+measurement is the argument for it, since 91.4% of blocks are ready with no
+wait at all.
+
 **(c) PIO.** A state machine that frames blocks and handles busy autonomously,
 so the whole chunk goes out on one kick. Only if (a) and (b) fall short.
 
@@ -1278,28 +1284,102 @@ Use the in-place `transfer_fullduplex(uint8_t *, uint32_t)` overload, not the
 two-pointer one: the latter stages through a `uint8_t buf[len]` variable length
 array on the caller's stack, which here would put 773 bytes on `log_io`.
 
-The busy window is the part worth tuning. `mmc_wait_idle()` polls a byte at a
-time and every poll is a thread suspend and resume, 1.3 ms at 58% core0 load
-and 5.7 ms at 79%. A clocked byte costs 0.36 us with the thread already
-blocked, so trading bytes for polls is wildly asymmetric. Measured on the bench
-with `LOG_DISARMED` 1:
+The busy window is the part worth tuning, and `mmc_wait_idle()` was the part
+worth fixing first. It polled a byte at a time, and every poll is a DMA setup
+and a thread suspend - exactly the cost the staged frame exists to avoid, paid
+sixteen times over for sixteen byte-times of wire. It now reads
+`MMC_BUFFER_SIZE` and scans. Overshooting the moment the card goes idle is
+free: the extra bytes clock against an idle bus, and a gap before the next
+token is allowed.
 
-| busy window | blocks finishing inside the frame |
-|--------------------|-----------------------------------|
-| 8 bytes (2.8 us) | 3/14 |
-| 256 bytes (91 us) | 9/15 |
+Measured over 5932 block writes on the bench with `LOG_DISARMED` 1, counted
+only on the block write path so that command traffic - which calls
+`mmc_wait_idle()` with the card already idle - cannot flatter it. The card
+finished inside the 256-byte window **91.4%** of the time. The 8.6% that
+overran it distribute as:
 
-The distribution is bimodal. Median busy is **3 byte periods, about 1.1 us** -
-the card buffers a multi-block write and answers almost at once - but about 40%
-of blocks run past 91 us. Growing the window further is still cheap in CPU
-terms, but chasing an unbounded tail with a fixed buffer is the wrong shape.
-That tail is what (b) is for.
+| wait past the window | share | cumulative |
+|---|---|---|
+| under 16 us | 58.7% | 58.7% |
+| 16-63 us | 26.4% | 85.2% |
+| 64-255 us | 2.2% | 87.3% |
+| 512 us - 2 ms | 5.4% | 92.7% |
+| 2-10 ms | 7.3% | 100% |
+
+Mean 406 us, worst 10.3 ms. The empty band between 256 us and 512 us is an
+artefact of the 500 us sleep, which quantises anything it catches, so the true
+spread there hides inside the 512 us bucket.
+
+Two conclusions. The window is already the right size - widening it to 512
+bytes would add 91 us of wire time to *every* block to save about 25 us of
+polling on 8.6% of them. And no further poll phase is worth adding: two reads
+land before the first sleep, covering everything out to 256 us, so the ceiling
+on a longer poll is the 1.7% in the 512 us bucket.
+
+The rest of the tail is the card erasing internally - real work, not overhead.
+This supersedes an earlier reading of the same distribution as "about 40% of
+blocks run past 91 us", which came from fifteen hand-counted samples and was
+wrong.
 
 Throughput is not yet measured. `PM.SPIC` cannot settle it, because fewer
 transfers per block and more blocks per second move it the same way - it sat at
 8000 to 10400 a second either side of the change. The figure to take is
 `PM.Load` against `DSF.Bytes` across an acro segment and a Loiter segment, the
 same way the problem was diagnosed in the first place.
+
+### The `idle` shortcut silently lost whole writes
+
+The staged frame originally read the last byte of the busy window and, if it
+was 0xFF, returned success without polling at all. That is not evidence. A
+card that has finished programming and a card that has not yet pulled MISO low
+read back identically, and on the second the next data token goes into a busy
+card, which discards the block and reports nothing. `f_write()` then returns
+success, `AP_Logger` advances `_write_offset`, and the data is gone.
+
+Logs 78 and 81 are what that looks like from the outside. Both begin with a
+run of zero bytes - 2,985,984 and 6,230,016, each an exact multiple of 4096 -
+followed by one contiguous run of real data containing no FMT records at all.
+The preamble and the first minutes of each flight were written, acknowledged
+and never landed; the file kept its full length because the offset had moved.
+Log 82 from the same session is dense from byte 0. Logs 79 and 80 were zero
+length, which is the same failure with nothing surviving.
+
+Two things make this worth remembering. A dropped message is not this - drops
+show up in `DSF.Dp` and leave the file dense - so the two symptoms need
+separating before diagnosing. And `AP_Logger_File::io_timer()` only advances
+the offset on a successful write, so a *failed* write cannot produce a hole;
+only a write that returns success without committing can, which narrows the
+search to below `f_write()` immediately.
+
+`LOG_FILE_DSRMROT` 1 makes this much more likely to bite, because it closes
+the log and opens a new one on every disarm: flush, FAT update, then 184 FMT
+plus 195 FMTU plus around 1400 PARM records, over 100 KB, as fast as the
+buffer can feed it. That is the heaviest SD moment of a flight and it happens
+at the exact instant `spi_fail` is reported.
+
+### 4 KB cannot go out as one exchange
+
+Worth recording because the STM32 path makes it look obvious. There the logger
+writes 4 KB, FATFS passes it through, and SDMMC streams the whole multi-block
+payload on one DMA with the card's busy handled in hardware on DAT0. The
+natural question is why SPI mode does not prebuild the same 4 KB as eight
+framed blocks and clock it in one exchange.
+
+Because in SPI mode busy is in-band on MISO. Concatenating eight blocks means
+guessing each inter-block busy length in advance, and guessing short is the
+`idle` shortcut failure again, eight times per write. At the measured 8.6%
+per-block overrun rate:
+
+    P(all eight fit their window) = 0.914^8 = 0.49
+
+Half of all 4 KB frames would contain a block that ran long, and every one of
+those would have to be detected and rewritten whole. Against a saving of about
+3% - seven thread suspends out of a 2.2 ms write - it is not close.
+
+This does not rule out (b). That design still waits per block, it only moves
+the waiting off the thread, and the measurement argues for it: 91.4% of blocks
+need no wait at all, so an ISR-driven walk would usually run to completion
+without rescheduling `log_io`.
 
 ### The write buffer is still short
 
