@@ -54,10 +54,13 @@ public:
 
     // generate a trigonometric track in 3D space that moves over a straight line
     // between two points defined by the origin and destination
+    // arc_axis_rot_rad rotates the helix axis away from Down about the chord, so 0 gives
+    // a horizontal arc and PI/2 gives an arc in the vertical plane containing the chord
     void calculate_track(const Vector3p &origin, const Vector3p &destination, float arc_rad,
                          float speed_xy, float speed_up, float speed_down,
                          float accel_xy, float accel_z, float accel_c,
-                         float snap_maximum, float jerk_maximum);
+                         float snap_maximum, float jerk_maximum,
+                         float arc_axis_rot_rad = 0.0f);
 
     // set maximum velocity and re-calculate the path using these limits
     void set_speed_max(float speed_xy, float speed_up, float speed_down);
@@ -179,6 +182,11 @@ private:
     // fill segment[first..last] with zero-delta constant-jerk segments anchored to segment[src]
     void fill_empty_segments(uint8_t first, uint8_t last, uint8_t src);
 
+    // maximum magnitude along the path that keeps the horizontal and vertical components
+    // within their limits everywhere on it.  A tilted arc sweeps its tangent direction, so
+    // the worst case fraction in each axis is used rather than the segment average.
+    float path_kinematic_limit(float max_xy, float max_z_up, float max_z_down) const WARN_IF_UNUSED;
+
     // return true if the curve is valid.  Used to identify and protect against code errors
     bool valid() const WARN_IF_UNUSED;
 
@@ -226,10 +234,15 @@ private:
     Vector3f seg_delta;     // total displacement vector from start to end point (NED frame)
     float seg_length;       // 3D scalar length of the path (arc length + vertical component)
 
+    // An arc segment is a helix: a circular arc in the plane perpendicular to `axis`,
+    // plus a linear translation along `axis`.  With axis = Down this is the horizontal
+    // arc with a linear altitude change that the NE-only implementation described.
     struct {
-        float angle_rad;    // signed central angle of the arc [rad] (+CCW, -CW), 0 = straight
-        float length_ne;    // horizontal arc length along the circle (R * |theta|)
-        float radius_ne;    // arc radius
-        Vector2f center_ne; // center of the circle in local NE plane, relative to start point
+        float angle_rad;    // signed swept angle of the arc [rad] (+CCW, -CW), 0 = straight
+        float length;       // arc length within the arc plane (radius * |angle|)
+        float radius;       // arc radius
+        float axis_travel;  // translation along the helix axis over the whole segment
+        Vector3f center;    // center of the circle relative to the segment origin
+        Vector3f axis;      // unit helix axis; the arc lies in the plane perpendicular to it
     } arc;
 };

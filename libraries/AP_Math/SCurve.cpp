@@ -64,7 +64,8 @@ void SCurve::init()
 void SCurve::calculate_track(const Vector3p &origin, const Vector3p &destination, float arc_ang_rad,
                              float speed_xy, float speed_up, float speed_down,
                              float accel_xy, float accel_z, float accel_c,
-                             float snap_maximum, float jerk_maximum)
+                             float snap_maximum, float jerk_maximum,
+                             float arc_axis_rot_rad)
 {
     init();
 
@@ -82,31 +83,58 @@ void SCurve::calculate_track(const Vector3p &origin, const Vector3p &destination
         return;
     }
 
-    const Vector2f chord = seg_delta.xy();
-    const float chord_length = seg_delta.xy().length();
-    if (!is_positive(chord_length) || fabsf(wrap_PI(arc_ang_rad)) < radians(1.0f)) {
+    // The helix axis starts at Down, which puts the arc in the horizontal plane, and is
+    // rotated about the chord by arc_axis_rot_rad.  At PI/2 the axis is perpendicular to
+    // the chord and horizontal, so the arc lies in the vertical plane through the chord.
+    Vector3f axis{0.0f, 0.0f, 1.0f};
+    if (!is_zero(arc_axis_rot_rad)) {
+        const Vector3f chord_unit = seg_delta.normalized();
+        const float ca = cosf(arc_axis_rot_rad);
+        const float sa = sinf(arc_axis_rot_rad);
+        // Rodrigues rotation of the Down axis about the chord
+        axis = axis * ca + (chord_unit % axis) * sa + chord_unit * ((chord_unit * axis) * (1.0f - ca));
+        if (!is_positive(axis.length_squared())) {
+            axis = Vector3f{0.0f, 0.0f, 1.0f};
+        } else {
+            axis.normalize();
+        }
+    }
+
+    // split the chord into the part lying in the arc plane and the part along the axis
+    const float chord_axis = seg_delta * axis;
+    const Vector3f chord_plane = seg_delta - axis * chord_axis;
+    const float chord_plane_length = chord_plane.length();
+
+    if (!is_positive(chord_plane_length) || fabsf(wrap_PI(arc_ang_rad)) < radians(1.0f)) {
         // straight segment
         is_arc_segment = false;
         arc.angle_rad = 0.0f;
-        arc.length_ne = chord_length;
-        arc.radius_ne = 0.0f;
-        arc.center_ne = Vector2f();
+        arc.length = seg_delta.length();
+        arc.radius = 0.0f;
+        arc.axis_travel = 0.0f;
+        arc.center.zero();
+        arc.axis = axis;
         seg_length = seg_delta.length();
     } else {
-        // arc segment. The outer condition guarantees chord_length > 0 and
+        // arc segment.  The outer condition guarantees chord_plane_length > 0 and
         // |sin(arc_ang_rad/2)| >= sin(0.5 deg), so both divisions below are safe and
-        // arc.radius_ne is always positive (>= chord_length/2).
+        // arc.radius is always positive (>= chord_plane_length/2).
         is_arc_segment = true;
         arc.angle_rad = arc_ang_rad;
-        arc.radius_ne = fabsf(chord_length / (2.0f * fabsf(sinf(arc.angle_rad * 0.5f))));
-        const float center_offset = safe_sqrt(sq(arc.radius_ne) - sq(chord_length * 0.5f)); // perpendicular offset from chord to circle center
+        arc.axis = axis;
+        arc.axis_travel = chord_axis;
+        arc.radius = fabsf(chord_plane_length / (2.0f * fabsf(sinf(arc.angle_rad * 0.5f))));
+        const float center_offset = safe_sqrt(sq(arc.radius) - sq(chord_plane_length * 0.5f)); // perpendicular offset from chord to circle center
         const float turn_dir = is_negative(arc.angle_rad) ? -1.0f : 1.0f; // -1 for CCW, 1 for CW
         const float center_side = (is_positive(wrap_PI(fabsf(arc.angle_rad)))) ? 1.0f : -1.0f; // 1 for |angle| < PI, -1 for |angle| > PI
-        arc.center_ne = chord * 0.5f + Vector2f(-chord.y, chord.x) * (center_side * turn_dir * center_offset / chord_length);
-        arc.length_ne = arc.radius_ne * fabsf(arc.angle_rad);
-        seg_length = safe_sqrt(sq(seg_delta.z) + sq(arc.length_ne));
+        // axis % chord_plane is the in-plane perpendicular to the chord; with axis = Down
+        // and a North chord it points East, matching the NE-only implementation
+        const Vector3f chord_perp = axis % (chord_plane / chord_plane_length);
+        arc.center = chord_plane * 0.5f + chord_perp * (center_side * turn_dir * center_offset);
+        arc.length = arc.radius * fabsf(arc.angle_rad);
+        seg_length = safe_sqrt(sq(arc.axis_travel) + sq(arc.length));
         accel_c = is_positive(accel_c) ? accel_c : accel_xy;
-        speed_xy = MIN(speed_xy, safe_sqrt(accel_c * arc.radius_ne));
+        speed_xy = MIN(speed_xy, safe_sqrt(accel_c * arc.radius));
     }
     if (is_zero(seg_length)) {
         seg_delta.zero();
@@ -117,13 +145,11 @@ void SCurve::calculate_track(const Vector3p &origin, const Vector3p &destination
     snap_max = snap_maximum;
     jerk_max = jerk_maximum;
 
-    // Set speed and acceleration limits from the path that is actually flown: the
-    // horizontal extent is the arc length (equal to the chord for a straight
-    // segment) and the vertical extent is seg_delta.z. Using the straight-line
-    // chord here would understate a climbing arc's horizontal travel and needlessly
-    // throttle it against the vertical speed limit.
-    vel_max = kinematic_limit(arc.length_ne, seg_delta.z, speed_xy, speed_up, speed_down);
-    accel_max = kinematic_limit(arc.length_ne, seg_delta.z, accel_xy, accel_z, accel_z);
+    // Set speed and acceleration limits from the path that is actually flown rather than
+    // from the straight line chord, which would understate an arc's travel and needlessly
+    // throttle it against the vertical limit.
+    vel_max = path_kinematic_limit(speed_xy, speed_up, speed_down);
+    accel_max = path_kinematic_limit(accel_xy, accel_z, accel_z);
     accel_z_max = accel_z;
 
     // avoid divide-by zeros. Path will be left as a zero length path
@@ -162,7 +188,7 @@ void SCurve::set_speed_max(float speed_xy, float speed_up, float speed_down)
     }
 
     // segment accelerations can not be changed after segment creation.
-    const float track_speed_max = kinematic_limit(arc.length_ne, seg_delta.z, speed_xy, speed_up, speed_down);
+    const float track_speed_max = path_kinematic_limit(speed_xy, speed_up, speed_down);
 
     if (is_equal(vel_max, track_speed_max)) {
         // new speed is equal to current speed maximum so no need to change anything
@@ -617,9 +643,9 @@ void SCurve::project_scurve_onto_track(float scurve_A1, float scurve_V1, float s
 
     if (is_arc_segment) {
         // Arc segment projection
-        
+
         // protect against divide by zero
-        if (!is_positive(arc.radius_ne)) {
+        if (!is_positive(arc.radius)) {
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
             ::printf("SCurve:: Arc radius is negative or zero\n");
 #endif
@@ -628,29 +654,30 @@ void SCurve::project_scurve_onto_track(float scurve_A1, float scurve_V1, float s
             return;
         }
 
-        Vector2f center_to_pos_ne = -arc.center_ne;
-        const float turn_dir = is_negative(arc.angle_rad) ? -1.0f : 1.0f; // -1 for CCW, 1 for CW 
-        // rotate by progress along the arc
-        center_to_pos_ne.rotate(turn_dir * fabsf(arc.angle_rad) * (scurve_P1 / seg_length));
+        const Vector3f center_to_origin = -arc.center;
+        const float turn_dir = is_negative(arc.angle_rad) ? -1.0f : 1.0f; // -1 for CCW, 1 for CW
+        const float sweep = turn_dir * fabsf(arc.angle_rad) * (scurve_P1 / seg_length);
+        // the radius vector is perpendicular to the axis, so Rodrigues loses its third term
+        const Vector3f center_to_pos = center_to_origin * cosf(sweep) + (arc.axis % center_to_origin) * sinf(sweep);
+
+        const float plane_ds = arc.length / seg_length;
+        const float axis_ds = arc.axis_travel / seg_length;
 
         // position
-        const float dz_ds = seg_delta.z / seg_length;
-        Vector3f delta_pos(arc.center_ne + center_to_pos_ne, scurve_P1 * dz_ds);
-        pos += delta_pos.topostype();
+        pos += (arc.center + center_to_pos + arc.axis * (scurve_P1 * axis_ds)).topostype();
 
-        // direction unit
-        Vector2f arc_tangent_ne = Vector2f(-center_to_pos_ne.y, center_to_pos_ne.x) * turn_dir;
-        arc_tangent_ne /= arc.radius_ne;
-        const float horiz_ds = arc.length_ne / seg_length;
-        // unit length by construction: |arc_tangent_ne| = 1 and horiz_ds^2 + dz_ds^2 = 1 from the seg_length definition
-        const Vector3f path_unit(arc_tangent_ne.x * horiz_ds, arc_tangent_ne.y * horiz_ds, dz_ds);
+        // direction unit: the in plane tangent is perpendicular to both the axis and the
+        // radius so it is already unit length, and plane_ds^2 + axis_ds^2 = 1 by the
+        // seg_length definition, so path_unit is unit length by construction
+        const Vector3f tangent = (arc.axis % center_to_pos) * (turn_dir / arc.radius);
+        const Vector3f path_unit = tangent * plane_ds + arc.axis * axis_ds;
 
         // velocity & tangential accel
         vel += path_unit * scurve_V1;
         accel += path_unit * scurve_A1;
 
-        // centripetal accel uses the horizontal speed component (scurve_V1 * horiz_ds)
-        accel.xy() -= center_to_pos_ne * sq(scurve_V1 * horiz_ds / arc.radius_ne);
+        // centripetal accel uses the in plane speed component (scurve_V1 * plane_ds)
+        accel -= center_to_pos * sq(scurve_V1 * plane_ds / arc.radius);
 
         return;
     }
@@ -1131,6 +1158,48 @@ void SCurve::add_segment(uint8_t &index, float end_time, SegmentType seg_type, f
     index++;
 }
 
+// maximum magnitude along the path that keeps each axis within its limit everywhere on it
+float SCurve::path_kinematic_limit(float max_xy, float max_z_up, float max_z_down) const
+{
+    if (!is_positive(seg_length)) {
+        return 0.0f;
+    }
+    if (!is_arc_segment) {
+        return kinematic_limit(seg_delta.xy().length(), seg_delta.z, max_xy, max_z_up, max_z_down);
+    }
+
+    const float plane_ds = arc.length / seg_length;
+    const float axis_ds = arc.axis_travel / seg_length;
+    const float axis_z = fabsf(arc.axis.z);
+    // the in plane tangent is a unit vector perpendicular to the axis, so around the arc its
+    // vertical component reaches sqrt(1 - axis.z^2) and its horizontal component reaches 1
+    const float axis_xy = safe_sqrt(MAX(0.0f, 1.0f - sq(arc.axis.z)));
+    const float frac_xy = plane_ds + axis_xy * fabsf(axis_ds);
+    const float frac_z = plane_ds * axis_xy + axis_z * fabsf(axis_ds);
+
+    // a tilted arc both climbs and descends within one segment so the tighter of the two
+    // vertical limits applies; an arc in the horizontal plane only moves one way
+    float max_z;
+    if (is_zero(axis_xy)) {
+        max_z = is_positive(arc.axis_travel * arc.axis.z) ? max_z_down : max_z_up;
+    } else {
+        max_z = MIN(max_z_up, max_z_down);
+    }
+
+    float limit = 0.0f;
+    bool limited = false;
+    if (is_positive(frac_xy)) {
+        limit = max_xy / frac_xy;
+        limited = true;
+    }
+    if (is_positive(frac_z)) {
+        const float limit_z = max_z / frac_z;
+        limit = limited ? MIN(limit, limit_z) : limit_z;
+        limited = true;
+    }
+    return limited ? limit : 0.0f;
+}
+
 // return true if the curve is valid.  Used to identify and protect against code errors
 bool SCurve::valid() const
 {
@@ -1181,6 +1250,7 @@ void SCurve::debug() const
                             (double)segment[i].end_accel, (double)segment[i].end_vel, (double)segment[i].end_pos);
     }
     ::printf("track x:%4.2f, y:%4.2f, z:%4.2f\n", (double)seg_delta.x, (double)seg_delta.y, (double)seg_delta.z);
-    ::printf("arc_center_ne x:%4.2f, y:%4.2f\n", (double)arc.center_ne.x, (double)arc.center_ne.y);
+    ::printf("arc_center x:%4.2f, y:%4.2f, z:%4.2f\n", (double)arc.center.x, (double)arc.center.y, (double)arc.center.z);
+    ::printf("arc_axis x:%4.2f, y:%4.2f, z:%4.2f, travel:%4.2f\n", (double)arc.axis.x, (double)arc.axis.y, (double)arc.axis.z, (double)arc.axis_travel);
 }
 #endif
