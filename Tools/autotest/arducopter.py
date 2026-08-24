@@ -16490,14 +16490,21 @@ RTL_ALT_M 111
         # the model defaults are applied by the setup above, so our limits go on after it
         self.set_parameters({
             "AUTO_OPTIONS": 3,
-            "WP_SPD": 15,
-            "WP_SPD_UP": 15,
-            "WP_SPD_DN": 15,
-            "WP_ACC": 10,
-            "WP_ACC_CNR": 20,
-            "WP_ACC_Z": 10,
-            # jerk is the binding constraint on a leg this short, not acceleration
-            "WP_JERK": 20,
+            # centripetal demand over the top is v^2/r, so on this 20 m radius 15 m/s only
+            # reaches 1.15g and the vehicle is barely inverted before the demand falls
+            # away again.  22 m/s asks for 2.5g, which needs real inverted thrust held
+            # through the apex rather than clipped at it.
+            "WP_SPD": 22,
+            "WP_SPD_UP": 22,
+            "WP_SPD_DN": 22,
+            "WP_ACC": 15,
+            # the arc speed cap is sqrt(WP_ACC_CNR * radius), so this has to clear
+            # 22^2/20 = 24.2 or the leg is throttled back below the speed asked for
+            "WP_ACC_CNR": 30,
+            "WP_ACC_Z": 15,
+            # ATC_RATE_R/P_MAX are 0 on this model, so WP_JERK is the only jerk limit and
+            # the acceleration will not develop within the leg if it is left low
+            "WP_JERK": 30,
             "ATC_ANGLE_MAX": 80,
             "PSC_TVEC_EN": 1,
         })
@@ -16522,7 +16529,7 @@ RTL_ALT_M 111
         # and RealFlight's drag will not put the apex in exactly the same place
         self.wait_altitude(72, 94, relative=True, timeout=300)
         self.progress("ABMARK LOOP_TOP")
-        self.wait_altitude(28, 48, relative=True, timeout=180)
+        self.wait_altitude(20, 48, relative=True, timeout=180)
         self.progress("ABMARK LOOP_BOTTOM")
         # climbing back to the chord is what separates a closed loop from a dive
         self.wait_altitude(52, 68, relative=True, timeout=180)
