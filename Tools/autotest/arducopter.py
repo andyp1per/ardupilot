@@ -507,6 +507,88 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         return (cx, cy), R
 
+    def ArcSplineAB(self):
+        '''A/B fast climbing and diving arcs vs splines (45 deg helix)'''
+        self.set_parameters({
+            "AUTO_OPTIONS": 3,
+            "WP_SPD": 15,
+            "WP_SPD_UP": 8,
+            "WP_SPD_DN": 8,
+            "WP_ACC": 5,
+            "WP_ACC_CNR": 10,
+            "WP_ACC_Z": 5,
+            "ATC_ANGLE_MAX": 60,
+        })
+        # params must be in effect at boot: a runtime change to WP_SPD_UP/DN makes
+        # update_wpnav() call set_speed_max(), which masks the calculate_track() limit
+        self.reboot_sitl()
+
+        WP = mavutil.mavlink.MAV_CMD_NAV_WAYPOINT
+        TO = mavutil.mavlink.MAV_CMD_NAV_TAKEOFF
+        ARC = 36  # MAV_CMD_NAV_ARC_WAYPOINT; literal, venv pymavlink predates it
+        SPL = mavutil.mavlink.MAV_CMD_NAV_SPLINE_WAYPOINT
+        RTL = mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH
+
+        BOT = 30.0
+        TOP = 124.25
+
+        # 180 deg arc, radius 30 (94.25 m of arc) climbing 94.25 m -> 45 deg helix.
+        # Arc start tangent is due West at both ends, so the leg before the curve runs
+        # from E=+60 to E=0 and enters tangentially -- no entry corner to pollute the A/B.
+        # The waypoint before an arc must NOT carry a delay: set_next_wp() early-returns on
+        # p1>0 and the arc angle only reaches wpnav via that preload, so a delay silently
+        # degrades the arc to a straight line.
+        cases = [
+            ("ARC_CLIMB", 4, 5, [
+                (TO, 0, 0, BOT),
+                (WP, 100, 60, BOT),
+                (WP, 100, 0, BOT),
+                (ARC, 160, 0, TOP, {"p1": 180}),
+                (RTL, 0, 0, 0),
+            ]),
+            ("SPLINE_CLIMB", 4, 8, [
+                (TO, 0, 0, BOT),
+                (WP, 100, 60, BOT),
+                (WP, 100, 0, BOT),
+                (SPL, 108.79, -21.21, 53.56),
+                (SPL, 130.0, -30.0, 77.12),
+                (SPL, 151.21, -21.21, 100.69),
+                (SPL, 160.0, 0.0, TOP),
+                (RTL, 0, 0, 0),
+            ]),
+            ("ARC_DIVE", 4, 5, [
+                (TO, 0, 0, TOP),
+                (WP, 160, 60, TOP),
+                (WP, 160, 0, TOP),
+                (ARC, 100, 0, BOT, {"p1": -180}),
+                (RTL, 0, 0, 0),
+            ]),
+            ("SPLINE_DIVE", 4, 8, [
+                (TO, 0, 0, TOP),
+                (WP, 160, 60, TOP),
+                (WP, 160, 0, TOP),
+                (SPL, 151.21, -21.21, 100.69),
+                (SPL, 130.0, -30.0, 77.12),
+                (SPL, 108.79, -21.21, 53.56),
+                (SPL, 100.0, 0.0, BOT),
+                (RTL, 0, 0, 0),
+            ]),
+        ]
+
+        for (name, seq_start, seq_end, items) in cases:
+            self.start_subtest("AB case %s" % name)
+            self.change_mode('STABILIZE')
+            self.context_push()
+            self.start_flying_simple_relhome_mission(items)
+            self.wait_current_waypoint(seq_start, timeout=180)
+            t0 = self.get_sim_time()
+            self.progress("ABMARK %s START %.3f" % (name, t0))
+            self.wait_current_waypoint(seq_end, timeout=300)
+            t1 = self.get_sim_time()
+            self.progress("ABMARK %s END %.3f dur=%.3f" % (name, t1, t1 - t0))
+            self.wait_disarmed(timeout=600)
+            self.context_pop()
+
     def WPArcs2(self):
         '''more tests for waypoint arcs'''
         self.set_parameters({
@@ -13430,6 +13512,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.CustomController,
              self.WPArcs,
              self.WPArcs2,
+             self.ArcSplineAB,
         ])
         return ret
 
