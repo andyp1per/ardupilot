@@ -1174,10 +1174,17 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
         cmd.content.location.loiter_xtrack = (packet.param4 > 0); // 0 to xtrack from center of waypoint, 1 to xtrack from tangent exit location
         break;
 
-    case MAV_CMD_NAV_ARC_WAYPOINT:                      // MAV ID: 36
+    case MAV_CMD_NAV_ARC_WAYPOINT: {                    // MAV ID: 36
         cmd.content.location.loiter_ccw = is_negative(packet.param1); // re-use loiter_cw for arc direction
         cmd.p1 = fabsf(packet.param1);                  // arc angle in deg
+        // arc plane rotation as a quarter turn index, see get_arc_axis_rot_rad(); NaN means not set
+        const float arc_rot_idx = isnan(packet.param2) ? 0.0f : roundf(packet.param2 * (1.0f / 45.0f));
+        if (is_negative(arc_rot_idx) || arc_rot_idx > 3.0f) {
+            return MAV_MISSION_INVALID_PARAM2;
+        }
+        cmd.type_specific_bits = uint8_t(arc_rot_idx);
         break;
+    }
 
     case MAV_CMD_NAV_SPLINE_WAYPOINT:                   // MAV ID: 82
 #if APM_BUILD_TYPE(APM_BUILD_ArduPlane)
@@ -1701,6 +1708,7 @@ bool AP_Mission::mission_cmd_to_mavlink_int(const AP_Mission::Mission_Command& c
     case MAV_CMD_NAV_ARC_WAYPOINT: {                    // MAV ID: 36
         const float sign = cmd.content.location.loiter_ccw == 0 ? 1.0 : -1.0; // Mavlink command specifies positiive is CW
         packet.param1 = float(cmd.p1) * sign;
+        packet.param2 = float(cmd.type_specific_bits & 0x3) * 45.0;
         break;
     }
     case MAV_CMD_NAV_SPLINE_WAYPOINT:                   // MAV ID: 82

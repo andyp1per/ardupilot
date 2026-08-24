@@ -439,10 +439,26 @@ public:
         /*
           return the arc angle in radians for an ARC_WAYPOINT command
           this has special handling for arc waypoints using cmd.p1 and loiter_ccw
+          positive is a clockwise arc, which bulges left of the chord in the horizontal
+          plane and above it in the vertical plane, whichever way the chord runs
          */
         float get_arc_angle_rad(void) const {
             const float sign = (content.location.loiter_ccw == 0) ? 1.0f : -1.0f;
             return radians(float(p1) * sign);
+        }
+
+        /*
+          return the arc plane rotation in radians for an ARC_WAYPOINT command
+          the plane is rotated from horizontal about the chord's ground track, so 0 is
+          the horizontal arc that has always been flown and PI/2 puts the arc in the
+          vertical plane through the chord.  only two bits of type_specific_bits reach
+          storage, so the angle is held as a quarter turn index: param2 is snapped to
+          the nearest 45 degrees and must lie in 0 to 135, anything else is rejected.
+          finer resolution would not need a mission format change: the arc angle only
+          uses 9 bits of p1, so the high 7 bits could carry the rotation instead
+         */
+        float get_arc_axis_rot_rad(void) const {
+            return radians(float(type_specific_bits & 0x3) * 45.0f);
         }
     };
 
