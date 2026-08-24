@@ -531,6 +531,14 @@ public:
     // Returns the maximum allowed roll/pitch angle in radians.
     float get_lean_angle_max_rad() const;
 
+    // Permits the commanded thrust vector to tilt past 90 degrees for one cycle. Only the
+    // vehicle knows whether it is near the ground, and the permission is consumed by the
+    // vertical controller, so it must be renewed every loop.
+    void set_inverted_thrust_allowed(bool allowed) { _inverted_thrust_allowed = allowed; }
+
+    // Returns true if the commanded thrust vector is currently permitted to point downward.
+    bool inverted_thrust_active() const { return _thrust_inverted_active; }
+
     // Overrides the maximum allowed roll/pitch angle in radians.
     // A value of 0 reverts to using the ANGLE_MAX parameter.
     void set_lean_angle_max_rad(float angle_max_rad) { _angle_max_override_rad = angle_max_rad; }
@@ -662,6 +670,9 @@ protected:
     // Converts horizontal acceleration (m/s²) to roll/pitch lean angles in radians.
     void accel_NE_mss_to_lean_angles_rad(float accel_n_mss, float accel_e_mss, float& roll_target_rad, float& pitch_target_rad) const;
 
+    // Updates whether the vehicle is allowed to point its thrust downward this cycle.
+    void update_inverted_thrust_state(float throttle_up);
+
     // Converts current target lean angles to NE acceleration in m/s².
     void lean_angles_to_accel_NE_mss(float& accel_n_mss, float& accel_e_mss) const;
 
@@ -717,6 +728,15 @@ protected:
     AP_Float        _lean_angle_max_deg;    // Maximum autopilot commanded angle (in degrees). Set to zero for Angle Max
     AP_Float        _shaping_jerk_ne_msss;  // Jerk limit of the ne kinematic path generation in m/s³ used to determine how quickly the aircraft varies the acceleration target
     AP_Float        _shaping_jerk_d_msss;   // Jerk limit of the u kinematic path generation in m/s³ used to determine how quickly the aircraft varies the acceleration target
+    AP_Int8         _thrust_vector_enabled; // allow the commanded thrust vector to tilt past 90 degrees when the path demands more than free fall
+    AP_Float        _thrust_vector_min_height_m; // minimum height above the EKF origin at which inverted thrust is permitted
+
+    // inverted thrust state
+    Vector3f        _thrust_vector_ned_mss;     // specific thrust the vehicle should produce, NED, used when _thrust_vector_enabled
+    bool            _inverted_thrust_allowed;   // vehicle permits inverted thrust; refreshed every loop by the vehicle
+    bool            _thrust_inverted_active;    // inverted thrust regime is currently armed
+    uint32_t        _thrust_invert_arm_ms;      // time the path first demanded more than free fall
+    uint32_t        _thrust_invert_upright_ms;  // time the vertical axis last wanted thrust up
     AC_P_2D         _p_pos_ne_m;            // XY axis position controller to convert target distance (m) to target velocity (m/s)
     AC_P_1D         _p_pos_d_m;             // Z axis position controller to convert target altitude (m) to target climb rate (m/s)
     AC_PID_2D       _pid_vel_ne_m;          // XY axis velocity controller to convert target velocity (m/s) to target acceleration (m/s²)
