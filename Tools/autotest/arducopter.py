@@ -661,6 +661,62 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.wait_disarmed(timeout=600)
             self.context_pop()
 
+    def WPArcVertical(self):
+        '''arcs that survive a delay, and arcs placed in the vertical plane'''
+        self.set_parameters({
+            "AUTO_OPTIONS": 3,
+            "WP_SPD": 15,
+            "WP_SPD_UP": 15,
+            "WP_SPD_DN": 15,
+            "WP_ACC": 10,
+            "WP_ACC_CNR": 20,
+            "WP_ACC_Z": 10,
+            "WP_JERK": 20,
+            "ATC_ANGLE_MAX": 80,
+            "PSC_TVEC_EN": 1,
+        })
+        self.reboot_sitl()
+
+        WP = mavutil.mavlink.MAV_CMD_NAV_WAYPOINT
+        TO = mavutil.mavlink.MAV_CMD_NAV_TAKEOFF
+        ARC = 36  # MAV_CMD_NAV_ARC_WAYPOINT; literal, venv pymavlink predates it
+        RTL = mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH
+
+        # An arc whose predecessor carries a delay is not preloaded by set_next_wp(), so
+        # before do_nav_wp passed the geometry on it silently flew the chord instead.  A
+        # 180 degree arc from (100,0) to (160,0) bulges 30 m west, through (130,-30).
+        self.start_subtest("arc after a delayed waypoint must still arc")
+        self.change_mode('STABILIZE')
+        self.context_push()
+        self.start_flying_simple_relhome_mission([
+            (TO, 0, 0, 40),
+            (WP, 100, 0, 40, {"p1": 2}),
+            (ARC, 160, 0, 40, {"p1": 180}),
+            (RTL, 0, 0, 0),
+        ])
+        apex = self.offset_location_ne(self.home_position_as_mav_location(), 130, -30)
+        self.wait_location(apex, accuracy=10, timeout=180)
+        self.wait_disarmed(timeout=600)
+        self.context_pop()
+
+        # param2 rotates the arc plane about the chord.  At 90 degrees a 180 degree arc
+        # over a 40 m chord is a half circle in the vertical plane, climbing one radius
+        # (20 m) above the chord.  At 15 m/s the apex needs v^2/r = 11.3 m/s/s of
+        # centripetal acceleration pointing down, which is more than gravity, so the
+        # vehicle has to invert to fly it.
+        self.start_subtest("vertical arc climbs one radius above the chord")
+        self.change_mode('STABILIZE')
+        self.context_push()
+        self.start_flying_simple_relhome_mission([
+            (TO, 0, 0, 60),
+            (WP, 100, 0, 60),
+            (ARC, 140, 0, 60, {"p1": 180, "p2": 90}),
+            (RTL, 0, 0, 0),
+        ])
+        self.wait_altitude(76, 90, relative=True, timeout=180)
+        self.wait_disarmed(timeout=600)
+        self.context_pop()
+
     def WPArcs2(self):
         '''more tests for waypoint arcs'''
         self.set_parameters({
@@ -13510,6 +13566,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.ArcSplineAB,
              self.ArcSplineAggro,
              self.ArcSplineAggroTV,
+             self.WPArcVertical,
         ])
         return ret
 
