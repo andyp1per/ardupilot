@@ -16413,7 +16413,6 @@ RTL_ALT_M 111
         self.wait_mode('RTL')
         self.wait_disarmed()
 
-
     def setup_RealFlight_vehicle(self, model, home):
         '''
         Restart the SITL for RealFlight. RealFlight must already be running and
