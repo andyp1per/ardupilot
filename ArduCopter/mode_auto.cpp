@@ -449,7 +449,7 @@ void ModeAuto::takeoff_start(const Location& dest_loc)
 }
 
 // auto_wp_start - initialises waypoint controller to implement flying to a particular destination
-bool ModeAuto::wp_start(const Location& dest_loc)
+bool ModeAuto::wp_start(const Location& dest_loc, float arc_rad, float arc_axis_rot_rad)
 {
     // init wpnav and set origin if transitioning from takeoff
     if (!wp_nav->is_active()) {
@@ -472,7 +472,7 @@ bool ModeAuto::wp_start(const Location& dest_loc)
         }
     }
 
-    if (!wp_nav->set_wp_destination_loc(dest_loc)) {
+    if (!wp_nav->set_wp_destination_loc(dest_loc, arc_rad, arc_axis_rot_rad)) {
         return false;
     }
 
@@ -1569,7 +1569,11 @@ void ModeAuto::do_nav_wp(const AP_Mission::Mission_Command& cmd)
 
     // get waypoint's location from command and send to wp_nav
     Location target_loc;
-    if (!get_loc_from_cmd(cmd, default_loc, target_loc) || !wp_start(target_loc)) {
+    // an arc reaching do_nav_wp as the current command must carry its own geometry: it is
+    // only preloaded by set_next_wp() when the preceding command allowed a fast waypoint
+    const float arc_rad = (cmd.id == MAV_CMD_NAV_ARC_WAYPOINT) ? cmd.get_arc_angle_rad() : 0.0;
+    const float arc_axis_rot_rad = (cmd.id == MAV_CMD_NAV_ARC_WAYPOINT) ? cmd.get_arc_axis_rot_rad() : 0.0;
+    if (!get_loc_from_cmd(cmd, default_loc, target_loc) || !wp_start(target_loc, arc_rad, arc_axis_rot_rad)) {
         // failure to get the location or set next destination can only be because of missing terrain data or unhealthy rangefinder
         copter.failsafe_terrain_on_event();
         return;
@@ -1648,8 +1652,7 @@ bool ModeAuto::set_next_wp(const AP_Mission::Mission_Command& current_cmd, const
             !get_loc_from_cmd(next_cmd, dest_loc, next_dest_loc)) {
             return false;
         }
-        const float arc_angle_rad = next_cmd.get_arc_angle_rad();
-        return wp_nav->set_wp_destination_next_loc(next_dest_loc, arc_angle_rad);
+        return wp_nav->set_wp_destination_next_loc(next_dest_loc, next_cmd.get_arc_angle_rad(), next_cmd.get_arc_axis_rot_rad());
     }
     case MAV_CMD_NAV_LOITER_TURNS:
     case MAV_CMD_NAV_RETURN_TO_LAUNCH:
