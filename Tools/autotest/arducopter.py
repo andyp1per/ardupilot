@@ -16471,6 +16471,65 @@ RTL_ALT_M 111
         self.change_mode("LAND")
         self.wait_disarmed(timeout=120)
 
+    def RealFlightInvertedLoop(self, model, home):
+        '''
+        Fly the vertical loop in RealFlight. SITL's multirotor model is simple
+        enough that an inverted manoeuvre there proves the controller maths and
+        little else; RealFlight brings real drag, prop and inertia behaviour, so
+        this is the cross-check that the thrust authority and the recovery are
+        actually there.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+
+        # full rate attitude and control logging, this test is analysed afterwards
+        self.set_parameters({
+            "LOG_BITMASK": 0x10FFFF,
+        })
+        self.setup_RealFlight_vehicle(model, home)
+
+        # the model defaults are applied by the setup above, so our limits go on after it
+        self.set_parameters({
+            "AUTO_OPTIONS": 3,
+            "WP_SPD": 15,
+            "WP_SPD_UP": 15,
+            "WP_SPD_DN": 15,
+            "WP_ACC": 10,
+            "WP_ACC_CNR": 20,
+            "WP_ACC_Z": 10,
+            # jerk is the binding constraint on a leg this short, not acceleration
+            "WP_JERK": 20,
+            "ATC_ANGLE_MAX": 80,
+            "PSC_TVEC_EN": 1,
+        })
+
+        WP = mavutil.mavlink.MAV_CMD_NAV_WAYPOINT
+        TO = mavutil.mavlink.MAV_CMD_NAV_TAKEOFF
+        ARC = 36  # MAV_CMD_NAV_ARC_WAYPOINT; literal, venv pymavlink predates it
+        RTL = mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH
+
+        # the same closed 40 m circle WPArcLoop flies: two 180 degree arcs in the
+        # vertical plane sharing a chord and bulging to opposite sides, entered from a
+        # vertical climb so the join is tangential
+        self.start_flying_simple_relhome_mission([
+            (TO, 0, 0, 30),
+            (WP, 100, 0, 30),
+            (WP, 100, 0, 60),
+            (ARC, 140, 0, 60, {"p1": 180, "p2": 90}),
+            (ARC, 100, 0, 60, {"p1": -180, "p2": 90}),
+            (RTL, 0, 0, 0),
+        ])
+        # tolerances are looser than the SITL test: the point of this run is the log,
+        # and RealFlight's drag will not put the apex in exactly the same place
+        self.wait_altitude(72, 94, relative=True, timeout=300)
+        self.progress("ABMARK LOOP_TOP")
+        self.wait_altitude(28, 48, relative=True, timeout=180)
+        self.progress("ABMARK LOOP_BOTTOM")
+        # climbing back to the chord is what separates a closed loop from a dive
+        self.wait_altitude(52, 68, relative=True, timeout=180)
+        self.progress("ABMARK LOOP_CLOSED")
+        self.wait_disarmed(timeout=600)
+
     def LUAConfigProfile(self):
         '''test the config_profiles.lua example script'''
         self.customise_SITL_commandline(
@@ -16870,6 +16929,10 @@ return update, 1000
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
+            Test(self.RealFlightInvertedLoop, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             self.BrakeZ,
             self.MAV_CMD_DO_FLIGHTTERMINATION,
             self.MAV_CMD_DO_LAND_START,
@@ -17000,7 +17063,9 @@ return update, 1000
             "RTLStoppingDistanceSpeed": "Currently fails due to vehicle going off-course",
         }
         if not self.realflight_address:
-            ret["RealFlightHover"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            why = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightHover"] = why
+            ret["RealFlightInvertedLoop"] = why
         return ret
 
 
