@@ -589,6 +589,78 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.wait_disarmed(timeout=600)
             self.context_pop()
 
+    def ArcSplineAggro(self):
+        '''push a diving arc past 1g of demanded downward acceleration'''
+        self.aggro_dive_cases(0)
+
+    def ArcSplineAggroTV(self):
+        '''same dive with thrust vector control, which may tilt past 90 degrees'''
+        self.aggro_dive_cases(1)
+
+    def aggro_dive_cases(self, tvec):
+        self.set_parameters({
+            "PSC_TVEC_EN": tvec,
+            "AUTO_OPTIONS": 3,
+            "WP_SPD": 30,
+            "WP_SPD_UP": 20,
+            "WP_SPD_DN": 30,
+            "WP_ACC": 10,
+            "WP_ACC_CNR": 20,
+            "WP_ACC_Z": 15,
+            # WP_JERK defaults to 1 m/s/s/s, which ramps the tangential accel so
+            # slowly the leg is over before it develops.  Raise it so the demanded
+            # vertical acceleration actually reaches the WP_ACC_Z limit.
+            "WP_JERK": 30,
+            "ATC_ANGLE_MAX": 80,
+        })
+        self.reboot_sitl()
+
+        WP = mavutil.mavlink.MAV_CMD_NAV_WAYPOINT
+        TO = mavutil.mavlink.MAV_CMD_NAV_TAKEOFF
+        ARC = 36  # MAV_CMD_NAV_ARC_WAYPOINT; literal, venv pymavlink predates it
+        SPL = mavutil.mavlink.MAV_CMD_NAV_SPLINE_WAYPOINT
+        RTL = mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH
+
+        # 180 deg arc, radius 10 (31.4 m of arc) descending 180 m: an 80 deg path
+        # angle.  WP_ACC_Z 15 puts the arc's tangential acceleration at 15 m/s/s
+        # along a path that is 98.5% vertical, so it asks for 1.51g downward -- more
+        # than free fall, which needs thrust pointing out of the bottom of the
+        # airframe.  The spline is the control: its TANGENTIAL_ACCEL_SCALER of 0.5
+        # holds the same geometry to 0.76g, so it never makes the request.
+        cases = [
+            ("ARC_DIVE_STEEP", 4, 5, [
+                (TO, 0, 0, 200),
+                (WP, 120, 60, 200),
+                (WP, 120, 0, 200),
+                (ARC, 100, 0, 20, {"p1": -180}),
+                (RTL, 0, 0, 0),
+            ]),
+            ("SPLINE_DIVE_STEEP", 4, 8, [
+                (TO, 0, 0, 200),
+                (WP, 120, 60, 200),
+                (WP, 120, 0, 200),
+                (SPL, 117.07, -7.07, 155.0),
+                (SPL, 110.0, -10.0, 110.0),
+                (SPL, 102.93, -7.07, 65.0),
+                (SPL, 100.0, 0.0, 20.0),
+                (RTL, 0, 0, 0),
+            ]),
+        ]
+
+        for (name, seq_start, seq_end, items) in cases:
+            self.start_subtest("aggro case %s" % name)
+            self.change_mode('STABILIZE')
+            self.context_push()
+            self.start_flying_simple_relhome_mission(items)
+            self.wait_current_waypoint(seq_start, timeout=300)
+            t0 = self.get_sim_time()
+            self.progress("ABMARK %s START %.3f" % (name, t0))
+            self.wait_current_waypoint(seq_end, timeout=300)
+            t1 = self.get_sim_time()
+            self.progress("ABMARK %s END %.3f dur=%.3f" % (name, t1, t1 - t0))
+            self.wait_disarmed(timeout=600)
+            self.context_pop()
+
     def WPArcs2(self):
         '''more tests for waypoint arcs'''
         self.set_parameters({
@@ -13436,6 +13508,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.WPArcs,
              self.WPArcs2,
              self.ArcSplineAB,
+             self.ArcSplineAggro,
+             self.ArcSplineAggroTV,
         ])
         return ret
 
