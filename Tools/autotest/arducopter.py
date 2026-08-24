@@ -717,6 +717,53 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_disarmed(timeout=600)
         self.context_pop()
 
+    def WPArcLoop(self):
+        '''fly a complete vertical circle as two chained vertical arcs'''
+        self.set_parameters({
+            "AUTO_OPTIONS": 3,
+            "WP_SPD": 15,
+            "WP_SPD_UP": 15,
+            "WP_SPD_DN": 15,
+            "WP_ACC": 10,
+            "WP_ACC_CNR": 20,
+            "WP_ACC_Z": 10,
+            "WP_JERK": 20,
+            "ATC_ANGLE_MAX": 80,
+            "PSC_TVEC_EN": 1,
+        })
+        self.reboot_sitl()
+
+        WP = mavutil.mavlink.MAV_CMD_NAV_WAYPOINT
+        TO = mavutil.mavlink.MAV_CMD_NAV_TAKEOFF
+        ARC = 36  # MAV_CMD_NAV_ARC_WAYPOINT; literal, venv pymavlink predates it
+        RTL = mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH
+
+        # Two 180 degree arcs in the vertical plane sharing a chord but bulging to
+        # opposite sides trace one 40 m circle centred at (120, 0, 60).  Both joins are
+        # tangential: the first exits straight down and the second enters the same way.
+        # The leg into the loop is a vertical climb so the entry is tangential too.
+        # Over the top the centripetal acceleration points down and exceeds gravity, so
+        # the vehicle inverts; at the bottom it points up and needs about 2.1g of thrust.
+        self.change_mode('STABILIZE')
+        self.context_push()
+        self.start_flying_simple_relhome_mission([
+            (TO, 0, 0, 30),
+            (WP, 100, 0, 30),
+            (WP, 100, 0, 60),
+            (ARC, 140, 0, 60, {"p1": 180, "p2": 90}),
+            (ARC, 100, 0, 60, {"p1": -180, "p2": 90}),
+            (RTL, 0, 0, 0),
+        ])
+        self.wait_altitude(76, 92, relative=True, timeout=240)
+        self.progress("ABMARK LOOP_TOP")
+        self.wait_altitude(30, 44, relative=True, timeout=120)
+        self.progress("ABMARK LOOP_BOTTOM")
+        # climbing back to the chord is what distinguishes a closed loop from a dive
+        self.wait_altitude(55, 65, relative=True, timeout=120)
+        self.progress("ABMARK LOOP_CLOSED")
+        self.wait_disarmed(timeout=600)
+        self.context_pop()
+
     def WPArcs2(self):
         '''more tests for waypoint arcs'''
         self.set_parameters({
@@ -13644,6 +13691,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.ArcSplineAggro,
              self.ArcSplineAggroTV,
              self.WPArcVertical,
+             self.WPArcLoop,
         ])
         return ret
 
