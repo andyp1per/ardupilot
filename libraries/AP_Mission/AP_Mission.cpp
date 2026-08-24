@@ -1177,6 +1177,10 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
     case MAV_CMD_NAV_ARC_WAYPOINT:                      // MAV ID: 36
         cmd.content.location.loiter_ccw = is_negative(packet.param1); // re-use loiter_cw for arc direction
         cmd.p1 = fabsf(packet.param1);                  // arc angle in deg
+        // Arc plane rotation about the chord, 0 horizontal and 90 vertical.  Packed
+        // storage leaves only type_specific_bit_0 and _1 for this command, so the angle
+        // is snapped to the nearest 45 degrees and held as a quarter turn index.
+        cmd.type_specific_bits = uint8_t(constrain_float(roundf(fabsf(packet.param2) / 45.0f), 0, 3));
         break;
 
     case MAV_CMD_NAV_SPLINE_WAYPOINT:                   // MAV ID: 82
@@ -1701,6 +1705,7 @@ bool AP_Mission::mission_cmd_to_mavlink_int(const AP_Mission::Mission_Command& c
     case MAV_CMD_NAV_ARC_WAYPOINT: {                    // MAV ID: 36
         const float sign = cmd.content.location.loiter_ccw == 0 ? 1.0 : -1.0; // Mavlink command specifies positiive is CW
         packet.param1 = float(cmd.p1) * sign;
+        packet.param2 = float(cmd.type_specific_bits & 0x3) * 45.0;
         break;
     }
     case MAV_CMD_NAV_SPLINE_WAYPOINT:                   // MAV ID: 82

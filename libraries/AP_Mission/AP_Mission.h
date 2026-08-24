@@ -444,6 +444,17 @@ public:
             const float sign = (content.location.loiter_ccw == 0) ? 1.0f : -1.0f;
             return radians(float(p1) * sign);
         }
+
+        /*
+          return the arc plane rotation in radians for an ARC_WAYPOINT command
+          the plane is rotated about the chord from horizontal, so 0 is the horizontal
+          arc that has always been flown and PI/2 puts the arc in the vertical plane.
+          only two bits of type_specific_bits reach storage, so the angle is held as a
+          quarter turn index and param2 is snapped to the nearest 45 degrees
+         */
+        float get_arc_axis_rot_rad(void) const {
+            return radians(float(type_specific_bits & 0x3) * 45.0f);
+        }
     };
 
 
