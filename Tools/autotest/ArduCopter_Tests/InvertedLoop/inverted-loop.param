@@ -1,0 +1,31 @@
+# Inverted vertical loop test - deltas from default only
+# r = 20 m, v = 20 m/s -> 2.04g at the apex, 1.04g of INVERTED thrust
+# Verified in SITL and RealFlight; see arc-fixes-4.7.1
+#
+# thrust budget at MOT_THST_HOVER 0.162 (6.17:1):
+#   apex inverted 1.04g = 17%, side 2.27g = 37%, bottom 3.04g = 49% of available
+
+# --- enables the inverted thrust regime (default 0 = off, nothing changes) ---
+PSC_TVEC_EN,1
+# minimum height for inverted thrust. ABOVE EKF ORIGIN, NOT TERRAIN.
+PSC_TVEC_ALT,30
+
+# --- speed. all three must match: a vertical arc is bounded by every one of them ---
+WP_SPD,20
+WP_SPD_UP,20
+WP_SPD_DN,20
+
+# --- acceleration ---
+WP_ACC,15
+WP_ACC_Z,15
+# must clear v^2/r = 20.0 or the arc speed cap throttles the leg below WP_SPD
+WP_ACC_CNR,30
+
+# --- jerk. default is 1.0 and the acceleration never develops within the leg. ---
+# only read by calc_scurve_jerk_and_snap() from wp_and_spline_init_m(), so this
+# must be set BEFORE entering AUTO - changing it mid-mission does nothing.
+WP_JERK,30
+
+# --- lean angle. the sides of the loop need 63.9 deg; the apex is exempt because
+# the inverted regime skips limit_accel_xy, but the sides are not ---
+ATC_ANGLE_MAX,75
