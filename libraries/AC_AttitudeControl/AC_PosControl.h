@@ -525,6 +525,12 @@ public:
     // acceleration target with 1g up, or with the vertical thrust demand when PSC_TVEC_EN allows it.
     Vector3f get_thrust_vector() const;
 
+    // Returns true when the thrust vector is tilted far enough that a world-frame heading
+    // target is no longer meaningful and a rate about the thrust axis should be used instead.
+    // Past that tilt the heading changes as a consequence of rotating about the pitch axis,
+    // so an absolute target fights the rotation already carrying the nose around.
+    bool thrust_vector_heading_degenerate() const;
+
     // Returns bearing from current position to position target in radians.
     // 0 = North, positive = clockwise.
     float get_bearing_to_target_rad() const;
@@ -679,6 +685,9 @@ protected:
     // Updates whether the vehicle is allowed to point its thrust downward this cycle.
     void update_inverted_thrust_state(float throttle_up);
 
+    // Updates the heading-degenerate flag from the thrust tilt, with hysteresis.
+    void update_heading_degenerate();
+
     // Converts current target lean angles to NE acceleration in m/s².
     void lean_angles_to_accel_NE_mss(float& accel_n_mss, float& accel_e_mss) const;
 
@@ -743,6 +752,7 @@ protected:
     bool            _thrust_inverted_active;    // inverted thrust regime is currently armed
     uint32_t        _thrust_invert_arm_ms;      // time the path first demanded more than free fall
     uint32_t        _thrust_invert_upright_ms;  // time the vertical axis last wanted thrust up
+    bool            _heading_degenerate;        // thrust tilt has passed the point where a world-frame heading target is meaningful
     AC_P_2D         _p_pos_ne_m;            // XY axis position controller to convert target distance (m) to target velocity (m/s)
     AC_P_1D         _p_pos_d_m;             // Z axis position controller to convert target altitude (m) to target climb rate (m/s)
     AC_PID_2D       _pid_vel_ne_m;          // XY axis velocity controller to convert target velocity (m/s) to target acceleration (m/s²)
