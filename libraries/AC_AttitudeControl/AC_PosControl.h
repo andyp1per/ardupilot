@@ -661,6 +661,13 @@ public:
 
 protected:
 
+    // Returns the symmetric down-axis acceleration limit used by the input shaping: an
+    // asymmetric pair lets the shaping build vertical momentum at one limit that it can only
+    // shed at the other. Held below GRAVITY_MSS so the shaping's own correction never asks for
+    // more than free fall; an external acceleration feedforward passed through unbounded still
+    // can, and inverted thrust arming does not distinguish the two.
+    float shaping_accel_max_d_mss(float accel_max_d_mss) const;
+
     // Calculates vertical throttle using vibration-resistant feedforward estimation.
     // Returns throttle output using manual feedforward gain for vibration compensation mode.
     // Integrator is adjusted using velocity error when PID is being overridden.
