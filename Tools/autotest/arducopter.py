@@ -764,6 +764,73 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_disarmed(timeout=600)
         self.context_pop()
 
+    def ArcSplineYawBehaviour(self):
+        '''arcs and splines must fly correctly under every WP_YAW_BEHAVIOR'''
+        # LOOK_AT_NEXT_WP asks for an absolute world-frame heading, which only means
+        # anything while the vehicle is near upright.  Nothing else in the suite varies
+        # WP_YAW_BEHAVIOR over a curved path, so a change to the heading source can
+        # break a vertical manoeuvre, or ordinary upright flight, unnoticed.
+        self.set_parameters({
+            "AUTO_OPTIONS": 3,
+            "WP_SPD": 20,
+            "WP_SPD_UP": 20,
+            "WP_SPD_DN": 20,
+            "WP_ACC": 10,
+            "WP_ACC_CNR": 25,  # must clear v^2/r = 20 or the arc speed cap throttles the leg
+            "WP_ACC_Z": 10,
+            "WP_JERK": 20,
+            "ATC_ANGLE_MAX": 80,
+            "PSC_TVEC_EN": 1,
+        })
+        self.reboot_sitl()
+
+        WP = mavutil.mavlink.MAV_CMD_NAV_WAYPOINT
+        TO = mavutil.mavlink.MAV_CMD_NAV_TAKEOFF
+        ARC = 36  # MAV_CMD_NAV_ARC_WAYPOINT; literal, venv pymavlink predates it
+        SPL = mavutil.mavlink.MAV_CMD_NAV_SPLINE_WAYPOINT
+        RTL = mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH
+
+        # The loop inverts over the top, so it is the case that exercises the heading
+        # source where a world-frame angle stops being meaningful.
+        loop = [
+            (TO, 0, 0, 30),
+            (WP, 100, 0, 30),
+            (WP, 100, 0, 60),
+            (ARC, 140, 0, 60, {"p1": 180, "p2": 90}),
+            (ARC, 100, 0, 60, {"p1": -180, "p2": 90}),
+            (RTL, 0, 0, 0),
+        ]
+        # The spline stays upright throughout, so it is the regression half: the heading
+        # source must be untouched for ordinary curved flight.
+        spline = [
+            (TO, 0, 0, 30),
+            (WP, 100, 60, 30),
+            (WP, 100, 0, 30),
+            (SPL, 108.79, -21.21, 45.0),
+            (SPL, 130.0, -30.0, 60.0),
+            (SPL, 151.21, -21.21, 75.0),
+            (SPL, 160.0, 0.0, 90.0),
+            (RTL, 0, 0, 0),
+        ]
+
+        # 0 is WP_YAW_BEHAVIOR_NONE, 2 is LOOK_AT_NEXT_WP_EXCEPT_RTL and the default
+        for behaviour in 0, 2:
+            for name, mission, inverts in [("arc loop", loop, True),
+                                           ("spline helix", spline, False)]:
+                self.start_subtest("%s with WP_YAW_BEHAVIOR=%u" % (name, behaviour))
+                self.set_parameter("WP_YAW_BEHAVIOR", behaviour)
+                self.change_mode('STABILIZE')
+                self.context_push()
+                self.start_flying_simple_relhome_mission(mission)
+                if inverts:
+                    self.wait_altitude(76, 92, relative=True, timeout=240)
+                    self.wait_altitude(30, 44, relative=True, timeout=120)
+                    self.wait_altitude(55, 65, relative=True, timeout=120)
+                else:
+                    self.wait_altitude(85, 95, relative=True, timeout=240)
+                self.wait_disarmed(timeout=600)
+                self.context_pop()
+
     def WPArcs2(self):
         '''more tests for waypoint arcs'''
         self.set_parameters({
@@ -13692,6 +13759,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.ArcSplineAggroTV,
              self.WPArcVertical,
              self.WPArcLoop,
+             self.ArcSplineYawBehaviour,
         ])
         return ret
 
