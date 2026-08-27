@@ -357,6 +357,14 @@ AC_AttitudeControl::HeadingCommand Mode::AutoYaw::get_heading()
             heading.heading_mode = AC_AttitudeControl::HeadingMode::Rate_Only;
             break;
         case Mode::LOOK_AT_NEXT_WP:
+            // a world-frame heading stops meaning anything once the thrust vector is steeply
+            // tilted, so fall back to the path's turn rate through a vertical manoeuvre
+            if (copter.pos_control->thrust_vector_heading_degenerate()) {
+                heading.heading_mode = AC_AttitudeControl::HeadingMode::Rate_Only;
+            } else {
+                heading.heading_mode = AC_AttitudeControl::HeadingMode::Angle_And_Rate;
+            }
+            break;
         case Mode::ROI:
         case Mode::FIXED:
         case Mode::LOOK_AHEAD:
