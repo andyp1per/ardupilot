@@ -160,14 +160,14 @@ public:
     // Sets the current waypoint destination using a Location object.
     // Converts global coordinates to NED position and sets destination.
     // arc_rad specifies the signed arc angle in radians for an ARC_WAYPOINT segment (0 for straight path)
-    // arc_axis_rot_rad rotates the arc plane about the chord (0 horizontal, PI/2 vertical)
+    // arc_axis_rot_rad rotates the arc plane about the chord's ground track (0 horizontal, PI/2 vertical)
     // Returns false if conversion fails (e.g. missing terrain data).
     bool set_wp_destination_loc(const Location& destination, float arc_rad = 0.0, float arc_axis_rot_rad = 0.0);
 
     // Sets the next waypoint destination using a Location object.
     // Converts global coordinates to NED position and preloads the trajectory.
     // arc_rad specifies the signed arc angle in radians for an ARC_WAYPOINT segment (0 for straight path)
-    // arc_axis_rot_rad rotates the arc plane about the chord (0 horizontal, PI/2 vertical)
+    // arc_axis_rot_rad rotates the arc plane about the chord's ground track (0 horizontal, PI/2 vertical)
     // Returns false if conversion fails or terrain data is unavailable.
     bool set_wp_destination_next_loc(const Location& destination, float arc_rad = 0.0, float arc_axis_rot_rad = 0.0);
 
@@ -189,7 +189,7 @@ public:
     // If `is_terrain_alt` is true, altitude is interpreted as height above terrain.
     // Reinitializes the current leg if interrupted, updates origin, and computes trajectory.
     // arc_rad specifies the signed arc angle in radians for an ARC_WAYPOINT segment (0 for straight path)
-    // arc_axis_rot_rad rotates the arc plane about the chord (0 horizontal, PI/2 vertical)
+    // arc_axis_rot_rad rotates the arc plane about the chord's ground track (0 horizontal, PI/2 vertical)
     // Returns false if terrain offset cannot be determined when required.
     virtual bool set_wp_destination_NED_m(const Vector3p& destination_ned_m, bool is_terrain_alt = false, float arc_rad = 0.0, float arc_axis_rot_rad = 0.0);
 
@@ -198,7 +198,7 @@ public:
     // Calculates trajectory preview for smoother transition into next segment.
     // Updates velocity handoff if previous leg is a spline.
     // arc_rad specifies the signed arc angle in radians for an ARC_WAYPOINT segment (0 for straight path)
-    // arc_axis_rot_rad rotates the arc plane about the chord (0 horizontal, PI/2 vertical)
+    // arc_axis_rot_rad rotates the arc plane about the chord's ground track (0 horizontal, PI/2 vertical)
     bool set_wp_destination_next_NED_m(const Vector3p& destination_ned_m, bool is_terrain_alt = false, float arc_rad = 0.0, float arc_axis_rot_rad = 0.0);
 
     // Computes the horizontal stopping point in NE frame, returned in centimeters.
