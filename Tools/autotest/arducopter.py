@@ -791,13 +791,17 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         RTL = mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH
 
         # The loop inverts over the top, so it is the case that exercises the heading
-        # source where a world-frame angle stops being meaningful.
+        # source where a world-frame angle stops being meaningful.  param1 is the side
+        # of the chord the arc bulges to, above (+) or below (-), so the two lower
+        # quarters are negative and the two upper ones positive.
         loop = [
-            (TO, 0, 0, 30),
-            (WP, 100, 0, 30),
-            (WP, 100, 0, 60),
-            (ARC, 140, 0, 60, {"p1": 180, "p2": 90}),
-            (ARC, 100, 0, 60, {"p1": -180, "p2": 90}),
+            (TO, 0, 0, 40),
+            (WP, 60, 0, 40),
+            (WP, 120, 0, 40),                             # bottom, tangent +North
+            (ARC, 140, 0, 60, {"p1": -90, "p2": 90}),     # up the front
+            (ARC, 120, 0, 80, {"p1": 90, "p2": 90}),      # over the top, INVERTED
+            (ARC, 100, 0, 60, {"p1": 90, "p2": 90}),      # down the back
+            (ARC, 120, 0, 40, {"p1": -90, "p2": 90}),     # back to the bottom
             (RTL, 0, 0, 0),
         ]
         # The spline stays upright throughout, so it is the regression half: the heading
@@ -823,9 +827,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 self.context_push()
                 self.start_flying_simple_relhome_mission(mission)
                 if inverts:
-                    self.wait_altitude(76, 92, relative=True, timeout=240)
-                    self.wait_altitude(30, 44, relative=True, timeout=120)
-                    self.wait_altitude(55, 65, relative=True, timeout=120)
+                    self.wait_altitude(74, 86, relative=True, timeout=240)
+                    self.wait_altitude(34, 46, relative=True, timeout=120)
                 else:
                     self.wait_altitude(85, 95, relative=True, timeout=240)
                 self.wait_disarmed(timeout=600)
