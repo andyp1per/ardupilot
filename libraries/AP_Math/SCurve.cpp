@@ -84,14 +84,23 @@ void SCurve::calculate_track(const Vector3p &origin, const Vector3p &destination
     }
 
     // The helix axis starts at Down, which puts the arc in the horizontal plane, and is
-    // rotated about the chord by arc_axis_rot_rad.  At PI/2 the axis is perpendicular to
-    // the chord and horizontal, so the arc lies in the vertical plane through the chord.
+    // rotated by arc_axis_rot_rad about the chord's ground track, so PI/2 puts the arc in
+    // the vertical plane through the chord.  Rotating about the ground track rather than
+    // the chord itself gives every leg of a figure in one vertical plane the same plane,
+    // which is what lets arcs compose; for a level chord the two are the same vector.
+    // The axis reverses with the ground track, which is what keeps a positive angle on
+    // the same side of the chord (above, for the vertical plane) on every heading.
     Vector3f axis{0.0f, 0.0f, 1.0f};
     if (!is_zero(arc_axis_rot_rad)) {
-        const Vector3f chord_unit = seg_delta.normalized();
+        Vector3f chord_ground = seg_delta;
+        chord_ground.z = 0.0f;
+        // a leg with no ground track has no vertical plane to name, so leave it flat
+        const Vector3f chord_unit = is_positive(chord_ground.length_squared())
+                                        ? chord_ground.normalized()
+                                        : seg_delta.normalized();
         const float ca = cosf(arc_axis_rot_rad);
         const float sa = sinf(arc_axis_rot_rad);
-        // Rodrigues rotation of the Down axis about the chord
+        // Rodrigues rotation of the Down axis about the ground track
         axis = axis * ca + (chord_unit % axis) * sa + chord_unit * ((chord_unit * axis) * (1.0f - ca));
         if (!is_positive(axis.length_squared())) {
             axis = Vector3f{0.0f, 0.0f, 1.0f};
