@@ -23,6 +23,7 @@
 #include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Filesystem/AP_Filesystem.h>
+#include <AP_Filesystem/AP_Filesystem_FATFS.h>
 #include "bouncebuffer.h"
 #include "stm32_util.h"
 
@@ -276,6 +277,22 @@ bool sdcard_init()
             continue;
         }
         hal.console->printf("Successfully mounted SDCard (slowdown=%u)\n", (unsigned)sd_slowdown);
+#if AP_FILESYSTEM_FATFS_ENABLED
+        /*
+          Same call the SDC path makes above, which the MMC-SPI path had
+          never made - so io_size stayed at the 4096 default and the logger
+          synced every 4 KB. Each sync writes the directory entry, the FSINFO
+          sector and one sector per FAT copy as single sector transfers, each
+          paying a whole CMD25 and a card program cycle for 512 bytes: four
+          metadata writes per 4 KB of log, four fifths of everything reaching
+          the card.
+
+          Unlike the SDC path this costs no memory. There the bounce buffer
+          is io_size and has to be paid for out of the log buffer; here the
+          staging buffer is one block, MMC_WRITE_FRAME_SIZE.
+         */
+        AP_Filesystem_FATFS::set_io_size(AP_FATFS_MAX_IO_SIZE);
+#endif
         return true;
     }
 #endif
