@@ -112,8 +112,12 @@ const PIORXDriver::InstanceConfig PIORXDriver::_cfg_table[PIO_NUM_INSTANCES] = {
 extern "C" {
 CH_IRQ_HANDLER(RP_PIO0_IRQ_0_HANDLER);
 CH_IRQ_HANDLER(RP_PIO0_IRQ_1_HANDLER);
+#if PIO_NUM_INSTANCES >= 3
 CH_IRQ_HANDLER(RP_PIO1_IRQ_0_HANDLER);
+#endif
+#if PIO_NUM_INSTANCES >= 4
 CH_IRQ_HANDLER(RP_PIO1_IRQ_1_HANDLER);
+#endif
 } // extern "C" (declarations)
 
 extern "C" {
@@ -132,19 +136,29 @@ CH_IRQ_HANDLER(RP_PIO0_IRQ_1_HANDLER)
     CH_IRQ_EPILOGUE();
 }
 
+/*
+  Gated like the instance table above. Without this a board that instantiates
+  no PIO1 UART still claims both PIO1 vectors, which collides with anything
+  else that owns the block - the OSD scan-out is 31 of PIO1's 32 instruction
+  slots and needs its own vsync interrupt.
+ */
+#if PIO_NUM_INSTANCES >= 3
 CH_IRQ_HANDLER(RP_PIO1_IRQ_0_HANDLER)
 {
     CH_IRQ_PROLOGUE();
     PIORXDriver::_irq_pio1_0();
     CH_IRQ_EPILOGUE();
 }
+#endif
 
+#if PIO_NUM_INSTANCES >= 4
 CH_IRQ_HANDLER(RP_PIO1_IRQ_1_HANDLER)
 {
     CH_IRQ_PROLOGUE();
     PIORXDriver::_irq_pio1_1();
     CH_IRQ_EPILOGUE();
 }
+#endif
 
 } // extern "C"
 
