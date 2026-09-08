@@ -9,6 +9,7 @@
  */
 
 #include "PIOUART.h"
+#include "RP2350_pio1.h"
 
 #if defined(HAL_HAVE_PIO_UARTS) && HAL_HAVE_PIO_UARTS > 0
 
@@ -288,11 +289,19 @@ void PIORXDriver::_configure_gpio(uint8_t pin, bool is_output)
     }
 }
 
-void PIORXDriver::_upload_programs()
+bool PIORXDriver::_upload_programs()
 {
     const uint8_t pio_idx = (cfg().pio == PIO0) ? 0U : 1U;
     if (_pgm_loaded[pio_idx]) {
-        return;
+        return true;
+    }
+    /*
+      PIO1 is shared with the analog OSD scan-out and the LED driver, and all
+      three claims are blind writes to INSTR_MEM with nothing in the hardware
+      to detect a collision. Ask before writing.
+     */
+    if (pio_idx == 1U && !pio1_claim(PIO1Owner::PIOUART)) {
+        return false;
     }
     PIO_TypeDef *const pio = cfg().pio;
 
@@ -326,6 +335,8 @@ void PIORXDriver::_upload_programs()
     }
 
     _pgm_loaded[pio_idx] = true;
+
+    return true;
 }
 
 void PIORXDriver::_start_tx_sm(uint32_t int_div, uint32_t frac_div)
@@ -557,7 +568,11 @@ void PIORXDriver::_begin(uint32_t b, uint16_t rxSpace, uint16_t txSpace)
         }
     }
 
-    _upload_programs();
+    if (!_upload_programs()) {
+        // PIO1 belongs to something else; leaving the pins alone is the only
+        // safe answer, and the broker has already said who won
+        return;
+    }
     pio_uart_debug_stage_mark(_instance, RP2350_PIOUART2_STAGE_PROG_UPLOADED, 0U);
 
     _configure_gpio(cfg().tx_pin, true);
