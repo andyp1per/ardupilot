@@ -15,7 +15,14 @@
 
 #include "RP2350_pio1.h"
 
-#if defined(RP2350)
+/*
+  The broker arbitrates between three things a bootloader has none of - the OSD
+  scan-out, the LED driver and the PIO UARTs - and it asks AP_Param which of
+  them the user wants, so it drags AP_Param and GCS in with it. Nothing in a
+  bootloader build calls it: its hwdef is standalone and defines neither
+  HAL_HAVE_PIO_UARTS nor the OSD.
+ */
+#if defined(RP2350) && !defined(HAL_BOOTLOADER_BUILD)
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Param/AP_Param.h>
@@ -117,4 +124,4 @@ PIO1Owner pio1_current_owner(void)
 
 }  // namespace ChibiOS
 
-#endif  // RP2350
+#endif  // RP2350 && !HAL_BOOTLOADER_BUILD
