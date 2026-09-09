@@ -76,6 +76,11 @@ volatile uint32_t pio_uart_dbg_rx_service_calls[PIO_NUM_INSTANCES];
  */
 uint32_t pio_uart_rx_overrun_count[PIO_NUM_INSTANCES];
 uint32_t pio_uart_rx_framing_count[PIO_NUM_INSTANCES];
+// Time spent in the shared vector. RXNEMPTY has no watermark, so at 420 kbaud
+// this fires once per byte - every 19 us inside a frame - and the question is
+// what that costs the core it lands on.
+uint32_t pio_uart_irq_us_total[PIO_NUM_INSTANCES];
+uint32_t pio_uart_irq_us_max[PIO_NUM_INSTANCES];
 volatile uint32_t pio_uart_dbg_rx_bytes[PIO_NUM_INSTANCES];
 volatile uint32_t pio_uart_dbg_begin_reentry[PIO_NUM_INSTANCES];
 volatile uint32_t pio_uart_dbg_irq_count[PIO_NUM_INSTANCES];
@@ -512,9 +517,17 @@ void PIORXDriver::_poll_pio_errors()
 // Both directions share one vector, so both are checked on every entry.
 void PIORXDriver::_service_irq()
 {
+    const uint32_t entry_us = TIMER0->TIMERAWL;
+
     _poll_pio_errors();
     _service_rx_fifo();
     _drain_tx_fifo();
+
+    const uint32_t spent = TIMER0->TIMERAWL - entry_us;
+    pio_uart_irq_us_total[_instance] += spent;
+    if (spent > pio_uart_irq_us_max[_instance]) {
+        pio_uart_irq_us_max[_instance] = spent;
+    }
 }
 
 /*
