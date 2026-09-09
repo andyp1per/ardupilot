@@ -62,7 +62,25 @@ static inline uint32_t pio_tx_level(PIO_TypeDef *pio, uint8_t sm)
 PIORXDriver *PIORXDriver::_instances[PIO_NUM_INSTANCES];
 bool         PIORXDriver::_pgm_loaded[2];
 
-// Bring-up debug counters read via SWD when diagnosing silent TX/RX paths.
+/*
+  Bring-up and fault instrumentation, read over SWD. Off by default: several
+  of these live in the receive interrupt, which runs once per byte at 420
+  kbaud, and the whole handler now sits in Scratch X where space is scarce.
+  Set AP_PIOUART_DEBUG_ENABLED to 1 in the hwdef to build them in.
+
+  What each is for is recorded in hwdef/RPI_UAVFC/DEVELOPMENT.md.
+ */
+#ifndef AP_PIOUART_DEBUG_ENABLED
+#define AP_PIOUART_DEBUG_ENABLED 0
+#endif
+
+#if AP_PIOUART_DEBUG_ENABLED
+#define PIOUART_DBG(...) do { __VA_ARGS__ } while (0)
+#else
+#define PIOUART_DBG(...) do { } while (0)
+#endif
+
+#if AP_PIOUART_DEBUG_ENABLED
 volatile uint32_t pio_uart_dbg_begin_count[PIO_NUM_INSTANCES];
 volatile uint32_t pio_uart_dbg_ctor_count[PIO_NUM_INSTANCES];
 volatile uint32_t pio_uart_dbg_write_calls[PIO_NUM_INSTANCES];
@@ -100,6 +118,10 @@ static inline void pio_uart_debug_stage_mark(const uint8_t instance, const uint8
     }
 #endif
 }
+#else
+static inline void pio_uart_debug_stage_mark(uint8_t, uint8_t, uint8_t) {}
+#endif  // AP_PIOUART_DEBUG_ENABLED
+
 
 // InstanceConfig: pin numbers from hwdef.h PIORXDRIVERn_TX/RX_PIN defines
 const PIORXDriver::InstanceConfig PIORXDriver::_cfg_table[PIO_NUM_INSTANCES] = {
@@ -178,7 +200,7 @@ void PIORXDriver::_irq_pio0_0()
 {
 #if PIO_NUM_INSTANCES > 0
     if (_instances[0]) {
-        pio_uart_dbg_irq_count[0]++;
+        PIOUART_DBG(pio_uart_dbg_irq_count[0]++;);
         _instances[0]->_service_irq();
     }
 #endif
@@ -188,7 +210,7 @@ void PIORXDriver::_irq_pio0_1()
 {
 #if PIO_NUM_INSTANCES > 1
     if (_instances[1]) {
-        pio_uart_dbg_irq_count[1]++;
+        PIOUART_DBG(pio_uart_dbg_irq_count[1]++;);
         _instances[1]->_service_irq();
     }
 #endif
@@ -198,7 +220,7 @@ void PIORXDriver::_irq_pio1_0()
 {
 #if PIO_NUM_INSTANCES > 2
     if (_instances[2]) {
-        pio_uart_dbg_irq_count[2]++;
+        PIOUART_DBG(pio_uart_dbg_irq_count[2]++;);
         _instances[2]->_service_irq();
     }
 #endif
@@ -208,7 +230,7 @@ void PIORXDriver::_irq_pio1_1()
 {
 #if PIO_NUM_INSTANCES > 3
     if (_instances[3]) {
-        pio_uart_dbg_irq_count[3]++;
+        PIOUART_DBG(pio_uart_dbg_irq_count[3]++;);
         _instances[3]->_service_irq();
     }
 #endif
@@ -227,7 +249,7 @@ PIORXDriver::PIORXDriver(uint8_t instance)
 {
     if (instance < PIO_NUM_INSTANCES) {
         _instances[instance] = this;
-        pio_uart_dbg_ctor_count[instance]++;
+        PIOUART_DBG(pio_uart_dbg_ctor_count[instance]++;);
     }
 }
 
@@ -506,28 +528,32 @@ void PIORXDriver::_poll_pio_errors()
 
     if ((pio->FDEBUG & PIO_FDEBUG_RXSTALL(sm)) != 0U) {
         pio->FDEBUG = PIO_FDEBUG_RXSTALL(sm);
-        pio_uart_rx_overrun_count[_instance]++;
+        PIOUART_DBG(pio_uart_rx_overrun_count[_instance]++;);
     }
     if ((pio->IRQ & PIO_IRQ_FRAMING_FLAG(sm)) != 0U) {
         pio->IRQ = PIO_IRQ_FRAMING_FLAG(sm);
-        pio_uart_rx_framing_count[_instance]++;
+        PIOUART_DBG(pio_uart_rx_framing_count[_instance]++;);
     }
 }
 
 // Both directions share one vector, so both are checked on every entry.
 void PIORXDriver::_service_irq()
 {
+#if AP_PIOUART_DEBUG_ENABLED
     const uint32_t entry_us = TIMER0->TIMERAWL;
+#endif
 
     _poll_pio_errors();
     _service_rx_fifo();
     _drain_tx_fifo();
 
+#if AP_PIOUART_DEBUG_ENABLED
     const uint32_t spent = TIMER0->TIMERAWL - entry_us;
     pio_uart_irq_us_total[_instance] += spent;
     if (spent > pio_uart_irq_us_max[_instance]) {
         pio_uart_irq_us_max[_instance] = spent;
     }
+#endif
 }
 
 /*
@@ -545,7 +571,7 @@ void PIORXDriver::_enable_tx_irq()
 
 void PIORXDriver::_service_rx_fifo()
 {
-    pio_uart_dbg_rx_service_calls[_instance]++;
+    PIOUART_DBG(pio_uart_dbg_rx_service_calls[_instance]++;);
 
     PIO_TypeDef *const pio = cfg().pio;
     const uint8_t      sm  = cfg().sm_rx;
@@ -560,7 +586,7 @@ void PIORXDriver::_service_rx_fifo()
 // For right-shifted UART RX, the received byte is left-justified in RXF bits [31:24].
 // The RP2350 datasheet's UART RX example reads the FIFO as an 8-bit access at RXF+3, which pops the FIFO and returns that upper byte directly.
         const uint8_t byte = *rxfifo_byte;
-        pio_uart_dbg_rx_bytes[_instance]++;
+        PIOUART_DBG(pio_uart_dbg_rx_bytes[_instance]++;);
         drained++;
         if (_readbuf && _initialized) {
             if (!sbus_sanitize) {
@@ -610,10 +636,11 @@ void PIORXDriver::_service_rx_fifo()
         }
     }
 
-    if (drained > pio_uart_dbg_irq_max_drain[_instance]) {
-        pio_uart_dbg_irq_max_drain[_instance] = drained;
-    }
-    pio_uart_dbg_last_fstat[_instance] = pio->FSTAT;
+    PIOUART_DBG(
+        if (drained > pio_uart_dbg_irq_max_drain[_instance]) {
+            pio_uart_dbg_irq_max_drain[_instance] = drained;
+        });
+    PIOUART_DBG(pio_uart_dbg_last_fstat[_instance] = pio->FSTAT;);
 }
 
 // --------------------------------------------------------------------------- AP_HAL::UARTDriver protected virtual overrides ---------------------------------------------------------------------------
@@ -636,7 +663,7 @@ void PIORXDriver::_begin(uint32_t b, uint16_t rxSpace, uint16_t txSpace)
 // Reinitializing PIO SMs on each packet disrupts RX/TX and can inject framing noise into loopback tests.
     const bool rxinv = option_is_set(Option::OPTION_RXINV);
     if (_initialized && _active_baud == b && _active_rxinv == rxinv) {
-        pio_uart_dbg_begin_reentry[_instance]++;
+        PIOUART_DBG(pio_uart_dbg_begin_reentry[_instance]++;);
         return;
     }
 
@@ -677,7 +704,7 @@ void PIORXDriver::_begin(uint32_t b, uint16_t rxSpace, uint16_t txSpace)
 
     _start_tx_sm(int_div, frac_div);
     _start_rx_sm(int_div, frac_div);
-    pio_uart_dbg_last_fstat[_instance] = cfg().pio->FSTAT;
+    PIOUART_DBG(pio_uart_dbg_last_fstat[_instance] = cfg().pio->FSTAT;);
     pio_uart_debug_stage_mark(_instance, RP2350_PIOUART2_STAGE_SMS_STARTED, 0U);
 
 // Start each session from a clean RX state.
@@ -700,7 +727,7 @@ void PIORXDriver::_begin(uint32_t b, uint16_t rxSpace, uint16_t txSpace)
     _active_rxinv = rxinv;
     _enable_rx_irq();
     pio_uart_debug_stage_mark(_instance, RP2350_PIOUART2_STAGE_IRQ_ENABLED, 0U);
-    pio_uart_dbg_begin_count[_instance]++;
+    PIOUART_DBG(pio_uart_dbg_begin_count[_instance]++;);
     pio_uart_debug_stage_mark(_instance, RP2350_PIOUART2_STAGE_BEGIN_DONE, (uint8_t)(cfg().sm_rx & 0xFFU));
 }
 
@@ -821,7 +848,7 @@ size_t PIORXDriver::_write(const uint8_t *buffer, size_t size)
         return 0;
     }
 
-    pio_uart_dbg_write_calls[_instance]++;
+    PIOUART_DBG(pio_uart_dbg_write_calls[_instance]++;);
 
     size_t written;
     {
@@ -836,7 +863,7 @@ size_t PIORXDriver::_write(const uint8_t *buffer, size_t size)
         _enable_tx_irq();
     }
 
-    pio_uart_dbg_write_bytes[_instance] += written;
+    PIOUART_DBG(pio_uart_dbg_write_bytes[_instance] += written;);
 
     return written;
 }
