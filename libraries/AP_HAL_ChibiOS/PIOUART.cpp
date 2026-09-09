@@ -31,7 +31,7 @@ static const uint16_t PIO_UART_RX_BUF = 512;
 static const uint16_t PIO_UART_TX_BUF = 512;
 
 // TX FIFO depth per state machine (not joined)
-static const uint8_t PIO_TX_FIFO_DEPTH = 4U;
+static const uint8_t PIO_TX_FIFO_DEPTH = 8U;   // FJOIN_TX, see _start_tx_sm()
 
 // Extract TX fill level for SM sm from PIO FLEVEL register.
 // FLEVEL layout: bits [sm*8+3:sm*8] = TX fill, bits [sm*8+7:sm*8+4] = RX fill
@@ -69,6 +69,14 @@ volatile uint32_t pio_uart_dbg_ctor_count[PIO_NUM_INSTANCES];
 volatile uint32_t pio_uart_dbg_write_calls[PIO_NUM_INSTANCES];
 volatile uint32_t pio_uart_dbg_write_bytes[PIO_NUM_INSTANCES];
 volatile uint32_t pio_uart_dbg_rx_service_calls[PIO_NUM_INSTANCES];
+/*
+  Faults the driver previously could not see. RXSTALL latches when a blocking
+  push met a full FIFO, so it counts bytes the state machine had to drop;
+  before this the loss was silent. The framing flag is irq 4+sm raised by the
+  RX programs when a stop bit was not where it should be.
+ */
+uint32_t pio_uart_rx_overrun_count[PIO_NUM_INSTANCES];
+uint32_t pio_uart_rx_framing_count[PIO_NUM_INSTANCES];
 volatile uint32_t pio_uart_dbg_rx_bytes[PIO_NUM_INSTANCES];
 volatile uint32_t pio_uart_dbg_begin_reentry[PIO_NUM_INSTANCES];
 volatile uint32_t pio_uart_dbg_irq_count[PIO_NUM_INSTANCES];
@@ -356,7 +364,9 @@ void PIORXDriver::_start_tx_sm(uint32_t int_div, uint32_t frac_div)
         | ((uint32_t)(PIO_UART_TX_PROG_OFFSET + 1U) << PIO_EXECCTRL_WRAP_BOT_LSB)
         | (1u << 30); // SIDE_EN: enable optional sideset bit used by uart_tx
 
-    pio->SM[sm].SHIFTCTRL = PIO_SHIFTCTRL_OUT_SHIFTDIR;
+    // this state machine only transmits, so the RX half of its FIFO is dead
+    // weight - join it to get 8 entries instead of 4
+    pio->SM[sm].SHIFTCTRL = PIO_SHIFTCTRL_OUT_SHIFTDIR | PIO_SHIFTCTRL_FJOIN_TX;
 
     // PINCTRL BASE fields are 5-bit and GPIOBASE-relative (GPIOBASE=16 set in
     // _upload_programs). GPIO34 → rel 18, GPIO20 → rel 4.
@@ -409,7 +419,9 @@ void PIORXDriver::_start_rx_sm(uint32_t int_div, uint32_t frac_div)
 
     // RX program uses explicit 'push noblock' after stop-bit validation,
     // so AUTOPUSH must remain disabled.
-    pio->SM[sm].SHIFTCTRL = PIO_SHIFTCTRL_IN_SHIFTDIR;
+    // receive only, so join the TX half in: eight entries of slack against
+    // interrupt latency rather than four
+    pio->SM[sm].SHIFTCTRL = PIO_SHIFTCTRL_IN_SHIFTDIR | PIO_SHIFTCTRL_FJOIN_RX;
 
     pio->SM[sm].PINCTRL = ((uint32_t)rel_rx << PIO_PINCTRL_IN_BASE_LSB);
 
@@ -457,6 +469,18 @@ void PIORXDriver::_service_rx_fifo()
 
     PIO_TypeDef *const pio = cfg().pio;
     const uint8_t      sm  = cfg().sm_rx;
+
+    // Both are sticky and write-one-to-clear, so a single check per service
+    // call is enough however many bytes arrived since the last one.
+    if ((pio->FDEBUG & PIO_FDEBUG_RXSTALL(sm)) != 0U) {
+        pio->FDEBUG = PIO_FDEBUG_RXSTALL(sm);
+        pio_uart_rx_overrun_count[_instance]++;
+    }
+    if ((pio->IRQ & PIO_IRQ_FRAMING_FLAG(sm)) != 0U) {
+        pio->IRQ = PIO_IRQ_FRAMING_FLAG(sm);
+        pio_uart_rx_framing_count[_instance]++;
+    }
+
     volatile uint8_t *const rxfifo_byte = ((volatile uint8_t *)&pio->RXF[sm]) + 3;
     uint32_t drained = 0;
     const bool sbus_sanitize = _active_rxinv && (_active_baud == 100000U);
