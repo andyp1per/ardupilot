@@ -286,12 +286,23 @@ void PIORXDriver::_configure_gpio(uint8_t pin, bool is_output)
         }
     }
 
-// For inverted-UART protocols (SBUS, option OPTION_RXINV): set GPIO INOVER=01 so the PIO SM sees standard UART levels (idle HIGH) from the idle-LOW SBUS wire signal.
-// MUST be written AFTER palSetPadMode() because that function writes the full IO_BANK0 GPIOx_CTRL register and would clear INOVER.
-    if (!is_output && option_is_set(Option::OPTION_RXINV)) {
+/*
+  Inverted protocols are handled in the pad rather than the program, so one
+  receive program serves both: INOVER on the way in, OUTOVER on the way out,
+  each two bits of GPIOn_CTRL with 01 meaning invert. SBUS idles low, so the
+  state machine sees ordinary UART levels once INOVER has flipped it.
+
+  Both MUST be written after palSetPadMode(), which writes the whole
+  IO_BANK0 GPIOn_CTRL register and would otherwise clear them.
+ */
+    const bool invert = is_output ? option_is_set(Option::OPTION_TXINV)
+                                  : option_is_set(Option::OPTION_RXINV);
+    if (invert) {
         volatile uint32_t *gpio_ctrl =
             reinterpret_cast<volatile uint32_t *>(0x40028004U + (uint32_t)pin * 8U);
-        *gpio_ctrl = (*gpio_ctrl & ~(3U << 16)) | (1U << 16);
+        // OUTOVER is bits 9:8, INOVER bits 17:16
+        const uint32_t lsb = is_output ? 8U : 16U;
+        *gpio_ctrl = (*gpio_ctrl & ~(3U << lsb)) | (1U << lsb);
     }
 }
 
@@ -837,15 +848,34 @@ uint32_t PIORXDriver::txspace()
     return PIO_UART_TX_BUF;
 }
 
+/*
+  Three places a byte can still be outstanding, and the FIFO is only one of
+  them. The ring matters now that _write() queues into it rather than pushing
+  straight at the hardware, and the state machine matters because an empty
+  FIFO says nothing about the byte currently being shifted: it is only
+  finished once it has come back to the blocking pull, which is where it
+  waits for work. Betaflight's isTxComplete_pio() tests the same two things.
+
+  One bit of slack remains. Reaching the pull applies its side-set, so the
+  stop bit starts there and runs for the eight cycles of the delay; a caller
+  switching a half duplex line around the instant this returns false could
+  clip it. Wait a bit time if that matters.
+ */
 bool PIORXDriver::tx_pending()
 {
     if (!_initialized) {
         return false;
     }
-    // Pending while the PIO TX FIFO has bytes not yet shifted out.
+    if (_writebuf != nullptr && _writebuf->available() > 0) {
+        return true;
+    }
+
     PIO_TypeDef *const pio = cfg().pio;
     const uint8_t      sm  = cfg().sm_tx;
-    return !(pio->FSTAT & (1u << (PIO_FSTAT_TXEMPTY_LSB + sm)));
+    if (!(pio->FSTAT & (1u << (PIO_FSTAT_TXEMPTY_LSB + sm)))) {
+        return true;
+    }
+    return pio->SM[sm].ADDR != (PIO_UART_TX_PROG_OFFSET + 1U);
 }
 
 bool PIORXDriver::wait_timeout(uint16_t n, uint32_t timeout_ms)
