@@ -153,6 +153,7 @@ static const uint16_t k_pio_uart_rx_sbus_pgm[PIO_UART_RX_SBUS_PROG_LEN] = {
 // RX FIFO not-empty interrupt bit for SM sm (in IRQx_INTE/INTS on RP2350).
 // RP2350 maps SM0..SM3 RXNEMPTY to bits 0..3.
 #define PIO_INTE_RX_NOTEMPTY(sm)  (1u << (sm))
+#define PIO_INTE_TX_NOTFULL(sm)   (1u << ((sm) + 4u))
 
 #ifdef HAL_HAVE_PIO_UARTS
 #define PIO_NUM_INSTANCES  HAL_HAVE_PIO_UARTS
@@ -213,6 +214,9 @@ private:
     bool  _initialized;
     bool  _active_rxinv;
     uint32_t _active_baud;
+    // _write() only ever fills this and returns; the transmit interrupt
+    // empties it. Nothing waits on the wire.
+    HAL_Semaphore _write_mutex;
     ByteBuffer *_readbuf;
     ByteBuffer *_writebuf;
 
@@ -232,6 +236,13 @@ private:
     void _configure_gpio(uint8_t pin, bool is_output);
     void _enable_rx_irq();
     void _drain_tx_fifo();
+    // one entry point for the shared PIO vector: errors, then RX, then TX
+    void _service_irq();
+    // sticky fault flags, polled where they will be seen even when no byte
+    // has arrived - a line stuck low raises framing errors and nothing else
+    void _poll_pio_errors();
+    void _enable_tx_irq();
+    volatile uint32_t *_inte_reg() const;
 
     static void _calc_clkdiv(uint32_t baud, uint32_t &int_div, uint32_t &frac_div);
 };
