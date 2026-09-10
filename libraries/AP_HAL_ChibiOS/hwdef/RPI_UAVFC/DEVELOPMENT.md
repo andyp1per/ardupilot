@@ -753,13 +753,45 @@ two requests and then went quiet for the whole of a 20 s window with
 that was getting nothing would still be requesting, and autobaud would be
 stepping `begin_count` up with it.
 
-**The turnaround costs about a byte.** The first response is one byte short of
-the second - it is missing the `00` after `27` - and `framing` reads 5 where
-the two transmit frame-ends account for only 2. The retry covered it here
-because GET_SETTINGS is idempotent and the loop asks again a second later.
-Anything that depends on a single reliable acknowledgement, which the SET
-commands do, should be watched: the likely mechanism is the far end starting to
-drive while our transmitter is still releasing the line.
+**The turnaround byte loss is a first-exchange effect, not a rate.** The very
+first response after power-up was a byte short - missing the `00` after `27` -
+with `framing` 5 where the two transmit frame-ends account for 2. That reads
+like a turnaround fault, and it is not one.
+
+Measured over a run of 20 channel changes: **61 requests, `framing` 121 against
+the 122 that two per request predicts, `overrun` 0.** No excess framing errors
+at all, and no short reply. A later cold boot was clean too - one request, an
+11 byte reply, `framing` exactly 2. So it is n=1 on the first exchange after the
+VTX powers up, most likely the pad and the far end still settling, and the
+driver's retry covers it because GET_SETTINGS is idempotent.
+
+`framing` is the sensitive instrument here and it scales at exactly two per
+request across runs of 1, 2 and 61 - one per line release, and `VTX_PULLDOWN`
+makes two writes per request. Anything above that is real.
+
+**The SET acknowledgements work.** The trace carries the whole conversation,
+and the follow-up GET_SETTINGS proves the change landed rather than merely
+being acked:
+
+    00 aa 55 03 00 9f                 our GET_SETTINGS
+    aa 55 09 06 00 00 06 16 e9 30 00  reply, 5865 MHz
+    aa 55 09 02 16 d5 fd              our SET_FREQUENCY to 5845
+    aa 55 04 04 16 d5 01 89 00        RSP_SET_FREQUENCY, 5845
+    00 aa 55 03 00 9f                 our GET_SETTINGS
+    aa 55 09 06 00 00 07 16 d5 92 00  reply, now 5845
+    aa 55 07 01 01 6d                 our SET_CHANNEL to 1
+    aa 55 03 03 01 01 41 00           RSP_SET_CHANNEL
+
+Reading these needs care: 0x09 is both `SMARTAUDIO_CMD_SET_FREQUENCY` outbound
+and `SMARTAUDIO_RSP_GET_SETTINGS_V2` inbound. The length field separates them,
+02 against 06, and on a shared pin both directions land in the same trace.
+
+**`VTX_OPTIONS` bit 4 stays set.** It is `VTX_PULLDOWN`, and its whole effect is
+the `_port->write(0x00)` in `send_request()`. That is a transmit-side fix for
+our own first start bit having no falling edge on a line that rests low, it
+acts at the start of our frame rather than during the turnaround, and the VTX
+framing our requests correctly is the evidence it works. Clearing it would
+trade an occasional retry for no replies at all.
 
 ## Standing check: when you add to a hot path, look at where it landed
 
@@ -3440,10 +3472,11 @@ Answered. A different VTX replies, the response parses, and `AP_SmartAudio`
 reaches `_initialised`. See "Status: working, on a different VTX". The ST
 flight controller A/B is not needed; the original VTX was the fault.
 
-- [ ] The turnaround drops about one byte per exchange - one short response and
-      3 framing errors beyond the 2 the transmit frame-ends explain. Harmless
-      for GET_SETTINGS, which is retried, but the SET commands need their
-      acknowledgement. Worth a look before relying on power or band changes.
+- [x] The turnaround byte loss. Measured and not a rate: 61 requests over 20
+      channel changes gave `framing` 121 against 122 predicted and zero short
+      replies. It was the first exchange after the VTX powered up. SET
+      acknowledgements are reliable and the follow-up GET confirms the change
+      landed.
 - [ ] Fly it. `SERIAL4_PROTOCOL` 37 and `VTX_ENABLE` 1 have only ever been on
       the bench.
 
