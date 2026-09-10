@@ -112,22 +112,6 @@ void AP_Logger_File::Init()
     }
 
     Prep_MinSpace();
-
-    /*
-      The filesystem is mounted by now, so HAL_LOGGER_WRITE_CHUNK_SIZE is
-      finally reporting the real io_size. Every backend is constructed before
-      any Init() runs, and on FATFS nothing mounts the card until the first
-      filesystem access, so the value captured at construction was the
-      pre-mount default - 4096 against a 32768 sync interval on boards that
-      raise it. That made io_timer() write eight times per sync rather than
-      once, paying the per-call FATFS and CMD25 cost eight times over.
-
-      Bound it so the threshold stays reachable: io_timer() will not write
-      until _writebuf_chunk has accumulated, so a chunk the buffer cannot hold
-      would leave only the 2 second timeout driving writes.
-     */
-    const uint32_t io_chunk = HAL_LOGGER_WRITE_CHUNK_SIZE;
-    _writebuf_chunk = MIN(io_chunk, MIN(_writebuf.get_size() / 2, 0x8000U));
 }
 
 bool AP_Logger_File::file_exists(const char *filename) const

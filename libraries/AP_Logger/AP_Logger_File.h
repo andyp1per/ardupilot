@@ -113,11 +113,7 @@ private:
 
     // write buffer
     ByteBuffer _writebuf{0};
-    // refreshed at the end of Init(), once the filesystem is mounted. On
-    // FATFS this comes from io_size, which the SD mount raises - and the
-    // mount happens after every backend is constructed, so the value
-    // captured here is the pre-mount default.
-    uint16_t _writebuf_chunk = HAL_LOGGER_WRITE_CHUNK_SIZE;
+    const uint16_t _writebuf_chunk = HAL_LOGGER_WRITE_CHUNK_SIZE;
     uint32_t _last_write_time;
 
     /* construct a file name given a log number. Caller must free. */
