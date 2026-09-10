@@ -52,7 +52,7 @@ starvation on core0, not the card. See the SD section below - the previous
 | GPS | log69 8-13 sats HDop 1.1-2.2; log70 11-16 sats HDop 0.8-1.3 |
 | Serial ports | SERIAL2/3 confirmed on hardware; SERIAL1/4 untested |
 | Battery voltage | Multiplier measured, 11.1 |
-| Battery current | Zero and gain both unstable; relative use only, see below |
+| Battery current | Gain unstable; zero is board-side thermal leakage, see below |
 | Motor outputs | 4x DShot600 via PIO; has also flown on PWM at 490 Hz |
 | DShot | Bidirectional DShot600 at 2 kHz, flown; eRPM scale verified |
 | DShot params | `SERVO_DSHOT_RATE` 1, `FSTRATE_DIV` 2, `SERVO_DSHOT_ESC` 0 - see below |
@@ -65,7 +65,7 @@ starvation on core0, not the card. See the SD section below - the previous
 | Yaw trim | 17% diagonal RPM split; explained, not a fault - see below |
 | DCM backup AHRS | 89 deg roll after log96, and starts before motors spin |
 | Tune | Hand tune below; AUTOTUNE started, roll only, unsaved |
-| Serial LED (J2) | Mode correct, LED not yet lit; see below |
+| Serial LED (J2) | Working; colours correct since the PULL_THRESH fix |
 | 9V rail (VID) | Stuck on; relay does not switch it, see below |
 
 Retracted: this section used to record that the GPS was detected but had never
@@ -1290,6 +1290,62 @@ The PC sampler is no help here - a state machine that never starts costs no CPU
 and shows up as absence. The counters-over-SWD approach in `PROFILING.md` is
 the right instrument if it comes to that.
 
+### Lit, and the colours were wrong: a borrowed constant off by five bits
+
+Working now. The strip lights and the pattern is correct. Between the list
+above and here the LEDs came on but every colour was wrong, which read as a
+timing or byte-order fault and was neither.
+
+`PIOUART.h` had `PIO_SHIFTCTRL_PULL_THRESH_LSB` as 20 against the true 25, and
+`PUSH_THRESH_LSB` as 26 against 20. The authority is
+`PIO_SM_SHIFTCTRL_*_THRESH_Pos` in the ChibiOS RP PIO header, in this same
+tree: PUSH_THRESH is 24:20 and PULL_THRESH 29:25.
+
+So `WS2812_BITS_PER_LED << PULL_THRESH_LSB` put 24 into PUSH_THRESH and left
+PULL_THRESH at 0, which PIO reads as 32. Autopull refilled every 32 bits rather
+than every 24, so each word clocked out G, R, B **and the zero low byte**. The
+strip takes 24 bits per LED, so everything past the first LED shifted one byte:
+
+| | bytes taken | shows |
+|------|-------------|--------------------------------|
+| LED1 | G1 R1 B1 | correct |
+| LED2 | 00 G2 R2 | green 0, red G2, blue R2 |
+| LED3 | B2 00 G3 | green B2, red 0, blue G3 |
+| LED4 | R3 B3 00 | green R3, red B3, blue 0 |
+
+The tell nobody used for a while: **LED1 is always right under this fault.** A
+strip whose first LED tracks the requested colour while the rest do not is a
+frame-alignment bug, not timing and not byte order.
+
+Why it survived: PIOUART defines both constants and uses neither. Its transmit
+program has an explicit `pull block` and its receive program an explicit
+`push`, so no threshold is ever written - `SHIFTCTRL` there is just
+`OUT_SHIFTDIR | FJOIN_TX`. `PUSH_THRESH_LSB` had no user at all and
+`PULL_THRESH_LSB` had exactly one, in the NeoPixel path. The gotcha above about
+this file borrowing PIO constants from `PIOUART.h` was written about the build
+guards; it applies to the values too, and a constant its owner never exercises
+is worth checking rather than trusting.
+
+Read back over SWD, `PIO1` at `0x50300000`, NeoPixel on SM0:
+
+| register | address | expected |
+|-------------|--------------|--------------------------------------------|
+| `CLKDIV` | `0x503000c8` | `0x001c2000`, 28 + 32/256, exactly 8.0 MHz |
+| `EXECCTRL` | `0x503000cc` | `0x00003000`, wrap 0..3 |
+| `SHIFTCTRL` | `0x503000d0` | `0x70020000`. `0x41820000` is the old bug |
+| `INSTR` | `0x503000d8` | `0x6321` when idle, parked on the `out` |
+| `PINCTRL` | `0x503000dc` | `0x24000840`, GPIO2 for SET and SIDESET |
+
+`INSTR_MEM` reads back as zeros because it is write-only on this part. That is
+not a missing program - `INSTR` showing `0x6321` is the proof it loaded.
+
+Two things left in this path, neither of which caused the above.
+`serial_led_send()` breaks out of the LED loop when `neopixel_send_word()`
+times out and then still calls `send_end()`, so a partial frame goes to the
+strip. And `neopixel_send_end()` stamps the completion time from
+`WS2812_BITS_PER_LED * 8U`, a hardcoded eight LEDs, so a chain longer than that
+gets a reset gap shorter than it should be.
+
 ## DShot parameters: the two that cost a day
 
 Both of these presented identically - the ESCs repeating part of their arming
@@ -1358,6 +1414,41 @@ lines and would make it measurable. This matters more now than it did before
 the notch was enabled, not less: if telemetry goes stale the notch falls back
 toward the `INS_HNTCH_FREQ` floor rather than tracking, and nothing currently
 reports that happening.
+
+### log96/97: the scale verified on this airframe, against the accel spectrum
+
+The scale check above is log51, on the earlier airframe and the earlier ESC.
+Repeated on both 2026-09-09 flights, because every quantitative claim about the
+current pin is regressed against eRPM and nothing had ever checked the
+regressor here.
+
+The batch sampler's pre-filter accel blocks owe nothing to the ESC, so the
+motor peak in their spectrum is an independent measurement of shaft speed.
+Strongest peak in 40-700 Hz per block, keeping blocks where it lands within
+20% of the eRPM fundamental, fitted through the origin:
+
+| | slope | r | implied poles |
+|-------|-------|-------|---------------|
+| log96 | 1.027 | 0.988 | 14.37 |
+| log97 | 1.011 | 0.996 | 14.16 |
+
+against `SERVO_BLH_POLES` 14. That reproduces log51's 1.011 and 14.2 poles on a
+different airframe and a different part, so eRPM is sound here to a few percent.
+
+Beyond the notch, it settles one thing about the current work: the 26% gain
+difference between the two flights is not an eRPM artifact. The model goes as
+RPM cubed, so a 26% slope change needs an 8.7% scale error, and the measured
+difference between the flights is 1.5% - worth about 4.5%. The instability is
+in the pin.
+
+**The pre/post-filter trap.** `INS_LOG_BAT_OPT` 4 logs pre- and post-filter
+blocks and tells them apart in the ISBH `instance` field, not by IMU. There is
+one IMU on this board: instance 0 is pre-filter, instance 1 post. The
+post-filter accel carries essentially nothing above 150 Hz - band energy ratio
+0.008 against 15448 for pre-filter - so an FFT that pools both finds noise
+peaks and returns a plausible wrong answer. The first run of this check did
+exactly that and gave slope 0.89, r 0.95, 12.5 poles. Select on `instance`
+before believing any spectrum out of this log.
 
 ## The harmonic notch works, and needs to be per-motor
 
@@ -2689,8 +2780,16 @@ temperature sensor, because `HAL_WITH_MCU_MONITORING` is 1.
 
 **Pad leakage cannot produce the level.** The pin sits at 0.60 to 0.63 V with a
 6S pack connected, which needs 7.6 uA through the 82.5k pulldown. The datasheet
-allows 1 uA. An order of magnitude short, so something low-impedance is driving
-the pin.
+allows 1 uA. An order of magnitude short, so the current arrives from outside
+the chip.
+
+Retracted: that paragraph used to end "so something low-impedance is driving
+the pin", and it does not follow. The arithmetic bounds the source's *current*,
+not its impedance. A 350k path to 3.3 V on the ESC side sources 7.6 uA and
+holds the node at 0.63 V against 82.5k - a high-impedance source, and one a
+stronger pulldown would fix. The vendor has since raised the 82.5k as too weak,
+and nothing in this section refutes that. Test 6 below settles it in one
+reading.
 
 **There is no chip-wide leakage floor.** The AN1 spare pad on GPIO40 reads
 0.0365 V and holds it across reboots and thermal drift, against 0.6 V on the
@@ -2699,7 +2798,10 @@ this is suggestive rather than a controlled comparison.
 
 **The pin really is wired to the ESC.** Spread within one 8-sample ADC burst is
 1 to 2 counts with the motors stopped and 4 to 33 counts with them spinning.
-That is ESC switching noise arriving on the pad, which needs a real wire.
+That is ESC switching noise arriving on the pad, which needs a real wire. No
+control was taken on AN1 with the motors spinning, so this does not separate
+noise coming down the CUR wire from supply or reference noise common to every
+channel.
 
 **It still does not respond to load.** Motors spinning, props off, the level
 stays at 0.61 to 0.64 V while the pack sags only 23.18 to 23.06 V. Temperature
@@ -2776,8 +2878,9 @@ current sense is recoverable by swapping two wires with no board change.
 
 ### Tests, cheapest first
 
-1 to 4 have been run. Only 5 is left, and it is not a flight controller
-question.
+1 to 4 have been run. 6 is new, is the cheapest thing on the list, and is the
+one to do next. 5 remains the only test that can close the hardware question,
+and it is not a flight controller question.
 
 1. Done. **Read `RSSI_ADC` on GPIO40.** 0.0365 V against 0.6 V on the current
    pin, so there is no leakage floor and case 2 is dead.
@@ -2793,8 +2896,28 @@ question.
    Metering with the lead off would confirm it directly and is still the
    cleanest single check if the ESC is ever off the airframe.
 5. **Confirm what the ESC actually outputs on that pin**, and its mV/A. The
-   only test left that can move the diagnosis. `BATT_AMP_PERVLT` 50 assumes
+   only test that can close the hardware question. `BATT_AMP_PERVLT` 50 assumes
    20 mV/A. If the output can exceed 3.3 V, see the protection note below.
+6. **Parallel a known resistor onto the pin and read the level again.** This
+   measures the source impedance directly, which is the thing every argument
+   above was inferring. Tack a resistor from the pin to ground and re-read
+   `ChibiOS::AnalogIn::samples[0]` over SWD as in the section above - no
+   reflash, no arming. With 10k added:
+
+   | source | 0.63 V becomes |
+   |---|---|
+   | high-Z, Rs about 350k | 0.082 V, down 7.7x |
+   | driven, Rs under 1k | 0.624 V, down 1% |
+
+   A factor of seven against one percent. Two readings with two different
+   resistors solve the Thevenin pair outright and give Rs and the open-circuit
+   voltage rather than another inference. Take it twice, motors stopped and at
+   a steady throttle: an output that can source but not sink looks
+   low-impedance under load and high-impedance at rest, and that case is the
+   one where strengthening the pulldown would cost gain on the airframe that
+   currently works. Do it in the same bench session as the drift test in open
+   item 1 - same rig, and between them they separate source impedance,
+   voltage coupling and thermal drift.
 
 ### One thing worth asking the designers
 
@@ -2910,6 +3033,77 @@ Conclusion, now on two flights: the pin tracks the *shape* of current well
 to calibrate. Setting `BATT_AMP_PERVLT` was worth trying and the answer is that
 it does not hold. Treat the pin as a relative indicator only.
 
+### The zero is thermal, and it tracks the flight controller's die temperature
+
+This file used to say the voltage-against-thermal question could not be settled
+from a flight, because pack voltage and elapsed time fall together in every
+log. True of voltage and time. Not true of voltage and *board temperature*, and
+log96 is the counter-example: the board was at 45.4 degC when the motors
+started, prop wash cooled it to 31.8 degC by disarm, and it soaked back to
+34.6 degC afterwards. Temperature reverses twice while the pack only falls and
+then plateaus.
+
+Motors-off samples only, both flights pooled, n = 316 over 32.3-45.4 degC:
+
+| model | R2 | slope |
+|--------------------|-------|----------------------------------------|
+| pin ~ `MCU.MTemp` | 0.996 | +28.4 mV/degC |
+| pin ~ pack voltage | 0.842 | +117 mV/V |
+| pin ~ both | 0.996 | the V term flips negative and adds nothing |
+
+`corr(MTemp, pack V)` is 0.928 across those samples, so the R2 gap is
+suggestive rather than conclusive on its own. What carries it is a matched
+pair: the two flights' post-disarm windows overlap in temperature and sit
+0.84 V apart in pack voltage.
+
+| | MCU | pack | pin |
+|-------|---------|----------|----------|
+| log96 | 33.92 C | 22.824 V | 200.4 mV |
+| log97 | 33.93 C | 23.663 V | 199.9 mV |
+
+0.5 mV of difference, against the 98 mV a voltage-coupled offset predicts.
+
+**And the temperature that predicts it is on the flight controller.** Open item
+1 assumed thermal drift would be uncorrectable because nothing here sees ESC die
+temperature. `MCU.MTemp` is not standing in for the ESC - through the flight the
+ESC is heating while the board cools in prop wash, and the pin follows the
+board. So a correction is available from something the FC already logs.
+
+### The standing offset is on the board, not in the ESC
+
+Three things put it there, and together they make the vendor's pulldown
+question the leading explanation rather than a dead end.
+
+**It is there with the motors stopped.** 530 mV before arming in log96 and
+496 mV in log97, which is 67% and 94% of the entire in-flight swing. Rectified
+switching noise cannot produce a level that exists when nothing is switching,
+so that mechanism is dead for the offset whatever it does to the gain.
+
+**It needs more current than the pad is allowed to leak.** 2.0 uA at 32.3 degC
+rising to 6.5 uA at 45.4 degC through the 82.5k, against a 1 uA pad maximum -
+the same few microamps the earlier airframe showed.
+
+**The same offset appears on two different ESCs.** 0.50-0.53 V here against
+0.60-0.63 V on the earlier airframe, a different ESC on a different aircraft.
+What those two share is this board.
+
+Read with the thermal result that is a few microamps of temperature-dependent
+leakage sourced into a node whose only DC return is the 82.5k, which is the
+failure a stronger pulldown fixes. At 10k the same current gives 20-65 mV where
+82.5k gives 166-538 mV, and a low-impedance ESC output is untouched.
+
+Two things not established. The tempco does not match between airframes -
+28.4 mV/degC here against about 12.5 mV/degC on the bench earlier, same sign
+and a factor of two apart. And the shape is open: if the rise is exponential
+the doubling constant is 7.9 degC, which is the junction-leakage band, but over
+a 13 degC span linear and exponential fit equally well at R2 0.9958. A wider
+sweep settles it and is worth doing while test 6 is set up.
+
+Worth checking before theorising further: whether RP2350 erratum E9, the
+documented GPIO input leakage whose published workaround is a stronger external
+pull-down, applies to a pad in analog mode with IE cleared. Read the erratum
+text rather than trusting this sentence - it is a lead, not a finding.
+
 ### log97: sag compensation makes the failsafe worse, not better
 
 `BATT_FS_VOLTSRC` was changed to 1 for log97. Do not leave it there while the
@@ -3009,23 +3203,32 @@ Note first that nothing unsafe depends on this. `BATT_LOW_MAH` and
 - [x] Set `BATT_AMP_PERVLT` 68. Done for log97, and the answer is that it does
       not hold: the reference-free gain moved 26% between the two flights, so
       68.4 is already about 25% low. Keep it - the shape is still useful - but
-      stop expecting a fixed value to be right.
+      stop expecting a fixed value to be right. eRPM is not the cause: it is
+      verified to 1.5% between those flights, worth 4.5% of gain against the 26%
+      seen.
 - [ ] Set `BATT_FS_VOLTSRC` back to 0. At 1 the failsafe uses
       `voltage + current * resistance`, and a +15 to +34 A current offset with
       `BAT.Res` 0.044 inflates it by 0.7-1.5 V, so the `BATT_CRT_VOLT` 19.8 Land
       fires about 0.7 V late. Sag compensation is right once current is, and
       wrong now.
-- [ ] Bench the pin's drift: props off, disarmed, pack voltage held steady from
-      a supply, log the pad for ten minutes, then step the voltage. This decides
-      everything below it - voltage-coupled drift is correctable from data the
-      FC already has and gives back a real current sensor, thermal drift is not,
-      because nothing here sees ESC die temperature. A flight cannot separate
-      them: pack voltage and elapsed time fall together in every log.
-- [ ] If the drift is voltage-coupled, correct it in Lua and keep the sensor.
-      If it is thermal, write the RPM model instead: `BATT_MONITOR` 29,
-      `esc_telem:get_rpm()` over the four motors,
+- [x] Decide whether the drift is voltage-coupled or thermal. Answered from
+      log96/97 without a bench run: it is thermal, and it tracks `MCU.MTemp` at
+      R2 0.996 and +28.4 mV/degC. log96 breaks the confound this file said no
+      flight could break, because prop wash cools the board through the flight
+      while the pack falls. See "The zero is thermal".
+- [ ] Test 6, the parallel resistor, now with a temperature sweep rather than at
+      one temperature. The offset is 2.0-6.5 uA into the 82.5k with the motors
+      stopped, it appears on two different ESCs, and it follows the board rather
+      than the ESC - so measure the source impedance and find out whether the
+      leakage is on the board. Do it with the ESC lead off as well: if the level
+      and its tempco survive that, the ESC is not involved at all.
+- [ ] Correct the zero against `MCU.MTemp` in Lua rather than falling back to
+      the RPM model. Thermal was assumed uncorrectable because nothing sees ESC
+      die temperature; the predictor turns out to be the FC's own. Keep the RPM
+      model (`BATT_MONITOR` 29, `esc_telem:get_rpm()`,
       `I = 0.5 + 9.0e-4 * SUM (RPM/1000)^3`, through
-      `battery:handle_scripting()`, letting the script own `consumed_mah`.
+      `battery:handle_scripting()`) as the fallback if the correction does not
+      hold across flights.
 - [ ] Either way, calibrate the absolute scale against a charger: fly a pack,
       note the mAh put back in, scale by `charger_mah / reported_mah`. That is
       the only weak term in the model and one flight settles it.
