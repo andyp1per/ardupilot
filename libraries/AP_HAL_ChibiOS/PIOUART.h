@@ -168,7 +168,7 @@ static const uint16_t k_pio_uart_rx_sbus_pgm[PIO_UART_RX_SBUS_PROG_LEN] = {
 #define PIO_SHIFTCTRL_AUTOPULL       (1u << 17)
 #define PIO_SHIFTCTRL_IN_SHIFTDIR    (1u << 18)
 #define PIO_SHIFTCTRL_OUT_SHIFTDIR   (1u << 19)
-#define PIO_SHIFTCTRL_PUSH_THRESH_LSB 26u
+#define PIO_SHIFTCTRL_PUSH_THRESH_LSB 20u
 // Each UART state machine uses one direction only, so the unused half of its
 // FIFO can be given to the half in use: 8 entries instead of 4.
 #ifndef PIO_SHIFTCTRL_FJOIN_TX
@@ -183,7 +183,11 @@ static const uint16_t k_pio_uart_rx_sbus_pgm[PIO_UART_RX_SBUS_PROG_LEN] = {
 // irq 4 rel from the RX programs lands on flag 4+sm, outside the 0-3 the
 // interrupt enable registers can reach.
 #define PIO_IRQ_FRAMING_FLAG(sm)     (1u << (4u + (sm)))
-#define PIO_SHIFTCTRL_PULL_THRESH_LSB 20u
+// SHIFTCTRL is PUSH_THRESH 24:20 and PULL_THRESH 29:25, per
+// PIO_SM_SHIFTCTRL_*_THRESH_Pos in ChibiOS rp_pio.h. Neither threshold is
+// used by this driver - both UART programs pull and push explicitly - so
+// these two were wrong for a long time without any UART noticing.
+#define PIO_SHIFTCTRL_PULL_THRESH_LSB 25u
 
 #define PIO_PINCTRL_OUT_BASE_LSB      0u
 #define PIO_PINCTRL_SET_BASE_LSB      5u
