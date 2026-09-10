@@ -66,6 +66,7 @@ starvation on core0, not the card. See the SD section below - the previous
 | DCM backup AHRS | 89 deg roll after log96, and starts before motors spin |
 | Tune | Hand tune below; AUTOTUNE started, roll only, unsaved |
 | Serial LED (J2) | Working; colours correct since the PULL_THRESH fix |
+| VTX SmartAudio | Working on SERIAL4; replies parse, see below |
 | 9V rail (VID) | Stuck on; relay does not switch it, see below |
 
 Retracted: this section used to record that the GPS was detected but had never
@@ -726,18 +727,39 @@ pull-down on GPIO16 that the controlled test above says is not there. Both
 mistakes have the same shape: a single measurement with no control, read as
 proof.
 
-### Status, and the next step
+### Status: working, on a different VTX
 
-The driver is done and its behaviour is verified on hardware. What is not
-resolved is whether this VTX ever answers SmartAudio at all, and that cannot be
-settled from this board - the next step is the same VTX on an ST flight
-controller with a known-good half-duplex UART. If it answers there, the fault is
-on this board between the pad and the connector; if it does not, the VTX is not
-speaking SmartAudio and none of this was ever going to work.
+**A VTX replied.** Half duplex receive is confirmed end to end, and the ST
+flight controller A/B this section used to prescribe is not needed - the
+original VTX simply never answered.
 
-Still untested on this port as a result: receiving anything at all in half
-duplex. Every transmit path is confirmed; the receive path is confirmed only in
-that it correctly reads back our own echo and parks on a held-low line.
+With `AP_PIOUART_DEBUG_ENABLED` and SmartAudio on SERIAL4, `rx_bytes` reads 33
+against `write_bytes` 12. Everything above our own 12 bytes came off the wire
+from the far end. The trace:
+
+    ff  00 aa 55 03 00 9f  aa 55 09 06 27 10 16 e9 32 00
+        00 aa 55 03 00 9f  aa 55 09 06 27 00 10 16 e9 32 00
+
+`00 aa 55 03 00 9f` is our GET_SETTINGS with its prepended throwaway byte.
+`aa 55 09 ...` is not ours: 0x09 is `SMARTAUDIO_RSP_GET_SETTINGS_V2`, so this
+is a SmartAudio v2 part. The payload carries 0x16E9 = 5865 MHz, a real band A
+channel 1 frequency, which is the check worth doing before believing any of it.
+
+The driver agrees. `AP_SmartAudio::loop()` re-requests settings every second
+only while `!_initialised`, and `_initialised = true` is the last line of the
+settings parser, after `vtx.set_options()` and `vtx.set_defaults()`. It sent
+two requests and then went quiet for the whole of a 20 s window with
+`begin_count` flat at 2 - so it parsed a response and stopped polling. A driver
+that was getting nothing would still be requesting, and autobaud would be
+stepping `begin_count` up with it.
+
+**The turnaround costs about a byte.** The first response is one byte short of
+the second - it is missing the `00` after `27` - and `framing` reads 5 where
+the two transmit frame-ends account for only 2. The retry covered it here
+because GET_SETTINGS is idempotent and the loop asks again a second later.
+Anything that depends on a single reliable acknowledgement, which the SET
+commands do, should be watched: the likely mechanism is the far end starting to
+drive while our transmitter is still releasing the line.
 
 ## Standing check: when you add to a hot path, look at where it landed
 
@@ -3414,10 +3436,16 @@ The notch is being driven by telemetry whose frame loss nobody can see.
 
 ### 7. Half duplex receive, and the VTX
 
-Every transmit path is confirmed byte for byte; nothing has ever replied.
-Next step is unchanged - the same VTX on an ST flight controller with a
-known-good half-duplex UART. Until then `SERIAL4_PROTOCOL` stays -1 and
-`VTX_ENABLE` 0, which is how log96 flew.
+Answered. A different VTX replies, the response parses, and `AP_SmartAudio`
+reaches `_initialised`. See "Status: working, on a different VTX". The ST
+flight controller A/B is not needed; the original VTX was the fault.
+
+- [ ] The turnaround drops about one byte per exchange - one short response and
+      3 framing errors beyond the 2 the transmit frame-ends explain. Harmless
+      for GET_SETTINGS, which is retried, but the SET commands need their
+      acknowledgement. Worth a look before relying on power or band changes.
+- [ ] Fly it. `SERIAL4_PROTOCOL` 37 and `VTX_ENABLE` 1 have only ever been on
+      the bench.
 
 ### 8. Standing checks before each flight
 
