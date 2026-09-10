@@ -1750,13 +1750,28 @@ all 77 message types the *logged* rate actually falls in Loiter, 2850/s to
 2579/s, because messages are being lost. Whatever Loiter costs, it is not extra
 log volume.
 
-One thing does not reconcile and should not be built on. `DSF.Dp` climbs at
-about 1791/s while the all-types logged rate falls by only 271/s, so taking `Dp`
-as a count of distinct messages implies an offered rate that rose 53%, which
-nothing in the message mix supports. `_dropped++` fires per failed
-`_WritePrioritisedBlock` call (`AP_Logger_File.cpp:474`, `:481`), so a caller
-that re-offers a rejected message increments it again. Treat `Dp` as a measure
-of write pressure, not as a message count, until that is checked.
+One thing does not reconcile. `DSF.Dp` climbs at about 1791/s while the
+all-types logged rate falls by only 271/s, so taking `Dp` as a count of
+distinct messages implies an offered rate that rose 53%.
+
+Checked since, and **in flight `Dp` is a count of distinct rejected messages,
+not re-offers.** `_writing_startup_messages` is true only inside
+`_startup_messagewriter->process()` (`AP_Logger_Backend.cpp:139`), and that
+writer stops once `finished()`. Everything logged in flight therefore takes the
+`else` branch at `AP_Logger_File.cpp:473`, and vehicle logging is
+fire-and-forget - nothing re-offers a rejected message. The one place re-offers
+do get counted is the boot FMT phase, where `_writing_startup_messages` is true
+but `fmt_done()` is false, so the no-count branch is skipped while the writer
+retries. That is the 473 in the first five seconds, and it is why boot `Dp`
+reads differently from in-flight `Dp`.
+
+So the offered rate really did rise, and the explanation this file gave for
+dismissing Loiter's own logging does not hold: "`PSC*` is 21 messages/s, about
+1.1 KB/s" is a count taken *from the file*, which is post-drop. Under
+saturation the logged rate of any stream understates what was offered by
+whatever fraction is being refused, so it cannot be used to bound what that
+stream costs. Position control adds streams that ACRO does not have, and how
+much they offer is still unmeasured - the logged rate cannot answer it.
 
 Retracted: "try io_size 16384 first". It goes the wrong way. The sweep in the
 next section has throughput *falling* as io_size falls - 211.4 KB/s at 16384
@@ -1839,13 +1854,35 @@ if (nbytes < _writebuf_chunk && tnow - _last_write_time < 2000UL) {
 }
 ```
 
-so nothing is written until 32 KB has accumulated. That is the source of the
-sawtooth in the log97 section - the 32,758 byte swing is `_writebuf_chunk`, not
-the f_sync interval, which happens to be the same number on this board and is
-why the wrong explanation fitted. Two consequences: 32 KB of the 80 KB buffer
-sits permanently below the write threshold, so the usable slack is nearer
-48 KB; and each burst is about 64 block writes, roughly 40 ms of work, in the
-lowest-priority thread.
+so nothing is written until `_writebuf_chunk` has accumulated.
+
+Retracted: this paragraph said `_writebuf_chunk` is 32768 here, that the
+32,758 byte sawtooth is therefore the chunk rather than the f_sync interval,
+that 32 KB of the 80 KB buffer sits permanently below the write threshold, and
+that each burst is about 64 block writes. All four are wrong. **The chunk is
+4096.** It is captured at construction from `get_io_size()`, every backend is
+constructed before any `Init()` runs, and on FATFS nothing mounts the card
+until the first filesystem access - so it takes the pre-mount default of
+`AP_FATFS_MIN_IO_SIZE`. `BRD_SD_SLOWDOWN` is 0 here, so the one early-mount
+path in `AP_Vehicle::setup()` is not taken either.
+
+The sweep in "Most of the writes were metadata" proves it without a probe,
+because blocks-per-call is fixed by the chunk and the metadata ratio:
+
+| io_size | measured | if data writes are 8 blocks | if 64 blocks |
+|---------|----------|-----------------------------|--------------|
+| 4096 | 2.40 | (8 + 4.01)/5.01 = **2.40** | 13.4 |
+| 32768 | 5.52 | (8 + 0.55)/1.55 = **5.52** | 41.6 |
+
+Both points land exactly on 4096 byte data writes, and the single-sector shares
+agree too - 4.01/5.01 = 80.0% against 80.1% measured, 0.55/1.55 = 35.5% against
+35.4%. So the io_size sweep never moved the chunk; it only ever moved the
+f_sync interval. The 32,758 byte sawtooth is the sync interval after all, which
+is what the "wrong explanation fitted" caveat was hedging against.
+
+What follows: only 4 KB sits below the write threshold, not 32 KB, so the
+usable slack is nearer 76 KB; each burst is 8 block writes, not 64; and the
+per-call FATFS and CMD25 cost is paid eight times per sync rather than once.
 
 ### Why STM32 shows it too
 
@@ -1869,14 +1906,34 @@ So the slope is shallower there, not flat. Same mechanism, smaller coefficient.
   puts a price on the core0 flash work: about 3 KB/s of log bandwidth per point
   of main-loop load recovered.
 
-### One thing worth checking
+### `_writebuf_chunk`: answered, and it was 4096 (fixed)
 
-`_writebuf_chunk` is a `const uint16_t` captured at construction from
-`get_io_size()`. 32768 fits, but it is one doubling from wrapping to zero, and
-it silently assumes the card mounted before `AP_Logger::init()` ran. A mount
-retry that succeeds *after* logger construction leaves the chunk at 4096 while
-FATFS syncs at 32768. Cheap to confirm and worth knowing which case a given
-boot is in.
+This asked which value the chunk took at boot. The answer is 4096 on every
+boot, not just after a mount retry - see the retraction above for the
+arithmetic that settles it from the existing sweep.
+
+The ordering is the cause and it is not board specific. `AP_Logger::init()`
+constructs every backend (`AP_Logger.cpp:273`), and `AP_Logger_File::probe()`
+only calls `new`. All the `Init()` calls come afterwards, in a second loop
+(`:286`), and `Init()` is the first thing to touch the filesystem, which is
+what mounts the card and raises `io_size`. So the constructor always reads the
+pre-mount default. Any FATFS board that raises `AP_FATFS_MAX_IO_SIZE` has the
+same gap, H7 included.
+
+Fixed by refreshing the chunk at the end of `Init()`, once the mount has
+happened, bounded to half the allocated buffer so the threshold stays
+reachable - `io_timer()` will not write until the chunk has accumulated, so a
+chunk larger than the buffer would leave only the 2 second timeout driving
+writes. That bound also caps it below the `uint16_t` wrap the old note warned
+about.
+
+**Unmeasured.** The gain is bounded by the share of time spent outside
+`mmc_write`, which the bench table puts at 21% - 335 KB/s inside against
+265 KB/s delivered. Eight f_write calls per sync become one, so part of that
+21% goes away; none of the 79% inside `mmc_write` does, because per-block cost
+is paid per block whatever the CMD25 length. Before believing any of it, repeat
+the bench measurement in "Most of the writes were metadata" and compare against
+the recorded 265.2 KB/s at io_size 32768. If it does not move, revert it.
 
 ## The SD write path is CPU-starved, not card-limited
 
@@ -3265,16 +3322,22 @@ This promotes the core0 flash work from a tidy-up to the main lever.
       way to stop losing messages while the load work is done.
 - [ ] Attack core0's flash share - the veneers in `PROFILING.md`. Now worth
       roughly 3 KB/s of log bandwidth per point of load recovered.
-- [ ] Check whether `_dropped` counts distinct messages or re-offers
-      (`AP_Logger_File.cpp:474`). log97's `Dp` implies an offered rate nothing
-      in the message mix supports, so `Dp` is currently only usable as a
-      pressure indicator.
+- [x] Check whether `_dropped` counts distinct messages or re-offers. Answered:
+      in flight it counts distinct rejected messages, and nothing re-offers.
+      Only the boot FMT phase counts retries. So the offered rate genuinely
+      rose in Loiter, and the "`PSC*` is 21 messages/s" dismissal is circular -
+      that count is post-drop. See the mechanism section.
+- [ ] Measure what position control actually offers, which the logged rate
+      cannot tell you. Needs a counter at the offer site, or a bench run with
+      LOG_BITMASK varied.
 - [ ] Do not shrink io_size. The sweep has throughput falling with it, and
       capacity is the term that is short.
-- [ ] Confirm which value `_writebuf_chunk` actually took this boot. It is
-      captured once at construction from `get_io_size()`, so a mount that only
-      succeeded on a retry leaves it at 4096 against a 32768 sync interval.
-      See the mechanism section.
+- [x] Confirm which value `_writebuf_chunk` took. Answered: 4096, on every
+      boot rather than only after a mount retry, because every backend is
+      constructed before any `Init()` mounts the card. Fixed by refreshing it
+      at the end of `Init()`. **The fix is unmeasured** - repeat the bench
+      throughput measurement against the recorded 265.2 KB/s before believing
+      it, and revert if it does not move.
 
 ### 5. PIO UART statistics
 
