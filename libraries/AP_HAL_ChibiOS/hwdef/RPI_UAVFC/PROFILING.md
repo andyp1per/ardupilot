@@ -214,15 +214,36 @@ was almost entirely fetch-bound - which fits what it is: long straight-line
 per-frame sensor snapshotting with no loop locality, so every instruction is a
 cold XIP fetch.
 
-**The general lesson is the useful part.** If 8-10x is what relocation gives
-XIP-resident core0 code, the remaining 71-77% of core0 non-idle time sitting in
-flash is a large opportunity, and the only thing stopping it is SRAM. Section
-sizes leave essentially nothing spare - `.data` 84128, `.bss` 110212, stacks
-101376, `.heap` 226548 - so the budget is whatever the heap can give up, and
-the 80 KB log buffer is allocated out of that same heap. Ranked by samples per
-KB the next candidates are AP_AHRS (96), AC_AttitudeControl (87),
-AP_RCProtocol (86) and EKFGSF_yaw (77), against AP_NavEKF3 at 51, which would
-spend the entire budget for its 11.7%.
+**The general lesson, and why core0 relocation stops here.** If 8-10x is what
+relocation gives XIP-resident core0 code, the remaining 71-77% of core0
+non-idle time in flash looks like a large opportunity. It is not takeable,
+because the budget is heap and the heap is spoken for.
+
+Ranked by samples per KB the next candidates are AP_AHRS (96, 23.9 KB),
+AC_AttitudeControl (87, 12.2 KB), AP_RCProtocol (86, 13.8 KB) and EKFGSF_yaw
+(77, 4.7 KB), against AP_NavEKF3 at 51, which would spend everything for its
+11.7%. Against the in-flight free heap:
+
+| | bytes | free after |
+|-----------------------------------|---------|------------|
+| `PM.Mem` in flight, log96/97 | 56856 | - |
+| analog PIO OSD as built | -17352 | 39504 |
+| AP_DAL relocation, done | -3072 | **36432** |
+| AP_AHRS if it were done | -23872 | 12560 |
+| plus AC_AttitudeControl | -12226 | 334 |
+
+Note `OSD_TYPE` was 5 in those flights - MSP DisplayPort, which allocates
+nothing - so the analog OSD's 17.4 KB is not in the 56856 and has to be
+subtracted. That is the as-built figure from `OSD.md`, not the 53 KB in the
+plan section above it, which assumed a field buffer the driver does not have.
+
+So AP_AHRS alone takes two thirds of what remains once the OSD is enabled, and
+the one after it reaches zero. **Decision: stop at AP_DAL.** The 80 KB log
+buffer comes out of the same heap, so pushing further trades the buffer that
+absorbs logging bursts for the CPU that drains it, which is the wrong way round
+for the problem being solved. Reopen this only if the heap grows - a smaller
+font, or the log buffer sized down deliberately - and re-measure `PM.Mem` in
+flight before spending any of it.
 
 ### The idle PC moves between builds
 

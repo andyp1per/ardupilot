@@ -3373,8 +3373,12 @@ This promotes the core0 flash work from a tidy-up to the main lever.
 
 - [ ] `LOG_FILE_RATEMAX` 67, or clear `MASK_LOG_ATTITUDE_FAST`, as the immediate
       way to stop losing messages while the load work is done.
-- [ ] Attack core0's flash share - the veneers in `PROFILING.md`. Now worth
-      roughly 3 KB/s of log bandwidth per point of load recovered.
+- [x] Attack core0's flash share. Done as far as it goes: `AP_DAL` relocated
+      and measured 8-10x cheaper per EKF frame, which validates the mechanism
+      on core0 rather than assuming it. **Stopped there on heap grounds** - the
+      next candidate, AP_AHRS, is 23.9 KB against 36.4 KB of in-flight free
+      heap once the analog OSD's 17.4 KB is allowed for, and the 80 KB log
+      buffer comes out of the same heap. See `PROFILING.md`.
 - [x] Check whether `_dropped` counts distinct messages or re-offers. Answered:
       in flight it counts distinct rejected messages, and nothing re-offers.
       Only the boot FMT phase counts retries. So the offered rate genuinely
@@ -3440,8 +3444,9 @@ vehicle.
   28 degC cal temperature.
 - Finish AUTOTUNE. Roll got most of the way in log62 without saving; pitch and
   yaw are untouched.
-- Attack core0's flash share, starting with the veneers - see `PROFILING.md`.
-  Core1 is done.
+- Core0's flash share is closed on heap grounds, not because it is finished.
+  71-77% of core0 non-idle time is still XIP-resident and relocation measured
+  8-10x on it, but there is no heap to spend. Reopen only if the heap grows.
 - Find the corrupt log filename cause. Three transport-level mechanisms are
   ruled out, so start above the SPI layer: the bouncebuffer copy in
   `SPIDevice::do_transfer()`, and what the card does with a directory sector
