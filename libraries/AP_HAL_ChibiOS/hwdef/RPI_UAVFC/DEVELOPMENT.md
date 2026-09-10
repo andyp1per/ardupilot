@@ -1927,13 +1927,66 @@ chunk larger than the buffer would leave only the 2 second timeout driving
 writes. That bound also caps it below the `uint16_t` wrap the old note warned
 about.
 
-**Unmeasured.** The gain is bounded by the share of time spent outside
-`mmc_write`, which the bench table puts at 21% - 335 KB/s inside against
-265 KB/s delivered. Eight f_write calls per sync become one, so part of that
-21% goes away; none of the 79% inside `mmc_write` does, because per-block cost
-is paid per block whatever the CMD25 length. Before believing any of it, repeat
-the bench measurement in "Most of the writes were metadata" and compare against
-the recorded 265.2 KB/s at io_size 32768. If it does not move, revert it.
+**Measured, and reverted.** It does nothing, because the write size was never
+the chunk's to set. See the next section.
+
+Retracted with it: an estimate that the change was worth "up to 26%", reasoned
+from the 21% of time spent outside `mmc_write`. The reasoning was fine and the
+premise was wrong.
+
+### The write size is capped by the FAT cluster size
+
+This is the thing neither the chunk nor io_size can move, and it explains why
+every data write in every measurement in this file has been exactly 8 blocks.
+
+`ff.c:4013`, in `f_write`:
+
+```c
+cc = btw / SS(fs);                  /* sectors remaining to write */
+if (cc > 0) {
+    if (csect + cc > fs->csize) {   /* Clip at cluster boundary */
+        cc = fs->csize - csect;
+    }
+    disk_write(fs->pdrv, wbuff, sect, cc);
+```
+
+FATFS clips every multi-sector transfer at the cluster boundary and does not
+coalesce across clusters even when they are contiguous. The read path at
+`:3898` does the same. Read off the mounted card - `FatFs` holds the object
+pointer, `csize` is at offset 10 - this card is **`csize` 8, so 4096 byte
+clusters**, alongside `fs_type` 3 and `n_fats` 2. So `disk_write` can never be
+handed more than 8 sectors, whatever `f_write` is given.
+
+The A/B, one boot, f_sync interval held at 32768 throughout by giving the chunk
+its own SWD-pokeable override rather than sweeping io_size, which would have
+moved both terms at once:
+
+| | chunk 4096 | chunk 32768 |
+|-----------------|------------|-------------|
+| blocks / call | 5.53 | 5.53 |
+| n histogram | 1:454 8:835 | 1:442 8:809 |
+| card blocks | 179.9 KB/s | 164.9 KB/s |
+| us/block exchange | 594 | 585 |
+| us/block idle | 409 | 403 |
+
+Identical histograms and identical blocks per call: bin 9, which is "9 blocks
+or more", stayed empty in both. The 8% throughput difference is not a gain
+going the other way, it is the same write pattern taking slightly longer -
+with a 32 KB chunk the writer waits for 32 KB and then issues eight
+cluster-capped writes back to back rather than spreading them.
+
+**Check the histogram before believing any throughput number here.** If bin 9
+is empty the write size did not change, and whatever the KB/s did is something
+else.
+
+What follows. Raising the chunk is necessary but not sufficient; to get larger
+writes you need a larger cluster size *and* a chunk big enough to fill it, and
+neither alone does anything. Sizing the gain from this measurement: inside
+`mmc_write` the per-block terms are 587 + 400 = 987 us against 1434 us/block
+total, so roughly 31% is per-call overhead. Removing seven of eight data calls
+recovers part of that, order 10%, not the 26% claimed above. That is a
+reformat of the card, so it is not free, and it is worth less than the core0
+work - which log97 prices at 40% of throughput for 12 points of load.
 
 ## The SD write path is CPU-starved, not card-limited
 
@@ -3334,10 +3387,14 @@ This promotes the core0 flash work from a tidy-up to the main lever.
       capacity is the term that is short.
 - [x] Confirm which value `_writebuf_chunk` took. Answered: 4096, on every
       boot rather than only after a mount retry, because every backend is
-      constructed before any `Init()` mounts the card. Fixed by refreshing it
-      at the end of `Init()`. **The fix is unmeasured** - repeat the bench
-      throughput measurement against the recorded 265.2 KB/s before believing
-      it, and revert if it does not move.
+      constructed before any `Init()` mounts the card. Fixed, measured, and
+      **reverted** - the write size is set by the 4096 byte FAT cluster, not by
+      the chunk, so raising it changed nothing. See "The write size is capped by
+      the FAT cluster size".
+- [ ] Optional, and worth less than the core0 work: reformat the card with a
+      larger cluster and re-land the chunk change with it. Neither alone does
+      anything. Order 10% by the measured per-call share, against 40% for the
+      12 points of core0 load log97 priced. Destroys the card contents.
 
 ### 5. PIO UART statistics
 
