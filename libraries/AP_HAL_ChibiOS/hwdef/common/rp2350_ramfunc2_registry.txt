@@ -32,6 +32,20 @@ libraries/AP_AHRS/AP_AHRS_Backend.cpp|AP_AHRS::update_cd_values  # 112 B (sram)
 libraries/AP_AHRS/AP_AHRS_DCM.cpp|AP_AHRS_DCM::update  # 480 B (sram)
 libraries/AP_AHRS/AP_AHRS_DCM.cpp|AP_AHRS_DCM::matrix_update  # 194 B (sram)
 libraries/AP_AHRS/AP_AHRS_DCM.cpp|AP_AHRS_DCM::drift_correction
+
+# AP_DAL: the EKF's sensor abstraction, 3.8% of core0 non-idle in 2.3 KB and
+# entirely XIP-resident before this. Only the entries the profile actually hit
+# and that are larger than a 16 B veneer are here - the constructors and the
+# unused write* paths score zero, and relocating a 4 B accessor called from
+# flash costs more veneer than it saves.
+libraries/AP_DAL/AP_DAL.cpp|AP_DAL::WriteLogMessage  # 72 B (sram)
+libraries/AP_DAL/AP_DAL.cpp|AP_DAL::ekf_low_time_remaining  # 96 B (sram)
+libraries/AP_DAL/AP_DAL.cpp|AP_DAL::start_frame  # 608 B (sram)
+libraries/AP_DAL/AP_DAL_Baro.cpp|AP_DAL_Baro::start_frame  # 142 B (sram)
+libraries/AP_DAL/AP_DAL_Compass.cpp|AP_DAL_Compass::start_frame  # 328 B (sram)
+libraries/AP_DAL/AP_DAL_GPS.cpp|AP_DAL_GPS::start_frame  # 462 B (sram)
+libraries/AP_DAL/AP_DAL_InertialSensor.cpp|AP_DAL_InertialSensor::start_frame  # 296 B (sram)
+libraries/AP_DAL/AP_DAL_InertialSensor.cpp|AP_DAL_InertialSensor::update_filtered  # 256 B (sram)
 libraries/AP_HAL_ChibiOS/hwdef/common/hrt.c|hrt_micros64  # 84 B (sram)
 libraries/AP_HAL_ChibiOS/hwdef/common/hrt.c|hrt_micros32
 libraries/AP_HAL_ChibiOS/hwdef/common/hrt.c|hrt_millis64  # 84 B (sram)
