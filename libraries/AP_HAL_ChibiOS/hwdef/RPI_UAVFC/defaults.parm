@@ -14,6 +14,22 @@
 #   INS_FAST_SAMPLE=1: enables the fast-sample window for the rate thread
 #     (required for AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW).
 #
+#   SERVO_DSHOT_RATE=1: the multiplier applies to the rate-loop rate, not
+#     SCHED_LOOP_RATE - see the DShot rate table in DEVELOPMENT.md. It does not
+#     set the frame rate here: rcout_thread() sends on every EVT_PWM_SEND
+#     whatever the multiplier is, and the rate thread signals one per tick, so
+#     output runs at the rate-loop rate at 0 as well. What 1 buys is a
+#     _dshot_period_us of one rate-loop period (500 at 2 kHz, 625 at the
+#     ICM-56686's 1.6 kHz) rather than a fixed 1000 for the cycle timeout,
+#     and no virtual timer. At 0 that timer is re-armed on every push, so it
+#     only fires once pushes are more than 1 ms apart, as they can be while
+#     disarmed if the rate thread decimates towards the main loop rate.
+#     None of it takes effect until the user selects DShot with MOT_PWM_TYPE 6,
+#     which this board deliberately leaves alone. Note that SRV_Channels::init()
+#     also calls set_dshot_rate(), with the main loop rate rather than the
+#     rate-loop rate; the rate thread's call runs later and wins, but the two
+#     disagree for any non-zero value.
+#
 # Main loop at 200 Hz: the 2 kHz rate loop on core1 handles the fast attitude
 # path, so core0's main loop (nav, EKF inline, GCS, logging) needs only a
 # modest rate. This is the baseline at the 225 MHz core clock.
@@ -22,6 +38,7 @@ INS_FAST_SAMPLE 1
 INS_GYRO_RATE 2
 FSTRATE_DIV 2
 FSTRATE_ENABLE 2
+SERVO_DSHOT_RATE 1
 
 # Single IMU on this board.
 EK3_IMU_MASK 1
