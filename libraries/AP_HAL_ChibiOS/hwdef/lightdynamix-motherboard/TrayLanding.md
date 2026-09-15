@@ -1,8 +1,10 @@
 # Tray landing accuracy on LightDynamix show drones
 
-Analysis session, 2026-09-14. Firmware ArduCopter V4.6.3-lightdynamix
-(73e18022) on lightdynamix-motherboard (APJ 5281), drone show mode (127),
-u-blox ZED-F9P RTK at 5 Hz, GPS as the height source, no rangefinder.
+Analysis sessions, 2026-09-14 (tray landings, firmware 73e18022 on
+lightdynamix-motherboard, APJ 5281) and 2026-09-15 (fast oscillation,
+firmware 8e72a9cb on lightdynamix-pixelmb, APJ 5282). ArduCopter
+V4.6.3-lightdynamix, drone show mode (127), u-blox ZED-F9P RTK at 5 Hz,
+GPS as the height source, no rangefinder.
 
 The complaint was that drones did not land accurately enough to seat in
 their charging trays. The flight logs are real customer flights and are
@@ -28,6 +30,12 @@ Three separate problems were found, in order of size:
 
 The EKF was never the limiting error. RTK fix losses on one airframe are
 an open hardware item.
+
+A follow-up found that two of the settings recommended for problem 1, the
+stiffer XY shaper and ATC_INPUT_TC 0.10, made the show's 10 Hz position
+commands drive a visible 10 Hz oscillation on fast show segments.
+SHOW_VEL_FF_GAIN 1.0 with SHOW_CTRL_RATE 25 removed it and halved show
+tracking error (section 6).
 
 ## Logs
 
@@ -93,6 +101,10 @@ AC_PosControl::set_max_speed_accel_xy(), which the port includes.
 The drones that flew logs 6, 8 and 55 did not carry the values in this
 directory's defaults.parm (PSC_JERK_XY 80, WPNAV_ACCEL 1000, different
 rate gains), so check what is actually loaded on each airframe.
+
+SHOW_VEL_FF_GAIN 1.0 is only worse here because these shows ended while
+still moving. With a hold at the end of the show it is the better setting;
+see section 6.
 
 ## 2. EKF position and height
 
@@ -261,6 +273,113 @@ Sensitivity peak is the loop's worst-case disturbance amplification.
 - In the windy show, the model gives 0.6-1.5 cm back from LAND_SPEED 50
   or 2.5 / 5 / 2.5.
 
+## 6. Fast oscillation at the show command rate (2026-09-15)
+
+Two pixelmb drones flew the same show with RATE, ANG and PID logging at
+400 Hz, which the tray logs did not have:
+
+| Log | Drone | Show settings | Other differences |
+|-----|-------|---------------|-------------------|
+| 29 | 162 | SHOW_VEL_FF_GAIN 0.6, SHOW_CTRL_RATE 10 | PSC_POSXY_P 3, PSC_JERK_XY 50, MOT_SPIN_MIN 0.30 (defaults problem) |
+| 72 | 165 | SHOW_VEL_FF_GAIN 1.0, SHOW_CTRL_RATE 25 | PSC_POSXY_P 2, PSC_JERK_XY 40, MOT_SPIN_MIN 0.09 |
+
+Both had WPNAV_ACCEL 500, ATC_INPUT_TC 0.10, PSC_VELXY_D 0.25 and drone
+193's rate gains. The show peaks at 2.8 m/s with 23 s above 1 m/s.
+
+### What it was
+
+In log 29 the oscillation was a narrow line at exactly 10.0 Hz, with a
+20 Hz harmonic, present only while the show was moving. Above 1 m/s show
+speed the rate demand at 9-11 Hz was 12.7 dps RMS and the rate controller
+output 8-11% of full authority. The airframe rolled about +/-0.3 deg at
+10 Hz. With the show stationary the same band was 0.3-0.5 dps and under 1%.
+
+It was not the rate loop. In steady flight the actual roll and pitch rates
+have no bump near 8-10 Hz. rate_response.py reported the rate loops as
+under-damped at 8-9 Hz, but that was noise at the edge of its trustworthy
+band.
+
+### Mechanism
+
+The show manager sends guided position and velocity at SHOW_CTRL_RATE with
+no acceleration, and scales the velocity by SHOW_VEL_FF_GAIN. Guided mode
+propagates its target with that velocity between updates. At 0.6 the
+target falls behind and jumps forward by 0.4 * speed / SHOW_CTRL_RATE at
+every update. Measured jumps per update were 2.9 cm at 0.5-1 m/s, 5.6 cm
+at 1-2 m/s and 9.6 cm at 2-3 m/s, matching that formula. The XY shaper
+turns each jump into an acceleration pulse, which goes straight to the
+lean target and becomes a sawtooth in rate demand locked to the commands.
+
+The shaper port from section 1, plus a first-order ATC_INPUT_TC, driven by
+log 29's commands reproduced the 10 Hz lean ripple: 0.028 m/s^2 against
+0.026 logged, and a lean-target rate above 5 Hz of 15.9 dps against
+15.3-16.2 logged depending on the window. Varying the settings on the
+same commands:
+
+| Settings | Ripple (dps) |
+|----------|--------------|
+| PSC_JERK_XY 20, WPNAV_ACCEL 800, ATC_INPUT_TC 0.15 (original) | 2.7 |
+| PSC_JERK_XY 40-50, WPNAV_ACCEL 500, ATC_INPUT_TC 0.15 | 10.7 |
+| PSC_JERK_XY 40-50, WPNAV_ACCEL 500, ATC_INPUT_TC 0.10 (as flown) | 15.9 |
+
+With ATC_ACCEL_R/P_MAX 500000 the effective jerk is capped at 32.7 m/s^3,
+so PSC_JERK_XY 40 and 50 are the same. The PSC gains do not enter this
+path.
+
+Trade-off on the same commands at ATC_INPUT_TC 0.10. "Lag" is how far the
+shaped target trails the show trajectory, mean over the fast segments:
+
+| JERK_XY / WPNAV_ACCEL | FF gain | Command rate | Ripple | Lag |
+|-----------------------|---------|--------------|--------|-----|
+| 40 / 500 | 0.6 | 10 Hz | 15.9 dps | 26 cm |
+| 40 / 500 | 0.6 | 50 Hz | 4.8 dps | 22 cm |
+| 40 / 500 | 1.0 | 10 Hz | 9.5 dps | 5 cm |
+| 40 / 500 | 1.0 | 25 Hz | 7.8 dps | 4 cm |
+| 20 / 800 | 1.0 | 10 Hz | 3.7 dps | 26 cm |
+| 20 / 800 | 1.0 | 25 Hz | 3.1 dps | 24 cm |
+
+Sending acceleration with the commands could not be evaluated: a spline
+through 10 Hz samples gives unusable acceleration, and the real trajectory
+would have to come from the show file.
+
+### Flown
+
+Log 72 flew SHOW_VEL_FF_GAIN 1.0 at 25 Hz with the 40 / 500 shaper:
+
+| Show speed > 1 m/s | Log 29 | Log 72 |
+|--------------------|--------|--------|
+| Target jump per update | 5.6-9.6 cm | 0.5 cm |
+| Rate demand at command rate | 12.7 dps | 1.9 dps |
+| Rate output at command rate | 8-11% | 2-3% |
+| Airframe attitude ripple at command rate | ~0.3 deg | ~0.007 deg |
+| Lean-target rate above 5 Hz | 15.3 dps | 4.8 dps |
+| SHOW.HDist mean / p95 / max | 15.8 / 31 / 41 cm | 6.9 / 16 / 19 cm |
+
+- Measured ripple beat the model's 7.8 dps prediction.
+- Scheduler load was 47-50% in both logs with no long loops, so 25 Hz
+  commands cost nothing measurable.
+- Hover error with the show stationary rose from 1.5 to 3.1 cm mean, a
+  different drone and day and PSC_POSXY_P 3 to 2. That is in line with the
+  step 2 tray and windy show flights.
+- Lean activity at 0.5-0.9 Hz fell back to step 2 levels (ratio 0.60 to
+  0.20). The earlier level came from PSC_POSXY_P 3 with PSC_VELXY_D 0.25,
+  which at the measured 0.10 s lag leaves about 31 deg of phase margin.
+- PSC_VELXY_D 0.25 is ArduCopter's firmware default; the tray drones
+  carried 0.5 from their parameter files. At 2 / 4 / 2 it gives 40 deg of
+  margin (28 deg with 50 ms extra delay) against 55 (41) at 0.5.
+
+With SHOW_VEL_FF_GAIN 1.0, section 1's handover replay gives up to 4.6 cm
+of LAND target error with the 40 / 500 shaper if a show ends while still
+moving, and up to 32 cm with 20 / 800. A hover of at least 2 s at the end
+keeps it under 2 cm either way. This show descended to the ground itself,
+so it was not affected.
+
+Log 72 also showed two single GPS records with no fix and 0 satellites,
+4 s apart mid-show, each with a dip in GPS UART receive bytes and RTK fixed
+either side; the EKF and position were unaffected. Before flight it
+reported a low magnetic field (140 against a minimum of 185) and a ground
+magnetic anomaly realignment at takeoff.
+
 ## Recommended settings
 
 | Parameter | Value | Why |
@@ -268,19 +387,22 @@ Sensitivity peak is the loop's worst-case disturbance amplification.
 | PSC_POSXY_P | 2.0 | step 2 |
 | PSC_VELXY_P | 4.0 | step 2 |
 | PSC_VELXY_I | 2.0 | step 2 |
-| PSC_VELXY_D | 0.5 | unchanged |
+| PSC_VELXY_D | 0.5 | margin; the Copter firmware default is 0.25 |
 | PSC_VELXY_FF | 0.2 | as flown |
 | ATC_INPUT_TC | 0.10 | halves attitude lag, restores margin for step 2 |
-| PSC_JERK_XY | 40 | LAND handover target |
-| WPNAV_ACCEL | 500 | LAND handover target |
+| PSC_JERK_XY | 40 | show tracking; LAND handover without an end hold |
+| WPNAV_ACCEL | 500 | show tracking; LAND handover without an end hold |
 | LAND_SPEED | 30 (up to 50) | less time in the near-ground push, fast land detect |
-| SHOW_VEL_FF_GAIN | 0.6 | leave unless the show holds at the end |
+| SHOW_VEL_FF_GAIN | 1.0 | removes the command-rate ripple, halves show tracking error |
+| SHOW_CTRL_RATE | 25 | smaller target steps, ripple moved above the attitude loop |
 | EK3_POSNE_M_NSE | 0.2 | only on airframes with healthy RTK |
 | EK3_VELNE_M_NSE | 0.15 | only on airframes with healthy RTK |
 | EK3_VELD_M_NSE | 0.2 | only on airframes with healthy RTK |
 
-Show trajectories should end with at least 2 s of hover over the landing
-point.
+Show trajectories that end at height should end with at least 2 s of
+hover over the landing point. Without it, SHOW_VEL_FF_GAIN 1.0 with this
+shaper leaves up to 4.6 cm of LAND target error, and much more if the
+shaper is softened back to PSC_JERK_XY 20 / WPNAV_ACCEL 800.
 
 ## Open items
 
@@ -298,6 +420,13 @@ point.
   site and tray walls. Needs more windy data before trying.
 - For testing, fly with LOG_DISARMED=1 so logs start at boot (faithful
   Replay) and capture post-landing events. Trim back for shows.
+- lightdynamix-pixelmb defaults.parm still sets SHOW_VEL_FF_GAIN 0.6 and
+  does not set SHOW_CTRL_RATE or PSC_VELXY_D; log 72's values were set on
+  the drone.
+- Show manager: send trajectory acceleration with the guided commands so
+  the target propagates consistently between updates. Untested.
+- Drone 165: the single-record GPS dropouts and the low magnetic field at
+  launch in log 72.
 
 ## Corrections made during the session
 
@@ -322,3 +451,10 @@ These were stated and then withdrawn when the data disagreed.
   land detect" from a contact-time estimate that depended on resting
   height, and "not seated" on show landings measured against the takeoff
   spot. All three were fixed.
+- PSC_JERK_XY 40 / WPNAV_ACCEL 500 and ATC_INPUT_TC 0.10 were recommended
+  without checking how they respond to the 10 Hz show commands; the tray
+  logs were logged at 10 Hz and could not show it. Together they made the
+  command-rate ripple about 6x larger (section 6).
+- rate_response.py reported under-damped rate loops at 8-9 Hz on log 29.
+  The steady-flight spectra show no resonance there, so that was noise at
+  the edge of its band.
