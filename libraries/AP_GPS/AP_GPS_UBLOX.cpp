@@ -1479,13 +1479,21 @@ AP_GPS_UBLOX::_parse_gps(void)
             if (mod != nullptr) {
                 strncpy(_module, (char*)mod+4, UBLOX_MODULE_LEN-1);
             }
+            char fwver[30] {};
+            const char *fw = (const char *)memmem(_buffer.mon_ver.extension, sizeof(_buffer.mon_ver.extension), "FWVER=", 6);
+            if (fw != nullptr) {
+                const size_t ext_remaining = sizeof(_buffer.mon_ver.extension) - (fw - _buffer.mon_ver.extension);
+                strncpy(fwver, fw, MIN(sizeof(fwver)-1, ext_remaining));
+            }
 
             GCS_SEND_TEXT(MAV_SEVERITY_INFO, 
-                                             "u-blox %s%s%d HW: %s SW: %s",
+                                             "u-blox %s%s%d HW: %s SW: %s%s%s",
                                              _module, mod != nullptr ? " " : "",
                                              state.instance + 1,
                                              _version.hwVersion,
-                                             _version.swVersion);
+                                             _version.swVersion,
+                                             fw != nullptr ? " " : "",
+                                             fwver);
             // check for F9 and M9. The F9 does not respond to SVINFO,
             // so we need to use MON_VER for hardware generation
             if (strncmp(_version.hwVersion, "00190000", 8) == 0) {
