@@ -12,8 +12,13 @@
 void AP_AdvancedFailsafe_Copter::terminate_vehicle(void)
 {
     if (_terminate_action == TERMINATE_ACTION_LAND) {
+        // outputs are sent corked by the rest of motors_output()
         copter.set_mode(Mode::Number::LAND, ModeReason::TERMINATE);
     } else {
+        // uncorked, every channel write triggers its own push and pulse gap wait
+        auto &srv = AP::srv();
+        srv.cork();
+
         // stop motors
         copter.motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::SHUT_DOWN);
         copter.motors->output();
@@ -28,9 +33,10 @@ void AP_AdvancedFailsafe_Copter::terminate_vehicle(void)
         SRV_Channels::set_output_limit(SRV_Channel::k_ignition, SRV_Channel::Limit::TRIM);
         SRV_Channels::set_output_limit(SRV_Channel::k_none, SRV_Channel::Limit::TRIM);
         SRV_Channels::set_output_limit(SRV_Channel::k_manual, SRV_Channel::Limit::TRIM);
-    }
 
-    SRV_Channels::output_ch_all();
+        SRV_Channels::output_ch_all();
+        srv.push();
+    }
 }
 
 void AP_AdvancedFailsafe_Copter::setup_IO_failsafe(void)
