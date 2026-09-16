@@ -826,6 +826,8 @@ void ModeDroneShow::landing_start()
     // TODO(ntamas): set stopping point of loiter nav properly so we land as
     // close to our destination as possible
 
+    _landing_hold_stage = LandingHold_Approaching;
+
     // call regular land flight mode initialisation and ask it to ignore checks
     copter.mode_land.init(/* ignore_checks = */ true);
 }
@@ -833,6 +835,8 @@ void ModeDroneShow::landing_start()
 // performs the landing stage
 void ModeDroneShow::landing_run()
 {
+    copter.mode_land.set_descent_hold(landing_hold_needed());
+
     // call regular land flight mode run function
     copter.mode_land.run();
 
@@ -840,6 +844,71 @@ void ModeDroneShow::landing_run()
     if (landing_completed()) {
         landed_start();
     }
+}
+
+// returns whether the landing should pause at SHOW_LAND_ALT. The wind falls off
+// close to the ground, and the position controller's integrator lags that change
+// by a few seconds, which pushes the drone upwind of its landing spot. Holding
+// until the position error settles lets the integrator catch up, after which the
+// remaining descent is short enough not to build the error up again.
+bool ModeDroneShow::landing_hold_needed()
+{
+    // time that the position error has to stay below the threshold, and the
+    // shortest hold we take, both in milliseconds
+    const uint32_t settle_duration_ms = 500;
+    const uint32_t min_hold_duration_ms = 1000;
+
+    AC_DroneShowManager_Copter& show_manager = copter.g2.drone_show_manager;
+    const float hold_alt_cm = show_manager.get_landing_hold_altitude_m() * 100.0f;
+
+    if (_landing_hold_stage == LandingHold_Done || hold_alt_cm <= 0) {
+        return false;
+    }
+
+    // holding is pointless without a position estimate; LAND drifts with the
+    // wind in that case and the sooner it is on the ground the better
+    if (!copter.position_ok()) {
+        _landing_hold_stage = LandingHold_Done;
+        return false;
+    }
+
+    const uint32_t now = AP_HAL::millis();
+
+    if (_landing_hold_stage == LandingHold_Approaching) {
+        if (get_alt_above_ground_cm() > hold_alt_cm) {
+            return false;
+        }
+
+        _landing_hold_stage = LandingHold_Holding;
+        _landing_hold_started_at = now;
+        _landing_hold_settled_at = 0;
+    }
+
+    const float error_cm = pos_control->get_pos_error_xy_cm();
+    if (error_cm > show_manager.get_landing_hold_xy_error_m() * 100.0f) {
+        _landing_hold_settled_at = 0;
+    } else if (_landing_hold_settled_at == 0) {
+        _landing_hold_settled_at = now;
+    }
+
+    const uint32_t held_for_ms = now - _landing_hold_started_at;
+    const bool settled = (
+        _landing_hold_settled_at != 0 &&
+        now - _landing_hold_settled_at >= settle_duration_ms &&
+        held_for_ms >= min_hold_duration_ms
+    );
+    const bool timed_out = held_for_ms >= show_manager.get_landing_hold_timeout_sec() * 1000;
+
+    if (settled || timed_out) {
+        _landing_hold_stage = LandingHold_Done;
+        gcs().send_text(
+            MAV_SEVERITY_INFO, "Landing: %s after %.1f s, error %.0f cm",
+            settled ? "settled" : "hold timed out", held_for_ms * 0.001f, error_cm
+        );
+        return false;
+    }
+
+    return true;
 }
 
 // returns whether the landing operation has finished successfully. Must be called

@@ -26,6 +26,7 @@ bool ModeLand::init(bool ignore_checks)
 
     land_start_time = millis();
     land_pause = false;
+    descent_hold = false;
 
     // reset flag indicating if pilot has applied roll or pitch inputs during landing
     copter.ap.land_repo_active = false;
@@ -83,7 +84,7 @@ void ModeLand::gps_run()
         }
 
         // run normal landing or precision landing (if enabled)
-        land_run_normal_or_precland(land_pause);
+        land_run_normal_or_precland(land_pause || descent_hold);
     }
 }
 

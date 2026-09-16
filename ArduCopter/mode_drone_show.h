@@ -102,6 +102,21 @@ private:
     // have attempted to arm the drone recently
     uint32_t _prevent_arming_until_msec;
 
+    // Stage of the pause that the landing takes at SHOW_LAND_ALT to let the
+    // position error settle before the final descent
+    enum LandingHoldStage {
+        LandingHold_Approaching,
+        LandingHold_Holding,
+        LandingHold_Done
+    } _landing_hold_stage;
+
+    // Timestamp when the landing hold started
+    uint32_t _landing_hold_started_at;
+
+    // Timestamp when the horizontal position error last fell below the
+    // threshold that ends the landing hold, zero if it is above it
+    uint32_t _landing_hold_settled_at;
+
     // Flag that stores whether the drone is limited to move only above the
     // takeoff altitude. The flag is set when entering the "performing" stage;
     // the limitation is relaxed when the real trajectory of the drone rises
@@ -143,6 +158,7 @@ private:
     void landing_start();
     void landing_run();
     bool landing_completed() const;
+    bool landing_hold_needed();
 
     void rtl_start();
     void rtl_run();

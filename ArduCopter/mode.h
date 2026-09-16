@@ -1262,6 +1262,10 @@ public:
 
     void set_land_pause(bool new_value) { land_pause = new_value; }
 
+    // holds the descent while position is still being controlled; unlike land_pause
+    // this is driven from outside the mode and has no time limit of its own
+    void set_descent_hold(bool new_value) { descent_hold = new_value; }
+
 protected:
 
     const char *name() const override { return "LAND"; }
@@ -1276,6 +1280,7 @@ private:
 
     uint32_t land_start_time;
     bool land_pause;
+    bool descent_hold;
 };
 
 
