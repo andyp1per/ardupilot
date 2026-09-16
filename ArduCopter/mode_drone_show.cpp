@@ -853,10 +853,12 @@ void ModeDroneShow::landing_run()
 // remaining descent is short enough not to build the error up again.
 bool ModeDroneShow::landing_hold_needed()
 {
-    // time that the position error has to stay below the threshold, and the
-    // shortest hold we take, both in milliseconds
+    // time that the position error has to stay below the threshold, in milliseconds
     const uint32_t settle_duration_ms = 500;
-    const uint32_t min_hold_duration_ms = 1000;
+
+    // the descent takes about 0.3 s to stop, measured on two airframes descending
+    // at 20-30 cm/s, so the hold has to start that much above SHOW_LAND_ALT
+    const float stopping_time_sec = 0.3f;
 
     AC_DroneShowManager_Copter& show_manager = copter.g2.drone_show_manager;
     const float hold_alt_cm = show_manager.get_landing_hold_altitude_m() * 100.0f;
@@ -875,7 +877,8 @@ bool ModeDroneShow::landing_hold_needed()
     const uint32_t now = AP_HAL::millis();
 
     if (_landing_hold_stage == LandingHold_Approaching) {
-        if (get_alt_above_ground_cm() > hold_alt_cm) {
+        const float descent_rate_cms = MAX(-inertial_nav.get_velocity_z_up_cms(), 0.0f);
+        if (get_alt_above_ground_cm() - descent_rate_cms * stopping_time_sec > hold_alt_cm) {
             return false;
         }
 
@@ -895,7 +898,7 @@ bool ModeDroneShow::landing_hold_needed()
     const bool settled = (
         _landing_hold_settled_at != 0 &&
         now - _landing_hold_settled_at >= settle_duration_ms &&
-        held_for_ms >= min_hold_duration_ms
+        held_for_ms >= show_manager.get_landing_hold_min_time_sec() * 1000
     );
     const bool timed_out = held_for_ms >= show_manager.get_landing_hold_timeout_sec() * 1000;
 
