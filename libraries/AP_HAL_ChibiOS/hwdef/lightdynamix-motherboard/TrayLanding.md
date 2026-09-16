@@ -467,6 +467,27 @@ show end height holds for SHOW_LAND_TMIN and lands normally, an error
 threshold that never settles ends at SHOW_LAND_TMAX, and SHOW_LAND_TMAX 0
 lands as if the hold were off.
 
+### Retry and time limit
+
+The hold runs once, so a gust in the last 25 cm still lands the drone
+where it was pushed. SHOW_LAND_AERR is the error during the final descent
+that sends it back up to the hold altitude at 20 cm/s to settle again,
+and SHOW_LAND_TOUT limits the landing as a whole so holding can never
+leave a drone hovering over its tray.
+
+Retries stop below 40% of the hold altitude, and once the land detector
+has seen anything. SITL found why: a retry triggered at 2 cm lifted a
+drone that had already touched down, and the landing logged two ground
+contacts.
+
+In SITL with the wind stepped from 5 to 15 m/s as the hold released, the
+error reached 8 cm, the drone climbed back, settled in 4.1 s and landed
+4.3 cm from its target; a landing without the gust is unchanged at
+2.4 cm. Forcing retries with a 0.5 cm threshold ends at SHOW_LAND_TOUT
+with "out of time, descending" and a single touchdown. SITL slews its
+wind over SIM_WIND_TC, 5 s by default, so a gust test needs that set to
+about 0.3 s or nothing happens.
+
 ### Flown
 
 | Log | Drone | Hold settings | Wind load | Hold | Veh | Contact | Rest |
@@ -495,6 +516,41 @@ rest in cm as in the first log table.
 During the hold the drone drifts up a few cm (5 cm on log 48). Harmless,
 but the hold is not stationary vertically.
 
+### VELXY_I 3
+
+Eight flights, four drones, the same settings apart from PSC_VELXY_I and
+with the hold at 0.25 / 0.03 / 2 / 5:
+
+| Log | Drone | I | Load | Hold | Veh | Contact | Rest | Detect |
+|-----|-------|---|------|------|-----|---------|------|--------|
+| 64 | 161 | 2 | 0.79 | 2.0 | 2.0 | 4.4 | 1.1 | 1.4 |
+| 65 | 161 | 3 | 0.65 | 2.0 | 0.9 | 0.7 | 1.3 | 1.5 |
+| 51 | 162 | 2 | 1.04 | 2.1 | 1.3 | 0.9 | 0.8 | 1.6 |
+| 52 | 162 | 3 | 0.90 | 2.0 | 2.1 | 1.4 | 1.3 | 1.9 |
+| 94 | 165 | 2 | 0.55 | 1.9 | 2.6 | 2.9 | 1.8 | 1.8 |
+| 95 | 165 | 3 | 0.48 | 2.0 | 1.0 | 3.2 | 1.0 | 1.7 |
+| 69 | 193 | 2 | 0.67 | 1.9 | 1.4 | 5.5 | 1.9 | 1.5 |
+| 70 | 193 | 3 | 0.52 | 2.0 | 0.9 | 2.9 | 2.1 | 1.4 |
+
+Three of the four pairs improved, median vehicle against target 1.7 cm at
+I 2 and 0.95 cm at I 3, but every I 3 flight happened to be in 8-17%
+lighter wind, so the pairs are confounded. Replaying each flight's own
+disturbance through both gain sets removes that: on the five flights the
+model reproduces, the worst error below 0.6 m falls from 3.1 to 2.5 cm
+and the error on arriving at the hold from 2.0 to 1.7 cm. About half a
+centimetre, which is what the model predicted before the flights, with no
+oscillation and no change in land detect time.
+
+The wind was light on all eight, the hold released at its 2 s minimum
+every time because the error was already below 3 cm on arrival, and the
+errors sit near the model's 1-2 cm floor. The case that shows the
+mechanism is still log 48 at 1.07 of load: 9.1 cm at 0.35 m, 1.0 cm at
+contact.
+
+Two of the eight rested about 10 deg tilted (162 log 52, 193 log 70)
+after contact errors of 1.4 and 2.9 cm, so that is mechanical, not
+approach accuracy. 162 has now done it four times and 193 twice.
+
 ### EKF drag coefficients and the wind estimate
 
 Drones 162 and 193 flew with EK3_DRAG_BCOEF_X/Y 58.77/51.02 and
@@ -516,13 +572,20 @@ speeds and flips the innovation positive.
 With GPS this affects nothing - log 63 tracked to 1.2-1.9 cm all the way
 down - but the wind estimate is what dead reckoning would fly on.
 
+Flown with EK3_DRAG_MCOEF 0.2 on all four drones (BCOEF left at its old
+values, which with MCOEF set adds about 15% of drag at 3 m/s), the
+estimates came out at 2.3-3.6 m/s from 89-105 deg against 2.2-4.0 m/s
+from 93-111 deg fitted per flight, and the drag innovation bias fell from
+-0.230 m/s^2 to between -0.04 and +0.06. The wind states are no longer
+absorbing a modelling error.
+
 ## Recommended settings
 
 | Parameter | Value | Why |
 |-----------|-------|-----|
 | PSC_POSXY_P | 2.0 | step 2 |
 | PSC_VELXY_P | 4.0 | step 2 |
-| PSC_VELXY_I | 2.0 | step 2 |
+| PSC_VELXY_I | 3.0 | step 2 was 2.0; 3 is worth about 0.5 cm near the ground |
 | PSC_VELXY_D | 0.5 | margin; the Copter firmware default is 0.25 |
 | PSC_VELXY_FF | 0.2 | as flown |
 | ATC_INPUT_TC | 0.10 | halves attitude lag, restores margin for step 2 |
@@ -538,6 +601,8 @@ down - but the wind estimate is what dead reckoning would fly on.
 | SHOW_LAND_ERR | 0.03 | above the hover error floor, which is 2-3 cm here |
 | SHOW_LAND_TMIN | 2 | the error dips below the threshold before the integrator settles |
 | SHOW_LAND_TMAX | 5 | still lands when the error never settles, e.g. RTK loss |
+| SHOW_LAND_AERR | 0.08 | a gust this far off sends the landing back up to settle |
+| SHOW_LAND_TOUT | 20 | the landing always finishes, however often it was held |
 | EK3_DRAG_MCOEF | 0.2 | measured on 162, 165 and 193; 0 disables wind learning |
 | EK3_DRAG_BCOEF_X/Y | 0 | bluff-body drag over-predicts at show speeds |
 
@@ -556,10 +621,14 @@ shaper is softened back to PSC_JERK_XY 20 / WPNAV_ACCEL 800.
   (section 7).
 - The landing hold drifts up a few cm while it waits; worth finding out
   whether that is the vertical shaper or near-ground height error.
-- EK3_DRAG_MCOEF 0.2 with BCOEF 0 is set from three airframes and one
-  Replay. Roll it out and check the XKF2 drag innovation bias (IDX) on
-  the next flights; zeroing that bias suggests a slightly higher 0.25-0.27
-  while the velocity fit says 0.19.
+- EK3_DRAG_BCOEF_X/Y are still set to 58.77/51.02 on the fleet. With
+  MCOEF 0.2 they do little at show speeds and the innovations are clean,
+  but zeroing them matches the measured drag better.
+- Drones 162 and 193 rest tilted about 10 deg after accurate landings.
+  Check their legs and tray funnels; it is not an approach problem.
+- The hold has only been flown in light wind since log 48. It releases at
+  SHOW_LAND_TMIN when the error is already small, so SHOW_LAND_ERR and
+  the retry threshold are still untested in the wind they were sized for.
 - Ground phase: relax XY control and clear the integrator once RTK height
   says the drone is within a few cm of the landing surface, so a drone
   resting off-centre is not pushed until it tips.
