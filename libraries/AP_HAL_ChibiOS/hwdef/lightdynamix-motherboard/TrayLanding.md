@@ -3,8 +3,8 @@
 Analysis sessions, 2026-09-14 (tray landings, firmware 73e18022 on
 lightdynamix-motherboard, APJ 5281), 2026-09-15 (fast oscillation,
 firmware 8e72a9cb on lightdynamix-pixelmb, APJ 5282) and 2026-09-16
-(windy landings and the landing hold, firmware 995f251d and af81d153 on
-lightdynamix-pixelmb). ArduCopter V4.6.3-lightdynamix, drone show mode
+(windy landings, the landing hold and a six-drone sweep, firmware
+995f251d, af81d153 and 069d6dbf on lightdynamix-pixelmb). ArduCopter V4.6.3-lightdynamix, drone show mode
 (127), u-blox ZED-F9P RTK at 5 Hz, GPS as the height source, no
 rangefinder.
 
@@ -639,6 +639,130 @@ A drone flashed with this firmware reads its old SHOW_LAND_ALT value as
 the upstream handover altitude and comes up with the hold off, so the hold
 settings have to be entered again.
 
+## 8. Six-drone sweep in moderate wind (2026-09-16)
+
+Drones 161, 193 and 166 flew as one group and 162, 165 and 167 as the
+other, on build 069d6dbf. There were 17 slots between 14:22 and 15:38
+UTC. In every slot all six launched within a minute, and the two groups
+flew opposite settings, so the difference between the group means in one
+slot is a comparison in the same wind. The flight record page was not
+used; each flight's settings were read from the parameters in effect when
+it armed, and the slots were lined up by GPS time.
+
+The procedure was reboot, change parameters, fly. Parameters written by a
+normal MAVLink parameter set appear in that flight's log, but a bulk
+upload over MAVLink FTP (@PARAM/param.pck) is saved without a log entry,
+so it only shows up in the next boot's log. The last slot was set that
+way (below), and nothing in its logs showed the change.
+
+Starting settings were the recommended set with SHOW_HOLD_TMAX 7 and
+PSC_VELXY_I 3. EK3_DRAG_BCOEF_X/Y were still 58.77/51.02. The wind load
+was 0.6-1.6 m/s^2, median 1.0, about 5 m/s: moderate, not gusty.
+
+### Results
+
+82 usable landings in slots 0-15, leaving out flights without RTK fixed
+at contact or for less than 90% of the descent (most of 193's):
+
+| | Median | Range |
+|---|---|---|
+| Vehicle against target at contact | 2.9 cm | 0.3-11.6 |
+| Contact against the seat | 3.8 cm | 0.7-11.9 |
+| Resting against the seat | 0.9 cm | 0.1-7.6 |
+| Land detect after contact | 1.6 s | 1.3-4.1 |
+| Hold length (74 holds) | 2.2 s | 90th percentile 3.7, max 6.4 |
+
+No hold timed out and no retry fired. Differences between the groups in
+the same slot, first setting minus second:
+
+| Comparison | Slots | Against target | Against seat | Resting |
+|---|---|---|---|---|
+| hold off vs on | 3 | +1.2 cm (+2.0, +2.2, -0.4) | 0.0 | +0.1 |
+| AERR 0.05 vs 0.08 | 4 | -0.5 (-3.3, +1.6, +0.1, -0.3) | -0.3 | -0.5 |
+| hold 0.15 vs 0.25 m | 3 | -0.1 (-0.6, +1.1, -0.6) | -0.6 | -0.7 |
+| hold 0.15 m, LAND_SPEED 10 | 1 | -2.3 | -1.5 | +0.9 |
+| TMAX 8 vs 7 | 4 | +0.6 (+0.9, +0.1, +0.7, +0.8) | +0.9 | +0.5 |
+
+- The hold brought the drone 1.2 cm closer to its target at contact, but
+  where it touched down and came to rest on the seat did not change: the
+  funnel evens out errors of that size.
+- The retry threshold, hold height and hold cap made no measurable
+  difference. No hold approached 7 s and nothing fired a retry, so in
+  this wind those settings were not doing anything. The TMAX row cannot
+  be the cap and is group-to-group scatter.
+- LAND_SPEED 10 below a 0.15 m hold landed closer in its one slot (3
+  against 2 flights) but took 3.2 s to detect the landing against 1.8 s.
+  Not enough to adopt, and slow land detection is what tipped a drone off
+  the tray on day 1 (section 3).
+
+### The last slot: retry and time limit in flight
+
+The last slot flew SHOW_HOLD_ALT 0.15 and SHOW_HOLD_AERR 0.01, set by
+bulk upload. A 1 cm retry threshold is below the normal 1-3 cm error in
+this wind, so each release was followed by a retry. The error while
+descending between retries shows the threshold at work: the drone passed
+0.3-0.9 cm without retrying and retried at about 1 cm.
+
+| Drone | Holds | Retries | Ended by | LAND to disarm | Against target | Against seat |
+|---|---|---|---|---|---|---|
+| 161 | 3 | 2 | settled, then descended | 12.9 s | 0.6 cm | 1.5 cm |
+| 167 | 6 | 5 | time limit, already descending | 22.9 s | 0.8 cm | 1.1 cm |
+| 162 | 6 | 6 | time limit | 23.6 s | 3.1 cm | 2.5 cm |
+| 165 | 6 | 6 | time limit | 23.9 s | 2.9 cm | 4.2 cm |
+| 166 | 5 | 5 | time limit | 24.3 s | 3.9 cm | 5.7 cm |
+
+Every retry went back to its hold and settled again, SHOW_HOLD_TOUT ended
+four of the five landings at exactly 20 s, and all five landed normally.
+The drones first held at about 14 cm, so the stopping-distance lead also
+works at 15 cm. "Landing: out of time, descending" is only reported when
+the limit catches the drone holding; on 167 it was already descending
+and the landing ended without a message.
+
+With 0.01 retrying on almost every landing and 0.05 and 0.08 never firing
+in 74 holds, the useful range sits well above the normal descent error.
+
+### Tilted resting
+
+30 of 91 landings came to rest 8-26 deg tilted, mostly 10-13 deg, on
+every drone: 161 4/17, 162 5/17, 165 9/17, 166 3/17, 167 7/17, 193 2/8.
+They were barely less accurate than the flat ones (contact 4.2 against
+3.5 cm from the seat, rest 1.6 against 0.9 cm), so this is a second way
+the drone sits on the tray rather than a missed approach.
+
+### 193's crash (log 95, 15:04:57)
+
+193's RTK was fixed for 0-85% of most descents. On log 95 it fell back to
+DGPS at about 0.6 m during the LAND stage and the EKF switched lanes. The
+GPS height stepped up 0.3 m and the EKF followed, so the drone reached
+the tray believing it was 0.5 m up and never triggered the hold. The GPS
+east position then jumped 0.4 m. Sitting tilted on the tray, the position
+loop demanded up to 26 deg of pitch, the throttle rose to 0.73, and the
+crash check disarmed it at an angle error of 44 deg. The hold played no
+part. 193 was flying the tight EKF GPS noise (0.2 / 0.15 / 0.2), which
+this note recommends only for airframes with healthy RTK; defaults.parm
+now sets it for every drone.
+
+### Drag coefficient from all 96 flights
+
+Fitting body-frame IMU acceleration against GPS velocity, as in section
+7, but pooling 95 minutes of flight with one wind per 20 s window:
+
+| Fit | Result |
+|---|---|
+| Fleet, momentum drag | MCOEF 0.176 1/s, 95% 0.166-0.184 |
+| Body X only / Y only | 0.176 / 0.179 |
+| Bluff-body term | zero: BCOEF effectively infinite, no change in residual |
+| 161 / 162 / 165 / 166 / 167 / 193 | 0.183 / 0.183 / 0.157 / 0.191 / 0.177 / 0.154 |
+
+Airspeed covered a median 3.4 and 95th percentile 7.4 m/s, so this
+holds across show speeds in wind. The fit is sensitive to the delay
+between GPS velocity and the IMU: its residual is almost flat in the
+delay, and scanning for the best value picked 0.30 s and MCOEF 0.198.
+Measured directly against the EKF's delay-compensated velocity the GPS
+velocity delay is 0.10-0.12 s (median 0.12 over 68 logs), which gives
+0.173-0.180. The per-drone intervals overlap, so one fleet value is
+enough.
+
 ## Recommended settings
 
 | Parameter | Value | Why |
@@ -654,17 +778,18 @@ settings have to be entered again.
 | LAND_SPEED | 30 (up to 50) | less time in the near-ground push, fast land detect |
 | SHOW_VEL_FF_GAIN | 1.0 | removes the command-rate ripple, halves show tracking error |
 | SHOW_CTRL_RATE | 25 | smaller target steps, ripple moved above the attitude loop |
-| EK3_POSNE_M_NSE | 0.2 | only on airframes with healthy RTK |
+| EK3_POSNE_M_NSE | 0.2 | only on airframes with healthy RTK; default elsewhere (193) |
 | EK3_VELNE_M_NSE | 0.15 | only on airframes with healthy RTK |
 | EK3_VELD_M_NSE | 0.2 | only on airframes with healthy RTK |
 | SHOW_HOLD_ALT | 0.25 | hold height, above the wind fall-off and clear of the funnel |
 | SHOW_HOLD_ERR | 0.03 | above the hover error floor, which is 2-3 cm here |
 | SHOW_HOLD_TMIN | 2 | the error dips below the threshold before the integrator settles |
-| SHOW_HOLD_TMAX | 5 | still lands when the error never settles, e.g. RTK loss |
+| SHOW_HOLD_TMAX | 7 | never reached in the sweep; log 57 needed 4.6 s in gusty air |
 | SHOW_HOLD_AERR | 0.08 | a gust this far off sends the landing back up to settle |
 | SHOW_HOLD_TOUT | 20 | the landing always finishes, however often it was held |
-| EK3_DRAG_MCOEF | 0.2 | measured on 162, 165 and 193; 0 disables wind learning |
-| EK3_DRAG_BCOEF_X/Y | 0 | bluff-body drag over-predicts at show speeds |
+| EK3_DRAG_MCOEF | 0.18 | fleet fit over 96 flights (section 8); 0 disables wind learning |
+| EK3_DRAG_BCOEF_X/Y | 0 | the fit finds no bluff-body drag up to 7 m/s |
+| SHOW_LAND_ALT | -1 | skybrush handover at half the takeoff altitude, at most 1 m |
 
 Show trajectories that end at height should end with at least 2 s of
 hover over the landing point. Without it, SHOW_VEL_FF_GAIN 1.0 with this
@@ -673,23 +798,30 @@ shaper is softened back to PSC_JERK_XY 20 / WPNAV_ACCEL 800.
 
 ## Open items
 
-- Drone 193: repeated RTK fix loss with corrections flowing. Check the
-  antenna, ground plane and cable before judging it on either EKF
-  setting, and find the cause of the post-landing glitch in log 44.
+- Drone 193: repeated RTK fix loss with corrections flowing, and a crash on
+  the tray after an RTK drop during landing (section 8). Check the
+  antenna, ground plane and cable, and fly it on default EKF GPS noise
+  until then.
 - mode_drone_show.cpp landing_start(): steer to the show end point instead
   of a velocity-only handover. The descent hold is now implemented
   (section 7).
 - The landing hold drifts up a few cm while it waits; worth finding out
   whether that is the vertical shaper or near-ground height error.
-- EK3_DRAG_BCOEF_X/Y are still set to 58.77/51.02 on the fleet. With
-  MCOEF 0.2 they do little at show speeds and the innovations are clean,
-  but zeroing them matches the measured drag better.
-- Drones 162 and 193 rest tilted about 10 deg after accurate landings.
-  Check their legs and tray funnels; it is not an approach problem.
-- The hold has only been flown in light to moderate wind. The retry has
-  never fired in flight, so SHOW_HOLD_AERR is still untested outside SITL.
-- Log 57 held for 4.6 s against a SHOW_HOLD_TMAX of 5. Raising it to 7
-  would let a gusty landing settle rather than release on the timeout.
+- EK3_DRAG_BCOEF_X/Y are still 58.77/51.02 and EK3_DRAG_MCOEF 0.2 in
+  defaults.parm; the fleet fit says 0 and 0.18.
+- A third of landings rest 10-13 deg tilted, on every drone (section 8).
+  Check how the legs meet the funnel and charging contacts; it is not an
+  approach problem.
+- The hold has been flown in light and moderate wind only. The retry has
+  fired in flight only with a deliberately tiny threshold, so its value
+  in real gusts is still untested.
+- defaults.parm sets the tight EKF GPS noise for every airframe, including
+  ones with poor RTK such as 193.
+- "Landing: out of time, descending" is not reported when the time limit
+  catches the drone already descending.
+- Parameters written by MAVLink FTP bulk upload are not logged, so a
+  flight's log can miss the settings it flew. Record them separately, or
+  log those writes in AP_Filesystem_Param.
 - The drone still drifts up a few cm while holding; only the catch-up
   descent is fixed. Whether that matters is a question for a windier day.
 - Ground phase: relax XY control and clear the integrator once RTK height
@@ -742,6 +874,13 @@ These were stated and then withdrawn when the data disagreed.
   shows the commit the build was made from, and the hold fixes were not
   committed yet. The parameters in the log settle it: SHOW_HOLD_TMIN is
   present, so it is the newer build.
+- The repeated retries in the sweep's last slot were first reported as an
+  unexplained misfire, with a suggestion to disable the retry. That slot
+  had SHOW_HOLD_AERR 0.01 and SHOW_HOLD_ALT 0.15, set by a bulk upload
+  that does not appear in the log; the retry did what it was set to do.
+- Zeroing the drag innovation bias on log 63 suggested MCOEF 0.25-0.27.
+  The pooled fit at the measured GPS delay gives 0.176; the innovation
+  mean is a weak measure because the wind states absorb a steady bias.
 - A bluff-body term of BCOEF 15 was suggested from the AFS drift at
   4 m/s. Replay of log 63 shows it over-predicts drag at show speeds and
   flips the drag innovation positive, so momentum drag alone is the
