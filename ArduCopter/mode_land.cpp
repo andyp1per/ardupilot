@@ -27,6 +27,7 @@ bool ModeLand::init(bool ignore_checks)
     land_start_time = millis();
     land_pause = false;
     descent_hold = false;
+    climb_rate_cms = 0;
 
     // reset flag indicating if pilot has applied roll or pitch inputs during landing
     copter.ap.land_repo_active = false;
@@ -83,8 +84,15 @@ void ModeLand::gps_run()
             land_pause = false;
         }
 
-        // run normal landing or precision landing (if enabled)
-        land_run_normal_or_precland(land_pause || descent_hold);
+        if (is_positive(climb_rate_cms)) {
+            // climbing away from the ground again instead of landing
+            land_run_horizontal_control();
+            pos_control->land_at_climb_rate_cm(climb_rate_cms, false);
+            pos_control->update_z_controller();
+        } else {
+            // run normal landing or precision landing (if enabled)
+            land_run_normal_or_precland(land_pause || descent_hold);
+        }
     }
 }
 

@@ -1266,6 +1266,11 @@ public:
     // this is driven from outside the mode and has no time limit of its own
     void set_descent_hold(bool new_value) { descent_hold = new_value; }
 
+    // climbs at this rate instead of landing while it is positive, with the
+    // horizontal controller still running; used by the show landing to return
+    // to its hold altitude
+    void set_climb_rate_cms(float new_value) { climb_rate_cms = new_value; }
+
 protected:
 
     const char *name() const override { return "LAND"; }
@@ -1281,6 +1286,7 @@ private:
     uint32_t land_start_time;
     bool land_pause;
     bool descent_hold;
+    float climb_rate_cms;
 };
 
 

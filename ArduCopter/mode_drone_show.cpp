@@ -827,6 +827,8 @@ void ModeDroneShow::landing_start()
     // close to our destination as possible
 
     _landing_hold_stage = LandingHold_Approaching;
+    _landing_hold_climb_cms = 0;
+    _landing_started_at = AP_HAL::millis();
 
     // call regular land flight mode initialisation and ask it to ignore checks
     copter.mode_land.init(/* ignore_checks = */ true);
@@ -836,6 +838,7 @@ void ModeDroneShow::landing_start()
 void ModeDroneShow::landing_run()
 {
     copter.mode_land.set_descent_hold(landing_hold_needed());
+    copter.mode_land.set_climb_rate_cms(_landing_hold_climb_cms);
 
     // call regular land flight mode run function
     copter.mode_land.run();
@@ -850,7 +853,12 @@ void ModeDroneShow::landing_run()
 // close to the ground, and the position controller's integrator lags that change
 // by a few seconds, which pushes the drone upwind of its landing spot. Holding
 // until the position error settles lets the integrator catch up, after which the
-// remaining descent is short enough not to build the error up again.
+// remaining descent is short enough not to build the error up again. A gust
+// during that descent sends the drone back up to the hold altitude to settle
+// again, and SHOW_LAND_TOUT ends all of it so the drone always lands.
+//
+// Also sets _landing_hold_climb_cms, which is non-zero while climbing back to
+// the hold altitude.
 bool ModeDroneShow::landing_hold_needed()
 {
     // time that the position error has to stay below the threshold, in milliseconds
@@ -860,34 +868,80 @@ bool ModeDroneShow::landing_hold_needed()
     // at 20-30 cm/s, so the hold has to start that much above SHOW_LAND_ALT
     const float stopping_time_sec = 0.3f;
 
+    // rate at which we climb back to the hold altitude after a gust, and how far
+    // below it we tolerate before doing so
+    const float climb_rate_cms = 20.0f;
+    const float climb_margin_cm = 3.0f;
+
+    // below this fraction of the hold altitude the drone is about to touch down,
+    // and climbing away risks lifting it off the ground again before the land
+    // detector has noticed it arrived
+    const float lowest_retry_fraction = 0.4f;
+
     AC_DroneShowManager_Copter& show_manager = copter.g2.drone_show_manager;
     const float hold_alt_cm = show_manager.get_landing_hold_altitude_m() * 100.0f;
+
+    _landing_hold_climb_cms = 0;
 
     if (_landing_hold_stage == LandingHold_Done || hold_alt_cm <= 0) {
         return false;
     }
 
     // holding is pointless without a position estimate; LAND drifts with the
-    // wind in that case and the sooner it is on the ground the better
-    if (!copter.position_ok()) {
+    // wind in that case and the sooner it is on the ground the better. Never
+    // lift a drone that has already touched down either.
+    if (!copter.position_ok() || copter.ap.land_complete || copter.ap.land_complete_maybe) {
         _landing_hold_stage = LandingHold_Done;
         return false;
     }
 
     const uint32_t now = AP_HAL::millis();
 
+    // SHOW_LAND_TOUT limits the landing as a whole, however often it was held
+    const float total_time_sec = show_manager.get_landing_total_time_sec();
+    if (total_time_sec > 0 && now - _landing_started_at >= total_time_sec * 1000) {
+        if (_landing_hold_stage != LandingHold_Descending) {
+            gcs().send_text(MAV_SEVERITY_INFO, "Landing: out of time, descending");
+        }
+        _landing_hold_stage = LandingHold_Done;
+        return false;
+    }
+
+    const float error_cm = pos_control->get_pos_error_xy_cm();
+
     if (_landing_hold_stage == LandingHold_Approaching) {
         const float descent_rate_cms = MAX(-inertial_nav.get_velocity_z_up_cms(), 0.0f);
         if (get_alt_above_ground_cm() - descent_rate_cms * stopping_time_sec > hold_alt_cm) {
             return false;
         }
-
+        _landing_hold_stage = LandingHold_Holding;
+        _landing_hold_started_at = now;
+        _landing_hold_settled_at = 0;
+    } else if (_landing_hold_stage == LandingHold_Descending) {
+        const float abort_error_cm = show_manager.get_landing_hold_abort_error_m() * 100.0f;
+        if (abort_error_cm <= 0 || error_cm <= abort_error_cm) {
+            return false;
+        }
+        if (get_alt_above_ground_cm() < hold_alt_cm * lowest_retry_fraction) {
+            // too close to the ground to go back up; land and let the tray
+            // funnel do what it can
+            _landing_hold_stage = LandingHold_Done;
+            return false;
+        }
+        gcs().send_text(MAV_SEVERITY_INFO, "Landing: %.0f cm off, holding again", error_cm);
         _landing_hold_stage = LandingHold_Holding;
         _landing_hold_started_at = now;
         _landing_hold_settled_at = 0;
     }
 
-    const float error_cm = pos_control->get_pos_error_xy_cm();
+    if (get_alt_above_ground_cm() < hold_alt_cm - climb_margin_cm) {
+        // climbing back up after a gust; the hold only starts once we are there
+        _landing_hold_climb_cms = climb_rate_cms;
+        _landing_hold_started_at = now;
+        _landing_hold_settled_at = 0;
+        return false;
+    }
+
     if (error_cm > show_manager.get_landing_hold_xy_error_m() * 100.0f) {
         _landing_hold_settled_at = 0;
     } else if (_landing_hold_settled_at == 0) {
@@ -903,7 +957,7 @@ bool ModeDroneShow::landing_hold_needed()
     const bool timed_out = held_for_ms >= show_manager.get_landing_hold_timeout_sec() * 1000;
 
     if (settled || timed_out) {
-        _landing_hold_stage = LandingHold_Done;
+        _landing_hold_stage = LandingHold_Descending;
         gcs().send_text(
             MAV_SEVERITY_INFO, "Landing: %s after %.1f s, error %.0f cm",
             settled ? "settled" : "hold timed out", held_for_ms * 0.001f, error_cm

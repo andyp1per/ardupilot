@@ -107,8 +107,16 @@ private:
     enum LandingHoldStage {
         LandingHold_Approaching,
         LandingHold_Holding,
+        LandingHold_Descending,
         LandingHold_Done
     } _landing_hold_stage;
+
+    // Climb rate that returns the drone to the hold altitude after a gust
+    // during the final descent, in cm/s, zero when it is not needed
+    float _landing_hold_climb_cms;
+
+    // Timestamp when the landing stage started
+    uint32_t _landing_started_at;
 
     // Timestamp when the landing hold started
     uint32_t _landing_hold_started_at;
