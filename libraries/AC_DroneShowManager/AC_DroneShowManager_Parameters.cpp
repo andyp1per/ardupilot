@@ -374,7 +374,25 @@ const AP_Param::GroupInfo AC_DroneShowManager::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("HOLD_TMIN", 45, AC_DroneShowManager, _params.landing_hold_min_time_sec, DEFAULT_LANDING_HOLD_MIN_TIME_SEC),
 
-    // Currently used max parameter ID: 45; update this if you add more parameters.
+    // @Param: HOLD_AERR
+    // @DisplayName: Landing hold retry error
+    // @Description: Horizontal position error that sends the landing back up to SHOW_HOLD_ALT to settle again, for example when a gust hits during the final descent. Zero lands whatever the error is once the hold has finished.
+    // @Range: 0 0.5
+    // @Increment: 0.01
+    // @Units: m
+    // @User: Advanced
+    AP_GROUPINFO("HOLD_AERR", 46, AC_DroneShowManager, _params.landing_hold_abort_error_m, DEFAULT_LANDING_HOLD_ABORT_ERROR_METERS),
+
+    // @Param: HOLD_TOUT
+    // @DisplayName: Landing time limit
+    // @Description: Time limit on the whole landing, measured from the start of the landing stage. After it the drone descends whatever its position error is, so a drone can never be left hovering over its tray. Zero removes the limit.
+    // @Range: 0 60
+    // @Increment: 1
+    // @Units: s
+    // @User: Advanced
+    AP_GROUPINFO("HOLD_TOUT", 47, AC_DroneShowManager, _params.landing_total_time_sec, DEFAULT_LANDING_TOTAL_TIME_SEC),
+
+    // Currently used max parameter ID: 47; update this if you add more parameters.
     // Note that the max parameter ID may appear in the middle of the above list.
 
     AP_GROUPEND

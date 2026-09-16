@@ -57,6 +57,14 @@
 // Default shortest duration of the landing hold, in seconds.
 #define DEFAULT_LANDING_HOLD_MIN_TIME_SEC 2.0f
 
+// Default horizontal position error that sends the landing back to the hold
+// altitude during the final descent, in meters. Zero never sends it back.
+#define DEFAULT_LANDING_HOLD_ABORT_ERROR_METERS 0.08f
+
+// Default limit on the whole landing, in seconds, after which the drone
+// descends whatever its position error is. Zero means no limit.
+#define DEFAULT_LANDING_TOTAL_TIME_SEC 20.0f
+
 // Distance threshold for the trajectory to be considered circular, in meters.
 #define DEFAULT_START_END_XY_DISTANCE_THRESHOLD_METERS 0.5f
 

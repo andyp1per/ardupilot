@@ -302,6 +302,13 @@ public:
     // Returns the shortest duration of the landing hold, in seconds
     float get_landing_hold_min_time_sec() const;
 
+    // Returns the horizontal position error that sends the landing back to the
+    // hold altitude during the final descent, in meters. Zero if disabled.
+    float get_landing_hold_abort_error_m() const;
+
+    // Returns the time limit on the whole landing, in seconds. Zero if disabled.
+    float get_landing_total_time_sec() const;
+
     // Returns the takeoff acceleration in meters per second squared
     float get_motor_spool_up_time_sec() const;
     
@@ -725,6 +732,13 @@ private:
 
         // Shortest duration of the landing hold, in seconds
         AP_Float landing_hold_min_time_sec;
+
+        // Horizontal position error that sends the landing back to the hold
+        // altitude during the final descent, in meters
+        AP_Float landing_hold_abort_error_m;
+
+        // Time limit on the whole landing, in seconds
+        AP_Float landing_total_time_sec;
 
         // General options related to the show flight mode. See the values from
         // the DroneShowOptionFlag enum for more details.

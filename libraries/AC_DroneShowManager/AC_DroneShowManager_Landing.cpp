@@ -77,3 +77,15 @@ float AC_DroneShowManager::get_landing_hold_min_time_sec() const
     float value = _params.landing_hold_min_time_sec;
     return (value >= 0 && isfinite(value)) ? value : DEFAULT_LANDING_HOLD_MIN_TIME_SEC;
 }
+
+float AC_DroneShowManager::get_landing_hold_abort_error_m() const
+{
+    float value = _params.landing_hold_abort_error_m;
+    return (value > 0 && isfinite(value)) ? value : 0.0f;
+}
+
+float AC_DroneShowManager::get_landing_total_time_sec() const
+{
+    float value = _params.landing_total_time_sec;
+    return (value > 0 && isfinite(value)) ? value : 0.0f;
+}
