@@ -289,6 +289,16 @@ public:
     // Returns the landing speed in meters per second
     float get_landing_speed_m_sec() const;
 
+    // Returns the altitude above the takeoff position where the landing pauses
+    // until the horizontal position error settles, in meters. Zero if disabled.
+    float get_landing_hold_altitude_m() const;
+
+    // Returns the horizontal position error that releases the landing hold, in meters
+    float get_landing_hold_xy_error_m() const;
+
+    // Returns the maximum duration of the landing hold, in seconds
+    float get_landing_hold_timeout_sec() const;
+
     // Returns the takeoff acceleration in meters per second squared
     float get_motor_spool_up_time_sec() const;
     
@@ -699,6 +709,16 @@ private:
 
         // Action to take at the end of the show
         AP_Int8 post_action;
+
+        // Altitude above the takeoff position where the landing pauses until the
+        // horizontal position error settles, in meters
+        AP_Float landing_hold_altitude_m;
+
+        // Horizontal position error that releases the landing hold, in meters
+        AP_Float landing_hold_xy_error_m;
+
+        // Maximum duration of the landing hold, in seconds
+        AP_Float landing_hold_timeout_sec;
 
         // General options related to the show flight mode. See the values from
         // the DroneShowOptionFlag enum for more details.

@@ -44,6 +44,16 @@
 // Default action to take when the show trajectory ends
 #define DEFAULT_POST_ACTION PostAction_Land
 
+// Default altitude above the takeoff position where the landing pauses until the
+// horizontal position error settles, in meters. Zero disables the hold.
+#define DEFAULT_LANDING_HOLD_ALTITUDE_METERS 0.0f
+
+// Default horizontal position error that releases the landing hold, in meters.
+#define DEFAULT_LANDING_HOLD_XY_ERROR_METERS 0.02f
+
+// Default limit on the duration of the landing hold, in seconds.
+#define DEFAULT_LANDING_HOLD_TIMEOUT_SEC 5.0f
+
 // Distance threshold for the trajectory to be considered circular, in meters.
 #define DEFAULT_START_END_XY_DISTANCE_THRESHOLD_METERS 0.5f
 

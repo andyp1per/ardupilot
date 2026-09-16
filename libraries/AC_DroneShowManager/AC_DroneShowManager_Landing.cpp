@@ -53,3 +53,21 @@ float AC_DroneShowManager::propose_landing_handover_altitude_mm() const {
     // sanity check
     return proposal < 0 ? 0 : proposal;
 }
+
+float AC_DroneShowManager::get_landing_hold_altitude_m() const
+{
+    float value = _params.landing_hold_altitude_m;
+    return (value > 0 && isfinite(value)) ? value : 0.0f;
+}
+
+float AC_DroneShowManager::get_landing_hold_xy_error_m() const
+{
+    float value = _params.landing_hold_xy_error_m;
+    return (value > 0 && isfinite(value)) ? value : DEFAULT_LANDING_HOLD_XY_ERROR_METERS;
+}
+
+float AC_DroneShowManager::get_landing_hold_timeout_sec() const
+{
+    float value = _params.landing_hold_timeout_sec;
+    return (value >= 0 && isfinite(value)) ? value : DEFAULT_LANDING_HOLD_TIMEOUT_SEC;
+}

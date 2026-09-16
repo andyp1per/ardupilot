@@ -338,7 +338,34 @@ const AP_Param::GroupInfo AC_DroneShowManager::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("MAX_ESC_ERR", 39, AC_DroneShowManager, _params.max_esc_error_rate_pcnt, DEFAULT_MAX_ESC_ERROR_RATE_PCNT),
 
-    // Currently used max parameter ID: 41; update this if you add more parameters.
+    // @Param: HOLD_ALT
+    // @DisplayName: Landing hold altitude
+    // @Description: Altitude above the takeoff position where the landing pauses until the horizontal position error settles. The wind drops off close to the ground and the position controller needs a few seconds to follow it. The drone stops a few centimeters below this altitude (about 10 cm at LAND_SPEED 30). Zero turns the hold off.
+    // @Range: 0 2
+    // @Increment: 0.05
+    // @Units: m
+    // @User: Advanced
+    AP_GROUPINFO("HOLD_ALT", 42, AC_DroneShowManager, _params.landing_hold_altitude_m, DEFAULT_LANDING_HOLD_ALTITUDE_METERS),
+
+    // @Param: HOLD_ERR
+    // @DisplayName: Landing hold horizontal error
+    // @Description: Horizontal position error that ends the landing hold. Set it above the noise of the position estimate, otherwise the hold always runs to SHOW_HOLD_TMAX.
+    // @Range: 0.005 0.5
+    // @Increment: 0.005
+    // @Units: m
+    // @User: Advanced
+    AP_GROUPINFO("HOLD_ERR", 43, AC_DroneShowManager, _params.landing_hold_xy_error_m, DEFAULT_LANDING_HOLD_XY_ERROR_METERS),
+
+    // @Param: HOLD_TMAX
+    // @DisplayName: Landing hold time limit
+    // @Description: The landing hold ends after this many seconds even if the horizontal position error never settles, so a drone that lost its RTK fix still lands.
+    // @Range: 0 20
+    // @Increment: 0.5
+    // @Units: s
+    // @User: Advanced
+    AP_GROUPINFO("HOLD_TMAX", 44, AC_DroneShowManager, _params.landing_hold_timeout_sec, DEFAULT_LANDING_HOLD_TIMEOUT_SEC),
+
+    // Currently used max parameter ID: 44; update this if you add more parameters.
     // Note that the max parameter ID may appear in the middle of the above list.
 
     AP_GROUPEND
