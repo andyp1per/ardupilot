@@ -551,6 +551,52 @@ Two of the eight rested about 10 deg tilted (162 log 52, 193 log 70)
 after contact errors of 1.4 and 2.9 cm, so that is mechanical, not
 approach accuracy. 162 has now done it four times and 193 twice.
 
+### Gusty air, and what the hold does vertically
+
+Log 57 (drone 162, 0.96 of hover load, gusty: the east push swung between
+0.45 and 1.23 m/s^2 during the descent) is the first flight where the
+hold did more than its minimum. It stopped at 24.6 cm, held 4.6 s while
+the error rode the gusts (2.5, 5.8, 3.4, 6.5, 1.2 cm) and released at
+1 cm; the final descent stayed under 2.7 cm, so the retry never fired. It
+contacted 1.8 cm from its target and 5.1 cm from the seat, rested 1.2 cm
+off and flat. That is 0.4 s short of SHOW_LAND_TMAX, so in gustier air
+the hold will end on the timeout rather than on settling.
+
+Across the fourteen holds flown so far the drone rises 1-9 cm (median 4)
+while it waits, and then descends at up to 41 cm/s against a LAND_SPEED
+of 30. Descent tracking outside the hold is good, within 2 cm/s of the
+target. The vertical position target is frozen when the descent stops
+while ground effect lifts the drone above it - in log 57 it sat 5.8 cm
+above target - and the position loop wins that height back on release at
+about 1 cm/s per cm of error. The hold now snaps the target to the
+current altitude when it releases, so the descent starts clean. SITL
+does not show the effect: there the drone tracks its vertical target
+closely, the excess descent is 4 cm/s either way, and the change only has
+to be shown not to break anything.
+
+### Compass and the tray
+
+The trays suppress the field by 8-12% on all four drones (162 reads 502
+against 559 mGauss in flight), which is what trips "ground mag anomaly,
+yaw re-aligned" at takeoff and, on 162, "EKF compass variance" and "GPS
+Glitch or Compass error" while it sits there after landing.
+
+It is not a yaw problem. The in-flight yaw realignment moves yaw by less
+than a degree on all four drones (+0.3, -0.3, -0.1, +0.5 deg) and the
+yaw at landing is within 0.6 deg of the yaw on the tray, so the EKF is
+not landing on a rotated heading. The 3.1 cm of EKF against RTK on log 57
+is not explained by yaw.
+
+What is worth fixing is the calibration spread. In flight the four
+drones measure 456, 559, 613 and 623 mGauss at the same site on the same
+day, against an EKF earth-field state of 492-517 mGauss, so their scales
+sit between -7% and +20%. That error plus the tray's 10% is what pushes
+the field checks over their thresholds. Recalibrate away from the trays
+and the fleet should read within a few per cent of about 510 mGauss.
+Note the shows fly at nearly constant yaw (1-6 deg of yaw span), so a
+magfit from a show log is poorly conditioned; it needs a proper
+calibration.
+
 ### EKF drag coefficients and the wind estimate
 
 Drones 162 and 193 flew with EK3_DRAG_BCOEF_X/Y 58.77/51.02 and
@@ -626,9 +672,12 @@ shaper is softened back to PSC_JERK_XY 20 / WPNAV_ACCEL 800.
   but zeroing them matches the measured drag better.
 - Drones 162 and 193 rest tilted about 10 deg after accurate landings.
   Check their legs and tray funnels; it is not an approach problem.
-- The hold has only been flown in light wind since log 48. It releases at
-  SHOW_LAND_TMIN when the error is already small, so SHOW_LAND_ERR and
-  the retry threshold are still untested in the wind they were sized for.
+- The hold has only been flown in light to moderate wind. The retry has
+  never fired in flight, so SHOW_LAND_AERR is still untested outside SITL.
+- Log 57 held for 4.6 s against a SHOW_LAND_TMAX of 5. Raising it to 7
+  would let a gusty landing settle rather than release on the timeout.
+- The drone still drifts up a few cm while holding; only the catch-up
+  descent is fixed. Whether that matters is a question for a windier day.
 - Ground phase: relax XY control and clear the integrator once RTK height
   says the drone is within a few cm of the landing surface, so a drone
   resting off-centre is not pushed until it tips.
