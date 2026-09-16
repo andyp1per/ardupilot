@@ -365,7 +365,16 @@ const AP_Param::GroupInfo AC_DroneShowManager::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("HOLD_TMAX", 44, AC_DroneShowManager, _params.landing_hold_timeout_sec, DEFAULT_LANDING_HOLD_TIMEOUT_SEC),
 
-    // Currently used max parameter ID: 44; update this if you add more parameters.
+    // @Param: HOLD_TMIN
+    // @DisplayName: Landing hold shortest time
+    // @Description: The landing hold lasts at least this long, even if the horizontal position error is already below SHOW_HOLD_ERR when the drone arrives. The error dips below the threshold on its own while the position integrator is still catching up with the wind close to the ground.
+    // @Range: 0 10
+    // @Increment: 0.5
+    // @Units: s
+    // @User: Advanced
+    AP_GROUPINFO("HOLD_TMIN", 45, AC_DroneShowManager, _params.landing_hold_min_time_sec, DEFAULT_LANDING_HOLD_MIN_TIME_SEC),
+
+    // Currently used max parameter ID: 45; update this if you add more parameters.
     // Note that the max parameter ID may appear in the middle of the above list.
 
     AP_GROUPEND

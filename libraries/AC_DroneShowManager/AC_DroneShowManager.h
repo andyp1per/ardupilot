@@ -299,6 +299,9 @@ public:
     // Returns the maximum duration of the landing hold, in seconds
     float get_landing_hold_timeout_sec() const;
 
+    // Returns the shortest duration of the landing hold, in seconds
+    float get_landing_hold_min_time_sec() const;
+
     // Returns the takeoff acceleration in meters per second squared
     float get_motor_spool_up_time_sec() const;
     
@@ -719,6 +722,9 @@ private:
 
         // Maximum duration of the landing hold, in seconds
         AP_Float landing_hold_timeout_sec;
+
+        // Shortest duration of the landing hold, in seconds
+        AP_Float landing_hold_min_time_sec;
 
         // General options related to the show flight mode. See the values from
         // the DroneShowOptionFlag enum for more details.

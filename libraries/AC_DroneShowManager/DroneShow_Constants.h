@@ -54,6 +54,9 @@
 // Default limit on the duration of the landing hold, in seconds.
 #define DEFAULT_LANDING_HOLD_TIMEOUT_SEC 5.0f
 
+// Default shortest duration of the landing hold, in seconds.
+#define DEFAULT_LANDING_HOLD_MIN_TIME_SEC 2.0f
+
 // Distance threshold for the trajectory to be considered circular, in meters.
 #define DEFAULT_START_END_XY_DISTANCE_THRESHOLD_METERS 0.5f
 

@@ -71,3 +71,9 @@ float AC_DroneShowManager::get_landing_hold_timeout_sec() const
     float value = _params.landing_hold_timeout_sec;
     return (value >= 0 && isfinite(value)) ? value : DEFAULT_LANDING_HOLD_TIMEOUT_SEC;
 }
+
+float AC_DroneShowManager::get_landing_hold_min_time_sec() const
+{
+    float value = _params.landing_hold_min_time_sec;
+    return (value >= 0 && isfinite(value)) ? value : DEFAULT_LANDING_HOLD_MIN_TIME_SEC;
+}
