@@ -957,6 +957,13 @@ bool ModeDroneShow::landing_hold_needed()
     const bool timed_out = held_for_ms >= show_manager.get_landing_hold_timeout_sec() * 1000;
 
     if (settled || timed_out) {
+        // the drone drifts up a few centimeters while it holds, mostly ground
+        // effect that the vertical loop trims out slowly. Start the descent from
+        // where it actually is, otherwise it wins that height back by descending
+        // faster than LAND_SPEED.
+        pos_control->set_pos_desired_z_cm(
+            inertial_nav.get_position_z_up_cm() - pos_control->get_pos_offset_z_cm()
+        );
         _landing_hold_stage = LandingHold_Descending;
         gcs().send_text(
             MAV_SEVERITY_INFO, "Landing: %s after %.1f s, error %.0f cm",
