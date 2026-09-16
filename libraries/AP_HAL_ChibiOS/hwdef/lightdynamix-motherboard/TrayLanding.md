@@ -438,10 +438,10 @@ finishing at LAND_SPEED helps in the calm-day disturbances as well
 
 ### The hold
 
-ModeDroneShow::landing_hold_needed() pauses the descent at SHOW_LAND_ALT
+ModeDroneShow::landing_hold_needed() pauses the descent at SHOW_HOLD_ALT
 while XY control keeps running, and releases when the horizontal error
-has been below SHOW_LAND_ERR for 0.5 s, never before SHOW_LAND_TMIN and
-never after SHOW_LAND_TMAX. It skips the hold if the position estimate is
+has been below SHOW_HOLD_ERR for 0.5 s, never before SHOW_HOLD_TMIN and
+never after SHOW_HOLD_TMAX. It skips the hold if the position estimate is
 lost, and reports one line per landing, for example "Landing: settled
 after 3.3 s, error 1 cm". Only show landings use it; failsafe and RTL
 landings are untouched. LAND mode takes the pause through a descent hold
@@ -463,16 +463,16 @@ eight wind directions:
 
 The third row matters: taking the same total time by descending slowly
 only gets half the gain. Edge cases behave - a hold altitude above the
-show end height holds for SHOW_LAND_TMIN and lands normally, an error
-threshold that never settles ends at SHOW_LAND_TMAX, and SHOW_LAND_TMAX 0
+show end height holds for SHOW_HOLD_TMIN and lands normally, an error
+threshold that never settles ends at SHOW_HOLD_TMAX, and SHOW_HOLD_TMAX 0
 lands as if the hold were off.
 
 ### Retry and time limit
 
 The hold runs once, so a gust in the last 25 cm still lands the drone
-where it was pushed. SHOW_LAND_AERR is the error during the final descent
+where it was pushed. SHOW_HOLD_AERR is the error during the final descent
 that sends it back up to the hold altitude at 20 cm/s to settle again,
-and SHOW_LAND_TOUT limits the landing as a whole so holding can never
+and SHOW_HOLD_TOUT limits the landing as a whole so holding can never
 leave a drone hovering over its tray.
 
 Retries stop below 40% of the hold altitude, and once the land detector
@@ -483,7 +483,7 @@ contacts.
 In SITL with the wind stepped from 5 to 15 m/s as the hold released, the
 error reached 8 cm, the drone climbed back, settled in 4.1 s and landed
 4.3 cm from its target; a landing without the gust is unchanged at
-2.4 cm. Forcing retries with a 0.5 cm threshold ends at SHOW_LAND_TOUT
+2.4 cm. Forcing retries with a 0.5 cm threshold ends at SHOW_HOLD_TOUT
 with "out of time, descending" and a single touchdown. SITL slews its
 wind over SIM_WIND_TC, 5 s by default, so a gust test needs that set to
 about 0.3 s or nothing happens.
@@ -496,15 +496,15 @@ about 0.3 s or nothing happens.
 | 63 | 193 | 0.15 / 0.03 / - / 5 | 0.49 | 1.0 s | 0.9 | 3.4 | 2.8 |
 | 48 | 162 | 0.25 / 0.03 / 2 / 5 | 1.07 | 3.3 s | 1.0 | 3.3 | 1.2 |
 
-Settings are SHOW_LAND_ALT / ERR / TMIN / TMAX; wind load in m/s^2, the
+Settings are SHOW_HOLD_ALT / ERR / TMIN / TMAX; wind load in m/s^2, the
 rest in cm as in the first log table.
 
-- Log 83 ran with SHOW_LAND_ERR at 0.20 m. The parameter is in meters, so
+- Log 83 ran with SHOW_HOLD_ERR at 0.20 m. The parameter is in meters, so
   the error was under the threshold on arrival and the hold ended at its
   minimum. It still recovered the error from 4.5 to 2.7 cm, about this
   drone's 2.3 cm hover error, before the last 20 cm put 2 cm back.
 - Log 63 arrived with 3.3 cm of error, already below its 0.03 threshold,
-  and again released after a second. This is what SHOW_LAND_TMIN was
+  and again released after a second. This is what SHOW_HOLD_TMIN was
   added for: the error dips below the threshold while the integrator is
   still moving.
 - Log 48 is the first with both fixes and the first in real wind. The
@@ -559,7 +559,7 @@ hold did more than its minimum. It stopped at 24.6 cm, held 4.6 s while
 the error rode the gusts (2.5, 5.8, 3.4, 6.5, 1.2 cm) and released at
 1 cm; the final descent stayed under 2.7 cm, so the retry never fired. It
 contacted 1.8 cm from its target and 5.1 cm from the seat, rested 1.2 cm
-off and flat. That is 0.4 s short of SHOW_LAND_TMAX, so in gustier air
+off and flat. That is 0.4 s short of SHOW_HOLD_TMAX, so in gustier air
 the hold will end on the timeout rather than on settling.
 
 Across the fourteen holds flown so far the drone rises 1-9 cm (median 4)
@@ -625,6 +625,20 @@ from 93-111 deg fitted per flight, and the drag innovation bias fell from
 -0.230 m/s^2 to between -0.04 and +0.06. The wind states are no longer
 absorbing a modelling error.
 
+### Parameter names after the skybrush merge
+
+Skybrush added its own SHOW_LAND_ALT at index 41, the altitude at which a
+show hands control back to ArduPilot at its end, which is a different
+thing from the hold. The hold parameters therefore moved to SHOW_HOLD_ALT,
+SHOW_HOLD_ERR, SHOW_HOLD_TMIN, SHOW_HOLD_TMAX, SHOW_HOLD_AERR and
+SHOW_HOLD_TOUT at indexes 42 to 47. Renaming ours rather than theirs keeps
+the upstream name free, so the next merge does not fight over it and their
+GCS cannot write a handover altitude into the hold height.
+
+A drone flashed with this firmware reads its old SHOW_LAND_ALT value as
+the upstream handover altitude and comes up with the hold off, so the hold
+settings have to be entered again.
+
 ## Recommended settings
 
 | Parameter | Value | Why |
@@ -643,12 +657,12 @@ absorbing a modelling error.
 | EK3_POSNE_M_NSE | 0.2 | only on airframes with healthy RTK |
 | EK3_VELNE_M_NSE | 0.15 | only on airframes with healthy RTK |
 | EK3_VELD_M_NSE | 0.2 | only on airframes with healthy RTK |
-| SHOW_LAND_ALT | 0.25 | hold height, above the wind fall-off and clear of the funnel |
-| SHOW_LAND_ERR | 0.03 | above the hover error floor, which is 2-3 cm here |
-| SHOW_LAND_TMIN | 2 | the error dips below the threshold before the integrator settles |
-| SHOW_LAND_TMAX | 5 | still lands when the error never settles, e.g. RTK loss |
-| SHOW_LAND_AERR | 0.08 | a gust this far off sends the landing back up to settle |
-| SHOW_LAND_TOUT | 20 | the landing always finishes, however often it was held |
+| SHOW_HOLD_ALT | 0.25 | hold height, above the wind fall-off and clear of the funnel |
+| SHOW_HOLD_ERR | 0.03 | above the hover error floor, which is 2-3 cm here |
+| SHOW_HOLD_TMIN | 2 | the error dips below the threshold before the integrator settles |
+| SHOW_HOLD_TMAX | 5 | still lands when the error never settles, e.g. RTK loss |
+| SHOW_HOLD_AERR | 0.08 | a gust this far off sends the landing back up to settle |
+| SHOW_HOLD_TOUT | 20 | the landing always finishes, however often it was held |
 | EK3_DRAG_MCOEF | 0.2 | measured on 162, 165 and 193; 0 disables wind learning |
 | EK3_DRAG_BCOEF_X/Y | 0 | bluff-body drag over-predicts at show speeds |
 
@@ -673,8 +687,8 @@ shaper is softened back to PSC_JERK_XY 20 / WPNAV_ACCEL 800.
 - Drones 162 and 193 rest tilted about 10 deg after accurate landings.
   Check their legs and tray funnels; it is not an approach problem.
 - The hold has only been flown in light to moderate wind. The retry has
-  never fired in flight, so SHOW_LAND_AERR is still untested outside SITL.
-- Log 57 held for 4.6 s against a SHOW_LAND_TMAX of 5. Raising it to 7
+  never fired in flight, so SHOW_HOLD_AERR is still untested outside SITL.
+- Log 57 held for 4.6 s against a SHOW_HOLD_TMAX of 5. Raising it to 7
   would let a gusty landing settle rather than release on the timeout.
 - The drone still drifts up a few cm while holding; only the catch-up
   descent is fixed. Whether that matters is a question for a windier day.
@@ -726,7 +740,7 @@ These were stated and then withdrawn when the data disagreed.
   the edge of its band.
 - Log 48 was read as flying the older firmware because its version string
   shows the commit the build was made from, and the hold fixes were not
-  committed yet. The parameters in the log settle it: SHOW_LAND_TMIN is
+  committed yet. The parameters in the log settle it: SHOW_HOLD_TMIN is
   present, so it is the newer build.
 - A bluff-body term of BCOEF 15 was suggested from the AFS drift at
   4 m/s. Replay of log 63 shows it over-predicts drag at show speeds and
