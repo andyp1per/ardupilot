@@ -1,10 +1,12 @@
 # Tray landing accuracy on LightDynamix show drones
 
 Analysis sessions, 2026-09-14 (tray landings, firmware 73e18022 on
-lightdynamix-motherboard, APJ 5281) and 2026-09-15 (fast oscillation,
-firmware 8e72a9cb on lightdynamix-pixelmb, APJ 5282). ArduCopter
-V4.6.3-lightdynamix, drone show mode (127), u-blox ZED-F9P RTK at 5 Hz,
-GPS as the height source, no rangefinder.
+lightdynamix-motherboard, APJ 5281), 2026-09-15 (fast oscillation,
+firmware 8e72a9cb on lightdynamix-pixelmb, APJ 5282) and 2026-09-16
+(windy landings and the landing hold, firmware 995f251d and af81d153 on
+lightdynamix-pixelmb). ArduCopter V4.6.3-lightdynamix, drone show mode
+(127), u-blox ZED-F9P RTK at 5 Hz, GPS as the height source, no
+rangefinder.
 
 The complaint was that drones did not land accurately enough to seat in
 their charging trays. The flight logs are real customer flights and are
@@ -36,6 +38,11 @@ stiffer XY shaper and ATC_INPUT_TC 0.10, made the show's 10 Hz position
 commands drive a visible 10 Hz oscillation on fast show segments.
 SHOW_VEL_FF_GAIN 1.0 with SHOW_CTRL_RATE 25 removed it and halved show
 tracking error (section 6).
+
+A fourth problem appeared once the drones flew in wind: the wind drops
+off in the last 25 cm and the velocity integrator lags it, pushing the
+drone upwind as it lands. Pausing the landing at 25 cm until the position
+error settles removes it (section 7).
 
 ## Logs
 
@@ -380,6 +387,135 @@ either side; the EKF and position were unaffected. Before flight it
 reported a low magnetic field (140 against a minimum of 185) and a ground
 magnetic anomaly realignment at takeoff.
 
+## 7. Windy landings and the landing hold (2026-09-16)
+
+Drones 161, 162, 165 and 193 flew repeated tray landings in wind giving
+0.7-1.7 m/s^2 of hover load, about 1.4x the earlier sweeps. Seating was
+not clearly worse (4.5 cm median contact against the seat, against 4.0 cm
+in calm air, and the funnel still pulled them to 0.6 cm) but tracking
+was: the vehicle sat 4.2 cm from its own target at contact against 1.5 cm
+before, and on 11 of 13 landings that error pointed upwind.
+
+### The wind falls off near the ground
+
+External horizontal acceleration during the descent, as a fraction of
+each flight's hover wind load, over all 16 windy landings:
+
+| Height (m) | 1.5-2 | 1-1.5 | 0.6-1 | 0.4-0.6 | 0.25-0.4 | 0.15-0.25 | 0.08-0.15 | contact |
+|---|---|---|---|---|---|---|---|---|
+| push / hover load | 0.83 | 0.74 | 0.70 | 0.55 | 0.56 | 0.44 | 0.25 | 0.19 |
+
+Half the fall happens in the last 25 cm. The velocity integrator still
+holds the lean the wind needed higher up, which pushes the drone upwind
+as it lands: the median along-wind error is under 1 cm between 0.15 and
+0.4 m, then 2.9 cm at 0.08-0.15 m and 3.7 cm at contact.
+
+### What the model says to do about it
+
+The section 5 model was re-fitted to nine of the windy flights; the other
+seven are dominated by RTK position steps, which are not forces and which
+the model cannot reproduce. Median error against the landing target at
+contact, from 1.0 m:
+
+| Change | Model, contact error |
+|--------|----------------------|
+| as flown, P2 / VP4 / VI2, LAND_SPEED 15 | 4.4-4.7 cm |
+| VELXY_I 3 | 3.7-4.0 |
+| VELXY_I 4 | 3.2-4.0 |
+| LAND_SPEED 10 | 2.5-2.7 |
+| LAND_SPEED 5 (19 s of descent) | 2.6-3.7 |
+| hold 2 s at 30 cm, then 30 cm/s | 2.5-3.4 |
+| hold at 20 cm until the error settles, then 30 cm/s | 1.3-2.2 |
+
+The pair of numbers is the spread between two ways of splitting the
+recorded disturbance into a height-bound part, which follows a re-timed
+descent, and gusts, which do not. Descending slowly the whole way is not
+the answer: the quasi-static error does fall with descent speed, but gust
+exposure and land-detect time grow with it, and at LAND_SPEED 5-10 the
+tip-off risk of section 3 returns. Settling at one low height and then
+finishing at LAND_SPEED helps in the calm-day disturbances as well
+(1.7-1.8 cm against 2.2-2.3 cm at a constant 30 cm/s).
+
+### The hold
+
+ModeDroneShow::landing_hold_needed() pauses the descent at SHOW_LAND_ALT
+while XY control keeps running, and releases when the horizontal error
+has been below SHOW_LAND_ERR for 0.5 s, never before SHOW_LAND_TMIN and
+never after SHOW_LAND_TMAX. It skips the hold if the position estimate is
+lost, and reports one line per landing, for example "Landing: settled
+after 3.3 s, error 1 cm". Only show landings use it; failsafe and RTL
+landings are untouched. LAND mode takes the pause through a descent hold
+that is separate from land_pause, which clears itself after 4 s.
+
+The descent takes about 0.3 s to stop, so the trigger leads by that much
+of the current descent rate. Without the lead the drone stopped 5.5 cm
+low at 21 cm/s and 7 cm low at 24 cm/s.
+
+SITL, real show file, tray gain set, 5 m/s wind decaying to the ground
+(SIM_WIND_T 0, SIM_WIND_T_ALT 2.0, which brackets the measured profile),
+eight wind directions:
+
+| Configuration | Contact error, median (worst) | Descent |
+|---------------|-------------------------------|---------|
+| no hold, LAND_SPEED 30 | 6.5-7.4 cm (7.9) | 5.5 s |
+| hold at 25 cm, LAND_SPEED 30 | 1.4-1.5 cm (1.8) | 9.5 s |
+| no hold, LAND_SPEED 15 | 4.1 cm (4.6) | 9.5 s |
+
+The third row matters: taking the same total time by descending slowly
+only gets half the gain. Edge cases behave - a hold altitude above the
+show end height holds for SHOW_LAND_TMIN and lands normally, an error
+threshold that never settles ends at SHOW_LAND_TMAX, and SHOW_LAND_TMAX 0
+lands as if the hold were off.
+
+### Flown
+
+| Log | Drone | Hold settings | Wind load | Hold | Veh | Contact | Rest |
+|-----|-------|---------------|-----------|------|-----|---------|------|
+| 83 | 165 | 0.25 / 0.20 / - / 5 | 0.60 | 1.0 s | 3.2 | 6.5 | 1.9 |
+| 63 | 193 | 0.15 / 0.03 / - / 5 | 0.49 | 1.0 s | 0.9 | 3.4 | 2.8 |
+| 48 | 162 | 0.25 / 0.03 / 2 / 5 | 1.07 | 3.3 s | 1.0 | 3.3 | 1.2 |
+
+Settings are SHOW_LAND_ALT / ERR / TMIN / TMAX; wind load in m/s^2, the
+rest in cm as in the first log table.
+
+- Log 83 ran with SHOW_LAND_ERR at 0.20 m. The parameter is in meters, so
+  the error was under the threshold on arrival and the hold ended at its
+  minimum. It still recovered the error from 4.5 to 2.7 cm, about this
+  drone's 2.3 cm hover error, before the last 20 cm put 2 cm back.
+- Log 63 arrived with 3.3 cm of error, already below its 0.03 threshold,
+  and again released after a second. This is what SHOW_LAND_TMIN was
+  added for: the error dips below the threshold while the integrator is
+  still moving.
+- Log 48 is the first with both fixes and the first in real wind. The
+  descent built 9.1 cm of error by 0.35 m; the hold ran 3.3 s at 23.5 cm
+  and took it to 1.1 cm, and the final 25 cm only put 1.5 cm back. It
+  seated 3.3 cm from the seat, rested 1.2 cm off and flat, and the land
+  detector fired 1.4 s after contact.
+
+During the hold the drone drifts up a few cm (5 cm on log 48). Harmless,
+but the hold is not stationary vertically.
+
+### EKF drag coefficients and the wind estimate
+
+Drones 162 and 193 flew with EK3_DRAG_BCOEF_X/Y 58.77/51.02 and
+EK3_DRAG_MCOEF 0. Drag fusion then ran and the wind states were learned,
+but the estimates came out at 8-10 m/s where the airframe's own drag says
+2.6 and 5.6 m/s. BCOEF models bluff-body drag, which grows with v^2, so
+at BCOEF 55 it takes 6.6 m/s to explain 0.49 m/s^2 of drag. A multirotor
+at show speeds is dominated by rotor momentum drag, which is linear in
+speed and is what EK3_DRAG_MCOEF models.
+
+Fitting body-frame XY specific force against GPS velocity (thrust is
+along body Z, so that force is aerodynamic) gives 0.17-0.19 1/s on these
+three airframes and 0.20-0.23 on the day-1 show logs. Replay of log 63
+confirms it: with MCOEF 0.2 and BCOEF 0 the wind estimate settles at
+2.5 m/s from 80 deg, which is what the fit says independently, and the
+drag innovation bias halves. Adding BCOEF 15 over-predicts drag at show
+speeds and flips the innovation positive.
+
+With GPS this affects nothing - log 63 tracked to 1.2-1.9 cm all the way
+down - but the wind estimate is what dead reckoning would fly on.
+
 ## Recommended settings
 
 | Parameter | Value | Why |
@@ -398,6 +534,12 @@ magnetic anomaly realignment at takeoff.
 | EK3_POSNE_M_NSE | 0.2 | only on airframes with healthy RTK |
 | EK3_VELNE_M_NSE | 0.15 | only on airframes with healthy RTK |
 | EK3_VELD_M_NSE | 0.2 | only on airframes with healthy RTK |
+| SHOW_LAND_ALT | 0.25 | hold height, above the wind fall-off and clear of the funnel |
+| SHOW_LAND_ERR | 0.03 | above the hover error floor, which is 2-3 cm here |
+| SHOW_LAND_TMIN | 2 | the error dips below the threshold before the integrator settles |
+| SHOW_LAND_TMAX | 5 | still lands when the error never settles, e.g. RTK loss |
+| EK3_DRAG_MCOEF | 0.2 | measured on 162, 165 and 193; 0 disables wind learning |
+| EK3_DRAG_BCOEF_X/Y | 0 | bluff-body drag over-predicts at show speeds |
 
 Show trajectories that end at height should end with at least 2 s of
 hover over the landing point. Without it, SHOW_VEL_FF_GAIN 1.0 with this
@@ -410,8 +552,14 @@ shaper is softened back to PSC_JERK_XY 20 / WPNAV_ACCEL 800.
   antenna, ground plane and cable before judging it on either EKF
   setting, and find the cause of the post-landing glitch in log 44.
 - mode_drone_show.cpp landing_start(): steer to the show end point instead
-  of a velocity-only handover, and optionally hold the descent until the
-  XY error is a few cm.
+  of a velocity-only handover. The descent hold is now implemented
+  (section 7).
+- The landing hold drifts up a few cm while it waits; worth finding out
+  whether that is the vertical shaper or near-ground height error.
+- EK3_DRAG_MCOEF 0.2 with BCOEF 0 is set from three airframes and one
+  Replay. Roll it out and check the XKF2 drag innovation bias (IDX) on
+  the next flights; zeroing that bias suggests a slightly higher 0.25-0.27
+  while the velocity fit says 0.19.
 - Ground phase: relax XY control and clear the integrator once RTK height
   says the drone is within a few cm of the landing surface, so a drone
   resting off-centre is not pushed until it tips.
@@ -458,3 +606,11 @@ These were stated and then withdrawn when the data disagreed.
 - rate_response.py reported under-damped rate loops at 8-9 Hz on log 29.
   The steady-flight spectra show no resonance there, so that was noise at
   the edge of its band.
+- Log 48 was read as flying the older firmware because its version string
+  shows the commit the build was made from, and the hold fixes were not
+  committed yet. The parameters in the log settle it: SHOW_LAND_TMIN is
+  present, so it is the newer build.
+- A bluff-body term of BCOEF 15 was suggested from the AFS drift at
+  4 m/s. Replay of log 63 shows it over-predicts drag at show speeds and
+  flips the drag innovation positive, so momentum drag alone is the
+  better fit below about 3 m/s.
