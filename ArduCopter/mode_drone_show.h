@@ -102,7 +102,7 @@ private:
     // have attempted to arm the drone recently
     uint32_t _prevent_arming_until_msec;
 
-    // Stage of the pause that the landing takes at SHOW_LAND_ALT to let the
+    // Stage of the pause that the landing takes at SHOW_HOLD_ALT to let the
     // position error settle before the final descent
     enum LandingHoldStage {
         LandingHold_Approaching,

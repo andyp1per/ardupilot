@@ -849,13 +849,13 @@ void ModeDroneShow::landing_run()
     }
 }
 
-// returns whether the landing should pause at SHOW_LAND_ALT. The wind falls off
+// returns whether the landing should pause at SHOW_HOLD_ALT. The wind falls off
 // close to the ground, and the position controller's integrator lags that change
 // by a few seconds, which pushes the drone upwind of its landing spot. Holding
 // until the position error settles lets the integrator catch up, after which the
 // remaining descent is short enough not to build the error up again. A gust
 // during that descent sends the drone back up to the hold altitude to settle
-// again, and SHOW_LAND_TOUT ends all of it so the drone always lands.
+// again, and SHOW_HOLD_TOUT ends all of it so the drone always lands.
 //
 // Also sets _landing_hold_climb_cms, which is non-zero while climbing back to
 // the hold altitude.
@@ -865,7 +865,7 @@ bool ModeDroneShow::landing_hold_needed()
     const uint32_t settle_duration_ms = 500;
 
     // the descent takes about 0.3 s to stop, measured on two airframes descending
-    // at 20-30 cm/s, so the hold has to start that much above SHOW_LAND_ALT
+    // at 20-30 cm/s, so the hold has to start that much above SHOW_HOLD_ALT
     const float stopping_time_sec = 0.3f;
 
     // rate at which we climb back to the hold altitude after a gust, and how far
@@ -897,7 +897,7 @@ bool ModeDroneShow::landing_hold_needed()
 
     const uint32_t now = AP_HAL::millis();
 
-    // SHOW_LAND_TOUT limits the landing as a whole, however often it was held
+    // SHOW_HOLD_TOUT limits the landing as a whole, however often it was held
     const float total_time_sec = show_manager.get_landing_total_time_sec();
     if (total_time_sec > 0 && now - _landing_started_at >= total_time_sec * 1000) {
         if (_landing_hold_stage != LandingHold_Descending) {
