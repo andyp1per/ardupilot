@@ -340,7 +340,7 @@ const AP_Param::GroupInfo AC_DroneShowManager::var_info[] = {
 
     // @Param: HOLD_ALT
     // @DisplayName: Landing hold altitude
-    // @Description: Altitude above the takeoff position where the landing pauses until the horizontal position error settles. The wind drops off close to the ground and the position controller needs a few seconds to follow it. The drone stops a few centimeters below this altitude (about 10 cm at LAND_SPEED 30). Zero turns the hold off.
+    // @Description: Altitude above the takeoff position where the landing pauses until the horizontal position error settles. The wind drops off close to the ground and the position controller needs a few seconds to follow it. Landings after a collective return to home skip the hold so they keep their planned timing. Zero turns the hold off.
     // @Range: 0 2
     // @Increment: 0.05
     // @Units: m
