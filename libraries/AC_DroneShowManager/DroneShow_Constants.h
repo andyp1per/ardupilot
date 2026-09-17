@@ -63,7 +63,7 @@
 
 // Default limit on the whole landing, in seconds, after which the drone
 // descends whatever its position error is. Zero means no limit.
-#define DEFAULT_LANDING_TOTAL_TIME_SEC 20.0f
+#define DEFAULT_LANDING_TOTAL_TIME_SEC 10.0f
 
 // Distance threshold for the trajectory to be considered circular, in meters.
 #define DEFAULT_START_END_XY_DISTANCE_THRESHOLD_METERS 0.5f
