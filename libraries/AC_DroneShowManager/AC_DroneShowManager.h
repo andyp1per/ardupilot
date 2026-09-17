@@ -309,6 +309,10 @@ public:
     // Returns the time limit on the whole landing, in seconds. Zero if disabled.
     float get_landing_total_time_sec() const;
 
+    // Returns the descent speed after the landing hold, in meters per second.
+    // Zero if LAND_SPEED applies.
+    float get_landing_hold_descent_speed_m_sec() const;
+
     // Returns the takeoff acceleration in meters per second squared
     float get_motor_spool_up_time_sec() const;
     
@@ -739,6 +743,9 @@ private:
 
         // Time limit on the whole landing, in seconds
         AP_Float landing_total_time_sec;
+
+        // Descent speed after the landing hold, in meters per second
+        AP_Float landing_hold_descent_speed_m_sec;
 
         // General options related to the show flight mode. See the values from
         // the DroneShowOptionFlag enum for more details.

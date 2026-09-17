@@ -392,7 +392,16 @@ const AP_Param::GroupInfo AC_DroneShowManager::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("HOLD_TOUT", 47, AC_DroneShowManager, _params.landing_total_time_sec, DEFAULT_LANDING_TOTAL_TIME_SEC),
 
-    // Currently used max parameter ID: 47; update this if you add more parameters.
+    // @Param: HOLD_SPD
+    // @DisplayName: Descent speed after the landing hold
+    // @Description: Descent speed from the landing hold to the ground, used once the hold has ended and after every retry. Landings that never held, such as after a collective return to home, descend at LAND_SPEED throughout. Zero uses LAND_SPEED.
+    // @Range: 0 1
+    // @Increment: 0.01
+    // @Units: m/s
+    // @User: Advanced
+    AP_GROUPINFO("HOLD_SPD", 48, AC_DroneShowManager, _params.landing_hold_descent_speed_m_sec, DEFAULT_LANDING_HOLD_DESCENT_SPEED_METERS_SEC),
+
+    // Currently used max parameter ID: 48; update this if you add more parameters.
     // Note that the max parameter ID may appear in the middle of the above list.
 
     AP_GROUPEND

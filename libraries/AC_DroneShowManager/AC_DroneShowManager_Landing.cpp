@@ -89,3 +89,9 @@ float AC_DroneShowManager::get_landing_total_time_sec() const
     float value = _params.landing_total_time_sec;
     return (value > 0 && isfinite(value)) ? value : 0.0f;
 }
+
+float AC_DroneShowManager::get_landing_hold_descent_speed_m_sec() const
+{
+    float value = _params.landing_hold_descent_speed_m_sec;
+    return (value > 0 && isfinite(value)) ? value : 0.0f;
+}

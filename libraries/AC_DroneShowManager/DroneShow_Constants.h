@@ -65,6 +65,10 @@
 // descends whatever its position error is. Zero means no limit.
 #define DEFAULT_LANDING_TOTAL_TIME_SEC 10.0f
 
+// Default descent speed after the landing hold, in meters per second. Zero
+// means LAND_SPEED.
+#define DEFAULT_LANDING_HOLD_DESCENT_SPEED_METERS_SEC 0.0f
+
 // Distance threshold for the trajectory to be considered circular, in meters.
 #define DEFAULT_START_END_XY_DISTANCE_THRESHOLD_METERS 0.5f
 
