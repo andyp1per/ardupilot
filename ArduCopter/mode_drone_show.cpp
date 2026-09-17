@@ -826,7 +826,9 @@ void ModeDroneShow::landing_start()
     // TODO(ntamas): set stopping point of loiter nav properly so we land as
     // close to our destination as possible
 
-    _landing_hold_stage = LandingHold_Approaching;
+    // a collective RTH lands on a timed plan, so it must not wait at the hold altitude
+    _landing_hold_stage = copter.g2.drone_show_manager.is_collective_rth_triggered()
+        ? LandingHold_Done : LandingHold_Approaching;
     _landing_hold_climb_cms = 0;
     _landing_started_at = AP_HAL::millis();
 
