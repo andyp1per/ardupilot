@@ -4,8 +4,9 @@ Analysis sessions, 2026-09-14 (tray landings, firmware 73e18022 on
 lightdynamix-motherboard, APJ 5281), 2026-09-15 (fast oscillation,
 firmware 8e72a9cb on lightdynamix-pixelmb, APJ 5282) and 2026-09-16
 (windy landings, the landing hold and a six-drone sweep, firmware
-995f251d, af81d153 and 069d6dbf on lightdynamix-pixelmb). ArduCopter V4.6.3-lightdynamix, drone show mode
-(127), u-blox ZED-F9P RTK at 5 Hz, GPS as the height source, no
+995f251d, af81d153 and 069d6dbf on lightdynamix-pixelmb) and 2026-09-17
+(landing timing in emergencies). ArduCopter V4.6.3-lightdynamix, drone
+show mode (127), u-blox ZED-F9P RTK at 5 Hz, GPS as the height source, no
 rangefinder.
 
 The complaint was that drones did not land accurately enough to seat in
@@ -763,6 +764,62 @@ velocity delay is 0.10-0.12 s (median 0.12 over 68 logs), which gives
 0.173-0.180. The per-drone intervals overlap, so one fleet value is
 enough.
 
+## 9. Landing timing in emergencies (2026-09-17)
+
+The skybrush team's concern was that the hold makes a landing late by a
+variable amount, which eats into the separation in time that a collective
+return to home (CRTH) plan relies on.
+
+The hold only runs in the show mode landing stage, which is entered at
+the end of the show and at the end of a CRTH trajectory. Failsafes that
+change mode (RTL, LAND, battery, GCS, geofence) never reach it.
+
+What it cost in the sweep at LAND_SPEED 30, leaving out LAND_SPEED 10 and
+the landings that retried:
+
+| | Landings | LAND stage to contact | LAND stage to land detect |
+|---|---|---|---|
+| hold off | 9 | median 3.2 s, max 3.4 | median 4.9 s, max 5.3 |
+| hold on | 76 | median 5.6 s, 90th pct 8.2, max 11.0 | median 7.2 s, 90th pct 9.8, max 12.5 |
+
+Four of the five forced-retry landings in the last slot took 20-21 s to
+contact, which is what SHOW_HOLD_TOUT 20 allowed.
+
+Two changes follow:
+
+- Landings after a CRTH skip the hold. The plan times each drone's
+  landing, and a CRTH is an emergency where getting down on time matters
+  more than the last 1-2 cm. It uses skybrush's own
+  is_collective_rth_triggered(), which is true once a CRTH command has
+  added its scene to the screenplay.
+- SHOW_HOLD_TOUT drops to 10 s. Sweep landings reached the hold 2-3 s
+  after handover, so SHOW_HOLD_TMAX 7 still fits. Of the 76 held landings
+  above only one (165 log 115, contact at 11.0 s) ran long enough that
+  the limit might have shortened it. A landing that keeps retrying now
+  releases 10 s after handover instead of 20, and touches down about 1 s
+  later.
+
+SITL, hover_3m_with_rth_plan.skyb, 3 m/s wind, CRTH sent through the time
+axis configuration packet:
+
+| Build | Landing | Held | LAND stage to landed |
+|---|---|---|---|
+| skip | end of show, handover at 2.6 m | 2.0 s at 24 cm | 11.5 s |
+| skip | CRTH during the show, handover at 1.2 m | no | 4.4 s |
+| skip | CRTH during takeoff, landed from 0.7 m | no | 5.0 s |
+| skip disabled | CRTH during the show, handover at 1.2 m | 2.0 s | 7.8 s |
+| skip disabled | CRTH during takeoff, landed from 1.3 m | 2.0 s | 12.8 s |
+
+SHOW_LAND_ALT stays at the skybrush default of -1 (half the takeoff
+altitude, at most 1 m). With SHOW_OPTIONS 2, as in defaults.parm, the end
+of the show trajectory is rewritten to descend to the handover at landing
+speed, so a lower handover moves where the descent changes from the show
+to LAND without removing the time the hold adds. Without that option
+SHOW_LAND_ALT only affects the CRTH handover, and the SITL show above,
+flown without it, handed over at 2.6 m. A handover more than 3 cm below
+SHOW_HOLD_ALT would make the drone climb back up to the hold height
+before settling.
+
 ## Recommended settings
 
 | Parameter | Value | Why |
@@ -786,7 +843,7 @@ enough.
 | SHOW_HOLD_TMIN | 2 | the error dips below the threshold before the integrator settles |
 | SHOW_HOLD_TMAX | 7 | never reached in the sweep; log 57 needed 4.6 s in gusty air |
 | SHOW_HOLD_AERR | 0.08 | a gust this far off sends the landing back up to settle |
-| SHOW_HOLD_TOUT | 20 | the landing always finishes, however often it was held |
+| SHOW_HOLD_TOUT | 10 | the landing always finishes, about 11 s from handover to contact at worst (section 9) |
 | EK3_DRAG_MCOEF | 0.18 | fleet fit over 96 flights (section 8); 0 disables wind learning |
 | EK3_DRAG_BCOEF_X/Y | 0 | the fit finds no bluff-body drag up to 7 m/s |
 | SHOW_LAND_ALT | -1 | skybrush handover at half the takeoff altitude, at most 1 m |
@@ -807,8 +864,6 @@ shaper is softened back to PSC_JERK_XY 20 / WPNAV_ACCEL 800.
   (section 7).
 - The landing hold drifts up a few cm while it waits; worth finding out
   whether that is the vertical shaper or near-ground height error.
-- EK3_DRAG_BCOEF_X/Y are still 58.77/51.02 and EK3_DRAG_MCOEF 0.2 in
-  defaults.parm; the fleet fit says 0 and 0.18.
 - A third of landings rest 10-13 deg tilted, on every drone (section 8).
   Check how the legs meet the funnel and charging contacts; it is not an
   approach problem.
@@ -832,9 +887,6 @@ shaper is softened back to PSC_JERK_XY 20 / WPNAV_ACCEL 800.
   site and tray walls. Needs more windy data before trying.
 - For testing, fly with LOG_DISARMED=1 so logs start at boot (faithful
   Replay) and capture post-landing events. Trim back for shows.
-- lightdynamix-pixelmb defaults.parm still sets SHOW_VEL_FF_GAIN 0.6 and
-  does not set SHOW_CTRL_RATE or PSC_VELXY_D; log 72's values were set on
-  the drone.
 - Show manager: send trajectory acceleration with the guided commands so
   the target propagates consistently between updates. Untested.
 - Drone 165: the single-record GPS dropouts and the low magnetic field at
