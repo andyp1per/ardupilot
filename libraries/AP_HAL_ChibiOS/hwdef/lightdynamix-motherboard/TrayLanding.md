@@ -5,7 +5,8 @@ lightdynamix-motherboard, APJ 5281), 2026-09-15 (fast oscillation,
 firmware 8e72a9cb on lightdynamix-pixelmb, APJ 5282) and 2026-09-16
 (windy landings, the landing hold and a six-drone sweep, firmware
 995f251d, af81d153 and 069d6dbf on lightdynamix-pixelmb) and 2026-09-17
-(landing timing in emergencies). ArduCopter V4.6.3-lightdynamix, drone
+(landing timing in emergencies, descent speed after the hold).
+ArduCopter V4.6.3-lightdynamix, drone
 show mode (127), u-blox ZED-F9P RTK at 5 Hz, GPS as the height source, no
 rangefinder.
 
@@ -820,6 +821,37 @@ flown without it, handed over at 2.6 m. A handover more than 3 cm below
 SHOW_HOLD_ALT would make the drone climb back up to the hold height
 before settling.
 
+## 10. Descent speed after the hold (2026-09-17)
+
+The one LAND_SPEED 10 slot in the sweep landed closer than LAND_SPEED 30,
+but LAND_SPEED slows the whole descent from the handover and it took
+3.2 s against 1.8 s to detect the landing. SHOW_HOLD_SPD sets the descent
+speed from the hold to the ground on its own, and zero keeps LAND_SPEED.
+It applies from the first hold onwards, including after a retry or the
+time limit. Landings that never held, including those after a collective
+RTH, stay at LAND_SPEED. A climb back after a gust and the hold itself
+take priority over it.
+
+SITL, hover_3m.skyb, 5 m/s wind decaying below 2 m, hold at 0.25 m,
+LAND_SPEED 30:
+
+| SHOW_HOLD_SPD | Final descent | Touchdown | Contact to land detect |
+|---|---|---|---|
+| 0 | 32 cm/s | 0.34 m/s | 2.0 s |
+| 0.10 | 10 cm/s | 0.10 m/s | 3.6 s |
+| 0.50 | 49 cm/s | 0.53 m/s | 1.5 s |
+| 0.10, hold off | 29 cm/s | 0.30 m/s | 2.1 s |
+
+The descent above the hold stayed at 29-30 cm/s in every run. With
+SHOW_HOLD_AERR at 1.5 cm and turbulence, retries at 24 and 15 cm climbed
+back to the hold at 15-16 cm/s and each final descent returned to
+10 cm/s. A slower final descent leaves more time for the error to pass
+SHOW_HOLD_AERR, so expect more retries at low thresholds.
+
+Whether 10-15 cm/s seats more reliably than 30 cm/s, and whether the
+slower land detect tips drones as on day 1 (section 3), is for a flight
+test.
+
 ## Recommended settings
 
 | Parameter | Value | Why |
@@ -844,6 +876,7 @@ before settling.
 | SHOW_HOLD_TMAX | 7 | never reached in the sweep; log 57 needed 4.6 s in gusty air |
 | SHOW_HOLD_AERR | 0.08 | a gust this far off sends the landing back up to settle |
 | SHOW_HOLD_TOUT | 10 | the landing always finishes, about 11 s from handover to contact at worst (section 9) |
+| SHOW_HOLD_SPD | 0 | LAND_SPEED until a slower final descent is flown (section 10) |
 | EK3_DRAG_MCOEF | 0.18 | fleet fit over 96 flights (section 8); 0 disables wind learning |
 | EK3_DRAG_BCOEF_X/Y | 0 | the fit finds no bluff-body drag up to 7 m/s |
 | SHOW_LAND_ALT | -1 | skybrush handover at half the takeoff altitude, at most 1 m |
@@ -885,6 +918,8 @@ shaper is softened back to PSC_JERK_XY 20 / WPNAV_ACCEL 800.
 - Wind near the ground: bleeding the XY integrator with height in the
   last ~0.5 m would match the show's wind collapse, but it depends on the
   site and tray walls. Needs more windy data before trying.
+- SHOW_HOLD_SPD 0.10-0.15 against 0 in same-slot pairs: contact and
+  resting error, land detect time, and tilted resting (section 10).
 - For testing, fly with LOG_DISARMED=1 so logs start at boot (faithful
   Replay) and capture post-landing events. Trim back for shows.
 - Show manager: send trajectory acceleration with the guided commands so
