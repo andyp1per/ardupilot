@@ -1271,6 +1271,10 @@ public:
     // to its hold altitude
     void set_climb_rate_cms(float new_value) { climb_rate_cms = new_value; }
 
+    // descends at this rate instead of LAND_SPEED while positive, unless paused
+    // or held; used by the show landing for the final descent after its hold
+    void set_descent_rate_cms(float new_value) { descent_rate_cms = new_value; }
+
 protected:
 
     const char *name() const override { return "LAND"; }
@@ -1287,6 +1291,7 @@ private:
     bool land_pause;
     bool descent_hold;
     float climb_rate_cms;
+    float descent_rate_cms;
 };
 
 

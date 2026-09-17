@@ -118,7 +118,7 @@ private:
     // Timestamp when the landing stage started
     uint32_t _landing_started_at;
 
-    // Timestamp when the landing hold started
+    // Timestamp when the landing hold started, zero if it has not held yet
     uint32_t _landing_hold_started_at;
 
     // Timestamp when the horizontal position error last fell below the

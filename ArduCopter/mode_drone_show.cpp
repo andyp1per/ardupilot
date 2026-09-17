@@ -831,6 +831,7 @@ void ModeDroneShow::landing_start()
         ? LandingHold_Done : LandingHold_Approaching;
     _landing_hold_climb_cms = 0;
     _landing_started_at = AP_HAL::millis();
+    _landing_hold_started_at = 0;
 
     // call regular land flight mode initialisation and ask it to ignore checks
     copter.mode_land.init(/* ignore_checks = */ true);
@@ -841,6 +842,13 @@ void ModeDroneShow::landing_run()
 {
     copter.mode_land.set_descent_hold(landing_hold_needed());
     copter.mode_land.set_climb_rate_cms(_landing_hold_climb_cms);
+
+    // SHOW_HOLD_SPD applies from the first hold onwards
+    copter.mode_land.set_descent_rate_cms(
+        _landing_hold_started_at != 0
+            ? copter.g2.drone_show_manager.get_landing_hold_descent_speed_m_sec() * 100.0f
+            : 0.0f
+    );
 
     // call regular land flight mode run function
     copter.mode_land.run();
