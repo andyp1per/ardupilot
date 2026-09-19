@@ -123,6 +123,10 @@ public:
 
     bool is_initialised(void) const { return initialised; }
 
+    // re-measure the field rate and switch standard if the camera's differs;
+    // the switch blanks the overlay for a field or two
+    void check_standard(void);
+
     // fields scanned out since init, incremented by the vsync interrupt.
     // Static so the interrupt handler can reach it without the object.
     static volatile uint32_t vsync_count;
@@ -147,6 +151,8 @@ private:
     void configure_sm(void);
     // swap the line standard on a running scan-out
     void set_standard(bool pal);
+    // set_standard() from the core1 thread, with the queue emptied
+    void apply_standard(bool pal);
     void release(void);
     /*
       Claims the DMA channel, enables both interrupts and then stays as the
@@ -210,6 +216,13 @@ private:
     volatile bool desynced;
     volatile bool core1_ready;
     volatile bool core1_failed;
+
+    // check_standard()'s measuring window, and the standard it has asked the
+    // core1 thread to apply: 0 none, 1 NTSC, 2 PAL
+    uint32_t std_window_ms;
+    uint32_t std_window_fields;
+    uint8_t std_mismatches;
+    volatile uint8_t pending_standard;
 };
 
 }  // namespace ChibiOS

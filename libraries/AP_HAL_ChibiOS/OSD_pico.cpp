@@ -153,6 +153,9 @@ void OSD_pico::configure_sm(void)
 
     pio->SM[sm].INSTR = 0xe083U;   // set pindirs, 3 - W and EN are outputs
     pio->SM[sm].INSTR = 0xe000U;   // set pins, 0 - transparent
+    // SM_RESTART leaves the program counter alone, and a standard change
+    // mid-field would resume the line loop against an empty FIFO
+    pio->SM[sm].INSTR = 0x0000U;   // jmp 0 - start at the top of a field
 
     pio->CTRL |= (1U << (PIO_CTRL_CLKDIV_RESTART_LSB + sm))
               |  (1U << (PIO_CTRL_SM_RESTART_LSB + sm));
@@ -590,6 +593,27 @@ void OSD_pico::set_standard(bool pal)
 }
 
 /*
+  Both interrupts and the renderer are on core1, so the kernel lock taken
+  here keeps them all out while the standard changes under them. Blocks
+  queued for the old line count are thrown away and the next field starts
+  from block 0, as it does at boot.
+ */
+void OSD_pico::apply_standard(bool pal)
+{
+    chSysLock();
+    set_standard(pal);
+    produced = 0;
+    consumed = 0;
+    prod_idx = 0;
+    cons_idx = 0;
+    next_render_block = 0;
+    late_seen = late_blocks;
+    // a completion already pending finds the field finished and arms nothing
+    dma_block = (uint16_t)(blocks - 1U);
+    chSysUnlock();
+}
+
+/*
   Claim the DMA channel, enable both interrupts, then stay as the renderer.
 
   Deliberately run on core1: dmaChannelAllocI() and nvicEnableVector() both
@@ -650,6 +674,11 @@ void OSD_pico::core1_thread(void)
     core1_ready = true;
 
     while (!thread_stop) {
+        const uint8_t pending = pending_standard;
+        if (pending != 0U) {
+            apply_standard(pending == 2U);
+            pending_standard = 0;
+        }
         // keep two rendered and waiting; the third is whatever the DMA has
         while ((produced - consumed) < 2U && !thread_stop) {
             if (late_seen != late_blocks) {
@@ -734,6 +763,8 @@ bool OSD_pico::init(bool pal)
             set_standard(measured_pal);
         }
     }
+    std_window_ms = AP_HAL::millis();
+    std_window_fields = vsync_count;
     detecting = false;
 
     initialised = true;
@@ -741,6 +772,42 @@ bool OSD_pico::init(bool pal)
                         is_pal ? "PAL" : "NTSC", unsigned(sm),
                         unsigned(lines), unsigned(fields));
     return true;
+}
+
+/*
+  init() measures the standard once, and a camera that is still starting
+  then sends no fields, which leaves the default in place for the whole boot.
+  An NTSC camera scanned out as PAL loses a block every field: the renderer
+  works ahead into rows the shorter field never reaches, and the next field
+  finds its queue full of them.
+ */
+void OSD_pico::check_standard(void)
+{
+    const uint32_t now_ms = AP_HAL::millis();
+    const uint32_t dt_ms = now_ms - std_window_ms;
+    if (dt_ms < 1000U || pending_standard != 0U) {
+        return;
+    }
+    const uint32_t n = vsync_count - std_window_fields;
+    std_window_ms = now_ms;
+    std_window_fields += n;
+
+    // a window spanning a gap in the calls, or under 40 fields a second from
+    // a camera starting or dropping out, says nothing about the standard
+    if (dt_ms > 5000U || n * 1000U < 40U * dt_ms) {
+        std_mismatches = 0;
+        return;
+    }
+    // 50 and 60 fields a second split at 55
+    const bool measured_pal = n * 1000U < 55U * dt_ms;
+    if (measured_pal == is_pal) {
+        std_mismatches = 0;
+        return;
+    }
+    if (++std_mismatches >= 2U) {
+        std_mismatches = 0;
+        pending_standard = measured_pal ? 2U : 1U;
+    }
 }
 
 void OSD_pico::release(void)
