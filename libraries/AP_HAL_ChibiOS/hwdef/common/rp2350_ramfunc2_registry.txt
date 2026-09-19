@@ -99,6 +99,11 @@ libraries/AP_ESC_Telem/AP_ESC_Telem.cpp|AP_ESC_Telem::get_rpm  # 180 B (sram)
 libraries/AP_ESC_Telem/AP_ESC_Telem.cpp|AP_ESC_Telem::get_motor_frequencies_hz  # 116 B (sram)
 libraries/AP_Motors/AP_MotorsMulticopter.cpp|AP_MotorsMulticopter::get_thrust  # 90 B (sram)
 libraries/Filter/HarmonicNotchFilter.cpp|HarmonicNotchFilter<Vector3<float>>::set_center_frequency  # 200 B (sram)
+# The leaf of the chain, left in flash, was 15-18% of core1 armed on its own
+# plus ~4% in veneers to the SRAM callees; linear_interpolate fades a notch
+# below its minimum frequency, so it runs whenever the motors are near idle.
+libraries/Filter/NotchFilter.cpp|NotchFilter<Vector3<float>>::init_with_A_and_Q  # 356 B (sram)
+libraries/AP_Math/AP_Math.cpp|linear_interpolate  # 82 B (sram)
 libraries/Filter/HarmonicNotchFilter.cpp|HarmonicNotchFilter<Vector3<float>>::init  # 204 B (sram)
 libraries/AP_InertialSensor/AP_InertialSensor.cpp|AP_InertialSensor::HarmonicNotch::update_frequencies_hz  # 34 B (sram)
 libraries/AP_Motors/AP_MotorsMulticopter.cpp|Thrust_Linearization::remove_thrust_curve_and_volt_scaling  # 188 B (sram)
