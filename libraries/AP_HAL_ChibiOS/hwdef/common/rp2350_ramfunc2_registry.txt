@@ -32,14 +32,11 @@ ArduCopter/rate_thread.cpp|Copter::update_dynamic_notch_at_specified_rate_main  
 libraries/AC_AttitudeControl/AC_AttitudeControl.cpp|AC_AttitudeControl::update_attitude_target  # 56 B (sram)
 libraries/AC_AttitudeControl/AC_AttitudeControl.cpp|AC_AttitudeControl::thrust_vector_rotation_angles  # 418 B (sram)
 libraries/AC_AttitudeControl/AC_AttitudeControl.cpp|AC_AttitudeControl::attitude_command_model  # 152 B (sram)
-# update_EKF3/update_DCM were folded into AP_AHRS::update by the backend-loop
-# rework, which is why this entry grew from 208 B to 424 B.
-libraries/AP_AHRS/AP_AHRS.cpp|AP_AHRS::update  # 424 B (sram)
+# update_EKF3 was folded into AP_AHRS::update by the backend-loop rework,
+# which is why this entry grew from 208 B.
+libraries/AP_AHRS/AP_AHRS.cpp|AP_AHRS::update  # 376 B (sram)
 libraries/AP_AHRS/AP_AHRS_Backend.cpp|AP_AHRS::update_trig  # 48 B (sram)
 libraries/AP_AHRS/AP_AHRS_Backend.cpp|AP_AHRS::update_cd_values  # 112 B (sram)
-libraries/AP_AHRS/AP_AHRS_DCM.cpp|AP_AHRS_DCM::update  # 480 B (sram)
-libraries/AP_AHRS/AP_AHRS_DCM.cpp|AP_AHRS_DCM::matrix_update  # 194 B (sram)
-libraries/AP_AHRS/AP_AHRS_DCM.cpp|AP_AHRS_DCM::drift_correction
 
 # AP_DAL: the EKF's sensor abstraction, 3.8% of core0 non-idle in 2.3 KB and
 # entirely XIP-resident before this. Only the entries the profile actually hit
