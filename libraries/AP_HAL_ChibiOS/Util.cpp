@@ -535,7 +535,11 @@ __RAMFUNC__ void Util::thread_info(ExpandingString &str)
         }
         // Giovanni thinks this is dangerous, but we can't get useable data without it
         if (tp != chThdGetSelfX()) {
-            chTMObjectInit(&tp->stats); // reset counters to zero
+            // not chTMObjectInit(): last is the start of the slice in progress for a thread running on another core
+            tp->stats.best = (rtcnt_t)-1;
+            tp->stats.worst = 0U;
+            tp->stats.n = 0U;
+            tp->stats.cumulative = 0U;
         } else {
             tp->stats.cumulative = 0U;
         }
