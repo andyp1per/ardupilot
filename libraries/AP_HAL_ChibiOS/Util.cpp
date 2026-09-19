@@ -408,6 +408,16 @@ bool Util::was_watchdog_reset() const
 }
 
 #if CH_DBG_ENABLE_STACK_CHECK == TRUE && !defined(HAL_BOOTLOADER_BUILD)
+#if HAL_ENABLE_THREAD_STATISTICS
+// the rate of chSysGetRealtimeCounterX(), which times the thread statistics: DWT CYCCNT at the
+// core clock, except on the RP2 SMP port, where both cores read the 1 MHz TIMER0
+#if defined(RP2350) && CH_CFG_SMP_MODE == TRUE
+#define THREAD_STATS_COUNTER_HZ 1000000U
+#else
+#define THREAD_STATS_COUNTER_HZ HAL_EXPECTED_SYSCLOCK
+#endif
+#endif
+
 /*
   display stack usage as text buffer for @SYS/threads.txt
  */
@@ -525,7 +535,7 @@ __RAMFUNC__ void Util::thread_info(ExpandingString &str)
                         // more than a loop slice is bad for everyone else, warn on
                         // more than a 200Hz slice so that only the worst offenders are identified
                         // also don't do this for the main or idle threads
-                        tp != chThdGetSelfX() && unsigned(RTC2US(STM32_HSECLK, stats.worst)) > 5000
+                        tp != chThdGetSelfX() && unsigned(RTC2US(THREAD_STATS_COUNTER_HZ, stats.worst)) > 5000
                             && tp != get_main_thread() && tp->realprio != 1 ? "*" : "",
                         core_sfx);
         } else {
