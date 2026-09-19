@@ -19,6 +19,8 @@
 
 #include <GCS_MAVLink/GCS.h>
 
+extern const AP_HAL::HAL &hal;
+
 /*
   The PIO1 broker decides between this and the LED driver by reading OSD_TYPE
   directly, because it has to answer before AP_OSD exists - RCOutput asks
@@ -64,8 +66,9 @@ bool AP_OSD_PICO::init(void)
         return false;
     }
     /*
-      PAL is only the answer when no camera is attached at boot: init()
-      counts fields and switches to NTSC if that is what is arriving.
+      PAL until a camera is seen: init() counts fields and switches to NTSC
+      if that is what is arriving, and flush() keeps checking while disarmed
+      because the camera can still be starting when init() runs.
      */
     if (!driver.init(true)) {
         delete fd;
@@ -95,6 +98,10 @@ void AP_OSD_PICO::clear(void)
 
 void AP_OSD_PICO::flush(void)
 {
+    // switching standard blanks the overlay briefly, so never in flight
+    if (!hal.util->get_soft_armed()) {
+        driver.check_standard();
+    }
     driver.flush();
 }
 
