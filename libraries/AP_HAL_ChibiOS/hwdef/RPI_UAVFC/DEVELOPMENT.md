@@ -63,7 +63,7 @@ starvation on core0, not the card. See the SD section below - the previous
 | Acro | log69, 153 s at 800 deg/s, inverted, EKF `FS` 0 throughout |
 | Rate loop in flight | 2 kHz held; dtMax never above 1.4 ms in any flight |
 | Yaw trim | 17% diagonal RPM split; explained, not a fault - see below |
-| DCM backup AHRS | 89 deg roll after log96, and starts before motors spin |
+| DCM backup AHRS | Compiled out since 2026-09-19, see below |
 | Tune | Hand tune below; AUTOTUNE started, roll only, unsaved |
 | Serial LED (J2) | Working; colours correct since the PULL_THRESH fix |
 | VTX SmartAudio | Working on SERIAL4; replies parse, see below |
@@ -1115,6 +1115,14 @@ a safety fallback issue" is right about the code path and wrong about the risk.
 The `filter_faults != 0` route is still live, and a backup AHRS holding a 90 deg
 roll error means taking it is not a degraded mode, it is an immediate flip. The
 re-arm delay is the cost that shows up; it is not the cost that matters.
+
+Closed 2026-09-19 by removing DCM rather than fixing it: `PICO2.py` sets
+`AP_AHRS_DCM_ENABLED` 0 for every RP2350 board, and the 1/16 skip went with
+it. With Copter's `FLAG_ALWAYS_USE_EKF`, DCM was only the attitude before EKF3
+starts, the `filter_faults` fallback and the consistency check above. Without
+it `fallback_active_EKF_type()` returns EKF3, so a filter fault stays on EKF3,
+and there is no DCM pre-arm check to lock out the next arm. The 16x
+`_ra_deltat` mechanism in open issue 3 was never measured.
 
 ## The tune
 
@@ -3442,6 +3450,9 @@ the margin has gone from 0.19 V to 0.13 V.
 
 ### 3. DCM roll/pitch divergence
 
+Closed 2026-09-19: DCM is compiled out, see the DCM section. The record below
+is kept as it was.
+
 89 deg after log96, worse each flight, and now known to start **before the
 motors spin**. Reproduces on the bench disarmed, so instrument `GA_e`,
 `_ra_deltat` and the GPS velocity term there rather than flying for it. The
@@ -3553,8 +3564,6 @@ flight controller A/B is not needed; the original VTX was the fault.
       flight. All four should be zero and none has yet fired outside deliberate
       injection.
 - [ ] Reboot shortly before arming, until the 71 minute wrap has been soaked.
-- [ ] Expect a re-arm delay after an aggressive flight while DCM decays below
-      10 deg. log96 was still 89 deg out at the end, so this is now minutes.
 
 ### 9. Not yet flown
 
