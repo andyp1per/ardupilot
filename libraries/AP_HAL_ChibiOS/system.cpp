@@ -49,7 +49,7 @@ static_assert(HAL_EXPECTED_SYSCLOCK == STM32_SYS_CK, "unexpected STM32_SYS_CK va
 #elif defined(STM32_HCLK)
 static_assert(HAL_EXPECTED_SYSCLOCK == STM32_HCLK, "unexpected STM32_HCLK value got " XSTR(STM32_HCLK) " expected " XSTR(HAL_EXPECTED_SYSCLOCK));
 #elif defined(RP2350)
-// the RP2350 clock tree is set up at runtime, so there is nothing to check here
+static_assert(HAL_EXPECTED_SYSCLOCK == RP_PLL_SYS_CLK, "unexpected RP_PLL_SYS_CLK value got " XSTR(RP_PLL_SYS_CLK) " expected " XSTR(HAL_EXPECTED_SYSCLOCK));
 #else
 #error "unknown system clock"
 #endif
