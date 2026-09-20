@@ -49,8 +49,6 @@ mcu = {
     'EXPECTED_CLOCK' : 375000000,  # overclocked from default.
 
     'DEFINES' : {
-        # no DCM: Copter always uses the EKF, so DCM was only a backup costing CPU and SRAM
-        'AP_AHRS_DCM_ENABLED' : '0',
         # the rate loop runs on core1
         'HAL_INS_RATE_LOOP' : '1',
         '__FASTRAMFUNC__' : '__attribute__((__section__(".ramtext")))',
