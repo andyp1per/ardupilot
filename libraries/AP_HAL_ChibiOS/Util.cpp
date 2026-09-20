@@ -409,8 +409,10 @@ bool Util::was_watchdog_reset() const
 
 #if CH_DBG_ENABLE_STACK_CHECK == TRUE && !defined(HAL_BOOTLOADER_BUILD)
 #if HAL_ENABLE_THREAD_STATISTICS
-// the rate of chSysGetRealtimeCounterX(), which times the thread statistics: DWT CYCCNT at the
-// core clock, except on the RP2 SMP port, where both cores read the 1 MHz TIMER0
+// the rate of chSysGetRealtimeCounterX(), which times the thread statistics. The SMP RP2 port
+// reads the 1 MHz TIMER0 from both cores (ARMv8-M-ML-ALT/smp/rp2/chcoresmp.h); every other port
+// here, including a non-SMP RP2350 build, takes DWT CYCCNT at the core clock
+// (ARMv8-M-ML-ALT/chcore.h), so the SMP test is load-bearing rather than a proxy for the chip
 #if defined(RP2350) && CH_CFG_SMP_MODE == TRUE
 #define THREAD_STATS_COUNTER_HZ 1000000U
 #else
