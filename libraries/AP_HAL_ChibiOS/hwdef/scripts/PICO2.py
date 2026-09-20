@@ -46,7 +46,9 @@ mcu = {
     # Required when CH_CFG_SMP_MODE=TRUE and RP_CORE1_START=TRUE.
     'LINKER_CONFIG' : 'common_rp2350_smp.ld',
 
-    'EXPECTED_CLOCK' : 375000000,  # overclocked from default.
+    # stock RP2350: 1500 MHz VCO / POSTDIV1 5 / POSTDIV2 2. A board that
+    # overclocks declares the rate it actually runs with MCU_CLOCKRATE_MHZ.
+    'EXPECTED_CLOCK' : 150000000,
 
     'DEFINES' : {
         # the rate loop runs on core1

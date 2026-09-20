@@ -690,7 +690,14 @@ define RP_CORE1_START TRUE
 # Changing POSTDIV1 from 5 to 3 (and keeping POSTDIV2=2) gives
 # 1500 / (3 x 2) = 250 MHz.  POSTDIV1(3) >= POSTDIV2(2) satisfies the
 # RP2350 constraint, and 250 MHz is a well-tested Pico2 operating point.
+#
+# No RP_VREG_VSEL here, so the core stays at the 1.1 V default: rp2350_vreg_init()
+# is compiled out without it. Laurel and RPI_UAVFC raise it to 1.15 V for 225 MHz
+# because a 300 MHz attempt at 1.1 V locked up on Laurel. 250 MHz at 1.1 V has not
+# been characterised on this board; raising VSEL is the first thing to try if a
+# carrier board proves unstable.
 define RP_PLL_SYS_POSTDIV1 3
+MCU_CLOCKRATE_MHZ 250
 # QMI flash timing for 250 MHz operation.
 # Bootloader default CLKDIV=3 gives SCK=50 MHz at 150 MHz; at 250 MHz that
 # would be 83 MHz -- 4% over W25Q32's 80 MHz fast-read limit.
