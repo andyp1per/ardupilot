@@ -1135,10 +1135,18 @@ at full rate, with its three functions in the SRAM registry.
 What does not come back is the decimation. Every flight in this record ran with
 the skip active - half rate from 2026-05-08, 1/16 from 2026-06-14 - so the
 drift and the arming lockouts have never been observed without it, and the
-mechanism in open issue 3 says the skip alone accounts for them. That is still
-inference: full-rate DCM has not yet run on this board. Watch `ErrRP` on the
-next bench run, and if it still climbs, `AHRS_GPS_GAIN` 0 remains the
-discriminator.
+mechanism in open issue 3 says the skip alone accounts for them.
+
+The bench run happened on 2026-09-20 and full-rate DCM is healthy on the
+ground: `ErrRP` 0.0007-0.0013 over 20 s, and roll/pitch 0.02 deg from the EKF3
+primary against the 10 deg pre-arm threshold, read live over SWD. Compare
+log96, where `ErrRP` was 0.63-0.75 before the motors spun. Yaw sits 33 deg from
+the EKF3's, but it is an offset and not a drift, it moved 0.16 deg in 30 s, and
+the yaw half of the check never fires on Copter. CPU is 1.5% of core0 and
+nothing on core1.
+
+Still open in flight: no full-rate flight has happened yet. If `ErrRP` climbs
+after arming, `AHRS_GPS_GAIN` 0 remains the discriminator.
 
 ## The tune
 
