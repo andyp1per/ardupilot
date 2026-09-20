@@ -24,19 +24,8 @@ INS_FAST_SAMPLE 0
 # of core1 and blocking core0.  With a real high-rate IMU (ICM-42688), set to 1.
 FSTRATE_ENABLE 0
 
-# Enable UART0 (GPIO12/13) and UART1 (GPIO10/11) with MAVLink2.
-# Without this, ArduPilot leaves UARTs unconfigured (FUNCSEL=5/SIO).
-# Setting protocol=2 makes the UARTs start at boot regardless of whether
-# a GCS is connected -- required for UART register verification and loopback tests.
-SERIAL1_PROTOCOL 2
-SERIAL2_PROTOCOL 2
-
-# Keep PIOUART ports free for dedicated loopback bring-up on GP14/17 and GP19/20.
-# SerialManager background users (for example GPS probing on SERIAL3 defaults)
-# can otherwise consume RX bytes and mask direct SERIAL_CONTROL validation.
-SERIAL3_PROTOCOL -1
-SERIAL4_PROTOCOL -1
-SERIAL5_PROTOCOL -1
+# Serial port roles are DEFAULT_SERIALn_* defines in hwdef.dat, where
+# test_new_boards.py requires them.
 
 # Enable watchdog (bit 0 of BRD_OPTIONS = BOARD_OPTION_WATCHDOG).
 # HAL_WATCHDOG_ENABLED_DEFAULT in hwdef.dat is only the fallback when

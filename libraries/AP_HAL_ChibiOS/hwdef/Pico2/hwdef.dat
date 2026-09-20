@@ -625,12 +625,19 @@ define HAL_USE_WDG                         TRUE
 define HAL_WATCHDOG_ENABLED_DEFAULT         1
 define HAL_USE_WSPI                        FALSE
 #
-# During RP2350 bring-up, leave the hardware UART telemetry ports disabled by
-# default. A floating RX line can generate continuous UART interrupts and
-# interfere with USB CDC startup/throughput. These can be re-enabled at runtime
-# with `SERIAL1_PROTOCOL`/`SERIAL2_PROTOCOL` once external wiring is known-good.
-define DEFAULT_SERIAL1_PROTOCOL             SerialProtocol_None
-define DEFAULT_SERIAL2_PROTOCOL             SerialProtocol_None
+# The hardware UARTs, UART0 (GPIO12/13) and UART1 (GPIO10/11), take
+# AP_SerialManager's MAVLink2 default for SERIAL1 and SERIAL2, so they start at
+# boot whether or not a GCS is attached, which is what the UART register and
+# loopback checks need. Unconfigured they sit at FUNCSEL 5 (SIO), and a floating
+# RX line can generate continuous interrupts, so only connect what is in use.
+# SERIAL5 is None by default and needs nothing here either.
+#
+# The PIO UARTs do need overriding, from the GPS default: they stay free for
+# dedicated loopback bring-up on GP14/17 and GP19/20, where a SerialManager
+# background user - GPS probing for one - would consume RX bytes and mask
+# direct SERIAL_CONTROL validation.
+define DEFAULT_SERIAL3_PROTOCOL             SerialProtocol_None
+define DEFAULT_SERIAL4_PROTOCOL             SerialProtocol_None
 #
 # PAL callbacks and wait are needed for GPIO interrupt handling (GPIO::_attach_interruptI
 # and GPIO::wait_pin). The RP2350 GPIOv1 ChibiOS driver supports both.
