@@ -405,8 +405,10 @@ define RP_QMI_RXDELAY 2
 # - GPIO27 is the IMU CLKIN net; not driven or configured by this port.
 # - GPIO5 (ESC_TELEMETRY) can only reach UART1 RX, which the GPS already owns,
 #   so it needs a third PIO UART and is left unbound for now.
-# - GPIO41 (DVTX_SBUS_RX) is left unbound: SBUS needs an inverted UART rather
-#   than the GPIO edge capture used for PPM.
+# - GPIO41 (DVTX_SBUS_RX) is left unbound for the same reason, twice over: its
+#   only hardware-UART function is UART1_RX, and a third PIO UART would land on
+#   PIO1, which the analog OSD claims.  SBUS itself is supported - wire the
+#   receiver to the RADIO pad and invert it with SERIAL3_OPTIONS 1.
 # - GPIO21/22/23 (OSD_W, OSD_EN, OSD_SYNC) are discrete OSD control lines with
 #   no accompanying SPI bus, so no hardware OSD device is declared.  Use MSP
 #   DisplayPort on SERIAL1 instead.

@@ -53,9 +53,15 @@ RC input is on SERIAL3 (the RADIO connector, GPIO42/43), which defaults to
 - FPort requires `SERIAL3_OPTIONS` = 15
 - SRXL2 requires `SERIAL3_OPTIONS` = 4, TX pin only
 
-The board also routes an SBUS pad on GPIO41, but SBUS needs an inverted UART
-rather than the GPIO edge capture this port provides, so that pad is not
-currently supported.
+SBUS is supported on this port: the PIO UART carries an 8E2 receive program and
+inverts the pad through INOVER, so a receiver on the RADIO pad runs with
+`SERIAL3_PROTOCOL` = 23 and `SERIAL3_OPTIONS` = 1. It also needs
+ArduPilot/ardupilot#33057, without which the upstream decoder drops frames on a
+port that hands over a whole frame at once. Not yet run against a receiver here.
+
+The board routes a dedicated SBUS pad on GPIO41 as well, which is left unbound:
+its only hardware-UART function is UART1_RX, which the GPS owns, and a third PIO
+UART would land on PIO1, which the analog OSD claims.
 
 ## PWM Output
 
@@ -235,7 +241,7 @@ with any ArduPilot ground station using the `*.apj` firmware files.
 | BLHeli passthrough | Not supported on RP2350 |
 | CAN / DroneCAN | Not supported by RP2350 hardware |
 | Hardware OSD | No SPI OSD device on this revision; use MSP DisplayPort |
-| SBUS pad (GPIO41) | Needs an inverted UART; not currently supported |
+| SBUS pad (GPIO41) | Unbound: UART1_RX belongs to the GPS and a third PIO UART would take PIO1 from the OSD. SBUS itself works on the RADIO pad, with `SERIAL3_OPTIONS` = 1 and ArduPilot/ardupilot#33057 |
 | Serial ESC telemetry (GPIO5) | Can only reach UART1 RX, which the GPS owns; use bidirectional DShot instead |
 | ProfiLED | Not supported on RP2350; NeoPixel only |
 | Battery current | Not usable on the tested vehicle; input does not track load |
