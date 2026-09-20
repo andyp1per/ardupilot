@@ -717,6 +717,10 @@ void PIORXDriver::_service_rx_fifo()
 // SBUS on PIOUART: assemble full frames and only forward valid 25-byte packets.
 // This keeps framing garbage out of the upper protocol layer and improves failsafe stability.
                 if (_sbus_rx.ofs == 0U && byte != 0x0FU) {
+// counted as dropped: drop= means bytes that never reached the reader, and a
+// byte discarded while hunting for a header is one of those. Without this the
+// assembler can be throwing frames away while the stats line reads clean.
+                    lost++;
                     continue;
                 }
                 _sbus_rx.buf[_sbus_rx.ofs++] = byte;
@@ -751,6 +755,7 @@ void PIORXDriver::_service_rx_fifo()
                                 break;
                             }
                         }
+                        lost += 25U - new_ofs;
                         _sbus_rx.ofs = new_ofs;
                     }
                 }
