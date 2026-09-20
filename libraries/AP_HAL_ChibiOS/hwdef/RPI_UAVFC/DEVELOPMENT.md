@@ -63,7 +63,7 @@ starvation on core0, not the card. See the SD section below - the previous
 | Acro | log69, 153 s at 800 deg/s, inverted, EKF `FS` 0 throughout |
 | Rate loop in flight | 2 kHz held; dtMax never above 1.4 ms in any flight |
 | Yaw trim | 17% diagonal RPM split; explained, not a fault - see below |
-| DCM backup AHRS | Compiled out since 2026-09-19, see below |
+| DCM backup AHRS | Full rate since 2026-09-20, in SRAM; the 1/16 skip is gone |
 | Tune | Hand tune below; AUTOTUNE started, roll only, unsaved |
 | Serial LED (J2) | Working; colours correct since the PULL_THRESH fix |
 | VTX SmartAudio | Working on SERIAL4; replies parse, see below |
@@ -1123,6 +1123,22 @@ starts, the `filter_faults` fallback and the consistency check above. Without
 it `fallback_active_EKF_type()` returns EKF3, so a filter fault stays on EKF3,
 and there is no DCM pre-arm check to lock out the next arm. The 16x
 `_ra_deltat` mechanism in open issue 3 was never measured.
+
+**Reopened 2026-09-20, and that removal was wrong.** `COMPASS_CAL_ENABLED` is
+`AP_COMPASS_ENABLED && AP_AHRS_DCM_ENABLED`, because the calibrator reads
+attitude through `AP_AHRS::get_DCM_rotation_body_to_ned()`, which only exists
+when DCM is built. Building DCM out therefore compiled out interactive compass
+calibration on a board with no compass of its own. Fixed-yaw calibration and
+`COMPASS_LEARN` survived, but they are not what a user reaches for. DCM is back
+at full rate, with its three functions in the SRAM registry.
+
+What does not come back is the decimation. Every flight in this record ran with
+the skip active - half rate from 2026-05-08, 1/16 from 2026-06-14 - so the
+drift and the arming lockouts have never been observed without it, and the
+mechanism in open issue 3 says the skip alone accounts for them. That is still
+inference: full-rate DCM has not yet run on this board. Watch `ErrRP` on the
+next bench run, and if it still climbs, `AHRS_GPS_GAIN` 0 remains the
+discriminator.
 
 ## The tune
 
@@ -3451,7 +3467,10 @@ the margin has gone from 0.19 V to 0.13 V.
 ### 3. DCM roll/pitch divergence
 
 Closed 2026-09-19: DCM is compiled out, see the DCM section. The record below
-is kept as it was.
+is kept as it was. **Reopened 2026-09-20:** DCM is back at full rate, because
+removing it took interactive compass calibration with it. The 1/16 skip this
+issue is about is gone either way, and whether it was the whole cause is now
+testable.
 
 89 deg after log96, worse each flight, and now known to start **before the
 motors spin**. Reproduces on the bench disarmed, so instrument `GA_e`,
