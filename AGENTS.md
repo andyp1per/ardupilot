@@ -154,6 +154,7 @@ Each hardware target may have its own README with build, flash, and debug steps.
 |-------|---------------------------|
 | Laurel (RP2350B) | [libraries/AP_HAL_ChibiOS/hwdef/Laurel/README.md](libraries/AP_HAL_ChibiOS/hwdef/Laurel/README.md) |
 | Pico2 (RP2350) | [libraries/AP_HAL_ChibiOS/hwdef/Pico2/README.md](libraries/AP_HAL_ChibiOS/hwdef/Pico2/README.md) |
+| RPI_UAVFC (RP2350B) | [libraries/AP_HAL_ChibiOS/hwdef/RPI_UAVFC/README.md](libraries/AP_HAL_ChibiOS/hwdef/RPI_UAVFC/README.md), flashing in [FLASHING.md](libraries/AP_HAL_ChibiOS/hwdef/RPI_UAVFC/FLASHING.md) |
 
 Example for the Laurel board:
 
