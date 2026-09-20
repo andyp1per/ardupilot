@@ -2741,6 +2741,14 @@ INCLUDE common.ld
             # macro initialises a struct whose next member is the IRQ handler.
             levels = [(port, pin, p) for (gpio, pwm, port, pin, p, enabled) in gpios
                       if pwm == 0 and enabled == 'true']
+            # an OUTPUT pin without a GPIO() number is not in the list above, so
+            # take it from its own HIGH/LOW qualifier. Only an explicit one: the
+            # default is HIGH, which is not a level anybody asked for.
+            listed = set((port, pin) for (port, pin, p) in levels)
+            for p in self.allpins:
+                if (p.type == 'OUTPUT' and (p.has_extra('HIGH') or p.has_extra('LOW'))
+                        and (p.port, p.pin) not in listed):
+                    levels.append((p.port, p.pin, p))
             if levels:
                 f.write('#define HAL_GPIO_INIT_LEVELS { \\\n')
                 for (port, pin, p) in levels:

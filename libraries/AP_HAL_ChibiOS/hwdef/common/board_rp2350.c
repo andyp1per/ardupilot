@@ -358,12 +358,13 @@ void pico2_gpio_init(void)
     palSetLineMode(HAL_GPIO_PIN_BUZZER, PAL_MODE_OUTPUT_PUSHPULL);
 #endif
 
+    // the regulator enables take their level from HAL_GPIO_INIT_LEVELS above;
+    // only the pad mode is left to set, and a pin with no GPIO() number gets it
+    // nowhere else
 #if defined(HAL_GPIO_PIN_BEC_5V_EN)
-    palSetLine(HAL_GPIO_PIN_BEC_5V_EN);
     palSetLineMode(HAL_GPIO_PIN_BEC_5V_EN, PAL_MODE_OUTPUT_PUSHPULL);
 #endif
 #if defined(HAL_GPIO_PIN_BEC_9V_EN)
-    palClearLine(HAL_GPIO_PIN_BEC_9V_EN);
     palSetLineMode(HAL_GPIO_PIN_BEC_9V_EN, PAL_MODE_OUTPUT_PUSHPULL);
 #endif
 }

@@ -166,7 +166,7 @@ define HAL_BUZZER_NOMINAL_FREQ_HZ 4000
 # Keep 5V peripherals powered during bring-up, but hold the 9V rail off
 # until the Laurel power tree has been validated on hardware.
 PA14 BEC_5V_EN OUTPUT HIGH
-PA15 BEC_9V_EN OUTPUT HIGH
+PA15 BEC_9V_EN OUTPUT LOW
 
 # Analog inputs on RP2350B-only ADC pins
 PA40 BATT_VOLTAGE_SENS ADC1 SCALE(1)
