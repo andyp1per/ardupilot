@@ -697,6 +697,17 @@ void OSD_pico::core1_thread(void)
                 break;
             }
             render_block(next_render_block, line_buf[prod_idx]);
+            if (late_seen != late_blocks) {
+                /*
+                  A block went out blank while this one was rendering, so the
+                  scan-out has moved past it and advance_to() has already
+                  pointed us elsewhere. Publishing it now would put the wrong
+                  lines on screen and be dropped on arrival anyway. Leave it
+                  unpublished and take the resync on the next wake, which is a
+                  block time away.
+                 */
+                break;
+            }
             // the tag has to be visible before the count that publishes it
             buf_block[prod_idx] = next_render_block;
             produced++;

@@ -75,7 +75,8 @@
   per line and waits for hsync between them, so the transfer is only a word
   stream paced by the FIFO - nothing in the DMA knows where a line ends.
   Batching therefore costs nothing but buffer, and buys two things: the
-  completion interrupt drops from 14 kHz to 1.75 kHz, and the renderer gets
+  completion interrupt drops from one per line to one per block, 14 kHz to
+  1.56 kHz over NTSC's 234 active lines a field, and the renderer gets
   two block times to work in - about a millisecond - rather than the seventeen
   microseconds the eight word FIFO holds.
 
