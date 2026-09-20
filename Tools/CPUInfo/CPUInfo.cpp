@@ -48,8 +48,10 @@ static uint32_t sysclk = STM32_SYS_CK;
 #elif defined(STM32_SYSCLK)
 static uint32_t sysclk = STM32_SYSCLK;
 #elif defined(RP2350)
-//static uint32_t sysclk = 150000000U;// stock
-static uint32_t sysclk = 375000000U;  // over clocked
+// the board's own rate: 225 MHz where the hwdef sets MCU_CLOCKRATE_MHZ, and the
+// MCU default otherwise. Stock silicon is 150 MHz; every RP2350 board here
+// overclocks, so a fixed constant here reports the wrong rate on most of them.
+static uint32_t sysclk = HAL_EXPECTED_SYSCLOCK;
 #else
 static uint32_t sysclk = 0;
 #endif
