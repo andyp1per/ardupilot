@@ -8,6 +8,9 @@ carrier board that provides SPI/I2C sensors and exposes the RP2350's
 full GPIO range including pins above GPIO29 (available on the Pico2
 castellated edges).
 
+![Pico 2 pinout, non-wireless](Pico2-no-wireless-pinout.jpg)
+![Pico 2 W pinout, wireless](Pico2w-with-wireless-pinout.jpg)
+
 ## Pin Numbering Conventions
 
 Three different pin numbering schemes appear in this documentation and in

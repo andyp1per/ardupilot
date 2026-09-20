@@ -9,6 +9,9 @@ different bus layout.
 This README documents the Laurel-specific wiring and the current state of
 the `hwdef/Laurel/` target.
 
+![Laurel board, component side](images/PXL_20260401_054858043.jpg)
+![Laurel board, connector side](images/PXL_20260401_054909505.jpg)
+
 ## Pin Numbering Conventions
 
 Three different numbering schemes may appear in Laurel documentation:
