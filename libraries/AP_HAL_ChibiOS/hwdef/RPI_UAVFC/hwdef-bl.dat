@@ -68,5 +68,5 @@ PA33 IMU1_CS CS
 
 # Leave board rails disabled in the bootloader.  Both enables are active HIGH
 # (MP4334 EN with a pull-down), so LOW is off.
-PA18 BEC_9V_EN OUTPUT LOW
-PA19 BEC_5V_EN OUTPUT LOW
+PA18 BEC_5V_EN OUTPUT LOW
+PA19 BEC_9V_EN OUTPUT LOW
