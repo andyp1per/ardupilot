@@ -1618,6 +1618,9 @@ bool AP_Param::load_all()
             // Enforce @READONLY defaults.parm values over stale storage. Without
             // this, a stored value from an earlier firmware build silently wins over
             // the defaults.parm entry, even though MAVLink will refuse to change it.
+            // The sentinel pass above repeats this for every read-only parameter,
+            // so on a normal load this is redundant; it is what runs when storage
+            // carries no sentinel and that pass is never reached.
             if (num_read_only > 0) {
                 for (uint16_t i = 0; i < num_param_overrides; i++) {
                     if (param_overrides[i].read_only &&
