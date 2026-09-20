@@ -143,7 +143,17 @@ Target is not powered. Plug in the target USB cable.
 
 ### RPI_UAVFC / Laurel — App Firmware via OpenOCD SWD (preferred / always works)
 
-**IMPORTANT:** Flash the `.bin` file at `0x10020000` (app offset = `FLASH_RESERVE_START_KB 128`).
+**IMPORTANT:** Flash the `.bin` file at the board's own app offset, which is
+`FLASH_RESERVE_START_KB` past the XIP base at `0x10000000`:
+
+| Board | `FLASH_RESERVE_START_KB` | App offset |
+|---|---|---|
+| RPI_UAVFC | 128 | `0x10020000` |
+| Laurel | 64 | `0x10010000` |
+| Pico2 | 64 | `0x10010000` |
+
+Using RPI_UAVFC's address on a Laurel writes the app 64 KB too high and it will
+not boot.
 `arducopter_with_bl.hex` covers the bootloader as well as the app, so it is the wrong
 file for an app-only update. Builds before 2026-09-16 put its segments at the STM32
 address 0x08000000, which fails to verify on RP2350; rebuild if you have an older one.
@@ -194,12 +204,19 @@ this on a current build. Check the first record reads `:020000041000` before
 trusting one: an older hex is addressed at the STM32 base and openocd writes none
 of it.
 
+**It also erases your parameters, every time.** The combined image is contiguous
+from `0x10000000`, so it carries the gap between the bootloader and the app as
+padding: on RPI_UAVFC that is 64 KB of `0xff` written across
+`0x10010000-0x1001fff0`, which is exactly where parameter storage lives. Flash
+the two `.bin` files instead when you want to keep your tune.
+
 Confirm both landed by dumping 256 bytes from each address and `cmp`-ing against
 the two `.bin` files; a verify pass on the app alone says nothing about the
 bootloader.
 
-Expect every parameter to be back to its default afterwards: the storage area at
-`0x10010000` was inside what the other firmware erased. A quick check that the
+Expect every parameter to be back to its default afterwards: the combined hex
+wrote `0xff` over the storage area at `0x10010000`, as above - it is the hex that
+clears them, not the firmware that was there before. A quick check that the
 board really is on defaults is the PIO UART clock divider - `SM0 CLKDIV` at
 `0x502000c8` reading 67.5 is SERIAL3 back on RC input at 420 kbaud.
 

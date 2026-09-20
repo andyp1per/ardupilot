@@ -471,6 +471,10 @@ after the 64 KB bootloader region). `arducopter_with_bl.hex` starts at `0x100000
 overwrites the bootloader too - use it only when you mean to write both. Builds before
 2026-09-16 put that hex at the STM32 base, where OpenOCD writes none of it.
 
+That hex also clears your parameters. It is contiguous from `0x10000000`, so the
+gap between bootloader and app goes down as `0xff` padding, and parameter storage
+sits in that gap. Flash the two `.bin` files when you want to keep a tune.
+
 using *a* dedicated Pico2W for a debugger, running debugprobe_on_pico2.uf2
 
 ```text
