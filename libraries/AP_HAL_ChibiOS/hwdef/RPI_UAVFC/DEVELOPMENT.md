@@ -1346,8 +1346,7 @@ Two things differ deliberately from Betaflight:
 - **Streamed, not buffered.** The frame is pushed a word at a time
   (`send_begin`/`send_word`/`send_end`) rather than packed into an array first.
   `AP_SERIALLED_MAX_LEDS` is 128, so a buffer would have put 512 bytes on the
-  LED thread stack, and stack headroom on this board is already something
-  `MAIN_STACK` has had to be raised for.
+  LED thread stack for a frame that is written straight out anyway.
 
 The pin is declared `PWM(5)` in the hwdef purely to get a channel index and a
 rate group; slice 1 never drives it, exactly as slices 3 and 4 never drive the

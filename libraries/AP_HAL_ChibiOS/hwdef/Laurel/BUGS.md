@@ -20,7 +20,7 @@ all GPS/altitude modes are blocked:
 
 - Loiter, Auto, PosHold → `requires position`
 - AltHold → `need alt estimate`
-**Context:** EKF runs on Core1 (375 MHz Cortex-M33). Each EKF tick costs 1400–31000 µs
+**Context:** EKF runs on Core1 (225 MHz Cortex-M33). Each EKF tick costs 1400–31000 µs
 (min = prediction-only, max = GPS+baro measurement update). The slow ticks (~15 ms avg)
 exceed the 8 ms slot at decim=8 → sustained 93–96% duty → CPU saturated.
 Single EKF core (`EK3_IMU_MASK=1`). 24×24 float state matrix.

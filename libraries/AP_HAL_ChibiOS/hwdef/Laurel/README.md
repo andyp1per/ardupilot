@@ -2,7 +2,7 @@
 
 The Laurel target runs ArduPilot on a custom RP2350B flight controller
 board built around the Raspberry Pi RP2350B (QFN-80, 48 GPIO) running at
-375 MHz. Unlike the Pico2 carrier-board reference target, Laurel has its
+225 MHz. Unlike the Pico2 carrier-board reference target, Laurel has its
 own fixed sensor stack, power rails, PWM outputs, edge buttons, and a
 different bus layout.
 
@@ -24,7 +24,7 @@ header-pin numbering from the Pico2 README does not apply here.
 
 ## Features
 
-- RP2350B dual-core Cortex-M33 @ 375 MHz
+- RP2350B dual-core Cortex-M33 @ 225 MHz
 - 520 KB SRAM
 - 4 MB boot/XIP flash (Winbond, 133 MHz max, CS = `QSPI_SS` pin75 - dedicated QMI hardware pin)
 - USB CDC serial on `SERIAL0`
