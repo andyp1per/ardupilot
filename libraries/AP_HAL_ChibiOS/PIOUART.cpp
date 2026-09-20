@@ -16,6 +16,7 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Common/ExpandingString.h>
 #include <hal.h>
+#include <hrt.h>
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
 
@@ -33,6 +34,8 @@ static const uint16_t PIO_UART_TX_BUF = 512;
 
 // TX FIFO depth per state machine (not joined)
 static const uint8_t PIO_TX_FIFO_DEPTH = 8U;   // FJOIN_TX, see _start_tx_sm()
+// silence that starts an SBUS frame, the same 2 ms AP_RCProtocol_SBUS uses
+static const uint32_t PIO_SBUS_FRAME_GAP_US = 2000U;
 
 // Extract TX fill level for SM sm from PIO FLEVEL register.
 // FLEVEL layout: bits [sm*8+3:sm*8] = TX fill, bits [sm*8+7:sm*8+4] = RX fill
@@ -253,13 +256,14 @@ PIORXDriver::PIORXDriver(uint8_t instance)
     , _active_rxinv(false)
     , _active_hdplex(false)
     , _active_baud(0)
+    , _sbus_rx_prog(false)
     , _hd_enabled(false)
     , _hd_echo_active(false)
     , _stop_bits(1)
     , _active_stop_bits(0)
     , _readbuf(nullptr)
     , _writebuf(nullptr)
-    , _sbus_rx{{0}, 0, 0}
+    , _sbus_rx{{0}, 0, 0, 0}
 {
     if (instance < PIO_NUM_INSTANCES) {
         _instances[instance] = this;
@@ -496,8 +500,8 @@ void PIORXDriver::_start_tx_sm(uint32_t int_div, uint32_t frac_div)
  */
 uint32_t PIORXDriver::_rx_prog_offset() const
 {
-    return option_is_set(Option::OPTION_RXINV) ? PIO_UART_RX_SBUS_PROG_OFFSET
-                                               : PIO_UART_RX_PROG_OFFSET;
+    return _sbus_rx_prog ? PIO_UART_RX_SBUS_PROG_OFFSET
+                         : PIO_UART_RX_PROG_OFFSET;
 }
 
 void PIORXDriver::_start_rx_sm(uint32_t int_div, uint32_t frac_div)
@@ -510,9 +514,8 @@ void PIORXDriver::_start_rx_sm(uint32_t int_div, uint32_t frac_div)
     // Choose between the standard 8N1/8N2 RX program and the SBUS 8E2 program
     // (which adds a parity-bit skip after the 8 data bits).
     const uint32_t rx_offset = _rx_prog_offset();
-    const uint32_t rx_len = option_is_set(Option::OPTION_RXINV)
-        ? PIO_UART_RX_SBUS_PROG_LEN
-        : PIO_UART_RX_PROG_LEN;
+    const uint32_t rx_len = _sbus_rx_prog ? PIO_UART_RX_SBUS_PROG_LEN
+                                         : PIO_UART_RX_PROG_LEN;
 
     pio->CTRL &= ~(1u << (PIO_CTRL_SM_ENABLE_LSB + sm));
 
@@ -691,7 +694,14 @@ void PIORXDriver::_service_rx_fifo()
     uint32_t drained = 0;
     uint32_t received = 0;
     uint32_t lost = 0;
-    const bool sbus_sanitize = _active_rxinv && (_active_baud == 100000U);
+    const bool sbus_sanitize = _sbus_rx_prog;
+    // Alignment needs the wire timing. Master's decoder starts a frame only
+    // after HAL_SBUS_FRAME_GAP (2000 us) of silence, and by the time these
+    // bytes reach it they are a batch out of a ring buffer with the gaps gone,
+    // so this layer is the last one that can apply the test. The flags nibble
+    // alone accepts a misaligned window 1 time in 16.
+    const uint32_t now_us = sbus_sanitize ? hrt_micros32() : 0U;
+    bool frame_gap = sbus_sanitize && ((now_us - _sbus_rx.last_byte_us) >= PIO_SBUS_FRAME_GAP_US);
 
 // Always drain hardware FIFO if data is present.
 // If this runs before normal initialization has completed, discarding bytes here prevents an IRQ retrigger storm that can starve the main loop.
@@ -716,22 +726,38 @@ void PIORXDriver::_service_rx_fifo()
             } else {
 // SBUS on PIOUART: assemble full frames and only forward valid 25-byte packets.
 // This keeps framing garbage out of the upper protocol layer and improves failsafe stability.
-                if (_sbus_rx.ofs == 0U && byte != 0x0FU) {
+// a byte is the only evidence of wire activity: this handler also runs for
+// transmit, where TXNFULL is true almost always, so timestamping every entry
+// would refresh away the silence the gap test is looking for
+                _sbus_rx.last_byte_us = now_us;
+                if (frame_gap && _sbus_rx.ofs != 0U) {
+                    // silence mid-frame: whatever is buffered never completed
+                    lost += _sbus_rx.ofs;
+                    _sbus_rx.ofs = 0U;
+                }
+                if (_sbus_rx.ofs == 0U && (byte != 0x0FU || !frame_gap)) {
 // counted as dropped: drop= means bytes that never reached the reader, and a
 // byte discarded while hunting for a header is one of those. Without this the
 // assembler can be throwing frames away while the stats line reads clean.
                     lost++;
+// a discarded byte does not consume the silence. The batch shares one
+// timestamp, so any byte in it could be the one that followed the gap, and
+// spending it on noise costs the real header behind it.
                     continue;
                 }
+// the frame the silence introduced has started; the rest of the batch continues it
+                frame_gap = false;
                 _sbus_rx.buf[_sbus_rx.ofs++] = byte;
                 if (_sbus_rx.ofs == 25U) {
                     uint8_t flags = _sbus_rx.buf[23];
-                    const uint8_t footer = _sbus_rx.buf[24];
-                    const bool footer_ok = (footer == 0x00U) || (footer == 0x04U) ||
-                                           (footer == 0x14U) || (footer == 0x24U) ||
-                                           (footer == 0x34U);
+// No footer whitelist. Only the low nibble of the flags byte is defined -
+// ch17, ch18, frame_lost, failsafe - so the top four being set means the
+// window is misaligned, and that catches it without judging the footer.
+// Accepting only five footer values instead drops every frame from a
+// receiver outside the set, which is why the same list came out of the
+// upstream decoder in ArduPilot/ardupilot#33057.
                     const bool flags_ok = (flags & 0xF0U) == 0U;
-                    if (footer_ok && flags_ok) {
+                    if (flags_ok) {
 // Debounce single-frame SBUS failsafe-flag spikes caused by occasional UART framing noise: require 3 consecutive flagged frames before forwarding FAILSAFE bit to upper layers.
                         if (flags & (1U << 3)) {
                             if (_sbus_rx.fs_count < 255U) {
@@ -844,6 +870,8 @@ void PIORXDriver::_begin(uint32_t b, uint16_t rxSpace, uint16_t txSpace)
     uint32_t int_div, frac_div;
     _calc_clkdiv(b, int_div, frac_div);
 
+    _sbus_rx_prog = rxinv && (b == 100000U);
+
     _start_tx_sm(int_div, frac_div);
     _start_rx_sm(int_div, frac_div);
     PIOUART_DBG(pio_uart_dbg_last_fstat[_instance] = cfg().pio->FSTAT;);
@@ -899,6 +927,7 @@ void PIORXDriver::_end()
     _active_rxinv = false;
     _active_hdplex = false;
     _active_stop_bits = 0;
+    _sbus_rx_prog = false;
     _hd_enabled = false;
     _hd_echo_active = false;
     _sbus_rx.ofs = 0;

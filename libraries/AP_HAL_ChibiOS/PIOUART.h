@@ -277,6 +277,9 @@ private:
     bool  _active_rxinv;
     bool  _active_hdplex;
     uint32_t _active_baud;
+    // the 8E2 receive program is for SBUS only: inverted at 100000 baud. FPort
+    // is inverted too but 8N1, and the parity skip would eat its stop bit
+    bool  _sbus_rx_prog;
     // half duplex: both state machines work the transmit pin, and the
     // transmit program releases it between frames
     bool  _hd_enabled;
@@ -305,6 +308,7 @@ private:
         uint8_t buf[25];
         uint8_t ofs;
         uint8_t fs_count;
+        uint32_t last_byte_us;
     } _sbus_rx;
 
     const InstanceConfig &cfg() const { return _cfg_table[_instance]; }
