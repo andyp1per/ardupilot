@@ -376,7 +376,11 @@ static uint16_t min_vrefint, max_vrefint;
 void AnalogIn::adcerrorcallback(ADCDriver *adcp, adcerror_t err)
 {
     (void)err;
+    // the RP DMA handlers use OSAL_IRQ_PROLOGUE() alone, so the kernel is not
+    // in the ISR lock state that adcStartConversionI() checks for
+    chSysLockFromISR();
     adcStartConversionI(adcp, adcp->grpp, adcp->samples, adcp->depth);
+    chSysUnlockFromISR();
 }
 #endif // RP2350
 
