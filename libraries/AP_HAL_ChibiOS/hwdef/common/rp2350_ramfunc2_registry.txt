@@ -360,7 +360,7 @@ modules/ChibiOS/os/rt/src/chschd.c|__sch_wakeup
 modules/ChibiOS/os/rt/src/chschd.c|__sch_ready_behind
 modules/ChibiOS/os/rt/src/chschd.c|__sch_ready_ahead
 modules/ChibiOS/os/rt/src/chschd.c|__sch_reschedule_ahead
-modules/ChibiOS/os/rt/src/chschd.c|vt_insert_first
+modules/ChibiOS/os/rt/src/chschd.c|vt_insert_first  # [needs CH_CFG_SMP_MODE]
 modules/ChibiOS/os/rt/src/chvt.c|chVTDoTickI
 modules/ChibiOS/os/rt/src/chvt.c|chVTDoResetI
 modules/ChibiOS/os/rt/src/chvt.c|chVTDoSetI
@@ -368,7 +368,7 @@ modules/ChibiOS/os/rt/src/chvt.c|chVTDoSetContinuousI
 modules/ChibiOS/os/rt/src/chvt.c|chVTResetTimeStampI
 modules/ChibiOS/os/rt/src/chvt.c|chVTGetTimeStampI
 modules/ChibiOS/os/rt/src/chvt.c|chVTGetRemainingIntervalI
-modules/ChibiOS/os/rt/src/chvt.c|vt_enqueue
+modules/ChibiOS/os/rt/src/chvt.c|vt_enqueue  # [needs CH_CFG_SMP_MODE]
 modules/ChibiOS/os/rt/src/chvt.c|vt_set_alarm
 modules/ChibiOS/os/rt/src/chvt.c|ch_dlist_insert
 modules/ChibiOS/os/rt/src/chsys.c|chSysInit
@@ -412,7 +412,7 @@ modules/ChibiOS/os/rt/src/chtm.c|chTMStartMeasurementX
 modules/ChibiOS/os/rt/include/chsys.h|chSysLock
 modules/ChibiOS/os/hal/src/hal_st.c|stGetCounter
 modules/ChibiOS/os/rt/src/chtm.c|chTMStopMeasurementX
-modules/ChibiOS/os/rt/include/chthreads.h|chThdGetSelfX
+modules/ChibiOS/os/rt/include/chthreads.h|chThdGetSelfX  # [needs CH_CFG_SMP_MODE]
 modules/ChibiOS/os/rt/src/chmtx.c|chMtxUnlock
 (profiled)|calc_lowpass_alpha_dt
 modules/ChibiOS/os/rt/src/chmtx.c|chMtxLockS

@@ -52,7 +52,9 @@ SIM_MAG1_DEVID 97539
 SIM_BARO_RND    0
 
 # The physics model steps once per main loop and sync_frame_time() sleeps to
-# hold SIM_RATE_HZ, so the loop rate has to match it or the loop is throttled.
+# hold SIM_RATE_HZ, so the two want to match: set SIM_RATE_HZ lower and the
+# sleep throttles the loop, set it higher and each iteration advances less
+# simulated time. See README.md.
 SIM_RATE_HZ 200
 SCHED_LOOP_RATE 200
 

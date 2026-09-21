@@ -681,15 +681,19 @@ define AP_COMPASS_PROBING_ENABLED 1
 # RP2350 now sets these centrally in AP_HAL_Boards.h, so no hwdef override
 # is needed here.
 
-# SMP dual-core: both cores run under ChibiOS with hardware spinlocks.
-# c1_main.c is compiled in but core1 participates as a full ChibiOS SMP peer.
-# CH_CFG_SMP_MODE=TRUE: chcoresmp.c owns VectorA4 (SIO FIFO IRQ), spinlocks active.
-# Core1 is launched by hal_lld via start_core1()
-# (gated on RP_CORE1_START=TRUE below).
-define CH_CFG_SMP_MODE TRUE
+# Core1 runs the bare-metal FIFO dispatcher in this board's c1_main.c, not a
+# ChibiOS instance: core0 pushes a function pointer through the SIO FIFO and
+# core1 calls it. That is what the file implements, and SMP is off to match.
+#
+# Turning CH_CFG_SMP_MODE on here would not be enough on its own. It makes
+# rp2350_core_affinity.h pin RCOUT and SPI0 to core 1, and Scheduler.cpp and
+# Device.cpp then create those threads against &ch1 - which only exists once
+# c1_main() calls chInstanceObjectInit(), as Laurel's and RPI_UAVFC's do and
+# this one does not. Add that boot sequence before changing this.
+define CH_CFG_SMP_MODE FALSE
 define HAL_ENABLE_THREAD_STATISTICS TRUE
 
-# SMP: start core1 for dual-core dispatch (c1_main.c FIFO dispatcher).
+# Start core1 for the FIFO dispatcher above.
 define RP_CORE1_START TRUE
 
 # Overclock the RP2350 from the default 150 MHz to 250 MHz.

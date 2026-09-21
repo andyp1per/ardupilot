@@ -16,7 +16,10 @@
 /*
  * @file Pico2/c1_main.c @brief RP2350 core1 entry point for ArduPilot.
  *
- * With CH_CFG_SMP_MODE=TRUE (the default): core1 is a full ChibiOS SMP
+ * This board runs CH_CFG_SMP_MODE=FALSE; the text below describes what SMP
+ * would do, and Laurel and RPI_UAVFC are the boards that do it.
+ *
+ * With CH_CFG_SMP_MODE=TRUE: core1 is a full ChibiOS SMP
  * instance (ch1). The rate controller thread is pinned there by
  * Scheduler::thread_create_pinned_to_core() via thread_create_alloc_affinity().
  * CH_CFG_CONTEXT_SWITCH_HOOK fires on both cores, so per-thread profiling
@@ -100,10 +103,11 @@ void __c1_late_init(void)
  * Core1 entry point (CH_CFG_SMP_MODE=FALSE bare-metal fallback path only).
  * Called from _crt0_c1_entry after stack/FPU init.
  *
- * This is the legacy bare-metal WFE FIFO dispatcher, active only when
- * CH_CFG_SMP_MODE=FALSE.  With CH_CFG_SMP_MODE=TRUE (current default),
- * core1 is owned by ChibiOS (ch1 SMP instance); see Laurel/c1_main.c for
- * the SMP-aware version that calls chInstanceObjectInit(&ch1, ...).
+ * This is the bare-metal WFE FIFO dispatcher, which is what this board runs:
+ * CH_CFG_SMP_MODE is FALSE here. Under CH_CFG_SMP_MODE=TRUE core1 is owned by
+ * ChibiOS (ch1 SMP instance) instead; see Laurel/c1_main.c for that version,
+ * which calls chInstanceObjectInit(&ch1, ...) - this file never gained it,
+ * which is why SMP is off.
  *
  * Core1 waits in a WFE loop for core0 to push a function pointer via
  * the SIO inter-core FIFO, calls it, then writes a done token back:

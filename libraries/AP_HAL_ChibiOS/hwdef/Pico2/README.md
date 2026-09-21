@@ -56,7 +56,8 @@ board pin 20 = GPIO15   board pin 40 = VBUS
 
 ## Features
 
-- RP2350 dual-core Cortex-M33 @ 250 MHz (both cores run ChibiOS under SMP)
+- RP2350 dual-core Cortex-M33 @ 250 MHz (core1 runs a bare-metal dispatcher,
+  not a ChibiOS instance - see hwdef.dat)
 - 520 KB SRAM
 - 4 MB external QSPI flash (parameter storage in pages 8–15, at 0x10008000–0x1000FFFF)
 - USB CDC serial (SERIAL0)
