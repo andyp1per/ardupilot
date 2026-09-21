@@ -307,7 +307,6 @@ private:
     struct {
         uint8_t buf[25];
         uint8_t ofs;
-        uint8_t fs_count;
         uint32_t last_byte_us;
     } _sbus_rx;
 

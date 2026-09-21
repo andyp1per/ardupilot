@@ -263,7 +263,7 @@ PIORXDriver::PIORXDriver(uint8_t instance)
     , _active_stop_bits(0)
     , _readbuf(nullptr)
     , _writebuf(nullptr)
-    , _sbus_rx{{0}, 0, 0, 0}
+    , _sbus_rx{{0}, 0, 0}
 {
     if (instance < PIO_NUM_INSTANCES) {
         _instances[instance] = this;
@@ -749,7 +749,7 @@ void PIORXDriver::_service_rx_fifo()
                 frame_gap = false;
                 _sbus_rx.buf[_sbus_rx.ofs++] = byte;
                 if (_sbus_rx.ofs == 25U) {
-                    uint8_t flags = _sbus_rx.buf[23];
+                    const uint8_t flags = _sbus_rx.buf[23];
 // No footer whitelist. Only the low nibble of the flags byte is defined -
 // ch17, ch18, frame_lost, failsafe - so the top four being set means the
 // window is misaligned, and that catches it without judging the footer.
@@ -758,18 +758,12 @@ void PIORXDriver::_service_rx_fifo()
 // upstream decoder in ArduPilot/ardupilot#33057.
                     const bool flags_ok = (flags & 0xF0U) == 0U;
                     if (flags_ok) {
-// Debounce single-frame SBUS failsafe-flag spikes caused by occasional UART framing noise: require 3 consecutive flagged frames before forwarding FAILSAFE bit to upper layers.
-                        if (flags & (1U << 3)) {
-                            if (_sbus_rx.fs_count < 255U) {
-                                _sbus_rx.fs_count++;
-                            }
-                            if (_sbus_rx.fs_count < 3U) {
-                                flags &= ~(1U << 3);
-                                _sbus_rx.buf[23] = flags;
-                            }
-                        } else {
-                            _sbus_rx.fs_count = 0U;
-                        }
+// The frame goes up as the receiver sent it. A debounce lived here, stripping
+// the failsafe bit until three consecutive frames carried it, and it could not
+// work: any clean frame reset the count, so an alternating receiver - the
+// marginal link where the flag matters most - never reached three and had its
+// failsafe suppressed indefinitely. Framing noise is the gap and header tests
+// above, not something to correct by editing the payload.
                         lost += 25U - _readbuf->write(_sbus_rx.buf, 25U);
                         _sbus_rx.ofs = 0U;
                     } else {
@@ -815,7 +809,6 @@ void PIORXDriver::_begin(uint32_t b, uint16_t rxSpace, uint16_t txSpace)
     }
 
     _sbus_rx.ofs = 0;
-    _sbus_rx.fs_count = 0;
 
 // SERIAL_CONTROL commonly calls begin() repeatedly with unchanged parameters.
 // Reinitializing PIO SMs on each packet disrupts RX/TX and can inject framing noise into loopback tests.
@@ -931,7 +924,6 @@ void PIORXDriver::_end()
     _hd_enabled = false;
     _hd_echo_active = false;
     _sbus_rx.ofs = 0;
-    _sbus_rx.fs_count = 0;
 }
 
 void PIORXDriver::_flush()
