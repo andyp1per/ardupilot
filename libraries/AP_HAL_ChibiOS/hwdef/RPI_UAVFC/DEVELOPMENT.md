@@ -50,7 +50,8 @@ starvation on core0, not the card. See the SD section below - the previous
 | Parameter storage | Working; needs both the sector-bound and write-verify fixes |
 | RC input | CRSF/ELRS on SERIAL3, 333 Hz link, 199 Hz telemetry |
 | GPS | log69 8-13 sats HDop 1.1-2.2; log70 11-16 sats HDop 0.8-1.3 |
-| Serial ports | SERIAL2/3 confirmed on hardware; SERIAL1/4 untested |
+| Serial ports | SERIAL1/2/3 carry traffic on hardware; SERIAL4 untested |
+| MSP DisplayPort | Working since 2026-09-21; SERIAL1 had no UART thread |
 | Battery voltage | Multiplier measured, 11.1 |
 | Battery current | Gain unstable; zero is board-side thermal leakage, see below |
 | Motor outputs | 4x DShot600 via PIO; has also flown on PWM at 490 Hz |
@@ -3409,6 +3410,106 @@ Note also that no failsafe depends on current here: `BATT_LOW_MAH` and
 `CurrTot` and `RemPct` and nothing else. There is no safety reason to drop to
 `BATT_MONITOR` 3 and give up the signal.
 
+## MSP DisplayPort: the port was never transmitting
+
+Fixed 2026-09-21. `OSD_TYPE 5` on SERIAL1 produced no overlay, on rp2350-v5 and
+again on rp2350-v7. The cause was not in AP_MSP, the wiring, the baud or the
+VTX commit: SERIAL1 had no UART thread, so it had never transmitted a byte.
+
+### The mechanism
+
+An RP2350-only gate, since removed, deferred `thread_init()` for a non-USB port
+whose `begin()` ran before `hal.scheduler->is_system_initialized()`. SERIAL1 is opened early,
+by MSP and OSD init, so it was skipped. Three lazy retries were meant to catch
+that up, and all three sit behind a write. That is not enough:
+
+1. `_tx_initialised` is true regardless, so writes queue into `_writebuf`.
+2. Nothing drains it - no thread, so no `_tx_timer_tick()`, so no
+   `write_pending_bytes()`.
+3. The ring fills, 1022 of 1024 bytes.
+4. `msp_serial_send_frame()` (`libraries/AP_MSP/msp.cpp:35`) then sees
+   `txspace()` short of a whole frame and returns **without calling
+   `write()`** - correctly, since a truncated frame is worse.
+5. The retry lives inside `_write()`, which step 4 guarantees is never reached
+   again. The port cannot recover.
+
+Receive is serviced separately and was unaffected, which is exactly why this
+looked like a working link with a broken protocol layer.
+
+### What the board showed, before the fix
+
+Read over SWD on a running board, no halting:
+
+| | SERIAL1 (DVTX) | SERIAL2 (GPS) |
+|---|---|---|
+| `uart_thread_ctx` (+0x28) | **NULL** | `0x20058860` |
+| `uart_thread_name` (+0x2c) | **empty** | `"UART2"` |
+| `_writebuf` pending | **1022/1024, head never moved** | 0/1024 |
+| bytes transmitted | **0** | 3621 |
+
+The empty name is the proof that `thread_init()` was never entered at all: it
+writes the name before creating the thread. The UART itself was fine - `UARTEN`
+and `TXE` set, FIFO empty, not busy, flow control DISABLE, SIO driver READY,
+`tx_dma_enabled` 0 so the non-DMA path applied. Every queued frame in the ring
+was `$M>` cmd 182; not one reply to the peer's polls, because they could not be
+queued either.
+
+### The fix
+
+First `Scheduler::set_system_initialized()` was made to walk `serial_drivers[]`
+and start any port that had no thread. Verified on hardware: thread `UART0`
+exists, 298,466 bytes transmitted, `head` and `tail` cycling, and the ring
+carrying DisplayPort frames **and** `$M>` replies to all eleven polled
+commands. The overlay is back. Fixing it at the `txspace()` guard instead would
+have left the hole open for every other sender that checks for space first.
+
+**Then the gate itself went, 2026-09-22.** Nothing in the tree justified it:
+`_tx_initialised` and `_rx_initialised` already keep the worker off an
+unstarted backend, and every other HAL calls `thread_init()` from `_begin()`
+unconditionally. Removing it deleted the gate, the three lazy retries and the
+catch-up walk together, and returned
+`Scheduler::set_system_initialized()` to master's. Bench tested on RPI_UAVFC
+afterwards: USB enumerates, the OSD overlay is up, and the GPS reports
+configured - which needs transmit, since `AP_GPS_UBLOX::is_configured()` only
+clears once the UBX config messages are ACKed, and a port that cannot send
+sits on "GPS 1 still configuring this GPS" forever. That covers all three
+UARTDriver ports; SERIAL3 and SERIAL4 are PIOUARTs and a different driver.
+
+The failure mode is loud now rather than silent: `thread_init()` panics if the
+thread cannot be created, so a boot-order problem shows up as a boot failure
+instead of a port that quietly never transmits.
+
+### What this corrects
+
+- **"Both directions of that connector work" was wrong.** Only receive did. The
+  `UART` log figure of 5378 B/s tx for instance 1 needs re-reading before it is
+  cited again - on this boot the port transmitted nothing at all, so that
+  counter is not evidence that bytes reached the wire.
+- **It explains the intermittency.** Whether `begin()` lands before or after
+  system init is a race, so the overlay worked on some boots and not others.
+  "Has it ever worked on this board" was the right question and the answer is
+  yes, sometimes.
+- **The peer is a DisplayPort consumer.** It polls eleven telemetry commands -
+  `MSP_FC_VERSION`, `MSP_NAME`, `MSP_FILTER_CONFIG`, `MSP_PID_ADVANCED`,
+  `MSP_STATUS`, `MSP_RC`, `MSP_ANALOG`, `MSP_RC_TUNING`, `MSP_PID`,
+  `MSP_BATTERY_STATE`, `MSP_STATUS_EX` - at about 55 requests/s, and never asks
+  for `MSP_OSD_CANVAS`, `MSP_OSD_CONFIG` or `MSP_FC_VARIANT`, cold or warm.
+  That absence reads like a DJI-style telemetry OSD and is not: it renders the
+  pushed cmd 182 frames without ever requesting a canvas. Do not switch this
+  board to `OSD_TYPE 3` on the strength of its poll set.
+
+### Method worth keeping
+
+The whole diagnosis came from reading live objects over SWD while the board
+ran, with no halting and no instrumented build. The addresses came out of the
+ELF, since this build ships no DWARF types: `AP_MSP::_singleton` for the MSP
+port, `UARTDriver::serial_drivers` for the port objects, and field offsets from
+disassembling the functions that touch them - `msp_parse_received_data()` gives
+`cmd_msp` at +210, `write_pending_bytes_NODMA()` gives `_writebuf` at +0x6c,
+`thread_init()` gives `uart_thread_ctx` at +0x28. Sampling `cmd_msp` at about
+1.9 kHz recovers the peer's command stream, and unplugging the cable to watch
+the stream stop is what proved which device was talking.
+
 ## Open items
 
 Ordered by what is being worked on, not by severity. Items that block a flight
@@ -3580,7 +3681,25 @@ flight controller A/B is not needed; the original VTX was the fault.
 - [ ] Fly it. `SERIAL4_PROTOCOL` 37 and `VTX_ENABLE` 1 have only ever been on
       the bench.
 
-### 8. Standing checks before each flight
+### 8. MSP DisplayPort shows nothing - CLOSED 2026-09-21
+
+SERIAL1 had no UART thread, so it had never transmitted a byte: the overlay,
+and every reply to the peer's polls, sat in a write buffer nothing drained.
+Fixed by starting the UART thread from `_begin()` like every other HAL, after
+an interim fix that started the deferred threads at system init. The overlay is
+back and the port now carries DisplayPort frames and `$M>` replies to all
+eleven polled commands. See "MSP DisplayPort: the port was never
+transmitting" for the mechanism, the before and after readings, and what it
+corrects in this file.
+
+None of the probe steps listed here were needed, and two would have misled:
+scoping GPIO44/45 would have shown an idle TX pin and been read as a pin mux
+or DMA fault, and the `txdma` check was aimed at the right symptom through the
+wrong mechanism - `tx_dma_enabled` was 0, so the non-DMA path applied. The
+step that did the work was reading `uart_thread_ctx` and the write buffer's
+head on the running board.
+
+### 9. Standing checks before each flight
 
 - [ ] `git diff` on `hwdef.dat` empty, so `AP_RP2350_PC_SAMPLER_ENABLED` and
       `AP_RP2350_DEBUG_REPORT_ENABLED` are both 0.
@@ -3591,13 +3710,13 @@ flight controller A/B is not needed; the original VTX was the fault.
       injection.
 - [ ] Reboot shortly before arming, until the 71 minute wrap has been soaked.
 
-### 9. Not yet flown
+### 10. Not yet flown
 
 RTL, Auto and the GPS failsafe paths remain untested on this board. Loiter and
 acro are flown. Fly them deliberately before relying on one to recover the
 vehicle.
 
-### 10. Longer-lived
+### 11. Longer-lived
 
 - Fresh accel calibration - log96 reads |g| 2% low at 24.8 degC against a
   28 degC cal temperature.
@@ -3612,7 +3731,8 @@ vehicle.
   whose write was interrupted.
 - Establish whether flash page programs succeed first time or only on the retry
   after a failed verify. One counter on the `memcmp` mismatch answers it.
-- Bring up SERIAL1 and SERIAL4. SERIAL2 and SERIAL3 are confirmed.
+- Bring up SERIAL4. SERIAL1, SERIAL2 and SERIAL3 all carry traffic; SERIAL1
+  still has no picture on it, which is item 8.
 - Re-check the QMI flash timing if this revision fits a different flash part.
 - For the next board spin: route microSD DAT1/DAT2 contiguous with DAT0, plus
   pull-ups on DAT0-3 and CMD. The only route to SDIO-class throughput on an

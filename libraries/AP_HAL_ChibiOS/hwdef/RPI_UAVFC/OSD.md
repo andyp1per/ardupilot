@@ -265,7 +265,10 @@ Two mistakes worth not repeating:
   after `init_ardupilot()` has set up the output groups. Using it made NeoPixel
   always lose PIO1 whatever OSD_TYPE said, and RCOutput takes a refusal as
   permanent. `AP_Param::initialised()` is the right one: `load_parameters()` is
-  `AP_Vehicle.cpp:342`, `init_ardupilot()` is `:449`.
+  `AP_Vehicle.cpp:342`, `init_ardupilot()` is `:449`. The UART driver made the
+  same mistake and it cost more: gating `thread_init()` on this left SERIAL1
+  unable to transmit for the whole of boot and then permanently, which is the
+  MSP DisplayPort fault in `DEVELOPMENT.md`.
 - **The IO process table is eight entries shared with the whole vehicle, and
   `register_io_process()` drops the ninth silently.** A one-shot init has no
   business taking a permanent slot. Use a thread.
