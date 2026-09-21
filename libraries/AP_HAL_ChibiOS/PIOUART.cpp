@@ -1032,10 +1032,19 @@ size_t PIORXDriver::_write(const uint8_t *buffer, size_t size)
     }
 
     // Start it moving now rather than waiting for the first interrupt, then
-    // let the interrupt finish the job.
-    _drain_tx_fifo();
-    if (_writebuf->available() > 0) {
-        _enable_tx_irq();
+    // let the interrupt finish the job. Locked because _service_irq() drains
+    // the same ring into the same FIFO: the drain reads a byte and then writes
+    // it, and an interrupt landing between those two puts later bytes on the
+    // wire first.
+    {
+        chSysLock();
+        _drain_tx_fifo();
+        // inside the lock as well: the drain clears PIO_INTE_TX_NOTFULL when it
+        // empties the ring, so testing out here would re-arm it for nothing
+        if (_writebuf->available() > 0) {
+            _enable_tx_irq();
+        }
+        chSysUnlock();
     }
 
     PIOUART_DBG(pio_uart_dbg_write_bytes[_instance] += written;);
@@ -1053,17 +1062,15 @@ uint32_t PIORXDriver::txspace()
     if (!_initialized) {
         return 0;
     }
-    // _write() blocks on FIFO drain internally, so we can always accept up to
-    // the TX ring-buffer size. Returning only the 4-byte hardware FIFO depth
-    // causes HAVE_PAYLOAD_SPACE to be permanently false for every MAVLink
-    // message (which are >=17 bytes), silently dropping all GCS output.
-    PIO_TypeDef *const pio = cfg().pio;
-    const uint8_t sm = cfg().sm_tx;
-    const uint32_t level = pio_tx_level(pio, sm);
-    if (level >= PIO_TX_FIFO_DEPTH) {
+    // What a caller can hand _write() without it returning short: the ring's
+    // own free space. Not the hardware FIFO depth - four bytes would leave
+    // HAVE_PAYLOAD_SPACE permanently false and silently drop every MAVLink
+    // message - and not the buffer size either, which overstates it by at
+    // least one even when empty and by the whole backlog when it is not.
+    if (_writebuf == nullptr) {
         return 0;
     }
-    return PIO_UART_TX_BUF;
+    return _writebuf->space();
 }
 
 /*
