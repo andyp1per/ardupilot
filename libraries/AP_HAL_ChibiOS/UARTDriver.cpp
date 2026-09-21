@@ -642,16 +642,8 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
     }
 #endif
     _uart_owner_thd = chThdGetSelfX();
-#if defined(RP2350)
-    // non-USB UART threads wait for the system to be up
-    if ((_tx_initialised || _rx_initialised) &&
-        (sdef.is_usb || hal.scheduler->is_system_initialized())) {
-        thread_init();
-    }
-#else
     // initialize the TX thread if necessary
     thread_init();
-#endif
 
     // setup flow control
     set_flow_control(_flow_control);
@@ -978,11 +970,6 @@ void UARTDriver::_flush()
 #endif
 #endif
     } else {
-#if defined(RP2350)
-        if (uart_thread_ctx == nullptr && hal.scheduler->is_system_initialized()) {
-            thread_init();
-        }
-#endif
         if (uart_thread_ctx != nullptr) {
             chEvtSignal(uart_thread_ctx, EVT_TRANSMIT_DATA_READY);
         }
@@ -1149,12 +1136,6 @@ size_t UARTDriver::_write(const uint8_t *buffer, size_t size)
     if (!_tx_initialised) {
 		return 0;
 	}
-
-#if defined(RP2350)
-    if (uart_thread_ctx == nullptr && (sdef.is_usb || hal.scheduler->is_system_initialized())) {
-        thread_init();
-    }
-#endif
 
     WITH_SEMAPHORE(_write_mutex);
 
@@ -2005,11 +1986,6 @@ __RAMFUNC__ void UARTDriver::update_rts_line(void)
 bool UARTDriver::set_unbuffered_writes(bool on)
 {
     unbuffered_writes = on;
-#if defined(RP2350)
-    if (uart_thread_ctx == nullptr && (sdef.is_usb || hal.scheduler->is_system_initialized())) {
-        thread_init();
-    }
-#endif
     if (uart_thread_ctx != nullptr) {
         chEvtSignal(uart_thread_ctx, EVT_TRANSMIT_UNBUFFERED);
     }
