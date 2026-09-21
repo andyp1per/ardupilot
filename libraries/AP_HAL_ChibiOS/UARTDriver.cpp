@@ -709,6 +709,10 @@ void UARTDriver::dma_tx_allocate(Shared_DMA *ctx)
         // Set destination to UART TX data register (fixed/not-incremented)
         dmaChannelSetDestinationX(txdma,
             (uint32_t)&((SIODriver*)sdef.serial)->uart->UARTDR);
+    } else {
+        // as on the RX side: write_pending_bytes() branches on the flag alone,
+        // and write_pending_bytes_DMA() dereferences txdma without checking
+        tx_dma_enabled = false;
     }
     chSysUnlock();
 #endif // HAL_USE_SERIAL / HAL_USE_SIO
@@ -754,7 +758,12 @@ void UARTDriver::dma_tx_deallocate(Shared_DMA *ctx)
 {
     chSysLock();
 #if defined(RP2350)
-    dmaChannelFreeI(txdma);
+    // the handle records ownership even when dma_tx_allocate() got no channel,
+    // so the next user's lock calls us with nothing to free. dmaChannelFreeI()
+    // asserts on null.
+    if (txdma != nullptr) {
+        dmaChannelFreeI(txdma);
+    }
 #else
     dmaStreamFreeI(txdma);
 #endif
@@ -1275,6 +1284,17 @@ void UARTDriver::write_pending_bytes_DMA(uint32_t n)
         }
 
         dma_handle->lock(); // we have our own thread so grab the lock
+
+#if defined(RP2350)
+        if (txdma == nullptr) {
+            // the lock ran dma_tx_allocate(), which found no free channel and
+            // cleared tx_dma_enabled for next time. The handle records
+            // ownership either way, so give it back before the non-DMA path
+            // takes these bytes.
+            dma_handle->unlock(false);
+            break;
+        }
+#endif
 
         chEvtGetAndClearEvents(EVT_TRANSMIT_DMA_COMPLETE);
 
