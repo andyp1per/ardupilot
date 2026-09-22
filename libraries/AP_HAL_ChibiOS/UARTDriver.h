@@ -174,6 +174,10 @@ private:
     const SerialDef &sdef;
     bool rx_dma_enabled;
     bool tx_dma_enabled;
+#if defined(RP2350)
+    // true while the RX channel is armed for the settings _begin() last applied
+    bool rx_dma_running;
+#endif
 
     /*
       copy of rx_line, tx_line, rts_line and cts_line with alternative configs resolved

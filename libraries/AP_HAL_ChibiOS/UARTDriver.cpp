@@ -516,7 +516,6 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
         // RP2350 SIO UART path
         if (_baudrate != 0) {
 #ifndef HAL_UART_NODMA
-            bool was_initialised = _device_initialised;
             // sioStart() leaves the FIFOs alone when the peripheral is already
             // running, so bytes framed at the old baud would survive into the
             // new window. Clearing FEN flushes RX and TX; setting it re-enables
@@ -526,6 +525,13 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
                 pl011->UARTLCR_H &= ~UART_UARTLCR_H_FEN;
                 pl011->UARTLCR_H |=  UART_UARTLCR_H_FEN;
             }
+            if (clear_buffers || !rx_dma_enabled) {
+                // an armed channel does not match what this begin() is asking
+                // for: it is either framing at the old baud, or it is about to
+                // be left out of UARTDMACR. Either way it needs re-arming when
+                // the flag next comes back on.
+                rx_dma_running = false;
+            }
             // Rx DMA for RP2350. Deliberately not gated on _device_initialised:
             // rx_dma_enabled is recomputed from the bounce buffers and
             // OPTION_NODMA_RX on every _begin(), so a port that first came up
@@ -534,7 +540,6 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
             // channel behind it. _rx_timer_tick() then runs neither the DMA path,
             // which needs rxdma, nor read_bytes_NODMA(), which needs the flag
             // clear, and receive stops with nothing reading at all.
-            bool rx_dma_fresh = false;
             if (rx_dma_enabled && rxdma == nullptr) {
                 chSysLock();
                 rxdma = dmaChannelAllocI(sdef.dma_rx_stream_id,
@@ -555,11 +560,11 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
                     // Set source to UART RX data register (fixed/not-incremented)
                     dmaChannelSetSourceX(rxdma,
                         (uint32_t)&((SIODriver*)sdef.serial)->uart->UARTDR);
-                    rx_dma_fresh = true;
                 } else {
                     // leaving RXDMAE set with no channel behind it just overruns
                     // the FIFO in silence
                     rx_dma_enabled = false;
+                    rx_dma_running = false;
                 }
                 chSysUnlock();
             }
@@ -625,9 +630,17 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
             acts_line = (ioline_t)sdef.cts_line;
 
 #ifndef HAL_UART_NODMA
-            if (rx_dma_enabled && (!was_initialised || rx_dma_fresh)) {
+            if (rx_dma_enabled && !rx_dma_running) {
+                // the channel can already be live here, so take the lock:
+                // rxbuff_full_irq() calls dma_rx_enable() as well, and both call
+                // sites in _rx_timer_tick() hold it. dmaChannelDisableX() aborts
+                // and clears, which is what discards the stale counter and the
+                // bytes the bounce buffer framed at the previous settings.
+                chSysLock();
                 dmaChannelDisableX(rxdma);
                 dma_rx_enable();
+                chSysUnlock();
+                rx_dma_running = true;
             }
 #endif // HAL_UART_NODMA
         }
@@ -894,6 +907,12 @@ void UARTDriver::_end()
         sioStop((SIODriver*)sdef.serial);
 #endif
     }
+
+#if defined(RP2350)
+    // sioStop() does not touch the RX channel, so it stays armed over a bounce
+    // buffer nothing will read; make the next _begin() re-arm it
+    rx_dma_running = false;
+#endif
 
     _readbuf.set_size(0);
     _writebuf.set_size(0);
