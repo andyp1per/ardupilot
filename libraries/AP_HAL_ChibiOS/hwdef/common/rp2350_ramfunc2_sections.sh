@@ -106,6 +106,8 @@ generate_ld_from_registry() {
                 cond = "needs:" substr($0, RSTART + 7, RLENGTH - 8)
             } else if (match($0, /\[unless [A-Za-z_][A-Za-z0-9_]*\]/)) {
                 cond = "unless:" substr($0, RSTART + 8, RLENGTH - 9)
+            } else if (match($0, /\[inlinable\]/)) {
+                cond = "inlinable"
             }
             s=$2
             gsub(/#.*/, "", s)
@@ -155,6 +157,9 @@ generate_ld_from_registry() {
                     continue
                 fi
                 if [[ "$cond" == unless:* ]] && define_disabled "${cond#unless:}"; then
+                    continue
+                fi
+                if [[ "$cond" == "inlinable" ]]; then
                     continue
                 fi
                 if [[ $strict -eq 1 ]]; then

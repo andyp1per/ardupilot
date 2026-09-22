@@ -15,6 +15,12 @@
 #
 # An option that defaults on outside hwdef.h takes "[unless <DEFINE>]" instead,
 # which stays quiet only when hwdef.h explicitly sets the define to 0 or FALSE.
+#
+# A header-defined function only gets an out-of-line copy once enough callers
+# exist, and a board that compiles a reduced set of them can inline it away
+# completely. No define expresses that, so those entries carry "[inlinable]"
+# and are the one kind of miss the check forgives. Use it only where the symbol
+# really does come from a .h - a typo in a .cpp entry must still be fatal.
 ArduCopter/Attitude.cpp|Copter::run_rate_controller_main  # 70 B (sram)
 ArduCopter/Copter.cpp|Copter::read_AHRS  # 12 B (sram)
 ArduCopter/ekf_check.cpp|Copter::check_ekf_reset  # 70 B (sram)
@@ -74,19 +80,19 @@ libraries/AP_InertialSensor/AP_InertialSensor_Backend.cpp|AP_InertialSensor_Back
 # set_cutoff_frequency (164 B each): called from update_gyro_filters (SRAM) during sensors_converging()
 # window (first 30s) on every filter update tick -- XIP fetch from Core1 causes UNDEFINSTR fault
 # via SMP XIP cache corruption. tanf slow-path still hits flash but only when cutoff actually changes.
-libraries/AP_Math/LowPassFilter.h|LowPassFilter2p<Vector3<float>>::set_cutoff_frequency  # 164 B (sram)
-libraries/AP_Math/LowPassFilter.h|LowPassFilter2p<float>::set_cutoff_frequency  # 164 B (sram)
+libraries/AP_Math/LowPassFilter.h|LowPassFilter2p<Vector3<float>>::set_cutoff_frequency  # 164 B (sram) [inlinable]
+libraries/AP_Math/LowPassFilter.h|LowPassFilter2p<float>::set_cutoff_frequency  # 164 B (sram) [inlinable]
 # The gyro-notch apply chain (apply_gyro_filters + NotchFilter<Vector3>::apply +
 # HarmonicNotchFilter<Vector3>::apply) moved to Scratch Y - it runs per gyro sample only on core1
 # (IMU SPI0 device-bus thread, HAL_CORE_SPI0=1). See rp2350_scratchy_registry.txt.
 # NotchFilter<float>::apply (PID target/error notch) stays here pending a check of whether the
 # core0 position-control PIDs use it; keep it in shared SRAM until then.
-libraries/Filter/NotchFilter.h|NotchFilter<float>::apply  # 108 B (sram)
+libraries/Filter/NotchFilter.h|NotchFilter<float>::apply  # 108 B (sram) [inlinable]
 # HarmonicNotchFilter::update (coeff recalc) is reachable from the core0 AP_Vehicle path as well
 # as the core1 rate thread. It was described here as "the slow half" when the filter update was
 # capped at 100 Hz; uncapped it runs at half the gyro rate, which is why the chain below it is
 # now relocated too.
-libraries/Filter/HarmonicNotchFilter.h|HarmonicNotchFilter<Vector3<float>>::update  # 352 B (sram)
+libraries/Filter/HarmonicNotchFilter.h|HarmonicNotchFilter<Vector3<float>>::update  # 352 B (sram) [inlinable]
 # update_dynamic_notch (252 B) + update_throttle_notch (204 B): called at 500 Hz from rate thread core1.
 # Previously in FLASH -- both cores share the 16 KB XIP cache, causing cache evictions to stall core1.
 libraries/AP_Vehicle/AP_Vehicle.cpp|AP_Vehicle::update_dynamic_notch  # 252 B (sram)
@@ -110,14 +116,14 @@ libraries/AP_RCProtocol/AP_RCProtocol_Backend.cpp|AP_RCProtocol_Backend::decode_
 libraries/AP_RCProtocol/AP_RCProtocol_Backend.cpp|AP_RCProtocol_Backend::add_input  # 72 B (sram)
 libraries/AP_RCProtocol/AP_RCProtocol_Backend.cpp|AP_RCProtocol_Backend::new_input  # 18 B (sram)
 libraries/AP_RCProtocol/AP_RCProtocol_Backend.cpp|AP_RCProtocol_Backend::log_data  # 140 B (sram)
-libraries/AP_RCProtocol/AP_RCProtocol_Backend.h|AP_RCProtocol_Backend::is_detected  # 26 B (sram)
+libraries/AP_RCProtocol/AP_RCProtocol_Backend.h|AP_RCProtocol_Backend::is_detected  # 26 B (sram) [inlinable]
 libraries/AP_RCProtocol/AP_RCProtocol_CRSF.cpp|AP_RCProtocol_CRSF::check_frame  # 186 B (sram)
 libraries/AP_RCProtocol/AP_RCProtocol_CRSF.cpp|AP_RCProtocol_CRSF::_process_byte  # 92 B (sram)
 libraries/AP_RCProtocol/AP_RCProtocol_CRSF.cpp|AP_RCProtocol_CRSF::process_byte  # 44 B (sram)
 libraries/AP_RCProtocol/AP_RCProtocol_CRSF.cpp|AP_RCProtocol_CRSF::decode_crsf_packet  # 232 B (sram)
 libraries/AP_RCProtocol/AP_RCProtocol_CRSF.cpp|AP_RCProtocol_CRSF::update  # 244 B (sram)
 libraries/AP_RCProtocol/AP_RCProtocol_CRSF.cpp|AP_RCProtocol_CRSF::get_link_rate  # 40 B (sram)
-libraries/AP_RCProtocol/AP_RCProtocol_CRSF.h|AP_RCProtocol_CRSF::is_rx_active  # 36 B (sram)
+libraries/AP_RCProtocol/AP_RCProtocol_CRSF.h|AP_RCProtocol_CRSF::is_rx_active  # 36 B (sram) [inlinable]
 libraries/AP_RCProtocol/AP_RCProtocol_SRXL2.cpp|AP_RCProtocol_SRXL2::update  # 40 B (sram)
 libraries/AP_HAL_ChibiOS/RCInput.cpp|ChibiOS::RCInput::_timer_tick  # 96 B (sram)
 libraries/AP_HAL_ChibiOS/RCInput.cpp|ChibiOS::RCInput::read  # 54 B (sram)
@@ -202,7 +208,7 @@ libraries/AP_Logger/AP_Logger_Backend.cpp|AP_Logger_Backend::WritePrioritisedBlo
 ArduCopter/rate_thread.cpp|Copter::rate_controller_log_update  # 76 B (sram)
 libraries/AP_Logger/AP_Logger.cpp|AP_Logger::WriteBlock  # 52 B (sram)
 libraries/AP_Motors/AP_MotorsMulticopter.cpp|AP_MotorsMulticopter::actuator_spin_up_to_ground_idle  # 40 B (sram)
-libraries/AP_Logger/AP_Logger.h|AP_Logger::in_log_download  # 26 B (sram)
+libraries/AP_Logger/AP_Logger.h|AP_Logger::in_log_download  # 26 B (sram) [inlinable]
 libraries/AP_Vehicle/AP_Vehicle.cpp|AP_Vehicle::update_throttle_notch  # 204 B (sram)
 libraries/AP_InertialSensor/AP_InertialSensor_Invensensev3.cpp|AP_InertialSensor_Invensensev3::accumulate_samples  # 268 B (sram)
 libraries/AP_InertialSensor/AP_InertialSensor_Invensensev3.cpp|AP_InertialSensor_Invensensev3::read_fifo  # 242 B (sram)
