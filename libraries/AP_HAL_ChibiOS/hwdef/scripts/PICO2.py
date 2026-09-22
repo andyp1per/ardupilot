@@ -60,6 +60,14 @@ mcu = {
         'AP_MAVLINK_FTP_THREAD_PRIORITY_OFFSET' : '121',
         # bidirectional DShot is the only ESC telemetry source, with no passthrough or CAN
         'HAL_WITH_ESC_TELEM' : '1',
+        # The M33 FPU is single precision (fpv5-sp-d16), so a double position
+        # type is software emulated. HAL_WITH_EKF_DOUBLE follows
+        # HAL_HAVE_HARDWARE_DOUBLE, which is 0 here, so the input is single
+        # precision already; what is lost is accumulator resolution in
+        # AC_PosControl, and at Copter ranges a float step there is far smaller
+        # than one update of target motion. The default gate is the declared
+        # FLASH_SIZE_KB rather than the FPU, which is why these boards had it.
+        'HAL_WITH_POSTYPE_DOUBLE' : '0',
     },
     'CORTEX'    : 'cortex-m33',
 # Use fpv5-sp-d16 with hard ABI: - hard: float args go in FPU registers directly (eliminates the int-register round-trip that softfp incurs per float call).
