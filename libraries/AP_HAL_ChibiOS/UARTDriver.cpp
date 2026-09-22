@@ -526,38 +526,44 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
                 pl011->UARTLCR_H &= ~UART_UARTLCR_H_FEN;
                 pl011->UARTLCR_H |=  UART_UARTLCR_H_FEN;
             }
-            // setup Rx DMA for RP2350
-            if (!_device_initialised) {
-                if (rx_dma_enabled) {
-                    osalDbgAssert(rxdma == nullptr, "double DMA allocation");
-                    chSysLock();
-                    rxdma = dmaChannelAllocI(sdef.dma_rx_stream_id,
-                                            3,   // IRQ priority
+            // Rx DMA for RP2350. Deliberately not gated on _device_initialised:
+            // rx_dma_enabled is recomputed from the bounce buffers and
+            // OPTION_NODMA_RX on every _begin(), so a port that first came up
+            // without RX DMA - the option set, or a bounce buffer that could not
+            // be allocated - would otherwise turn the flag back on later with no
+            // channel behind it. _rx_timer_tick() then runs neither the DMA path,
+            // which needs rxdma, nor read_bytes_NODMA(), which needs the flag
+            // clear, and receive stops with nothing reading at all.
+            bool rx_dma_fresh = false;
+            if (rx_dma_enabled && rxdma == nullptr) {
+                chSysLock();
+                rxdma = dmaChannelAllocI(sdef.dma_rx_stream_id,
+                                        3,   // IRQ priority
+                                        (rp_dmaisr_t)rxbuff_full_irq,
+                                        (void *)this);
+                if (rxdma == nullptr) {
+                    // hwdef assigns fixed channel numbers, but the RP SPI and ADC
+                    // drivers take RP_DMA_CHANNEL_ID_ANY and start earlier, so the
+                    // assigned channel is usually gone by now. TREQ selects the
+                    // peripheral, so any free channel serves just as well.
+                    rxdma = dmaChannelAllocI(RP_DMA_CHANNEL_ID_ANY,
+                                            3,
                                             (rp_dmaisr_t)rxbuff_full_irq,
                                             (void *)this);
-                    if (rxdma == nullptr) {
-                        // hwdef assigns fixed channel numbers, but the RP SPI and ADC
-                        // drivers take RP_DMA_CHANNEL_ID_ANY and start earlier, so the
-                        // assigned channel is usually gone by now. TREQ selects the
-                        // peripheral, so any free channel serves just as well.
-                        rxdma = dmaChannelAllocI(RP_DMA_CHANNEL_ID_ANY,
-                                                3,
-                                                (rp_dmaisr_t)rxbuff_full_irq,
-                                                (void *)this);
-                    }
-                    if (rxdma != nullptr) {
-                        // Set source to UART RX data register (fixed/not-incremented)
-                        dmaChannelSetSourceX(rxdma,
-                            (uint32_t)&((SIODriver*)sdef.serial)->uart->UARTDR);
-                    } else {
-                        // leaving RXDMAE set with no channel behind it just overruns
-                        // the FIFO in silence
-                        rx_dma_enabled = false;
-                    }
-                    chSysUnlock();
                 }
-                _device_initialised = true;
+                if (rxdma != nullptr) {
+                    // Set source to UART RX data register (fixed/not-incremented)
+                    dmaChannelSetSourceX(rxdma,
+                        (uint32_t)&((SIODriver*)sdef.serial)->uart->UARTDR);
+                    rx_dma_fresh = true;
+                } else {
+                    // leaving RXDMAE set with no channel behind it just overruns
+                    // the FIFO in silence
+                    rx_dma_enabled = false;
+                }
+                chSysUnlock();
             }
+            _device_initialised = true;
             if (tx_dma_enabled && dma_handle == nullptr) {
                 // TX DMA channel is managed via Shared_DMA wrapper
                 dma_handle = NEW_NOTHROW Shared_DMA(sdef.dma_tx_stream_id,
@@ -619,7 +625,7 @@ void UARTDriver::_begin(uint32_t b, uint16_t rxS, uint16_t txS)
             acts_line = (ioline_t)sdef.cts_line;
 
 #ifndef HAL_UART_NODMA
-            if (rx_dma_enabled && !was_initialised) {
+            if (rx_dma_enabled && (!was_initialised || rx_dma_fresh)) {
                 dmaChannelDisableX(rxdma);
                 dma_rx_enable();
             }
@@ -759,8 +765,9 @@ void UARTDriver::dma_tx_deallocate(Shared_DMA *ctx)
     chSysLock();
 #if defined(RP2350)
     // the handle records ownership even when dma_tx_allocate() got no channel,
-    // so the next user's lock calls us with nothing to free. dmaChannelFreeI()
-    // asserts on null.
+    // so the next user's lock calls us with nothing to free. These boards build
+    // without HAL_CHIBIOS_ENABLE_ASSERTS, so dmaChannelFreeI()'s osalDbgCheck is
+    // a no-op and it would fault dereferencing the channel.
     if (txdma != nullptr) {
         dmaChannelFreeI(txdma);
     }
@@ -1287,10 +1294,12 @@ void UARTDriver::write_pending_bytes_DMA(uint32_t n)
 
 #if defined(RP2350)
         if (txdma == nullptr) {
-            // the lock ran dma_tx_allocate(), which found no free channel and
-            // cleared tx_dma_enabled for next time. The handle records
-            // ownership either way, so give it back before the non-DMA path
-            // takes these bytes.
+            // no channel, and the handle will not re-run the allocator while it
+            // still records us as the owner. Clear the flag here as well as in
+            // dma_tx_allocate(): _begin() recomputes it from tx_bounce_buf,
+            // which is never freed, so a later begin() would otherwise resurrect
+            // it with nothing behind it and stall transmit for good.
+            tx_dma_enabled = false;
             dma_handle->unlock(false);
             break;
         }
