@@ -83,6 +83,9 @@ private:
 
     ObjectBuffer<Transaction> requests{AP_MAVLINK_FTP_MAX_SESSIONS};
 
+    // signalled when a request is queued, so the worker wakes for it
+    HAL_BinarySemaphore *requests_sem;
+
     bool initialised;
 
     // session specific info

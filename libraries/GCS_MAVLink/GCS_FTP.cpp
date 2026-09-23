@@ -53,6 +53,12 @@ bool GCS_FTP::init(void)
         return true;
     }
 
+    if (requests_sem == nullptr) {
+        // a failed init() is retried on the next incoming packet, so a
+        // remote peer would otherwise pace an unbounded leak here
+        requests_sem = NEW_NOTHROW HAL_BinarySemaphore(false);
+    }
+
     initialised = hal.scheduler->thread_create(FUNCTOR_BIND_MEMBER(&GCS_FTP::worker, void),
                                                "FTP", 2560, AP_MAVLINK_FTP_THREAD_PRIORITY_BASE,
                                                AP_MAVLINK_FTP_THREAD_PRIORITY_OFFSET);
@@ -103,7 +109,10 @@ void GCS_FTP::handle_file_transfer_protocol(const mavlink_message_t &msg, mavlin
         // if the push fails we drop the message
         // we could NACK it, but that can lead to GCS
         // confusion, so we're treating it like lost data
-        ftp->requests.push(request);
+        const bool pushed = ftp->requests.push(request);
+        if (pushed && ftp->requests_sem != nullptr) {
+            ftp->requests_sem->signal();
+        }
     }
 }
 
@@ -864,8 +873,12 @@ void GCS_FTP::worker(void)
 
     while (true) {
         while (!requests.pop(request)) {
-            // nothing to handle, delay ourselves a bit then check again. Ideally we'd use conditional waits here
-            hal.scheduler->delay(2);
+            // wake on a new request, or after 100ms to clean up sessions
+            if (requests_sem != nullptr) {
+                IGNORE_RETURN(requests_sem->wait(100 * 1000));
+            } else {
+                hal.scheduler->delay(2);
+            }
 
             // kill any dead sessions
             const uint32_t now = AP_HAL::millis();
