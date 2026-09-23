@@ -66,8 +66,8 @@ def ch_dynamic_env(self):
 # because XIP flash bandwidth is the bottleneck, so the handful of translation
 # units that need -O2 are listed in one place, next to the RAMFUNC2 and
 # Scratch X/Y placement registries they are traded against.
-RP2350_OPTIMIZE_REGISTRY = os.path.join('libraries', 'AP_HAL_ChibiOS', 'hwdef',
-                                        'common', 'rp2350_optimize_registry.txt')
+RP2350_OPTIMIZE_REGISTRY = os.path.join('libraries', 'AP_HAL_ChibiOS', 'rp2350',
+                                        'rp2350_optimize_registry.txt')
 
 _optimize_registry = None
 _optimize_applied = set()
@@ -145,7 +145,7 @@ class rp2350_ramfunc2_gen(Task.Task):
         import subprocess
         buildroot = self.env.BUILDROOT
         script = os.path.join(self.env.SRCROOT,
-                              'libraries/AP_HAL_ChibiOS/hwdef/common/rp2350_ramfunc2_sections.sh')
+                              'libraries/AP_HAL_ChibiOS/rp2350/rp2350_ramfunc2_sections.sh')
         cmd = ['bash', script, buildroot]
         # the registries are tuned for copter; elsewhere most entries are absent
         if getattr(self.generator, 'program_name', None) == 'arducopter':
@@ -937,6 +937,7 @@ def build(bld):
     common_src += bld.path.ant_glob('libraries/AP_HAL_ChibiOS/hwdef/common/*.[ch]')
     common_src += bld.path.ant_glob('libraries/AP_HAL_ChibiOS/hwdef/common/*.mk')
     common_src += bld.path.ant_glob('libraries/AP_HAL_ChibiOS/hwdef/common/*.S')
+    common_src += bld.path.ant_glob('libraries/AP_HAL_ChibiOS/rp2350/*.[chS]')
     common_src += bld.path.ant_glob('modules/ChibiOS/os/hal/**/*.[ch]')
     common_src += bld.path.ant_glob('modules/ChibiOS/os/hal/**/*.mk')
     # a board makefile can also build C sources from a board directory, e.g. the RP2350 c1_main.c
