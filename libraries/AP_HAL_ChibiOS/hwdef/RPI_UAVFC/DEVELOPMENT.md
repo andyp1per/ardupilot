@@ -199,8 +199,8 @@ about that does not apply here.
 ## Performance architecture, inherited from v1
 
 The configuration is carried over unchanged from the v1 baseline, which was
-validated on hardware. See `../Laurel/BASELINE.md` for how it was derived and
-`../Laurel/xip-cache-and-pgo.md` for the XIP cache analysis behind it.
+validated on hardware. See `../../rp2350/BASELINE.md` for how it was derived and
+`../../rp2350/xip-cache-and-pgo.md` for the XIP cache analysis behind it.
 
 Core clock is 225 MHz at 1.15 V, down from an original 375 MHz / 1.30 V
 overclock. It remains above the RP2350 datasheet's 150 MHz clk_sys/clk_peri
@@ -212,7 +212,7 @@ cache for core0 and let the clock come back down.
 
 Work is split as main loop 200 Hz on core0 (nav, EKF inline, GCS, logging) and
 a 2 kHz rate thread pinned to core1, fed by a 4 kHz gyro backend. Core affinity
-is set in `hwdef/common/rp2350_core_affinity.h`: the SPI buses are on core1,
+is set in `rp2350/rp2350_core_affinity.h`: the SPI buses are on core1,
 I2C on core0. Only the rate thread (`ArduCopter/Copter.cpp`, via
 `thread_create_pinned_to_core`) and the SPI bus threads run on core1;
 everything else, including logging, is on core0.
@@ -866,7 +866,7 @@ registries is silently dropped from one. See `PROFILING.md`.
 `memcpy` and `memset` are relocated into `.ramtext` because they are the top
 flash-resident functions on the core1 rate/IMU path. The relocation has a
 boot-order gotcha involving a volatile copy loop; see the memcpy/memset section
-of `../Laurel/BASELINE.md` before touching it.
+of `../../rp2350/BASELINE.md` before touching it.
 
 They are relocated by `common_rp2350_smp.ld` picking the newlib archive members
 directly, *not* through a registry, and that is the only mechanism that can
