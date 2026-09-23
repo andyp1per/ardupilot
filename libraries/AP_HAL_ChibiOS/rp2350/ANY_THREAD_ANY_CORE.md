@@ -34,7 +34,7 @@ co-located automatically.
 ### One config header
 
 ```c
-// libraries/AP_HAL_ChibiOS/hwdef/common/rp2350_core_affinity.h
+// libraries/AP_HAL_ChibiOS/rp2350/rp2350_core_affinity.h
 
 #define HAL_CORE_RCOUT    1
 #define HAL_CORE_SPI0     1
@@ -337,7 +337,7 @@ because Core1's ChibiOS tick (TIMER0_ALARM1) is not yet active during that windo
 - `libraries/AP_HAL_ChibiOS/hwdef/common/board_rp2350.c` — defines `c1_xip_lock`,
   `c1_xip_lock_ready`, `rpEflBeforeXipOff()`, `rpEflAfterXipOn()` (all inside
   `#if defined(RP_CORE1_START) && RP_CORE1_START == TRUE`)
-- `libraries/AP_HAL_ChibiOS/hwdef/Laurel/c1_main.c` — adds NVIC_ISER0/ISER1 and
+- `libraries/AP_HAL_ChibiOS/rp2350/c1_main.c` — adds NVIC_ISER0/ISER1 and
   SIO_DOORBELL_IN_CLR macros; adds `c1_xip_lockout_handler` in `.ramtext`; installs
   it in `c1_vtable[42]`; enables IRQ26 and sets `c1_xip_lock_ready = 1` after
   `chInstanceObjectInit()`.
@@ -698,13 +698,13 @@ same parameters give 3.2 kHz and 1.6 kHz.
 
 | File | Purpose |
 |---|---|
-| `hwdef/Laurel/c1_main.c` | Core1 startup, c1_vtable in SRAM9, fault handler, XIP lockout handler |
+| `rp2350/c1_main.c` | Core1 startup, c1_vtable in SRAM9, fault handler, XIP lockout handler |
 | `hwdef/common/board_rp2350.c` | Core0 board init, `rpEflBeforeXipOff/AfterXipOn`, XIP lockout state vars |
 | `hwdef/common/flash.c` | `stm32_flash_erasepage` / `stm32_flash_write` — calls EFL driver |
 | `modules/ChibiOS/os/hal/ports/RP/LLD/EFLv1/rp_efl_lld.c` | EFL driver: `rpEflBeforeXipOff/AfterXipOn` weak hooks |
 | `modules/ChibiOS/os/hal/ports/RP/RP2350/hal_efl_lld.c` | RP2350-specific flash: `rp_flash_exit_xip`, `rp_flash_enter_xip` (.ramtext) |
 | `modules/ChibiOS/os/hal/ports/RP/LLD/TIMERv1/hal_st_lld.c` | ChibiOS tick ISR handlers (Vector40=Core0, Vector44=Core1) |
-| `hwdef/common/rp2350_core_affinity.h` | Per-thread core assignment `#define`s |
+| `rp2350/rp2350_core_affinity.h` | Per-thread core assignment `#define`s |
 | `hwdef/Laurel/hwdef.dat` | Board config — `RP_CORE1_START TRUE`, `SCHED_LOOP_RATE 400`, `FSTRATE_*` |
 | `AP_NavEKF3/AP_NavEKF3_Logging.cpp` | `Log_Write_GSF` restored with null-guard in place |
 | `modules/ChibiOS/os/common/ports/ARMv8-M-ML-ALT/compilers/GCC/chcoreasm.S` | Per-function `.section` directives for `PendSV_Handler`, `SVC_Handler`, `__port_thread_start` — enables RAMFUNC2 placement |
