@@ -165,6 +165,20 @@ the USB connector." — which requires a human to physically press the reset but
 That is often not possible (board mounted in vehicle, user remote, etc.).
 If `uploader.py` is already stuck, use OpenOCD to reset the target, then flash via SWD.
 
+The exception is a board on a Windows COM port with no SWD probe attached. Run
+`uploader.py` with Windows `python.exe` (it has pyserial and pymavlink), from
+files staged under `/mnt/c`. On RPI_UAVFC the bootloader came up on the same
+port and the upload went through with no re-plug, three times out of three:
+
+```bash
+cp Tools/scripts/uploader.py build/RPI_UAVFC/bin/arducopter.apj /mnt/c/support/raspberrypi/rp2350v2/
+cd /mnt/c/support/raspberrypi/rp2350v2
+timeout 180 python.exe -u uploader.py --port COM40 arducopter.apj
+```
+
+pymavlink's MAVFTP writes to a hard-coded `/tmp`, so create `C:\tmp` before an
+`@SYS` fetch from Windows python.
+
 OpenOCD is a Windows binary and cannot read WSL paths, so stage the image on
 the Windows side first and give it the `C:\` path:
 

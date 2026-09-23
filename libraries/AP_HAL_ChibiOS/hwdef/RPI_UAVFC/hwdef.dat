@@ -259,9 +259,6 @@ define HAL_MAIN_LOOP_STUCK_THRESHOLD_MS 1200
 # logs/files only.  There is no dedicated card-detect GPIO, so the low-level
 # card-detect reports inserted and connect probing detects absence.
 define HAL_OS_FATFS_IO 1
-define MMC_CONNECT_IDLE_TIMEOUT_MS 20
-define HAL_SDCARD_SPI_INIT_TRIES 3
-define HAL_FS_MOUNT_RETRY_MS 30000
 
 # Battery and RSSI channels on RP2350 ADC inputs.  Pin numbers are the ADC
 # channel index (GPIO40 = 0 ... GPIO47 = 7); verify against HAL_ANALOG_PINS in

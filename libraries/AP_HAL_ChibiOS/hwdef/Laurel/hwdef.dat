@@ -231,16 +231,8 @@ define HAL_MAIN_LOOP_STUCK_THRESHOLD_MS 1200
 # XIP flash; FATFS is for logs/files only.
 # Laurel has no dedicated SD card-detect GPIO, so the low-level card-detect
 # reports inserted and connect probing is relied on to detect absence.
-# Keep FATFS enabled, but shorten connect-path idle waits so a missing card
-# fails fast without delaying console/MAVLink boot.
+# FATFS on the microSD card, for logs and files
 define HAL_OS_FATFS_IO 1
-define MMC_CONNECT_IDLE_TIMEOUT_MS 20
-# On SPI-only card detection (no dedicated CD GPIO), avoid repeated long
-# connect attempts when no card is fitted.
-define HAL_SDCARD_SPI_INIT_TRIES 3
-# SD mount retry from the IO thread. Keep it long to avoid SPI bus stalls
-# from repeated failed card probes.
-define HAL_FS_MOUNT_RETRY_MS 30000
 
 # Battery and RSSI channels on RP2350 ADC inputs.
 define HAL_BATT_MONITOR_DEFAULT 4
