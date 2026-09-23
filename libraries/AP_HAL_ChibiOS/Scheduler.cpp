@@ -656,13 +656,10 @@ void Scheduler::_io_thread(void* arg)
 #endif
 
 #if HAL_LOGGING_ENABLED
-#ifndef HAL_FS_MOUNT_RETRY_MS
-#define HAL_FS_MOUNT_RETRY_MS 3000U
-#endif
         if (!hal.util->get_soft_armed()) {
-            // if sdcard hasn't mounted then retry it periodically in the IO
-            // thread when disarmed (rate controlled by HAL_FS_MOUNT_RETRY_MS)
-            if (now - last_sd_start_ms > HAL_FS_MOUNT_RETRY_MS) {
+            // if sdcard hasn't mounted then retry it every 3s in the IO
+            // thread when disarmed
+            if (now - last_sd_start_ms > 3000) {
                 last_sd_start_ms = now;
                 AP::FS().retry_mount();
             }
