@@ -238,10 +238,9 @@ define MMC_CONNECT_IDLE_TIMEOUT_MS 20
 # On SPI-only card detection (no dedicated CD GPIO), avoid repeated long
 # connect attempts when no card is fitted.
 define HAL_SDCARD_SPI_INIT_TRIES 3
-# SD mount retry: outer Scheduler gate and inner sdcard_retry() gate.
-# Keep both long to avoid SPI bus stalls from repeated failed card probes.
+# SD mount retry from the IO thread. Keep it long to avoid SPI bus stalls
+# from repeated failed card probes.
 define HAL_FS_MOUNT_RETRY_MS 30000
-define HAL_SDCARD_RETRY_INTERVAL_MS 1000
 
 # Battery and RSSI channels on RP2350 ADC inputs.
 define HAL_BATT_MONITOR_DEFAULT 4
