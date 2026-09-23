@@ -70,7 +70,7 @@ Fix, in two parts:
 After this, memcpy/memset live in SRAM, boot is clean, and core1 flash drops to
 ~0.7% (the residual is two small C++ template thunks, not worth chasing).
 
-The linker-script part has since gone: `hwdef/common/rp2350_memfunctions.S`
+The linker-script part has since gone: `rp2350/rp2350_memfunctions.S`
 now supplies memcpy/memset in its own `.ramtext` section, so the newlib
 members are no longer linked and the `EXCLUDE_FILE` picks were removed. The
 `volatile` copy loop in `rp_clocks.c` is still what makes SRAM mem functions
