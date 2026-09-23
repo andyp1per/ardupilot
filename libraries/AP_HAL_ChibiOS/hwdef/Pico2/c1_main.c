@@ -105,7 +105,7 @@ void __c1_late_init(void)
  *
  * This is the bare-metal WFE FIFO dispatcher, which is what this board runs:
  * CH_CFG_SMP_MODE is FALSE here. Under CH_CFG_SMP_MODE=TRUE core1 is owned by
- * ChibiOS (ch1 SMP instance) instead; see Laurel/c1_main.c for that version,
+ * ChibiOS (ch1 SMP instance) instead; see rp2350/c1_main.c for that version,
  * which calls chInstanceObjectInit(&ch1, ...) - this file never gained it,
  * which is why SMP is off.
  *
