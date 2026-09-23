@@ -13,7 +13,6 @@
 
 #if AP_RELAY_ENABLED
 
-#include <AP_Common/Bitmask.h>
 #include <AP_Param/AP_Param.h>
 #include <AP_Relay/AP_Relay_Params.h>
 
@@ -100,13 +99,6 @@ private:
 
     // Get the state of the specified pin
     bool get_pin_state(const int16_t pin) const;
-
-    // make a pin an output on its first read only; re-applying can glitch it
-    void ensure_output(int16_t pin) const;
-    // one bit per GPIO number the memo covers; pins above this are handled
-    // without it rather than wrapping onto another pin's bit
-    static const uint16_t AP_RELAY_OUTPUT_PINS = 256;
-    mutable Bitmask<AP_RELAY_OUTPUT_PINS> _output_pins;
 
 #if AP_RELAY_DRONECAN_ENABLED
     // Virtual DroneCAN pins
