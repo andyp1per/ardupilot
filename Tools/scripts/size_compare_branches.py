@@ -252,6 +252,8 @@ class SizeCompareBranches(BuildScriptBase):
             board_info = self.boards_by_name[board]
 
             vehicles_to_build = self.vehicles_to_build_for_board_info(board_info)
+            if len(vehicles_to_build) == 0:
+                continue
 
             outdir_1 = os.path.join(tmpdir, "out-master-%s" % (board,))
             tasks.append(SizeCompareBranches.Task(
