@@ -409,7 +409,12 @@ buffers always leaves the armed one alone, so the DMA can never read a buffer
 being written. Each buffer carries the block it holds: a block sent blank is
 never consumed, so without the tag the queue would be left one ahead of the
 scan-out and put the wrong eight lines up, shifted, for the rest of the
-field. The interrupt drops stale heads until one matches.
+field. The interrupt drops stale heads until one matches. A blank block takes
+a slot too, flagged rather than rendered, so the renderer is the only side
+that ever decides what is blank. The interrupt used to test the frame again
+at scan time, and when a redraw changed the answer in between it dropped the
+whole queue and counted a late block for a block nobody had been asked to
+render; that is what the steady 30 late blocks a window on the bench were.
 
 **A late block is not a desync, and conflating them cost a screen.** An
 underrun consumes words that were never supplied, so the phase is gone and
