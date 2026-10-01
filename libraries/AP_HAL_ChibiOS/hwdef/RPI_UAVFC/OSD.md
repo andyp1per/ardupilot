@@ -396,6 +396,13 @@ falls to 5 in 30 s. Buffer count, not block size, is the
 lever for this: block size trades the deadline against the work in the same
 proportion and changes nothing.
 
+**The character frame is double-buffered.** `update_osd()` on core0 runs
+clear(), the element draws and flush() at 10 Hz, and the scan-out used to
+read the same array that was being wiped and redrawn, so a block built or
+tested during a redraw saw a blank or half-drawn frame. Now core0 draws into
+a back frame and flush() swaps a pointer; the interrupt and the renderer read
+only the front. 480 bytes for the second frame.
+
 **Queue rules.** `produced` and `consumed` have a single writer each, so
 nothing needs locking. The thread stops at two rendered, which with three
 buffers always leaves the armed one alone, so the DMA can never read a buffer
