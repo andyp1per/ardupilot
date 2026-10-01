@@ -144,8 +144,8 @@ public:
     // short by the FIFO running dry; both only ever count up
     static volatile uint32_t late_blocks;
     static volatile uint32_t desyncs;
-    // blocks sent transparent without rendering because nothing on them is
-    // visible
+    // blocks sent transparent because the renderer found nothing visible on
+    // them
     static volatile uint32_t blank_blocks;
 
     // called from interrupt context only
@@ -210,9 +210,16 @@ private:
       core1 threads at priority 181.
      */
     uint32_t line_buf[3][OSD_PICO_BLOCK_WORDS];
-    // which block each buffer holds, so a skipped one cannot silently shift
+    // which block each slot holds, so a dropped one cannot silently shift
     // everything after it
     volatile uint16_t buf_block[3];
+    /*
+      Set when the slot's block has nothing visible on it, so the interrupt
+      arms the filler instead of the buffer. The renderer is the only thing
+      that decides a block is blank, and it decides once per slot; the
+      interrupt never reads the character frame.
+     */
+    volatile bool buf_blank[3];
     // single writer each, so the difference needs no locking
     volatile uint32_t produced;
     volatile uint32_t consumed;
@@ -238,7 +245,18 @@ private:
     // one bit per character code for each block-sized part of a cell, set
     // when that part of the glyph is entirely transparent
     uint32_t glyph_blank[OSD_PICO_CELL_ROWS / OSD_PICO_BLOCK_LINES][8];
-    uint8_t chars[OSD_PICO_MAX_CELLS];
+    /*
+      Two character frames. core0 clears and draws into back during
+      update_osd() and flush() swaps the pointers, so the scan-out never
+      sees a frame in the middle of a redraw; block_is_blank() and
+      render_block() read only through front. The swap is one pointer
+      write. A render already in progress keeps reading the frame it
+      started on, which core0 does not touch again until its next clear(),
+      100 ms later.
+     */
+    uint8_t chars[2][OSD_PICO_MAX_CELLS];
+    uint8_t * volatile front;
+    uint8_t *back;
     uint8_t rows;
     bool is_pal;
     bool initialised;
