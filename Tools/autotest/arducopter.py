@@ -2440,6 +2440,27 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         if not flags & mavutil.mavlink.EKF_POS_HORIZ_REL:
             raise NotAchievedException("relative position lost above the rangefinder range")
 
+        self.start_subtest("A range finder lost in range after a climb out and back drops it")
+        # the fallback ends when range data is fused again, so a later failure inside the range
+        # has to pass the last good reading check afresh: at 5 m it is over the 4.6 m height
+        # limit and short of the 5.6 m reading a climb out passes through
+        self.reboot_sitl()
+        climb_out_of_range()
+        if not horiz_pos_rel():
+            raise NotAchievedException("the climb out did not engage the fallback, so the leg proves nothing")
+        self.set_rc(3, 1350)
+        self.wait_altitude(5.0, 5.4, relative=True, timeout=90)
+        self.set_rc(3, 1500)
+        self.wait_climbrate(-0.1, 0.1, minimum_duration=2)
+        assert_offset_measured()
+        assert_rangefinder_between(4.8, 5.5)
+        kill_rangefinder()
+        wait_terrain_offset_stale()
+        flags = ekf_flags()
+        self.disarm_vehicle(force=True)
+        revive_rangefinder()
+        assert_refused(flags, "relative position held on a range finder lost in range after a climb out")
+
         self.start_subtest("A range finder lost below the height limit drops it")
         self.reboot_sitl()
         self.takeoff(2.5, mode="ALT_HOLD", require_absolute=False, altitude_max=3.5)
