@@ -17703,12 +17703,12 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.disarm_vehicle(force=True)
 
     def FlowFocusHoldAfterLanding(self):
-        """flow aiding stays off while landed below the focus floor and restarts on climbing"""
-        # After touchdown the range is below the flow's focus floor, so every sample
-        # is discarded and relative aiding stops 5 s later. It has to stay stopped:
-        # restarting on the next sample only to time out again 5 s later churns the
-        # aiding mode for as long as the vehicle sits armed on the ground. And it has
-        # to come back once the vehicle climbs clear, without a disarm in between.
+        """flow aiding carries on through a landing below the focus floor"""
+        # After touchdown the range finder reads its ground clearance, below the flow's
+        # focus floor. At rest there the vehicle is not moving, so the EKF fuses zero flow
+        # rather than discarding every sample: discarding let relative aiding time out 5 s
+        # after touchdown, which left an armed vehicle with no position, an EKF failsafe in
+        # LOITER.
         self.set_parameters({
             "SIM_FLOW_ENABLE": 1,
             "FLOW_TYPE": 10,
@@ -17726,28 +17726,98 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.reboot_sitl()
             ground_m = self.get_altitude(altitude_source="SIM_STATE.alt")
             self.takeoff(10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
-            # no position controller, so the vehicle can sit on the ground without aiding
+            # ALT_HOLD, so that lost aiding shows as a statustext rather than a failsafe LAND
             self.change_mode('ALT_HOLD')
             self.context_collect('STATUSTEXT')
             self.set_rc(3, 1000)
-            self.wait_statustext("EKF3 IMU0 stopped aiding", check_context=True, timeout=60)
-            self.context_clear_collection('STATUSTEXT')
+            self.wait_altitude(ground_m - 1, ground_m + 0.3, altitude_source="SIM_STATE.alt", timeout=60)
             self.delay_sim_time(12, reason="two flow fusion timeouts on the ground")
-            if self.statustext_in_collections("EKF3 IMU0 started relative aiding"):
-                raise NotAchievedException("Relative aiding restarted while held below the focus floor")
+            # climbing clear ends the hold with aiding still running, held up there for longer
+            # than the flow fusion timeout so a hold that did not end would show
             self.set_rc(3, 1700)
-            self.wait_statustext("EKF3 IMU0 started relative aiding", check_context=True, timeout=30)
-            alt = self.get_altitude(altitude_source="SIM_STATE.alt") - ground_m
-            self.progress("relative aiding restarted at %.2f m" % alt)
-            # the floor is the 0.1 m default ground clearance plus 0.05 m
-            if alt < 0.15:
-                raise NotAchievedException("Relative aiding restarted below the focus floor (%.2f m)" % alt)
-            if alt > 2:
-                raise NotAchievedException("Relative aiding restarted late, at %.2f m" % alt)
+            self.wait_altitude(ground_m + 2, ground_m + 20, altitude_source="SIM_STATE.alt", timeout=30)
+            self.set_rc(3, 1500)
+            self.delay_sim_time(7, reason="longer than the flow fusion timeout above the floor")
             self.set_rc(3, 1000)
             self.wait_altitude(ground_m - 1, ground_m + 0.5, altitude_source="SIM_STATE.alt", timeout=60)
             self.disarm_vehicle(force=True)
+            if self.statustext_in_collections("stopped aiding"):
+                raise NotAchievedException("aiding stopped through a landing below the focus floor")
             self.context_stop_collecting('STATUSTEXT')
+
+        self.start_subtest("Low hover after a touchdown below the focus floor")
+        # in a hover below the floor the range finder reads the hover height, not the ground, so
+        # the vehicle is not at rest there: zero flow fused would hide drift in the hover
+        self.set_parameter("SIM_BARO_GEFF_M", 0)
+        self.reboot_sitl()
+        ground_m = self.get_altitude(altitude_source="SIM_STATE.alt")
+        self.takeoff(5, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
+        self.change_mode('ALT_HOLD')
+        # a 1 m floor keeps the hold on through the hover, so any flow fused there is the zero
+        self.set_parameter("FLOW_HGT_MIN", 1.0)
+        self.set_rc(3, 1000)
+        self.wait_altitude(ground_m - 1, ground_m + 0.1, altitude_source="SIM_STATE.alt", timeout=60)
+        # discarded, the flow stops aiding on the 5 s timeout, on the ground or in the hover;
+        # fused as zero it would not
+        self.context_collect('STATUSTEXT')
+        self.delay_sim_time(3, reason="the hold engages")
+        self.set_rc(3, 1650)
+        self.wait_altitude(ground_m + 0.25, ground_m + 0.5, altitude_source="SIM_STATE.alt", timeout=30)
+        self.set_rc(3, 1500)
+        hover_start_us = self.get_sim_time() * 1e6
+        self.delay_sim_time(7, reason="hover below the range finder minimum")
+        hover_end_us = self.get_sim_time() * 1e6
+        hover_m = self.get_altitude(altitude_source="SIM_STATE.alt") - ground_m
+        stopped = self.statustext_in_collections("stopped aiding")
+        self.context_stop_collecting('STATUSTEXT')
+        self.set_rc(3, 1000)
+        self.wait_altitude(ground_m - 1, ground_m + 0.1, altitude_source="SIM_STATE.alt", timeout=60)
+        self.disarm_vehicle(force=True)
+        self.set_parameter("FLOW_HGT_MIN", 0)
+        if not 0.25 < hover_m < 0.9:
+            raise NotAchievedException("hover at %.2f m, not between the ground and the floor" % hover_m)
+        if not stopped:
+            raise NotAchievedException("aiding carried on in a hover below the floor, so zero flow was fused")
+        dfreader = self.dfreader_for_current_onboard_log()
+        last = None
+        updates = 0
+        rows = 0
+        while True:
+            m = dfreader.recv_match(type='XKF5')
+            if m is None:
+                break
+            if m.C != 0 or not (hover_start_us + 1e6 < m.TimeUS < hover_end_us):
+                continue
+            rows += 1
+            innov = (m.FIX, m.FIY, m.NI)
+            if last is not None and innov != last:
+                updates += 1
+            last = innov
+        self.progress("%u flow fusions in %u XKF5 in the hover at %.2f m" % (updates, rows, hover_m))
+        if rows < 20:
+            raise NotAchievedException("only %u XKF5 in the hover" % rows)
+        if updates != 0:
+            raise NotAchievedException("flow fused in a hover below the floor (%u updates)" % updates)
+
+        self.start_subtest("LOITER landing with an origin and the default disarm delay")
+        # LOITER needs a position, so this is where losing aiding on the ground was an EKF
+        # failsafe; with the default delay the vehicle sits armed for 10 s before disarming
+        self.set_parameters({
+            "SIM_BARO_GEFF_M": 0,
+            "DISARM_DELAY": 10,
+        })
+        self.reboot_sitl()
+        self.wait_ready_to_arm(require_absolute=False)
+        self.set_origin(self.sitl_start_location())
+        self.takeoff(5, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
+        self.context_collect('STATUSTEXT')
+        self.set_rc(3, 1000)
+        self.wait_disarmed(timeout=120)
+        self.set_rc(3, 1500)
+        for text in "EKF variance", "EKF Failsafe":
+            if self.statustext_in_collections(text):
+                raise NotAchievedException("'%s' after a LOITER landing below the focus floor" % text)
+        self.context_stop_collecting('STATUSTEXT')
 
     def ThrowDoubleDrop(self):
         '''Test a more complicated drop-mode scenario'''
