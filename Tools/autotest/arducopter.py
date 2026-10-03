@@ -4697,6 +4697,43 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_statustext("flow vel reset", check_context=True, timeout=30)
         self.disarm_vehicle(force=True)
 
+        # A steady offset is reset once and then agreed with, so flip its sign every 4 s: each
+        # flip is a fresh lockout and a fresh reset, as repeated hard manoeuvres would give.  Five
+        # resets within 20 s pause the resets, for 5 s and then 10 s, while flow aiding carries on.
+        self.start_subtest("Repeated lockouts: bursts of resets pause them, for longer each time")
+        self.context_clear_collection('STATUSTEXT')
+        fly_with_stuck_flow_axis(8, inject=False)  # AglKfForOptflow
+        t0 = self.get_sim_time()
+        for i in range(1, 17):
+            self.delay_sim_time(t0 + 4 * i - self.get_sim_time(), "the next flip")
+            self.set_parameter("SIM_FLOW_OFS_X", 1.0 if i % 2 == 0 else -1.0)
+        self.delay_sim_time(4, "the last flip and its reset")
+        self.set_parameter("SIM_FLOW_OFS_X", 0)
+        stopped = self.statustext_in_collections("stopped aiding")
+        paused = [self.statustext_in_collections("EKF3 IMU0 flow vel resets paused %us" % s) for s in (5, 10)]
+        self.disarm_vehicle(force=True)
+        resets = []
+        dfreader = self.dfreader_for_current_onboard_log()
+        last = 0
+        while True:
+            m = dfreader.recv_match(type='XKF7')
+            if m is None:
+                break
+            if m.C == 0 and m.FVC != last:
+                resets.append(m.TimeUS * 1e-6)
+                last = m.FVC
+        self.progress("reset times: %s" % ' '.join('%.1f' % t for t in resets))
+        if stopped:
+            raise NotAchievedException("flow aiding stopped through the bursts of resets")
+        if not all(paused):
+            raise NotAchievedException("expected pauses of 5 s then 10 s to be reported")
+        if self.max_dfreader_field('XKF7', 'FVU') != 0:
+            raise NotAchievedException("a burst of resets latched flow aiding off")
+        if len(resets) < 11:
+            raise NotAchievedException("resets did not resume after the pauses (%u)" % len(resets))
+        if resets[5] - resets[4] < 4.9 or resets[10] - resets[9] < 9.9:
+            raise NotAchievedException("resets not paused for 5 s then 10 s: %s" % str(resets))
+
     def OpticalFlowCalibration(self):
         '''test optical flow calibration'''
         ex = None
