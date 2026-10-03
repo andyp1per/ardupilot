@@ -111,10 +111,20 @@ bool NavEKF3_core::getHeightControlLimit(float &height) const
         // on the ground it last measured, or while the range finder measures the ground under
         // another height source and the fallback can take over, which it cannot with the
         // limit at its 1 m floor. Elsewhere backing down into range is the recovery
-        if (flatGroundAssumed() ||
-            (gndOffsetValid && flowScaleHgtUsable() &&
-             (activeHgtSource != AP_NavEKF_Source::SourceZ::RANGEFINDER) && (height > 1.0f))) {
+        if (flatGroundAssumed()) {
             return false;
+        }
+        if (gndOffsetValid && flowScaleHgtUsable() &&
+            (activeHgtSource != AP_NavEKF_Source::SourceZ::RANGEFINDER) && (height > 1.0f)) {
+            // the fallback only takes over once the range has reached 1 m above the limit, so a
+            // range finder near the limit is let up to just past there to show it can, and one
+            // that cannot is held there rather than climbing on until the range data goes stale
+            if (lastGoodRngMeas >= height + 1.0f) {
+                return false;
+            }
+            if (lastGoodRngMeas >= height - 0.5f) {
+                height += 1.5f;
+            }
         }
         // If we are are not using the range finder as the height reference, then compensate for the difference between terrain and EKF origin
         if (frontend->sources.getPosZSource(core_index) != AP_NavEKF_Source::SourceZ::RANGEFINDER) {
