@@ -17880,7 +17880,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
     def AccelBiasLearningInhibitedInAcro(self):
         '''Test ACC_ZBIAS_LEARN bit 3 holds accel bias learning in acro'''
         # With ACC_ZBIAS_LEARN bit 3 set, Copter inhibits EKF accel bias
-        # learning while spooled up in acro. Step a real Z accel bias in once
+        # learning while armed and flying in acro. Step a real Z accel bias in once
         # in acro: the estimate must not follow it, and must follow it once
         # back in a mode that learns, which also shows the step was learnable.
         # Then clear the bit and step the bias back out in a second acro
@@ -19501,7 +19501,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.HomeAltResetTest,
             self.VibrationRectificationBiasLearning,
             self.AccelBiasMovingPlatform,
-             self.AccelBiasLearningInhibitedInAcro,
+            self.AccelBiasLearningInhibitedInAcro,
         ])
         return ret
 
