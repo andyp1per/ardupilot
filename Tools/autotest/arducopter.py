@@ -4233,6 +4233,62 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 raise NotAchievedException("Alt should be limited by EKF optical flow limits")
         self.reboot_sitl(force=True)
 
+    def OpticalFlowFallbackHeightLimit(self):
+        '''falling back to flow above the flow height limit does not pull the vehicle down'''
+        # The flow height limit, 0.7 * RNGFND1_MAX - 1, applies in relative aiding, and a climb
+        # demand above it is answered with a descent.  A vehicle that falls back from GPS to
+        # flow above it, with the range finder still in range, was not flying to that limit and
+        # must not be brought down to it.  Needs #34380, which lifts the limit while flow
+        # navigation carries on above it.
+        self.set_parameters({
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_TERRAIN": 0,
+            "EK3_SRC2_POSXY": 0,   # none
+            "EK3_SRC2_VELXY": 5,   # optical flow
+            "EK3_SRC2_POSZ": 1,    # baro
+            "EK3_SRC2_VELZ": 0,    # none
+            "EK3_SRC2_YAW": 1,     # compass
+            "RC8_OPTION": 90,      # EKF source selector
+        })
+        self.set_analog_rangefinder_parameters()
+        rng_max_m = 12
+        limit_m = rng_max_m * 0.7 - 1
+        self.set_parameter("RNGFND1_MAX", rng_max_m)
+        self.set_rc(8, 1000)       # source set 1 (GPS)
+        self.reboot_sitl()
+        self.takeoff(9, mode='LOITER')
+        self.context_collect('STATUSTEXT')
+        self.set_rc(8, 1500)
+        self.wait_statustext("EKF3 IMU0 started relative aiding", check_context=True, timeout=30)
+        self.delay_sim_time(3, reason="settle on flow")
+        start_alt = self.get_altitude(relative=True)
+        if start_alt < limit_m + 0.5:
+            raise NotAchievedException("fell back at %.1f m, not above the %.1f m limit" % (start_alt, limit_m))
+        lowest = start_alt
+        highest = start_alt
+        self.set_rc(3, 1700)
+        tstart = self.get_sim_time()
+        while self.get_sim_time_cached() - tstart < 11:
+            if self.get_sim_time_cached() - tstart > 2:
+                self.set_rc(3, 1500)
+            alt = self.get_altitude(relative=True)
+            lowest = min(lowest, alt)
+            highest = max(highest, alt)
+        self.progress("from %.1f m with a %.1f m flow height limit: %.1f to %.1f m" %
+                      (start_alt, limit_m, lowest, highest))
+        stopped = self.statustext_in_collections("stopped aiding")
+        self.set_rc(8, 1000)
+        self.do_RTL()
+        if lowest < start_alt - 0.5:
+            raise NotAchievedException("climb demand after the fall back became a descent to %.1f m" % lowest)
+        if highest < start_alt + 0.5:
+            raise NotAchievedException("climb demand did not climb (highest %.1f m)" % highest)
+        if highest >= rng_max_m - 1:
+            raise NotAchievedException("climbed to %.1f m, near the end of the range finder" % highest)
+        if stopped:
+            raise NotAchievedException("flow aiding stopped after the fall back")
+
     def OpticalFlowGPSLossAiding(self):
         '''EKF falls back to relative aiding when flow replaces lost GPS in flight'''
         # A vehicle that takes off on GPS is in AID_ABSOLUTE.  When it switches to
@@ -19395,6 +19451,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.ScriptingFlipMode,
             self.UTMGlobalPosition,
             self.OpticalFlowGPSLossAiding,
+            self.OpticalFlowFallbackHeightLimit,
             self.OpticalFlowFallbackKeepsAbsolute,
         ])
         return ret
@@ -23861,6 +23918,7 @@ return update, 1000
             "SMART_RTL_Repeat": "Currently fails due to issue with loop detection",
             "RTLStoppingDistanceSpeed": "Currently fails due to vehicle going off-course",
             "ScriptingOSD": "Requires SFML which is not available in CI",
+            "OpticalFlowFallbackHeightLimit": "Needs #34380, which lifts the flow height limit above the range finder range",
         }
 
 
