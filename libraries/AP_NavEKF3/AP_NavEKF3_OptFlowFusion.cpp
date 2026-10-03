@@ -64,6 +64,7 @@ void NavEKF3_core::SelectFlowFusion()
     }
     if (!takeOffDetected) {
         flowFocusBelow = false;
+        flowFocusResting = false;
     } else if (flowDataToFuse && tiltOK && flowFocusRngValid) {
         // Within 5 cm of the range finder ground clearance the vehicle is on or at the ground,
         // where the range is clamped and the flow is not motion, whatever the sensor's focus height.
@@ -73,6 +74,10 @@ void NavEKF3_core::SelectFlowFusion()
         // the range sample lags behind a median of three, a lot of height on a fast touchdown, so
         // carry it forward by the height change since
         const ftype aglEst = flowFocusRngAgl + (flowFocusRngPosD - stateStruct.position.z);
+        // at rest when the range finder says the vehicle is on the ground
+        const auto *rng = dal.rangefinder();
+        const auto *rngSensor = (rng != nullptr) ? rng->get_backend(rangeDataDelayed.sensor_idx) : nullptr;
+        flowFocusResting = (rngSensor != nullptr) && rngSensor->on_ground();
         if (imuSampleTime_ms - rngValidMeaTime_ms < 500) {
             flowFocusBelow = aglEst < minHeight;
         } else {
@@ -90,7 +95,12 @@ void NavEKF3_core::SelectFlowFusion()
             flowFocusBelow = (flowFocusBelow && rngOutOfRangeLow && (aglEst < minHeight + 0.5f)) ||
                              (aglEstValid && (aglEst < minHeight));
         }
-        if (flowFocusBelow) {
+        if (flowFocusBelow && flowFocusResting) {
+            // on the ground below the floor the flow is not motion: fuse zero, as before takeoff, so
+            // that aiding does not time out and leave an armed vehicle with no position
+            ofDataDelayed.flowRadXYcomp.zero();
+            ofDataDelayed.flowRadXY.zero();
+        } else if (flowFocusBelow) {
             flowDataToFuse = false;
         }
     }
