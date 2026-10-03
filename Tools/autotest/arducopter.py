@@ -4368,6 +4368,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         self.takeoff(3, mode="LOITER")
         self.delay_sim_time(10, reason="AGL KF to settle in the hover")
+        step_s = self.get_sim_time()
         self.set_parameter("SIM_SONAR_OFFSET", 1)
         self.delay_sim_time(0.5, reason="AGL KF to pick up an upward velocity from the step")
         self.set_parameter("RNGFND1_MIN", 10)
@@ -4381,12 +4382,31 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         dfreader = self.dfreader_for_current_onboard_log()
         samples = []
+        step_vel = []
+        rfnd_stat = []
         while True:
-            m = dfreader.recv_match(type='XKFA', condition='XKFA.C==0')
+            m = dfreader.recv_match(type=['XKFA', 'RFND'])
             if m is None:
                 break
-            if low_s + 0.5 < m.TimeUS * 1e-6 < low_s + 4:
+            t = m.TimeUS * 1e-6
+            if m.get_type() == 'RFND':
+                if low_s + 0.5 < t < low_s + 4:
+                    rfnd_stat.append(m.Stat)
+                continue
+            if m.C != 0:
+                continue
+            if step_s < t < low_s and m.Valid and math.isfinite(m.VAgl):
+                step_vel.append(m.VAgl)
+            if low_s + 0.5 < t < low_s + 4:
                 samples.append(m)
+        self.progress("step velocity peak %.3f m/s, range finder status %s" %
+                      (max(step_vel) if step_vel else float("nan"), sorted(set(rfnd_stat))))
+        # without the provocation the test would pass whatever the AGL KF did
+        if len(step_vel) == 0 or max(step_vel) < 0.015:
+            raise NotAchievedException("the range step left no upward AGL KF velocity (max %.3f m/s)" %
+                                       (max(step_vel) if step_vel else float('nan')))
+        if len(rfnd_stat) == 0 or any(st != 2 for st in rfnd_stat):  # RangeFinder::Status::OutOfRangeLow
+            raise NotAchievedException("range finder was not out of range low without a reading")
         if len(samples) < 20 or not all(m.Valid for m in samples):
             raise NotAchievedException("AGL KF samples missing or invalid without a reading (%u)" % len(samples))
         hgts = [m.HAgl for m in samples]
