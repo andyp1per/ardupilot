@@ -17404,6 +17404,37 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_parameter("RNGFND1_TYPE", 0)
         self.reboot_sitl()
 
+    def TouchdownGroundEffectPositionReset(self):
+        '''an EKF position reset is not drift away from takeoff'''
+        # Without a true height above ground the touchdown gate only fires within 20 m of the
+        # takeoff point. A GPS glitch the EKF resets onto moves its position 33 m with the
+        # vehicle still over the takeoff point, and that must not shut the gate on the landing.
+        self.set_parameters({
+            "LOG_FILE_DSRMROT": 1,
+            "GNDEFF_ALT": 1.0,
+            "RNGFND1_TYPE": 0,   # no rangefinder, so there is no true height above ground
+        })
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+        self.takeoff(5, mode='GUIDED', alt_minimum_duration=2)
+        start = self.assert_receive_message('LOCAL_POSITION_NED')
+        self.set_parameter("SIM_GPS1_GLTCH_X", 0.0003)
+        tstart = self.get_sim_time()
+        while True:
+            if self.get_sim_time_cached() - tstart > 60:
+                raise NotAchievedException("EKF did not reset onto the glitched GPS")
+            m = self.assert_receive_message('LOCAL_POSITION_NED')
+            if abs(m.x - start.x) > 25:
+                break
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=120)
+        self.set_parameter("SIM_GPS1_GLTCH_X", 0)
+        durations = self.get_touchdownexpected_durations_from_current_onboard_log(ignore_multi=True)
+        self.progress("touchdown_expected episodes: %s" % str(durations))
+        if sum(durations) < 0.5:
+            raise NotAchievedException("touchdown_expected did not arm after a position reset (got %s)" % str(durations))
+        self.reboot_sitl()
+
     def EK3_OptflowTerrainScaleHeight(self):
         '''optical flow scale height from the terrain database is right over slopes'''
         # Above the rangefinder range with EK3_OPTIONS bit 2 the optical flow scale
@@ -19207,6 +19238,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.HomeAltResetTest,
              self.TouchdownGroundEffectCruise,
             self.TouchdownGroundEffectSlowApproach,
+            self.TouchdownGroundEffectPositionReset,
         ])
         return ret
 
