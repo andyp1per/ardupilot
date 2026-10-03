@@ -2584,9 +2584,11 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException("bit 2 no longer holds relative position on terrain data")
 
         def max_alt_climbing_on_terrain(options_value):
+            # the range finder as the height source keeps the limit wherever the flat-ground
+            # fallback could take over, so only bit 2 can lift it here
             self.set_parameters({
                 "EK3_OPTIONS": options_value,
-                "EK3_SRC1_POSZ": 1,
+                "EK3_SRC1_POSZ": 2,
                 "TERRAIN_ENABLE": 1,
                 "AVOID_ENABLE": 3,
             })
