@@ -2559,6 +2559,41 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 & mavutil.mavlink.EKF_POS_HORIZ_REL):
             raise NotAchievedException("bit 2 no longer holds relative position on terrain data")
 
+        def max_alt_climbing_on_terrain(options_value):
+            self.set_parameters({
+                "EK3_OPTIONS": options_value,
+                "EK3_SRC1_POSZ": 1,
+                "TERRAIN_ENABLE": 1,
+                "AVOID_ENABLE": 3,
+            })
+            self.reboot_sitl()
+            self.takeoff(3, mode="ALT_HOLD", require_absolute=False, altitude_max=4)
+            wait_terrain_loaded()
+            self.set_rc(3, 1900)
+            tstart = self.get_sim_time()
+            max_alt = 0
+            while self.get_sim_time_cached() - tstart < 20:
+                max_alt = max(max_alt, self.get_altitude(relative=True))
+            self.set_rc(3, 1500)
+            self.disarm_vehicle(force=True)
+            self.set_parameters({
+                "AVOID_ENABLE": 0,
+                "TERRAIN_ENABLE": 0,
+            })
+            return max_alt
+
+        self.start_subtest("Terrain data does not lift the height limit without bit 2")
+        # terrain data reaches the EKF whatever EK3_OPTIONS says, and only bit 2 may lift
+        # the optical flow height limit on it, so with avoidance at its default the climb
+        # has to stop near the 4.6 m limit; bit 2 is the control that it could go higher
+        max_alt = max_alt_climbing_on_terrain(0)
+        if not 4 < max_alt <= 7:
+            raise NotAchievedException("climbed to %.1f m, not to near the 4.6 m height limit" % max_alt)
+        max_alt = max_alt_climbing_on_terrain(1 << 2)
+        if max_alt <= 7:
+            raise NotAchievedException("bit 2 did not lift the height limit (%.1f m), so the leg proves nothing" %
+                                       max_alt)
+
         self.start_subtest("The fallback does not carry over to another flight")
         self.set_parameters({
             "EK3_OPTIONS": 0,
