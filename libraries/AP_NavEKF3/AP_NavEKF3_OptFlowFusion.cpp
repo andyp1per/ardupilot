@@ -745,12 +745,13 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
     // 5 s AID_RELATIVE timeout never fires. Re-anchor horizontal velocity to the flow measurement.
     // The AGL KF supplies the range and its variance, so require it to be running.
     const uint32_t FLOW_AXIS_LOCKOUT_MS = 500;
-    const uint32_t FLOW_RESET_WINDOW_MS = 10000;
-    const uint8_t FLOW_RESET_MAX_IN_WINDOW = 5;
+    const uint32_t FLOW_RESET_WINDOW_MS = 20000;
     // aglKfValid survives 5 s without a range fusion, long enough for aglKfH to coast
     // metres low, so require a range recent enough to have produced a median
     const uint32_t FLOW_RESET_RANGE_MAX_AGE_MS = 500;
     const uint32_t FLOW_RESET_DEFER_REPORT_MS = 10000;
+    const uint32_t FLOW_RESET_PAUSE_MIN_MS = 5000;
+    const uint32_t FLOW_RESET_PAUSE_MAX_MS = 40000;
     if (really_fuse && !flowVelResetUnhealthy &&
         frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKfValid &&
         PV_AidingMode == AID_RELATIVE && takeOffDetected &&
@@ -758,8 +759,12 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
         (fabsF(ofDataDelayed.flowRadXY.y) < frontend->_maxFlowRate)) {
         const uint32_t stale0 = imuSampleTime_ms - flowFuseTimeAxis_ms[0];
         const uint32_t stale1 = imuSampleTime_ms - flowFuseTimeAxis_ms[1];
+        // paused after a burst of resets, a lockout is left alone: not deferred, reset or latched
+        const bool resetsPaused = (flowVelResetPauseStart_ms != 0) &&
+                                  (imuSampleTime_ms - flowVelResetPauseStart_ms) < flowVelResetPause_ms;
         // one axis locked out, the other still passing
-        const bool axisLockout = (MAX(stale0, stale1) > FLOW_AXIS_LOCKOUT_MS) &&
+        const bool axisLockout = !resetsPaused &&
+                                 (MAX(stale0, stale1) > FLOW_AXIS_LOCKOUT_MS) &&
                                  (MIN(stale0, stale1) < FLOW_AXIS_LOCKOUT_MS);
         const bool rangeCurrent = (imuSampleTime_ms - lastAglRngFuseTime_ms) < FLOW_RESET_RANGE_MAX_AGE_MS;
         if (axisLockout && !rangeCurrent) {
@@ -784,19 +789,27 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
             if (flowVelResetCount < UINT8_MAX) {
                 flowVelResetCount++;
             }
-            if (flowVelResetWindow_ms == 0 || imuSampleTime_ms - flowVelResetWindow_ms > FLOW_RESET_WINDOW_MS) {
-                flowVelResetWindow_ms = imuSampleTime_ms;
-                flowVelResetWindowCount = 0;
-            }
-            if (flowVelResetWindowCount < UINT8_MAX) {
-                flowVelResetWindowCount++;
-            }
-            // one per reset; flowVelResetUnhealthy only latches when five land inside one window
+            flowVelResetTimes_ms[flowVelResetNext] = imuSampleTime_ms;
+            flowVelResetNext = (flowVelResetNext + 1) % FLOW_RESET_MAX_IN_WINDOW;
+            const uint32_t oldestReset_ms = flowVelResetTimes_ms[flowVelResetNext];
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF3 IMU%u flow vel reset %u (axis lockout)",
                           (unsigned)imu_index, (unsigned)flowVelResetCount);
-            if (flowVelResetWindowCount >= FLOW_RESET_MAX_IN_WINDOW) {
-                flowVelResetUnhealthy = true;
-                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF3 IMU%u flow aiding unhealthy", (unsigned)imu_index);
+            if (oldestReset_ms != 0 && (imuSampleTime_ms - oldestReset_ms) <= FLOW_RESET_WINDOW_MS) {
+                // five within 20 s is most likely hard manoeuvring rather than a failed sensor, so
+                // pause the resets rather than give up on flow, for longer at each burst unless this
+                // one began after a quiet spell. Flow aiding carries on meanwhile, and a locked axis is
+                // left as it was before this recovery
+                if (flowVelResetPause_ms == 0 ||
+                    (oldestReset_ms - (flowVelResetPauseStart_ms + flowVelResetPause_ms)) > 2 * flowVelResetPause_ms) {
+                    flowVelResetPause_ms = FLOW_RESET_PAUSE_MIN_MS;
+                } else {
+                    flowVelResetPause_ms = MIN(flowVelResetPause_ms * 2, FLOW_RESET_PAUSE_MAX_MS);
+                }
+                flowVelResetPauseStart_ms = imuSampleTime_ms;
+                memset(flowVelResetTimes_ms, 0, sizeof(flowVelResetTimes_ms));
+                flowVelResetNext = 0;
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF3 IMU%u flow vel resets paused %us",
+                              (unsigned)imu_index, (unsigned)(flowVelResetPause_ms / 1000));
             }
         }
     }

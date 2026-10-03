@@ -480,6 +480,10 @@ void NavEKF3_core::detectOptFlowTakeoff(void)
 #if EK3_FEATURE_OPTFLOW_AGL_KF
         // give flow aiding a fresh start for the next flight
         flowVelResetUnhealthy = false;
+        memset(flowVelResetTimes_ms, 0, sizeof(flowVelResetTimes_ms));
+        flowVelResetNext = 0;
+        flowVelResetPauseStart_ms = 0;
+        flowVelResetPause_ms = 0;
 #endif
     }
 }

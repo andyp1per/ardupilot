@@ -453,8 +453,8 @@ void NavEKF3_core::setAidingMode()
                 prevFlowFuseTime_ms = imuSampleTime_ms;
 #if EK3_FEATURE_OPTFLOW_AGL_KF
                 flowFuseTimeAxis_ms[0] = flowFuseTimeAxis_ms[1] = imuSampleTime_ms;
-                flowVelResetWindowCount = 0;
-                flowVelResetWindow_ms = 0;
+                memset(flowVelResetTimes_ms, 0, sizeof(flowVelResetTimes_ms));
+                flowVelResetNext = 0;
 #endif
             } else
 #endif
@@ -569,8 +569,9 @@ bool NavEKF3_core::readyToUseOptFlow(void) const
     }
 
 #if EK3_FEATURE_OPTFLOW_AGL_KF
-    // repeated velocity resets mean flow cannot be trusted for the rest of this flight. Without
-    // this the filter leaves AID_RELATIVE on the timeout below and re-enters on the next step.
+    // a lockout sample the sensor itself reports as poor means flow cannot be trusted for the rest
+    // of this flight. Without this the filter leaves AID_RELATIVE on the timeout below and
+    // re-enters on the next step.
     if (flowVelResetUnhealthy) {
         return false;
     }

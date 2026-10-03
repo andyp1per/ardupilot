@@ -1366,10 +1366,13 @@ private:
 #if EK3_FEATURE_OPTFLOW_AGL_KF
     uint32_t flowFuseTimeAxis_ms[2];// per-axis time the flow innovation test last passed, used to detect a single-axis lockout
     uint8_t flowVelResetCount;      // count of horizontal velocity resets triggered by optical flow recovery
-    uint8_t flowVelResetWindowCount;// count of optical-flow horizontal velocity resets in the current rate window
-    uint32_t flowVelResetWindow_ms; // start time of the optical-flow horizontal velocity reset rate window
+    static const uint8_t FLOW_RESET_MAX_IN_WINDOW = 5;
+    uint32_t flowVelResetTimes_ms[FLOW_RESET_MAX_IN_WINDOW]; // times of the latest optical-flow velocity resets, 0 if none
+    uint8_t flowVelResetNext;       // slot in flowVelResetTimes_ms the next reset overwrites, holding the oldest
     uint32_t flowVelResetDeferTime_ms; // last report of a recovery deferred for a stale range
-    bool flowVelResetUnhealthy;     // true when repeated flow velocity resets have made flow aiding untrustworthy
+    uint32_t flowVelResetPauseStart_ms; // start of a pause in flow velocity resets after a burst of them, 0 if none
+    uint32_t flowVelResetPause_ms;  // length of that pause, doubled on each burst unless it follows a quiet spell
+    bool flowVelResetUnhealthy;     // true when the flow sensor reports a lockout sample too poor to recover from
 #endif
     Vector2 flowTestRatio;          // square of optical flow innovations divided by fail threshold used by main filter where >1.0 is a fail
     Vector2F auxFlowTestRatio;      // sum of squares of optical flow innovation divided by fail threshold used by 1-state terrain offset estimator
