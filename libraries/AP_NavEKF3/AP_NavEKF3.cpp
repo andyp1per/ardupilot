@@ -779,7 +779,7 @@ const AP_Param::GroupInfo NavEKF3::var_info2[] = {
 
     // @Param: FLOW_QMIN
     // @DisplayName: Optical flow quality required to re-anchor velocity
-    // @Description: Minimum surface quality the flow sensor must report before a single-axis lockout is recovered by re-anchoring velocity to the flow. Below it the filter stops using flow instead, on the basis that a sample the sensor itself calls poor is as likely to be the fault as the cure. 0 disables the check and always re-anchors. Sensors do not share a quality scale, so set this from the quality your own sensor reports in good conditions (logged as OF.Qual).
+    // @Description: Minimum surface quality the flow sensor must report before a single-axis lockout is recovered by re-anchoring velocity to the flow. Below it the lockout is not recovered and the filter stops navigating on flow for the rest of the flight: it leaves relative aiding and does not re-enter it, on the basis that a sample the sensor itself calls poor is as likely to be the fault as the cure. Flow samples that pass the innovation checks are still fused. 0 disables the check and always re-anchors. Sensors do not share a quality scale, so set this from the quality your own sensor reports in good conditions (logged as OF.Qual).
     // @Range: 0 255
     // @User: Advanced
     AP_GROUPINFO("FLOW_QMIN", 13, NavEKF3, _flowQualMin, 0),
