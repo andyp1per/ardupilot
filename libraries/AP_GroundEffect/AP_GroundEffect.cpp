@@ -26,9 +26,9 @@
 #define AP_GROUNDEFFECT_TAKEOFF_MAX_MS 5000U
 
 // once we are using the relative-to-takeoff height fallback with GPS but
-// no rangefinder, disable the touchdown altitude gate once the
-// vehicle has drifted this far horizontally from where it lifted off, as
-// the terrain elevation under it may differ from the launch site
+// no rangefinder, stop expecting a touchdown once the vehicle has drifted
+// this far horizontally from where it lifted off, as the terrain elevation
+// under it may differ from the launch site
 #define AP_GROUNDEFFECT_TAKEOFF_DRIFT_NE_MAX_M 20.0f
 
 // deadband (m/s) on the commanded descent test. In a hover the desired vertical
@@ -48,7 +48,7 @@ const AP_Param::GroupInfo AP_GroundEffect::var_info[] = {
 
     // @Param: ALT
     // @DisplayName: Ground effect altitude threshold
-    // @Description: Ground effect compensation altitude threshold. Compensation is turned off once the vehicle climbs this many meters above the takeoff location. Positive values cause compensation to be applied both during takeoff and landing. Zero keeps compensation enabled but removes the altitude gating: the takeoff window is released once GNDEFF_TMO has elapsed and the vehicle has climbed at all, and any gentle descent counts as a landing (the legacy behaviour). Negative values disable the feature. Altitude of the vehicle is derived from a downward facing rangefinder (if present) or using the height-change-since-takeoff assuming flat ground and no baro drift. More than 20m from the takeoff location (when a horizontal position is available) that height no longer refers to the ground below the vehicle, so the landing gate does not fire at all unless the EKF has a valid height above ground, which today means a range finder in range.
+    // @Description: Ground effect compensation altitude threshold. Compensation is turned off once the vehicle climbs this many meters above the takeoff location. Positive values cause compensation to be applied both during takeoff and landing. Zero keeps compensation enabled but removes the altitude gating: the takeoff window is released once GNDEFF_TMO has elapsed and the vehicle has climbed at all, and any gentle descent counts as a landing (the legacy behaviour). Negative values disable the feature. Altitude of the vehicle is derived from a downward facing rangefinder (if present) or using the height-change-since-takeoff assuming flat ground and no baro drift. More than 20m from the takeoff location (when a horizontal position is available) that height no longer refers to the ground below the vehicle, so the landing gate does not fire at all unless the EKF has a valid height above ground, from a range finder in range or optical flow terrain estimation.
     // @Range: -1 10
     // @Units: m
     // @User: Advanced
