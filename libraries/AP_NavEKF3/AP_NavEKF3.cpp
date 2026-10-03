@@ -1164,7 +1164,7 @@ void NavEKF3::resetCoreErrors(void)
 }
 
 // set position, velocity and yaw sources to either 0=primary, 1=secondary, 2=tertiary
-bool NavEKF3::setPosVelYawSourceSet(uint8_t source_set_idx, bool select_lane)
+bool NavEKF3::setPosVelYawSourceSet(uint8_t source_set_idx)
 {
     // each core runs the set with its own index, so that core has to be made primary
     const bool per_core = sources.source_set_per_core();

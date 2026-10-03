@@ -345,7 +345,7 @@ public:
     // set position, velocity and yaw sources to either 0=primary, 1=secondary, 2=tertiary
     // with a source set per core this also selects the lane that runs that set.
     // Returns false if that lane could not be selected, leaving the sources unchanged
-    bool setPosVelYawSourceSet(uint8_t source_set_idx, bool select_lane = false);
+    bool setPosVelYawSourceSet(uint8_t source_set_idx);
 
     // write EKF information to on-board logs
     void Log_Write();
