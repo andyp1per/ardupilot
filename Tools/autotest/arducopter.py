@@ -19224,7 +19224,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.HomeCircleInclusionFence_MultipleHomeCircle,
             self.HomeCircleInclusionFence_Avoidance,
             self.HomeAltResetTest,
-             self.TerrainOffsetGroundEffectRecovery,
+            self.TerrainOffsetGroundEffectRecovery,
         ])
         return ret
 
