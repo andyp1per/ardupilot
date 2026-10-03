@@ -4339,9 +4339,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException(
                 "AGL KF height did not return toward the floor (%.2f m)" % hgt)
 
-        # measured on this test over two runs each: +0.0001 m/s with the velocity clear at
-        # the clamp and -0.431 to -0.438 without it, so the bound sits between them with margin
-        # either side. One-sided deliberately - an upward velocity lifts the height off the
+        # measured on this test: about 0 m/s with the velocity clear at the clamp, and without
+        # it -0.43 m/s before the accel-Z bias state and -1.29 to -1.41 m/s with it, so the
+        # bound sits between them with margin either side. One-sided deliberately - an upward velocity lifts the height off the
         # floor and corrects itself, and it is only the downward one that the zeroed
         # innovation leaves nothing to correct
         if vel < -0.1:
