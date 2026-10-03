@@ -19503,7 +19503,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.MAV_CMD_MISSION_START_p1_p2,
             self.ScriptingFlipMode,
             self.UTMGlobalPosition,
-             self.OpticalFlowAGLKalmanFilter,
+            self.OpticalFlowAGLKalmanFilter,
             self.OpticalFlowAGLKfFloorVelocity,
             self.OpticalFlowAGLKfNoCoastBelowMin,
         ])
