@@ -17376,6 +17376,34 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_parameter("RNGFND1_TYPE", 0)
         self.reboot_sitl()
 
+    def TouchdownGroundEffectSlowApproach(self):
+        '''a slow approach longer than the touchdown cap keeps expecting touchdown'''
+        # The touchdown window is capped so that a latch which never clears ends. Coming down
+        # through GNDEFF_ALT 10 m at 0.1 m/s takes about 100 s, longer than the cap, so the cap
+        # has to restart as the vehicle descends rather than end compensation near the ground.
+        self.set_parameters({
+            "LOG_FILE_DSRMROT": 1,
+            "GNDEFF_ALT": 10,
+            "WP_SPD_DN": 0.1,
+        })
+        self.set_analog_rangefinder_parameters()
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+        self.takeoff(12, mode='GUIDED', alt_minimum_duration=2)
+        self.fly_guided_move_local(0, 0, 1, timeout=200)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=120)
+        durations = self.get_touchdownexpected_durations_from_current_onboard_log(ignore_multi=True)
+        longest = max(durations) if len(durations) else 0
+        self.progress("touchdown_expected episodes: %s" % str(durations))
+        if longest < 70:
+            raise NotAchievedException("touchdown_expected ended before touchdown (longest %fs)" % longest)
+
+        # the range finder is detected at init, so clear it before the reboot rather than hand
+        # it to the next test
+        self.set_parameter("RNGFND1_TYPE", 0)
+        self.reboot_sitl()
+
     def EK3_OptflowTerrainScaleHeight(self):
         '''optical flow scale height from the terrain database is right over slopes'''
         # Above the rangefinder range with EK3_OPTIONS bit 2 the optical flow scale
@@ -19178,6 +19206,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.HomeCircleInclusionFence_Avoidance,
             self.HomeAltResetTest,
              self.TouchdownGroundEffectCruise,
+            self.TouchdownGroundEffectSlowApproach,
         ])
         return ret
 
