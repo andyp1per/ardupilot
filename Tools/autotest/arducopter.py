@@ -19462,10 +19462,10 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.HomeCircleInclusionFence_MultipleHomeCircle,
             self.HomeCircleInclusionFence_Avoidance,
             self.HomeAltResetTest,
-             self.OpticalFlowFocusHeight,
-             self.FlowHeightMinTerrainPath,
-             self.FlowFocusHoldAfterLanding,
-             self.FlowFocusHoldReleasesWithDeadRangeFinder,
+            self.OpticalFlowFocusHeight,
+            self.FlowHeightMinTerrainPath,
+            self.FlowFocusHoldAfterLanding,
+            self.FlowFocusHoldReleasesWithDeadRangeFinder,
         ])
         return ret
 
