@@ -146,6 +146,9 @@ private:
         float    takeoff_hagl_m;    // HAGL while on the ground, 0 if HAGL was unavailable
         Vector2f takeoff_pos_ne_m;  // EKF-origin XY at takeoff, used by the relative-to-takeoff fallback
         bool     takeoff_pos_ne_valid;
+        Vector2f last_pos_ne_m;     // EKF-origin XY on the previous update, to measure a position reset
+        bool     last_pos_ne_valid;
+        uint16_t ne_reset_count;    // AHRS NE position reset count at the previous update
     } _state;
 };
 

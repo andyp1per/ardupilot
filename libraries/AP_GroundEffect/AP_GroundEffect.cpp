@@ -79,6 +79,7 @@ void AP_GroundEffect::update(bool armed, bool land_complete, bool throttle_up)
         _state.takeoff_expected = false;
         _state.touchdown_expected = false;
         _state.touchdown_time_ms = 0;
+        _state.last_pos_ne_valid = false;
         ahrs.set_takeoff_expected(false);
         ahrs.set_touchdown_expected(false);
         return;
@@ -101,6 +102,18 @@ void AP_GroundEffect::update(bool armed, bool land_complete, bool throttle_up)
     const bool have_pos_ne = ahrs.get_relative_position_NE_origin_float(pos_ne_m);
     float hagl_m = 0;
     const bool height_is_agl = ahrs.get_hagl(hagl_m);
+
+    // an EKF position reset moves the position without the vehicle moving, so move the
+    // takeoff point with it, or a reset could carry the drift test across its threshold
+    const uint16_t ne_reset_count = ahrs.get_position_NE_reset_count();
+    if (ne_reset_count != _state.ne_reset_count) {
+        if (have_pos_ne && _state.last_pos_ne_valid) {
+            _state.takeoff_pos_ne_m += pos_ne_m - _state.last_pos_ne_m;
+        }
+        _state.ne_reset_count = ne_reset_count;
+    }
+    _state.last_pos_ne_m = pos_ne_m;
+    _state.last_pos_ne_valid = have_pos_ne;
 
     if (!throttle_up && land_complete) {
         _state.takeoff_time_ms = tnow_ms;
