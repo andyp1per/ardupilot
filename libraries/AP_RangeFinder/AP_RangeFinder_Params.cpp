@@ -101,7 +101,7 @@ const AP_Param::GroupInfo AP_RangeFinder_Params::var_info[] = {
 
     // @Param: MIN
     // @DisplayName: Rangefinder minimum distance
-    // @Description: Minimum distance in metres that rangefinder can reliably read
+    // @Description: Minimum distance in metres that rangefinder can reliably read. A reading below this is taken as the vehicle being on the ground, where EKF3 fuses zero optical flow below the flow focus floor, so with optical flow, set it no higher than RNGFNDx_GNDCLR plus 0.05. The defaults of 0.20 and 0.10 do not meet that.
     // @Units: m
     // @Increment: 0.01
     // @User: Standard
