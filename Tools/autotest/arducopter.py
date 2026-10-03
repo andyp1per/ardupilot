@@ -16566,6 +16566,37 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException("EKF failsafe cleared by landing with no position")
         self.set_parameter("SIM_GPS1_ENABLE", 1)
         self.disarm_vehicle(force=True)
+        self.reboot_sitl()
+
+        self.start_subtest("spooling up without a position trips before land_complete clears")
+        # STABILIZE clears land_complete only once the motors reach full throttle, so
+        # a long spool-up keeps it set while the vehicle is leaving idle; only the
+        # spool state part of the landed hold lets the failsafe count then
+        self.set_parameters({
+            "DISARM_DELAY": 0,
+            "MOT_SPOOL_TIME": 3,
+        })
+        self.set_rc(8, 1000)
+        self.change_mode('STABILIZE')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.wait_ekf_flags(0, pos_horiz, timeout=30)
+        self.context_clear_collection('STATUSTEXT')
+        self.set_message_rate_hz(mavutil.mavlink.MAVLINK_MSG_ID_EXTENDED_SYS_STATE, 10)
+        self.set_rc(3, 1700)
+        tstart = self.get_sim_time()
+        while not self.statustext_in_collections("EKF Failsafe"):
+            if self.get_sim_time_cached() - tstart > 10:
+                raise NotAchievedException("No EKF failsafe on a spool-up without a position")
+            m = self.assert_receive_message('EXTENDED_SYS_STATE')
+            if m.landed_state != mavutil.mavlink.MAV_LANDED_STATE_ON_GROUND:
+                raise NotAchievedException("land_complete cleared before the EKF failsafe tripped")
+        self.set_message_rate_hz(mavutil.mavlink.MAVLINK_MSG_ID_EXTENDED_SYS_STATE, -1)
+        self.set_rc(3, 1000)
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.disarm_vehicle(force=True)
+        self.reboot_sitl()
 
     def EK3_EXT_NAV_vel_without_vert(self):
         '''Test that EK3 External Navigation velocity works without vertical velocity.'''
