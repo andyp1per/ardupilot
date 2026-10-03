@@ -17257,6 +17257,67 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
     def get_touchdownexpected_durations_from_current_onboard_log(self, ignore_multi=False):
         return self.get_ground_effect_duration_from_current_onboard_log(12, ignore_multi=ignore_multi)
 
+    def EK3_AglKfVerticalMotion(self):
+        '''the AGL KF height keeps up with a climb and a descent'''
+        # With EK3_OPTIONS bit 3 the AGL KF height is what the EKF fuses as the range
+        # finder height, so a lag in it during vertical motion is a height error.  It is
+        # compared with the main filter's height, from baro and GPS here as no range finder
+        # height is selected, after taking out the offset between the two in a hover, so only
+        # the error that motion adds counts.  That height is the output predictor's, ahead of
+        # the AGL KF's delayed fusion time by the fusion delay, about 0.15 m at this speed.
+        self.set_parameters({
+            "EK3_OPTIONS": 1 << 3,   # AglKfForOptflow
+            "WP_SPD_UP": 1.0,
+            "WP_SPD_DN": 1.0,
+        })
+        self.set_analog_rangefinder_parameters()
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+        self.takeoff(2, mode='GUIDED', alt_minimum_duration=2)
+        self.delay_sim_time(5, reason="hover to measure the bias")
+        hover = (self.get_sim_time() - 4) * 1e6, self.get_sim_time() * 1e6
+        tstart = self.get_sim_time() * 1e6
+        self.fly_guided_move_local(0, 0, 9)
+        self.fly_guided_move_local(0, 0, 2)
+        tend = self.get_sim_time() * 1e6
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=120)
+
+        dfreader = self.dfreader_for_current_onboard_log()
+        ref = []
+        agl = []
+        while True:
+            m = dfreader.recv_match(type=['XKF1', 'XKFA'])
+            if m is None:
+                break
+            if m.C != 0:
+                continue
+            if m.get_type() == 'XKF1':
+                ref.append((m.TimeUS, -m.PD))
+            elif hover[0] <= m.TimeUS <= tend:
+                if m.Valid != 1 or not math.isfinite(m.HAgl):
+                    raise NotAchievedException("AGL KF not valid at %.1f s" % (m.TimeUS * 1e-6))
+                agl.append((m.TimeUS, m.HAgl))
+
+        def ref_at(t):
+            best = min(ref, key=lambda x: abs(x[0] - t))
+            return best[1]
+        hover_err = [h - ref_at(t) for t, h in agl if t <= hover[1]]
+        moving_err = [h - ref_at(t) for t, h in agl if tstart <= t]
+        if len(hover_err) < 10 or len(moving_err) < 50:
+            raise NotAchievedException("too little AGL KF output: %u in the hover, %u moving" %
+                                       (len(hover_err), len(moving_err)))
+        bias = sum(hover_err) / len(hover_err)
+        worst = max(abs(e - bias) for e in moving_err)
+        if not math.isfinite(worst):
+            raise NotAchievedException("non-finite AGL KF height error")
+        self.progress("AGL KF error through a climb and descent: worst %.2f m (bias %.2f m)" % (worst, bias))
+        if worst > 0.25:
+            raise NotAchievedException("AGL KF height lags vertical motion by %.2f m" % worst)
+
+        self.set_parameter("RNGFND1_TYPE", 0)
+        self.reboot_sitl()
+
     def EK3_OptflowTerrainScaleHeight(self):
         '''optical flow scale height from the terrain database is right over slopes'''
         # Above the rangefinder range with EK3_OPTIONS bit 2 the optical flow scale
@@ -18998,6 +19059,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.VibrationFailsafe,
              self.EK3AccelBias,
              self.EK3_OptflowTerrainScaleHeight,
+             self.EK3_AglKfVerticalMotion,
              self.EK3_AccelBiasInhibitOnGroundMoving,
              self.EK3_AccelBiasZeroVelOptFlow,
              self.EK3_ZeroVelFusionNotUsedWithGPS,
