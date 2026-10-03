@@ -17898,6 +17898,11 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "SIM_ACC1_BIAS_Z": step,
             "SIM_ACC2_BIAS_Z": step,
         })
+        # a flip started from acro returns to it, and must not release the inhibit
+        for i in range(3):
+            self.change_mode('FLIP')
+            self.wait_mode('ACRO', timeout=10)
+            self.delay_sim_time(2, "settle after the flip")
         # a throttle cut without air mode spools down to ground idle in the air,
         # which must not release the inhibit
         for i in range(3):
@@ -17928,14 +17933,22 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         segments = []
         acro_in = None
         az = []
+        flip_in = None
+        longest_flip = 0
         while True:
             m = dfreader.recv_match(type=['MODE', 'XKF2'])
             if m is None:
                 break
             if m.get_type() == 'MODE':
+                if flip_in is not None:
+                    longest_flip = max(longest_flip, (m.TimeUS - flip_in) * 1e-6)
+                    flip_in = None
+                if m.Mode == 14:
+                    flip_in = m.TimeUS
+                # a flip from acro returns to it, so it is part of the acro segment
                 if m.Mode == 1 and acro_in is None:
                     acro_in = m.TimeUS
-                elif m.Mode != 1 and acro_in is not None:
+                elif m.Mode not in (1, 14) and acro_in is not None:
                     segments.append((acro_in, m.TimeUS))
                     acro_in = None
                 continue
@@ -17943,6 +17956,10 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 az.append((m.TimeUS, m.AZ))
         if len(segments) != 2:
             raise NotAchievedException("expected two acro segments in the log, found %u" % len(segments))
+        # the inhibit is written from the 1Hz loop, so a flip needs to last about a second
+        # to be sure of being held
+        if longest_flip < 1.0:
+            raise NotAchievedException("longest flip %.2f s, too short to test the hold" % longest_flip)
 
         def in_acro(segment):
             # the step lands 3s into acro; compare from there to the exit
