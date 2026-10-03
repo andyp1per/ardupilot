@@ -19215,7 +19215,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.HomeCircleInclusionFence_MultipleHomeCircle,
             self.HomeCircleInclusionFence_Avoidance,
             self.HomeAltResetTest,
-             self.EK3_FlowAxisLockoutRecovery,
+            self.EK3_FlowAxisLockoutRecovery,
         ])
         return ret
 
