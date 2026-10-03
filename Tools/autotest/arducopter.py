@@ -3477,6 +3477,49 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.land_and_disarm()
         self.reboot_sitl()
 
+    def FlowCeilingShortRangeFinder(self):
+        """A range finder that cannot reach the optical flow height limit keeps the limit"""
+        # RNGFND1_MAX 40 puts the limit at 27 m, and the flat-ground fallback only takes over
+        # once the range has reached 28 m. A range finder that loses its return short of that
+        # has to be held near the limit rather than climb on out of range
+        self.set_parameters({
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+        # below the limit it is held at 27 m; just above it, at the raised 28.5 m
+        for reach, floor, ceiling in ((25, 0, 29), (27, 27.8, 30.5)):
+            self.start_subtest("return lost at %u m" % reach)
+            self.reboot_sitl()
+            self.wait_ready_to_arm(require_absolute=False)
+            ground_alt = self.get_altitude(altitude_source='SIM_STATE.alt')
+            self.takeoff(5, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1800)
+            self.set_rc(3, 1900)
+            reach_lost = False
+            max_alt = 0
+            tstart = self.get_sim_time()
+            while self.get_sim_time_cached() - tstart < 60:
+                alt = self.get_altitude(altitude_source='SIM_STATE.alt') - ground_alt
+                max_alt = max(max_alt, alt)
+                if not reach_lost and alt > reach:
+                    # full scale reads as out of range high, as a lidar past its reach does
+                    self.set_parameter("SIM_SONAR_GLITCH", 1)
+                    reach_lost = True
+            self.progress("highest %.1f m with a %u m reach under a 27 m limit" % (max_alt, reach))
+            self.set_rc(3, 1500)
+            self.set_parameter("SIM_SONAR_GLITCH", 0)
+            if not reach_lost:
+                raise NotAchievedException("never climbed past the %u m reach" % reach)
+            if max_alt > ceiling:
+                raise NotAchievedException("climbed to %.1f m with a %u m reach" % (max_alt, reach))
+            if max_alt < floor:
+                raise NotAchievedException("held at %.1f m with a %u m reach, under the raised limit" % (max_alt, reach))
+            self.land_and_disarm()
+        self.reboot_sitl()
+
     # MaxAltFence - fly up until you hit the fence ceiling
     def MaxAltFence(self):
         '''Test Max Alt Fences'''
@@ -19927,6 +19970,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.SetpointGlobalPos,
             self.TakeoffCheck,
             self.FlowCeilingBacksDownIntoRange,
+            self.FlowCeilingShortRangeFinder,
             self.MaxAltFenceAvoid,
             self.GPSGlitchLoiter2,
             self.SuperSimpleCircle,
