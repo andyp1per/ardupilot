@@ -4196,55 +4196,119 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "EK3_SRC2_YAW": 6,
             "EK3_IMU_MASK": 3,        # two cores, so the third set has no lane to select
             "EK3_OPTIONS": 1 << 1,    # ManualLaneSwitch, or the lane is not the user's to pick
+            "RC8_OPTION": 90,         # EKF source set selector
+            "SCR_ENABLE": 1,
+            "LOG_DISARMED": 1,
         })
         self.customise_SITL_commandline(["--serial5=sim:vicon"])
+        # a script selects a set the same way, and must get the same lane
+        self.install_script_content_context("select_set.lua", """
+local done = false
+function update()
+  if not done and param:get('SCR_USER1') == 1 then
+    ahrs:set_posvelyaw_source_set(1)
+    done = true
+  end
+  return update, 100
+end
+return update, 100
+""")
+        self.reboot_sitl()
 
         self.start_subtest("without a source set per core the lane is left alone")
+        self.context_collect('STATUSTEXT')
         self.set_parameter("EK3_SRC_OPTIONS", 0)
         self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 2)
-        self.assert_parameter_value("EK3_PRIMARY", 0)
+        self.delay_sim_time(3, "a lane switch would follow at once")
+        if self.statustext_in_collections("EKF3 lane switch"):
+            raise NotAchievedException("lane moved without a source set per core")
         self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 1)
         self.set_parameter("EK3_SRC_OPTIONS", 8)
 
-        # one collection, and a string unique to each phase: check_context matches
-        # everything gathered so far, so re-collecting would not scope the later waits
-        self.context_collect('STATUSTEXT')
-        self.context_collect('PARAM_VALUE')
         self.takeoff(10, mode='GUIDED')
         try:
             self.start_subtest("selecting the second set moves the primary to its lane")
             self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 2)
             self.wait_statustext("EKF3 lane switch 1", check_context=True, timeout=10)
-            # checked before assert_parameter_value, whose own request would answer it
-            sent = [m for m in self.context_collection('PARAM_VALUE') if m.param_id == "EK3_PRIMARY"]
-            if len(sent) == 0 or sent[-1].param_value != 1:
-                raise NotAchievedException("EK3_PRIMARY changed without telling the GCS")
-            self.assert_parameter_value("EK3_PRIMARY", 1)
+            # the boot lane belongs to the user: a selection lasts for this boot only
+            self.assert_parameter_value("EK3_PRIMARY", 0)
 
             # the warning is worth nothing if the lane it declines to select moves anyway
             self.start_subtest("a set with no lane warns and leaves the lane where it was")
             self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 3, want_result=mavutil.mavlink.MAV_RESULT_FAILED)
             self.wait_statustext("source set 3 has no lane", check_context=True, timeout=10)
-            self.assert_parameter_value("EK3_PRIMARY", 1)
+            self.delay_sim_time(2, "a lane switch would follow at once")
             if self.statustext_count_in_collections("EKF3 lane switch") != 1:
                 raise NotAchievedException("a set with no lane moved the primary")
 
             self.start_subtest("and selecting the first set brings it back")
             self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 1)
             self.wait_statustext("EKF3 lane switch 0", check_context=True, timeout=10)
-            self.assert_parameter_value("EK3_PRIMARY", 0)
 
-            # the lane is not the request's to move here, and the disarmed EKF forces
-            # EK3_PRIMARY, so a write would move the lane silently on landing
+            self.start_subtest("a script selecting a set moves the lane too")
+            self.set_parameter("SCR_USER1", 1)
+            self.delay_sim_time(2, "let the lane follow")
+            if self.statustext_count_in_collections("EKF3 lane switch 1") != 2:
+                raise NotAchievedException("a script selecting the second set did not move the lane")
+            self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 1)
+            self.delay_sim_time(2, "let the lane follow")
+            if self.statustext_count_in_collections("EKF3 lane switch 0") != 2:
+                raise NotAchievedException("selecting the first set again did not bring the lane back")
+
+            # the lane is not the request's to move here, and the disarmed EKF forces the
+            # user's lane, so taking it would move the lane silently on landing
             self.start_subtest("armed without manual lane switching the request is refused")
             self.set_parameter("EK3_OPTIONS", 0)
             self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 2, want_result=mavutil.mavlink.MAV_RESULT_FAILED)
             self.wait_statustext("lane needs EK3_OPTIONS bit 1", check_context=True, timeout=10)
-            self.assert_parameter_value("EK3_PRIMARY", 0)
+            # the RC switch is refused the same way, and says so
+            self.run_cmd(mavutil.mavlink.MAV_CMD_DO_AUX_FUNCTION, 90, 1,
+                         want_result=mavutil.mavlink.MAV_RESULT_FAILED)
+            if self.statustext_count_in_collections("EKF3 lane switch 1") != 2:
+                raise NotAchievedException("a refused selection moved the lane")
             # automatic lane selection is live without bit 1; keep it out of the RTL
             self.set_parameter("EK3_OPTIONS", 1 << 1)
         finally:
             self.do_RTL()
+
+        # the first RC read comes before the cores exist; the selection must wait for
+        # them rather than be refused, and the lane must follow once they run. Read
+        # from the log, which also holds what was sent before the GCS link came up
+        def boot_on_switch(pwm):
+            self.set_rc(8, pwm)
+            self.reboot_sitl()
+            self.wait_ready_to_arm()
+            dfreader = self.dfreader_for_current_onboard_log()
+            primary = None
+            texts = []
+            while True:
+                m = dfreader.recv_match(type=['XKF4', 'MSG'])
+                if m is None:
+                    break
+                if m.get_type() == 'MSG':
+                    texts.append(m.Message)
+                elif m.C == 0:
+                    primary = m.PI
+            no_lane = any("has no lane" in t for t in texts)
+            selected = any("Using EKF Source Set" in t for t in texts)
+            return primary, no_lane, selected
+
+        self.start_subtest("an RC switch held at the second set through boot selects its lane")
+        primary, no_lane, selected = boot_on_switch(1500)
+        if not selected:
+            raise NotAchievedException("the RC switch made no selection at boot")
+        if no_lane:
+            raise NotAchievedException("a selection made at boot was refused")
+        if primary != 1:
+            raise NotAchievedException("lane %s after booting on the second set, want 1" % primary)
+
+        self.start_subtest("a set with no lane selected at boot is reported once the cores run")
+        primary, no_lane, selected = boot_on_switch(2000)
+        if not no_lane:
+            raise NotAchievedException("no warning for a set with no lane selected at boot")
+        if primary != 0:
+            raise NotAchievedException("lane %s after booting on a set with no lane, want 0" % primary)
+        self.set_rc(8, 1000)
 
     def OpticalFlowLimits(self):
         '''test EKF navigation limiting'''
@@ -19237,7 +19301,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.MAV_CMD_MISSION_START_p1_p2,
             self.ScriptingFlipMode,
             self.UTMGlobalPosition,
-             self.EK3_SourceSetSelectsLane,
+            self.EK3_SourceSetSelectsLane,
         ])
         return ret
 
