@@ -44,7 +44,8 @@ void NavEKF3_core::SelectFlowFusion()
     gndOffsetValid = ((imuSampleTime_ms - gndHgtValidTime_ms) < 5000) || (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER);
     // the fallback above the range needs a terrain offset measured this flight, not the
     // validity gndOffsetValid grants a range finder height source, and cleared on the
-    // ground so it never carries over from an earlier flight
+    // ground so it carries over from an earlier flight only through a ground offset update
+    // in the 5 s before arming
     const bool gndMeasuredNow = (gndHgtValidTime_ms != 0) && ((imuSampleTime_ms - gndHgtValidTime_ms) < 5000);
     if (onGround) {
         gndOffsetMeasured = false;
