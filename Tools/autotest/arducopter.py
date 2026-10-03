@@ -19337,8 +19337,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.MAV_CMD_MISSION_START_p1_p2,
             self.ScriptingFlipMode,
             self.UTMGlobalPosition,
-             self.OpticalFlowAGLKfFloorVelocity,
-             self.OpticalFlowAGLKfNoCoastBelowMin,
+            self.OpticalFlowAGLKfFloorVelocity,
+            self.OpticalFlowAGLKfNoCoastBelowMin,
         ])
         return ret
 
