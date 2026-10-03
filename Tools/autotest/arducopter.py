@@ -19236,7 +19236,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.HomeCircleInclusionFence_MultipleHomeCircle,
             self.HomeCircleInclusionFence_Avoidance,
             self.HomeAltResetTest,
-             self.TouchdownGroundEffectCruise,
+            self.TouchdownGroundEffectCruise,
             self.TouchdownGroundEffectSlowApproach,
             self.TouchdownGroundEffectPositionReset,
         ])
