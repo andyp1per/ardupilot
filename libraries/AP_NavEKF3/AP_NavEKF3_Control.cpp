@@ -825,6 +825,13 @@ bool NavEKF3_core::aboveFlowHgtLimit(ftype hagl) const
 
 void NavEKF3_core::updateFlatGroundAssumed(void)
 {
+    // range data arrives at about 20 Hz, so a 500 ms gap is a break in it. The measurement time
+    // is used rather than the terrain update time, which a range height source holds still
+    if (imuSampleTime_ms - rngValidMeaTime_ms >= 500) {
+        flatGndRngResumeTime_ms = 0;
+    } else if (flatGndRngResumeTime_ms == 0) {
+        flatGndRngResumeTime_ms = imuSampleTime_ms;
+    }
     if (!frontend->sources.useVelXYSource(AP_NavEKF_Source::SourceXY::OPTFLOW, core_index) ||
         !gndOffsetMeasured || !flowScaleHgtUsable()) {
         flatGndEngaged = false;
@@ -843,11 +850,16 @@ void NavEKF3_core::updateFlatGroundAssumed(void)
         flatGndEngaged = false;
         return;
     }
-    if (!flatGndEngaged) {
-        // engage only once the range data has gone, so the checks below see why it went
-        if (gndOffsetValid) {
-            return;
+    // engage only once the range data has gone, so the checks below see why it went, and end
+    // once the ground has been measured again without a break for 2 s, so a later loss has to
+    // pass those checks afresh. A shorter return, from something passed over, leaves it engaged
+    if (gndOffsetValid) {
+        if ((flatGndRngResumeTime_ms != 0) && (imuSampleTime_ms - flatGndRngResumeTime_ms >= 2000)) {
+            flatGndEngaged = false;
         }
+        return;
+    }
+    if (!flatGndEngaged) {
         // A climb out of range passes through readings near the maximum; a range finder that
         // fails or loses its return low down does not, whichever ground height follows. Under
         // a 2.9 m maximum the height limit is at its 1 m floor and the two cannot be told apart

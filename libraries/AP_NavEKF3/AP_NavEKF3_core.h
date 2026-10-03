@@ -1406,6 +1406,7 @@ private:
     Vector2F gndKnownNE;            // NE position where the ground height was last measured or anchored (m)
     ftype lastGoodRngMeas;          // last range measurement fused into the terrain estimator (m)
     bool flatGndEngaged;            // true while flow navigation continues on the flat-ground assumption
+    uint32_t flatGndRngResumeTime_ms; // start of the current unbroken run of valid range measurements, or 0
     Vector3F delAngBodyOF;          // bias corrected delta angle of the vehicle IMU measured summed across the time since the last OF measurement
     ftype delTimeOF;                // time that delAngBodyOF is summed across
     bool flowFusionActive;          // true when optical flow fusion is active

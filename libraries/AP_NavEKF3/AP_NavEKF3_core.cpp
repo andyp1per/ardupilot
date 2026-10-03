@@ -286,6 +286,7 @@ void NavEKF3_core::InitialiseVariables()
     terrainAnchorValid = false;
     lastGoodRngMeas = 0;
     flatGndEngaged = false;
+    flatGndRngResumeTime_ms = 0;
     validOrigin = false;
     gpsSpdAccuracy = 0.0f;
     gpsPosAccuracy = 0.0f;
