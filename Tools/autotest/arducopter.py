@@ -2440,10 +2440,34 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         if not flags & mavutil.mavlink.EKF_POS_HORIZ_REL:
             raise NotAchievedException("relative position lost above the rangefinder range")
 
+        self.start_subtest("A brief return from something passed over keeps it")
+        # a second or so of in-range readings at height, as from a roof flown over, does not
+        # end the fallback; only ground measured again without a break for 2 s does
+        self.reboot_sitl()
+        climb_out_of_range()
+        if not horiz_pos_rel():
+            raise NotAchievedException("the climb out did not engage the fallback, so the leg proves nothing")
+        sonar_scale = self.get_parameter("SIM_SONAR_SCALE")
+        # four times the metres per volt, so at about 20 m it reads about 5 m: under the 5.6 m
+        # a re-engagement needs, so the fallback has to have stayed on for the flag to survive
+        self.set_parameter("SIM_SONAR_SCALE", sonar_scale * 4)
+        t_start = self.get_sim_time()
+        self.wait_ekf_flags(mavutil.mavlink.EKF_POS_VERT_AGL, 0, timeout=10)
+        assert_rangefinder_between(3, 5.4)
+        self.set_parameter("SIM_SONAR_SCALE", sonar_scale)
+        window = self.get_sim_time() - t_start
+        if window > 1.5:
+            raise NotAchievedException("the return lasted %.1f s, too close to 2 s to prove anything" % window)
+        wait_terrain_offset_stale()
+        flags = ekf_flags()
+        self.disarm_vehicle(force=True)
+        if not flags & mavutil.mavlink.EKF_POS_HORIZ_REL:
+            raise NotAchievedException("relative position dropped after a brief in-range return at height")
+
         self.start_subtest("A range finder lost in range after a climb out and back drops it")
-        # the fallback ends when range data is fused again, so a later failure inside the range
-        # has to pass the last good reading check afresh: at 5 m it is over the 4.6 m height
-        # limit and short of the 5.6 m reading a climb out passes through
+        # the fallback ends once range data has been fused again for 2 s, so a later failure
+        # inside the range has to pass the last good reading check afresh: at 5 m it is over
+        # the 4.6 m height limit and short of the 5.6 m reading a climb out passes through
         self.reboot_sitl()
         climb_out_of_range()
         if not horiz_pos_rel():
