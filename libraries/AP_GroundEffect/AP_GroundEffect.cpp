@@ -36,9 +36,13 @@
 // zero, so a bare "< 0" reads a commanded descent for as long as the vehicle hovers
 #define AP_GROUNDEFFECT_DESCENT_DEADBAND_MS 0.05f
 
-// hard cap on the touchdown_expected window, sized well clear of the longest
+// cap on the touchdown_expected window, sized well clear of the longest
 // legitimate landing so it only catches a latch that would never clear
 #define AP_GROUNDEFFECT_TOUCHDOWN_MAX_MS 60000U
+
+// descent within the touchdown window that restarts it while still above the takeoff
+// height, so a slow approach is not cut off while it is still coming down
+#define AP_GROUNDEFFECT_TOUCHDOWN_PROGRESS_M 1.0f
 
 const AP_Param::GroupInfo AP_GroundEffect::var_info[] = {
 
@@ -170,10 +174,12 @@ void AP_GroundEffect::update(bool armed, bool land_complete, bool throttle_up)
     const bool touchdown_signal = slow_horizontal && slow_descent && near_ground;
     if (!touchdown_signal) {
         _state.touchdown_time_ms = 0;
-    } else if (_state.touchdown_time_ms == 0) {
+    } else if ((_state.touchdown_time_ms == 0) ||
+               (is_positive(height_m) && (height_m < _state.touchdown_height_m - AP_GROUNDEFFECT_TOUCHDOWN_PROGRESS_M))) {
         _state.touchdown_time_ms = tnow_ms;
+        _state.touchdown_height_m = height_m;
     }
-    // a touchdown that has not arrived within the window is not a touchdown. GNDEFF_ALT
+    // a touchdown that has not come any closer within the window is not a touchdown. GNDEFF_ALT
     // of zero asks for no altitude gate at all, so it gets no time bound either
     const bool touchdown_timed_out = is_positive(_alt_m) &&
                                      AP_HAL::timeout_expired(_state.touchdown_time_ms, tnow_ms,
