@@ -1406,6 +1406,8 @@ private:
     uint32_t aglKfVelHoldTime_ms;   // time the AGL KF velocity was last held out of velD after a step
     uint32_t lastAglKfVelFuseTime_ms; // timestamp of last AGL KF velocity fused as a velD observation
     ftype aglKfVelTestRatio;        // innovation test ratio of the last AGL KF velD observation, fused or not
+    ftype aglKfLastRngHgt;          // tilt-corrected range of the last range sample fused (m)
+    bool aglKfHeldOnFloor;          // AGL KF held on its floor until the range finder reads again
 #endif
     ftype terrainState;             // terrain position state (m)
     ftype prevPosN;                 // north position at last measurement

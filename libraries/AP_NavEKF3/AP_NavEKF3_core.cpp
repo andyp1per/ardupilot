@@ -301,6 +301,8 @@ void NavEKF3_core::InitialiseVariables()
     aglKfStepTime_ms = 0;
     aglKfVelHoldTime_ms = 0;
     aglKfVelTestRatio = 0;
+    aglKfLastRngHgt = 1.0e6f;   // no reading yet, so not near the floor
+    aglKfHeldOnFloor = false;
 #endif
     yawResetCount = 0;
     tiltErrorVariance = sq(M_2PI);
