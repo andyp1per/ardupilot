@@ -328,6 +328,7 @@ void NavEKF3_core::InitialiseVariables()
     optFlowFusionDelayed = false;
 #endif
     flowFusionActive = false;
+    flowFusedAxes = 0;
     airSpdFusionDelayed = false;
     sideSlipFusionDelayed = false;
     airDataFusionWindOnly = false;
@@ -366,6 +367,7 @@ void NavEKF3_core::InitialiseVariables()
 
     // body frame displacement fusion
     bodyOdm.InitialiseVariables();
+    bodyVelFusedAxes = 0;
 
     // yaw sensor fusion
     gpsYaw.InitialiseVariables();
