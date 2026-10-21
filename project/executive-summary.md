@@ -26,7 +26,7 @@ This update sits above the June summary, which is kept below it as it was.
   The flight-control timing held throughout.
 
 - **August to September: features and hardening.** In this period:
-  - Logging to the SD card became about 2.3 times faster.
+  - Logging to the SD card became about 2.3 times faster. By late September, flights were logging without losing any data in any mode flown.
   - The on-screen display (OSD) now works with both digital and analog video.
   - LED strips are supported, and the video transmitter can be controlled from the flight controller (bench-tested so far).
   - The newer motion sensor shown on the production schematic got its driver. On 9 September it flew on a second, different aircraft, and the port needed no changes for either.
@@ -44,14 +44,13 @@ This update sits above the June summary, which is kept below it as it was.
 - ✅ **Less overclocking.** The chip runs at 225 MHz instead of 375 MHz.
 - 🔵 **Upstream review is in progress.** This is now the gating item for ArduPilot users getting the board. The project's maintainers have asked for changes. A companion change to ChibiOS, the real-time operating system ArduPilot runs on, has to be accepted first.
 - ⚠️ **Some safety modes have not yet been flown.** Return-to-home, autonomous missions and the GPS-loss failsafe all need deliberate testing before anyone relies on them.
-- ⚠️ **Logging loses data in position-hold flight.** The first core is too busy to keep up with the SD card. A short-term setting avoids the loss; the full fix needs more headroom on that core.
+- ✅ **Flight logging fixed.** A 9 September flight lost log data in position hold because the first core was too busy. After the September work, flights lose no log data in any mode flown so far, position hold included.
 - ⚠️ **There are open hardware questions for Raspberry Pi.** They cover running the chip above its datasheet speed, a current sensor whose reading drifts with temperature, and a 9 V power switch that does not appear to switch.
 
 ### What's left
 
 - **Get the upstream submission accepted.** This means the ArduPilot and ChibiOS changes, plus answering the reviewers' outstanding requests.
 - **Flight-test the remaining modes and failsafes,** and finish automatic tuning.
-- **Improve logging capacity** during position-hold flight.
 - **Hardware answers from Raspberry Pi** on the clock speed, current sensing and power switching. These feed into the next board revision.
 - **Later:** other vehicle types (fixed-wing and others) and CAN-bus peripherals.
 
