@@ -853,9 +853,9 @@ bool AP_OSD_pico::start_scanout(bool pal)
     }
     configure_sm();
 
-    if (!hal.scheduler->thread_create_pinned_to_core(
+    if (!hal.scheduler->thread_create(
             FUNCTOR_BIND_MEMBER(&AP_OSD_pico::core1_thread, void),
-            "OSD_c1", 1024, AP_HAL::Scheduler::PRIORITY_IO, 0, 1)) {
+            "OSD_c1", 1024, AP_HAL::Scheduler::PRIORITY_IO, 0)) {
         hal.console->printf("OSD: could not start core1 thread\n");
         release();
         return false;
