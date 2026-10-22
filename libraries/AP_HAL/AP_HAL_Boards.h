@@ -332,6 +332,12 @@
 #define HAL_RATE_THREAD_STACK_SIZE 1536
 #endif
 
+// Set where the vehicle rate controller thread runs on a different core from
+// the main loop, so main loop overrun says nothing about the rate thread's load.
+#ifndef HAL_RATE_THREAD_SEPARATE_CORE
+#define HAL_RATE_THREAD_SEPARATE_CORE 0
+#endif
+
 #ifndef AP_STATS_ENABLED
 #define AP_STATS_ENABLED 1
 #endif
