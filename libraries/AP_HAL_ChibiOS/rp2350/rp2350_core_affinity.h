@@ -24,9 +24,9 @@
   them does nothing.
 
   A board replaces the whole table with its own in hwdef.dat, for example
-    define HAL_THREAD_CORE_TABLE { "rate", 1 }, { "rcout", 1 }, { "SPI0", 0 }
+    define AP_THREAD_CORE_TABLE { "rate", 1 }, { "rcout", 1 }, { "SPI0", 0 }
   A board that puts "rate" on core0 with the main loop also needs
-    define HAL_RATE_THREAD_SEPARATE_CORE 0
+    define AP_RATE_THREAD_SEPARATE_CORE 0
 
   A peripheral's IRQ follows its thread: ChibiOS routes it to the core that
   calls the driver start function (spiStart, i2cStart, sdStart, etc.), and the
@@ -35,8 +35,8 @@
 */
 #pragma once
 
-#ifndef HAL_THREAD_CORE_TABLE
-#define HAL_THREAD_CORE_TABLE \
+#ifndef AP_THREAD_CORE_TABLE
+#define AP_THREAD_CORE_TABLE \
     { "rate",   1 },    /* the vehicle rate thread */ \
     { "rcout",  1 },    /* with the rate thread: motor demands stay in SRAM */ \
     { "SPI0",   1 },    /* IMU bus, alongside the rate thread */ \

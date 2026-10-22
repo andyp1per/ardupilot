@@ -36,7 +36,7 @@ co-located automatically.
 ```c
 // libraries/AP_HAL_ChibiOS/rp2350/rp2350_core_affinity.h
 
-#define HAL_THREAD_CORE_TABLE \
+#define AP_THREAD_CORE_TABLE \
     { "rate",   1 }, \
     { "rcout",  1 }, \
     { "SPI0",   1 }, \
@@ -47,7 +47,7 @@ co-located automatically.
 ```
 
 That is the RP2350 default. A board replaces the whole table with a
-`define HAL_THREAD_CORE_TABLE ...` line in its hwdef.dat. Change one entry and
+`define AP_THREAD_CORE_TABLE ...` line in its hwdef.dat. Change one entry and
 the thread creation and IRQ routing both follow.
 
 The table is keyed on the thread's name. `thread_create_alloc()` looks every
@@ -61,7 +61,7 @@ from `chThdCreateStatic()` during Core0 init and are not looked up, so an
 entry for any of them would look like a knob and do nothing.
 
 The vehicle creates the rate thread with a plain `thread_create()`, so HALs
-without SMP need nothing. Copter does read `HAL_RATE_THREAD_SEPARATE_CORE`,
+without SMP need nothing. Copter does read `AP_RATE_THREAD_SEPARATE_CORE`,
 1 here, so that core0 main loop overrun does not slow a rate thread on core1;
 a board whose table puts `"rate"` on core0 sets it to 0. The EKF has no thread of its own here and runs
 inline in the Core0 main loop; the Core1 EKF thread described further down was
@@ -118,10 +118,10 @@ Moving SPI to Core1 is therefore a one-entry change to the table.
 # hwdef.dat lines; the default table puts rate, rcout, SPI0 and OSD_c1 on Core1
 
 # Does the IMU bus on Core0 hurt? (regression baseline)
-define HAL_THREAD_CORE_TABLE { "rate", 1 }, { "rcout", 1 }, { "SPI0", 0 }, { "OSD_c1", 1 }
+define AP_THREAD_CORE_TABLE { "rate", 1 }, { "rcout", 1 }, { "SPI0", 0 }, { "OSD_c1", 1 }
 
 # More I/O on Core1, leaving Core0 for the scheduler
-define HAL_THREAD_CORE_TABLE { "rate", 1 }, { "rcout", 1 }, { "SPI0", 1 }, { "I2C0", 1 }, { "OSD_c1", 1 }
+define AP_THREAD_CORE_TABLE { "rate", 1 }, { "rcout", 1 }, { "SPI0", 1 }, { "I2C0", 1 }, { "OSD_c1", 1 }
 ```
 
 Storage is not switchable, and must not be: see the XIP lockout below.
@@ -645,7 +645,7 @@ same parameters give 3.2 kHz and 1.6 kHz.
 | `modules/ChibiOS/os/hal/ports/RP/LLD/EFLv1/rp_efl_lld.c` | EFL driver: `rpEflBeforeXipOff/AfterXipOn` weak hooks |
 | `modules/ChibiOS/os/hal/ports/RP/RP2350/hal_efl_lld.c` | RP2350-specific flash: `rp_flash_exit_xip`, `rp_flash_enter_xip` (.ramtext) |
 | `modules/ChibiOS/os/hal/ports/RP/LLD/TIMERv1/hal_st_lld.c` | ChibiOS tick ISR handlers (Vector40=Core0, Vector44=Core1) |
-| `rp2350/rp2350_core_affinity.h` | Default thread core table (`HAL_THREAD_CORE_TABLE`) |
+| `rp2350/rp2350_core_affinity.h` | Default thread core table (`AP_THREAD_CORE_TABLE`) |
 | `hwdef/Laurel/hwdef.dat` | Board config — `RP_CORE1_START TRUE`, `SCHED_LOOP_RATE 400`, `FSTRATE_*` |
 | `AP_NavEKF3/AP_NavEKF3_Logging.cpp` | `Log_Write_GSF` restored with null-guard in place |
 | `modules/ChibiOS/os/common/ports/ARMv8-M-ML-ALT/compilers/GCC/chcoreasm.S` | Per-function `.section` directives for `PendSV_Handler`, `SVC_Handler`, `__port_thread_start` — enables RAMFUNC2 placement |

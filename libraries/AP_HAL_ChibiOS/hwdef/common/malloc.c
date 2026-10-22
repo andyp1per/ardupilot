@@ -457,16 +457,16 @@ size_t mem_available(void)
 #if CH_CFG_USE_DYNAMIC == TRUE
 #if CH_CFG_SMP_MODE == TRUE
 /*
-  the OS instance a named thread runs on, from HAL_THREAD_CORE_TABLE, or NULL
+  the OS instance a named thread runs on, from AP_THREAD_CORE_TABLE, or NULL
   to start it on the calling core. A core that has not started yet gives NULL.
  */
 os_instance_t *thread_get_preferred_core(const char *name)
 {
-#ifdef HAL_THREAD_CORE_TABLE
+#ifdef AP_THREAD_CORE_TABLE
     static const struct {
         const char *name;
         uint8_t core;
-    } thread_cores[] = { HAL_THREAD_CORE_TABLE };
+    } thread_cores[] = { AP_THREAD_CORE_TABLE };
     for (uint8_t i = 0; name != NULL && i < sizeof(thread_cores)/sizeof(thread_cores[0]); i++) {
         if (strcmp(name, thread_cores[i].name) == 0) {
             const uint8_t core = thread_cores[i].core;
@@ -475,7 +475,7 @@ os_instance_t *thread_get_preferred_core(const char *name)
     }
 #else
     (void)name;
-#endif  // HAL_THREAD_CORE_TABLE
+#endif  // AP_THREAD_CORE_TABLE
     return NULL;
 }
 #endif  // CH_CFG_SMP_MODE
