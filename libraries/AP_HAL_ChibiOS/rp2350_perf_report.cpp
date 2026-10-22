@@ -23,6 +23,8 @@
 #if defined(RP2350) && AP_RP2350_DEBUG_REPORT_ENABLED && !defined(HAL_BOOTLOADER_BUILD)
 
 #include <AP_HAL/AP_HAL.h>
+#include "HAL_ChibiOS_Class.h"
+#include "Scheduler.h"
 #include <AP_Scheduler/AP_Scheduler.h>
 #include <AP_InertialSensor/AP_InertialSensor.h>
 #include <AP_InertialSensor/AP_InertialSensor_rate_config.h>
@@ -43,7 +45,11 @@ void rp2350_perf_report(void)
         return;
     }
 
-    const float c1_pct = hal.scheduler->get_core1_load_pct();
+#if CH_CFG_SMP_MODE == TRUE
+    const float c1_pct = static_cast<ChibiOS::Scheduler *>(hal.scheduler)->core1_load_pct();
+#else
+    const float c1_pct = -1.0f;
+#endif  // CH_CFG_SMP_MODE == TRUE
     // c1_pct sentinels: -2.0 = SMP active but no interval measured yet
     // (suppress to avoid bogus single-core output); -1.0 = non-SMP target
     // (print single-core format); >= 0.0 = SMP ready (print dual-core format).
@@ -120,8 +126,8 @@ void rp2350_perf_report(void)
 
 #if AP_RP2350_PC_SAMPLER_ENABLED
     // Arm core0's sampler on the first report (this runs on core0); core1 is
-    // armed by the HAL when the pinned thread starts. Emit the core1 histogram
-    // top-N; addresses are attributed to functions offline.
+    // armed by the HAL when a thread_create() thread first runs there. Emit
+    // the core1 histogram top-N; addresses are attributed to functions offline.
     rp2350_pc_sampler_init_core0();
     {
         // send_text uses AP's cut-down vsnprintf, which has no %.*s; terminate

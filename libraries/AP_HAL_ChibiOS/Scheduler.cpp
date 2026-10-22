@@ -841,7 +841,7 @@ rttime_t Scheduler::core1_idle_cumulative(void)
 }
 #endif  // CH_DBG_STATISTICS == TRUE
 
-float Scheduler::get_core1_load_pct()
+float Scheduler::core1_load_pct()
 {
 #if CH_DBG_STATISTICS == TRUE
     // Measure idle time on ch1 and invert: load = 100% - idle%.

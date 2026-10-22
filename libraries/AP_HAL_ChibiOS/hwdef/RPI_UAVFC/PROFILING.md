@@ -23,7 +23,7 @@ a ~5.1 kHz ISR per core and 24 KB of BSS, and cannot see itself: it samples the
 interrupted PC, so its own cost never appears in its own output.
 
 Without `HAL_ENABLE_THREAD_STATISTICS` the `Perf` line loses `core1load`
-entirely - `Scheduler::get_core1_load_pct()` reads the cumulative time of
+entirely - `Scheduler::core1_load_pct()` reads the cumulative time of
 core1's idle thread, which only exists with `CH_DBG_STATISTICS`. Core0 load
 comes from `AP_Scheduler` and survives either way.
 

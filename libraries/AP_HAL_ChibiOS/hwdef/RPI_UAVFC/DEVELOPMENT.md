@@ -320,7 +320,7 @@ Three switches, all off in this hwdef. Turn them on to measure, off to fly.
 | `AP_RP2350_DEBUG_REPORT_ENABLED` | negligible CPU; clutters the GCS pane |
 
 Statistics instrument every critical section and context switch. Turning them
-off also removes `core1load` from the `Perf` line - `Scheduler::get_core1_load_pct()`
+off also removes `core1load` from the `Perf` line - `Scheduler::core1_load_pct()`
 reads the cumulative time of core1's idle thread, which only exists with
 `CH_DBG_STATISTICS`. There is no way to keep the core1 load figure without
 paying for the statistics.
