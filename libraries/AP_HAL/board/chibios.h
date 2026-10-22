@@ -2,10 +2,6 @@
 
 #include <hwdef.h>
 
-#if defined(CH_CFG_SMP_MODE) && CH_CFG_SMP_MODE == TRUE
-#define HAL_SCHEDULER_SMP_ENABLED 1
-#endif  // defined(CH_CFG_SMP_MODE) && CH_CFG_SMP_MODE == TRUE
-
 // the RP2350 thread core table puts the rate thread on core1, away from the
 // main loop; a board whose table keeps them together defines this as 0
 #if defined(RP2350) && defined(CH_CFG_SMP_MODE) && CH_CFG_SMP_MODE == TRUE

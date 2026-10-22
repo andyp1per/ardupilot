@@ -126,16 +126,6 @@ public:
         return false;
     }
 
-#if HAL_SCHEDULER_SMP_ENABLED
-    // True when a thread pinned to a core other than the main loop's runs
-    // independently of it, so main loop overrun says nothing about that
-    // thread's scheduling capacity.
-    virtual bool cores_are_independent() const { return false; }
-#else
-    // one core: the same answer, without a vtable slot on every board
-    bool cores_are_independent() const { return false; }
-#endif  // HAL_SCHEDULER_SMP_ENABLED
-
 private:
 
     AP_HAL::Proc _delay_cb;

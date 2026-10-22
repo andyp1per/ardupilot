@@ -313,12 +313,6 @@
 #define AP_RP2350_SPI_CYCLE_STATS_ENABLED 0
 #endif
 
-// set by a HAL whose scheduler can pin threads to other cores; without it
-// the Scheduler's core-pinning hooks are inline rather than virtual
-#ifndef HAL_SCHEDULER_SMP_ENABLED
-#define HAL_SCHEDULER_SMP_ENABLED 0
-#endif
-
 // Scheduler rate for the GCS receive and send tasks. A board whose main loop
 // shares a core with the GCS work can lower this to leave cycles for the
 // estimators.
