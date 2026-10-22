@@ -127,16 +127,12 @@ public:
     }
 
 #if HAL_SCHEDULER_SMP_ENABLED
-    // Returns the CPU load percentage of the thread pinned to core1, or -1 if unavailable.
-    virtual float get_core1_load_pct() { return -1.0f; }
-
     // True when a thread pinned to a core other than the main loop's runs
     // independently of it, so main loop overrun says nothing about that
     // thread's scheduling capacity.
     virtual bool cores_are_independent() const { return false; }
 #else
-    // one core: the same answers, without vtable slots on every board
-    float get_core1_load_pct() { return -1.0f; }
+    // one core: the same answer, without a vtable slot on every board
     bool cores_are_independent() const { return false; }
 #endif  // HAL_SCHEDULER_SMP_ENABLED
 
