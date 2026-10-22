@@ -332,6 +332,18 @@
 #define HAL_RATE_THREAD_SEPARATE_CORE 0
 #endif
 
+// AP_ spellings of the three above, taking the HAL_ values until the
+// boards and vehicles have moved to them
+#ifndef AP_GCS_UPDATE_RATE_HZ
+#define AP_GCS_UPDATE_RATE_HZ HAL_GCS_UPDATE_RATE_HZ
+#endif
+#ifndef AP_RATE_THREAD_STACK_SIZE
+#define AP_RATE_THREAD_STACK_SIZE HAL_RATE_THREAD_STACK_SIZE
+#endif
+#ifndef AP_RATE_THREAD_SEPARATE_CORE
+#define AP_RATE_THREAD_SEPARATE_CORE HAL_RATE_THREAD_SEPARATE_CORE
+#endif
+
 #ifndef AP_STATS_ENABLED
 #define AP_STATS_ENABLED 1
 #endif
