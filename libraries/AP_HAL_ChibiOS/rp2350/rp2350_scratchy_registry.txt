@@ -18,7 +18,7 @@ libraries/AC_PID/AC_PID.cpp|AC_PID::get_ff
 #
 # Gyro filter fast half (core1 only): apply_gyro_filters runs the harmonic notch and gyro LPF per
 # sample, called from AP_InertialSensor_Invensensev3::read_fifo on the SPI0 device-bus thread,
-# pinned to core1 (HAL_CORE_SPI0=1). The Vector3 notch apply is reached only through this path.
+# pinned to core1 (SPI0 in the thread core table). The Vector3 notch apply is reached only through this path.
 # Only exercised when INS_HNTCH is configured. HarmonicNotchFilter::update (coeff recalc) stays in
 # RAMFUNC2 - it is the slow half and is also reachable from the core0 AP_Vehicle path.
 libraries/AP_InertialSensor/AP_InertialSensor_Backend.cpp|AP_InertialSensor_Backend::apply_gyro_filters

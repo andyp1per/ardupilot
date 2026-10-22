@@ -31,51 +31,54 @@ co-located automatically.
 
 ## The Design
 
-### One config header
+### One table of thread names
 
 ```c
 // libraries/AP_HAL_ChibiOS/rp2350/rp2350_core_affinity.h
 
-#define HAL_CORE_RCOUT    1
-#define HAL_CORE_SPI0     1
-#define HAL_CORE_SPI1     0
-#define HAL_CORE_I2C0     0
-#define HAL_CORE_I2C1     0
+#define HAL_THREAD_CORE_TABLE \
+    { "rate",   1 }, \
+    { "rcout",  1 }, \
+    { "SPI0",   1 }, \
+    { "OSD_c1", 1 }, \
+    { "SPI1",   0 }, \
+    { "I2C0",   0 }, \
+    { "I2C1",   0 }
 ```
 
-Change one line. The thread creation and IRQ routing both follow.
+That is the RP2350 default. A board replaces the whole table with a
+`define HAL_THREAD_CORE_TABLE ...` line in its hwdef.dat. Change one entry and
+the thread creation and IRQ routing both follow.
 
-The list is deliberately short: a define is only here if something reads it.
-Every other thread starts on the core that creates it. Timer, monitor, RCIN,
-IO and storage threads come from `chThdCreateStatic()` during Core0 init. The
-UART threads come from `thread_create_alloc()` on whichever core first opens
-the port (there is no separate USB thread), and library threads such as the
-LED thread from `thread_create()`. A define for any of them would look like a
-knob and do nothing.
+The table is keyed on the thread's name. `thread_create_alloc()` looks every
+new thread up, which covers `hal.scheduler->thread_create()` (the rate thread,
+the OSD scan-out, library threads such as the LED thread), the `SPIn`/`I2Cn`
+bus threads and the UART threads. A thread that is not listed starts on the
+core that creates it, as before, so the UART threads still land on whichever
+core first opens the port (there is no separate USB thread). The rcout thread
+looks up `"rcout"` itself. Timer, monitor, RCIN, IO and storage threads come
+from `chThdCreateStatic()` during Core0 init and are not looked up, so an
+entry for any of them would look like a knob and do nothing.
 
-The rate thread is not in that list: the vehicle asks for core 1 directly in
-`Copter::one_hz_loop()`, so HALs without affinity fall back to a plain thread. Nor is
-the EKF, which has no thread of its own here and runs inline in the Core0 main
-loop; the Core1 EKF thread described further down was bring-up work on the
-earlier dual-core branch and is not in the port as submitted.
+The vehicle creates the rate thread with a plain `thread_create()`, so HALs
+without SMP need nothing. The EKF has no thread of its own here and runs
+inline in the Core0 main loop; the Core1 EKF thread described further down was
+bring-up work on the earlier dual-core branch and is not in the port as
+submitted.
 
 ### Thread creation
 
-The defines are read where the thread is created, and the mechanism differs by
-thread rather than being uniform:
+```c
+// malloc.c - thread_create_alloc() gives every heap thread the table's core
+thread_descriptor_t td = THD_DESCRIPTOR_AFFINITY(name, wbase, wend, prio, pf, arg,
+                                                 thread_get_preferred_core(name));
 
-```cpp
-// Device.cpp - SPI/I2C bus threads pick their instance from the define
-os_instance_t *oip = (core_id == 1) ? &ch1 : &ch0;
-thread_create_alloc_affinity(..., name, prio, DeviceBus::bus_thread, this, oip);
-
-// Scheduler.cpp - rcout builds the descriptor by hand under HAL_CORE_RCOUT == 1
+// Scheduler.cpp - rcout builds its descriptor by hand with the same lookup.
 // Everything else (timer, IO, storage) is a plain chThdCreateStatic() on core0.
 ```
 
-`thread_create_pinned_to_core()` exists but has only two in-tree callers, and
-neither reads a define: `ArduCopter/Copter.cpp` (rate thread, literal core 1)
-and `AP_OSD/AP_OSD_pico.cpp`.
+`thread_get_preferred_core()` returns NULL, meaning the calling core, for a
+name that is not listed or a core that has not started yet.
 
 ### IRQ routing
 
@@ -105,25 +108,21 @@ inside the SPI bus thread when the first transaction is acquired. Since the SPI 
 is already pinned to its assigned core, `spiStart()` runs on that core and the DMA
 IRQ is routed there automatically.
 
-Moving SPI to Core1 is therefore a 1-line change today.
+Moving SPI to Core1 is therefore a one-entry change to the table.
 
 ## Interesting Experiments
 
-```c
-// Shipped today
-#define HAL_CORE_SPI0  1   // IMU bus on Core1, with the rate thread
-#define HAL_CORE_RCOUT 1
+```
+# hwdef.dat lines; the default table puts rate, rcout, SPI0 and OSD_c1 on Core1
 
-// Does the IMU bus on Core0 hurt? (regression baseline)
-#define HAL_CORE_SPI0  0
+# Does the IMU bus on Core0 hurt? (regression baseline)
+define HAL_THREAD_CORE_TABLE { "rate", 1 }, { "rcout", 1 }, { "SPI0", 0 }, { "OSD_c1", 1 }
 
-// More I/O on Core1, leaving Core0 for the scheduler
-#define HAL_CORE_SPI0  1
-#define HAL_CORE_I2C0  1
+# More I/O on Core1, leaving Core0 for the scheduler
+define HAL_THREAD_CORE_TABLE { "rate", 1 }, { "rcout", 1 }, { "SPI0", 1 }, { "I2C0", 1 }, { "OSD_c1", 1 }
 ```
 
-The rate thread is not switchable from here - the vehicle asks for core 1
-directly. Storage is not either, and must not be: see the XIP lockout below.
+Storage is not switchable, and must not be: see the XIP lockout below.
 
 ## IRQ Contention Note
 
@@ -136,7 +135,7 @@ just thread scheduling, it is the raw ISR execution overhead disappearing from C
 ## What This Is Not
 
 This is not dynamic load balancing. ChibiOS does not migrate threads. The assignment
-is static for the lifetime of a boot. Changing `HAL_CORE_xxx` requires a rebuild and
+is static for the lifetime of a boot. Changing the table requires a rebuild and
 reflash. The benefit is rapid experimental iteration across boots, not runtime
 adaptivity.
 
@@ -600,7 +599,7 @@ possible threads (currently: rate + EKF). Each additional Core1 thread adds spin
 contention that penalises both cores.
 
 **Config A as measured during bring-up:** `HAL_CORE_SPI0=0` with the EKF on Core1
--> 296 Hz, Core1 65-68% loaded. Historical: the branch now ships `HAL_CORE_SPI0 1`
+-> 296 Hz, Core1 65-68% loaded. Historical: the branch now ships SPI0 on Core1
 (Config E) and has no EKF thread at all.
 
 **FSTRATE settings used for the Laurel measurements above:**
@@ -644,7 +643,7 @@ same parameters give 3.2 kHz and 1.6 kHz.
 | `modules/ChibiOS/os/hal/ports/RP/LLD/EFLv1/rp_efl_lld.c` | EFL driver: `rpEflBeforeXipOff/AfterXipOn` weak hooks |
 | `modules/ChibiOS/os/hal/ports/RP/RP2350/hal_efl_lld.c` | RP2350-specific flash: `rp_flash_exit_xip`, `rp_flash_enter_xip` (.ramtext) |
 | `modules/ChibiOS/os/hal/ports/RP/LLD/TIMERv1/hal_st_lld.c` | ChibiOS tick ISR handlers (Vector40=Core0, Vector44=Core1) |
-| `rp2350/rp2350_core_affinity.h` | Per-thread core assignment `#define`s |
+| `rp2350/rp2350_core_affinity.h` | Default thread core table (`HAL_THREAD_CORE_TABLE`) |
 | `hwdef/Laurel/hwdef.dat` | Board config — `RP_CORE1_START TRUE`, `SCHED_LOOP_RATE 400`, `FSTRATE_*` |
 | `AP_NavEKF3/AP_NavEKF3_Logging.cpp` | `Log_Write_GSF` restored with null-guard in place |
 | `modules/ChibiOS/os/common/ports/ARMv8-M-ML-ALT/compilers/GCC/chcoreasm.S` | Per-function `.section` directives for `PendSV_Handler`, `SVC_Handler`, `__port_thread_start` — enables RAMFUNC2 placement |

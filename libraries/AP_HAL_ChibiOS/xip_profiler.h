@@ -26,8 +26,8 @@
  *    (no per-master or per-core filter exists in hardware).
  *  - Both Laurel and Pico2 run ChibiOS Full SMP (CH_CFG_SMP_MODE TRUE).
  *    Core 0 runs most ArduPilot threads.  Core 1 runs a ChibiOS SMP instance
- *    (ch1) with the rate controller thread pinned to it via
- *    thread_create_alloc_affinity().
+ *    (ch1) with the rate controller thread placed on it by the thread core
+ *    table in rp2350_core_affinity.h.
  *  - CH_CFG_CONTEXT_SWITCH_HOOK fires on whichever core the context switch
  *    occurs on, so ap_xip_cs_hook() correctly attributes XIP counts to the
  *    rate thread on Core 1 as well as all Core 0 threads.

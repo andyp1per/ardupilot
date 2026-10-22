@@ -176,7 +176,7 @@ Added vs Run 2:
   eviction pressure entirely.
 - `ArduCopter` reached **99%** — fully resident.
 - `rate` is stuck at 91–92% across **all three runs**. The rate thread is
-  pinned to Core1 (`thread_create_pinned_to_core(..., rate_core=1)`) but the
+  pinned to Core1 (its `"rate"` entry in the thread core table) but the
   XIP cache is **shared** — so Core0 promotions do relieve shared cache
   pressure. However the rate thread's own hot callees (`AC_PID::update_all()`,
   `AC_AttitudeControl_Multi::rate_controller_run()`,

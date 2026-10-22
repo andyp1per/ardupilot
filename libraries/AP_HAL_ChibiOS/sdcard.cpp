@@ -158,7 +158,7 @@ bool sdcard_init_raw(uint8_t sd_slowdown, uint8_t tries)
 
 #if defined(RP2350) && CH_CFG_SMP_MODE == TRUE
     /*
-     * HAL_CORE_SPI1 controls which core the SPI1 bus thread runs on.
+     * The thread core table controls which core the SPI1 bus thread runs on.
      * sdcard_init() always runs on core0. If the SPI1 bus thread has already
      * started SPID1 on the other core then its DMA IRQs fire there while the
      * thread waiting here is on core0, so the bus is stopped and left for the

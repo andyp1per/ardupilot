@@ -211,11 +211,12 @@ core1's rate loop were thrashing it. Moving core1's hot path into SRAM freed the
 cache for core0 and let the clock come back down.
 
 Work is split as main loop 200 Hz on core0 (nav, EKF inline, GCS, logging) and
-a 2 kHz rate thread pinned to core1, fed by a 4 kHz gyro backend. Core affinity
-is set in `rp2350/rp2350_core_affinity.h`: the SPI buses are on core1,
-I2C on core0. Only the rate thread (`ArduCopter/Copter.cpp`, via
-`thread_create_pinned_to_core`) and the SPI bus threads run on core1;
-everything else, including logging, is on core0.
+a 2 kHz rate thread pinned to core1, fed by a 4 kHz gyro backend. Core
+placement is the thread core table in `rp2350/rp2350_core_affinity.h`, keyed on
+thread name, which a hwdef can replace with `define HAL_THREAD_CORE_TABLE`.
+The rate thread, rcout, the SPI0 (IMU) bus thread and the OSD scan-out run on
+core1; everything else, including logging and the SPI1 (microSD) bus, is on
+core0.
 
 The EKF runs inline in the main loop, not as a thread. Earlier threaded-EKF
 scaffolding was removed because it added a one-tick lag and shared-state

@@ -44,7 +44,7 @@ void rp2350_perf_report(void)
     }
 
     const float c1_pct = hal.scheduler->get_core1_load_pct();
-    // c1_pct sentinels: -2.0 = SMP active but core1 thread not yet started
+    // c1_pct sentinels: -2.0 = SMP active but no interval measured yet
     // (suppress to avoid bogus single-core output); -1.0 = non-SMP target
     // (print single-core format); >= 0.0 = SMP ready (print dual-core format).
     if (c1_pct < -1.5f) {

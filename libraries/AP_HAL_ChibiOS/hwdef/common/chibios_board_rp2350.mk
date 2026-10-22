@@ -239,7 +239,7 @@ endif
 
 # SMP: generate _crt0_c1_entry trampoline required for core1 startup under
 # CH_CFG_SMP_MODE=TRUE.  Core1 initialises as a full ChibiOS SMP instance
-# (ch1); the rate thread is pinned there via thread_create_alloc_affinity().
+# (ch1); the thread core table in rp2350_core_affinity.h puts threads there.
 UADEFS = -DCRT0_EXTRA_CORES_NUMBER=1
 
 ifeq ($(COPY_VECTORS_TO_RAM),yes)

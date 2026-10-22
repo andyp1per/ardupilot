@@ -84,7 +84,7 @@ libraries/AP_Math/LowPassFilter.h|LowPassFilter2p<Vector3<float>>::set_cutoff_fr
 libraries/AP_Math/LowPassFilter.h|LowPassFilter2p<float>::set_cutoff_frequency  # 164 B (sram) [inlinable]
 # The gyro-notch apply chain (apply_gyro_filters + NotchFilter<Vector3>::apply +
 # HarmonicNotchFilter<Vector3>::apply) moved to Scratch Y - it runs per gyro sample only on core1
-# (IMU SPI0 device-bus thread, HAL_CORE_SPI0=1). See rp2350_scratchy_registry.txt.
+# (IMU SPI0 device-bus thread, on core1 in the thread core table). See rp2350_scratchy_registry.txt.
 # NotchFilter<float>::apply (PID target/error notch) stays here pending a check of whether the
 # core0 position-control PIDs use it; keep it in shared SRAM until then.
 libraries/Filter/NotchFilter.h|NotchFilter<float>::apply  # 108 B (sram) [inlinable]

@@ -30,9 +30,6 @@
 #include "Scheduler.h"
 #include "Util.h"
 #include "GPIO.h"
-#if defined(RP2350)
-#include "rp2350/rp2350_core_affinity.h"
-#endif  // defined(RP2350)
 
 #include <AP_HAL_ChibiOS/UARTDriver.h>
 #include <AP_HAL_ChibiOS/AnalogIn.h>
@@ -137,12 +134,10 @@ void Scheduler::init()
 
 #ifndef HAL_NO_RCOUT_THREAD
     // setup the RCOUT thread - this will call tasks at 1kHz
-#if defined(RP2350) && CH_CFG_SMP_MODE == TRUE && HAL_CORE_RCOUT == 1
+#if CH_CFG_SMP_MODE == TRUE
     /*
-      Pinned to core1 so it shares a core with the rate thread: the motor
-      demands are then handed over in SRAM rather than across the cores.
       chThdCreateStatic() has no way to name an instance, so build the
-      descriptor by hand - same shape as thread_create_alloc_affinity().
+      descriptor by hand, on the core the thread core table gives "rcout".
      */
     {
         /*
@@ -163,7 +158,7 @@ void Scheduler::init()
             .prio     = APM_RCOUT_PRIORITY,
             .funcp    = _rcout_thread,
             .arg      = this,
-            .instance = &ch1,
+            .instance = thread_get_preferred_core("rcout"),
         };
         chSysLock();
         _rcout_thread_ctx = chThdCreateSuspendedI(&td);
@@ -752,24 +747,16 @@ void Scheduler::restore_interrupts(void *state)
 */
 void Scheduler::thread_create_trampoline(void *ctx)
 {
+#if defined(RP2350) && AP_RP2350_PC_SAMPLER_ENABLED
+    // the sampler arms its own core's alarm, so core1's is armed from a thread there
+    if (port_get_core_id() == 1U) {
+        rp2350_pc_sampler_init_core1();
+    }
+#endif  // defined(RP2350) && AP_RP2350_PC_SAMPLER_ENABLED
     AP_HAL::MemberProc *t = (AP_HAL::MemberProc *)ctx;
     (*t)();
     free(t);
 }
-
-#if CH_CFG_SMP_MODE == TRUE
-/*
-  trampoline for the core1-pinned thread
-*/
-void Scheduler::thread_create_trampoline_core1(void *ctx)
-{
-#if defined(RP2350) && AP_RP2350_PC_SAMPLER_ENABLED
-    // the sampler arms its own core's alarm, so this has to run on core1
-    rp2350_pc_sampler_init_core1();
-#endif  // defined(RP2350) && AP_RP2350_PC_SAMPLER_ENABLED
-    thread_create_trampoline(ctx);
-}
-#endif  // CH_CFG_SMP_MODE == TRUE
 
 // calculates an integer to be used as the priority for a newly-created thread
 uint8_t Scheduler::calculate_thread_priority(priority_base base, int8_t priority) const
@@ -830,40 +817,6 @@ bool Scheduler::thread_create(AP_HAL::MemberProc proc, const char *name, uint32_
 }
 
 #if CH_CFG_SMP_MODE == TRUE
-bool Scheduler::thread_create_pinned_to_core(AP_HAL::MemberProc proc, const char *name,
-                                             uint32_t stack_size, priority_base base,
-                                             int8_t priority, uint8_t core)
-{
-    // Only core1 pinning is supported; any other core falls back to thread_create().
-    if (core == 1) {
-        AP_HAL::MemberProc *tproc = (AP_HAL::MemberProc *)malloc(sizeof(proc));
-        if (!tproc) {
-            return false;
-        }
-        *tproc = proc;
-
-        const uint8_t thread_priority = calculate_thread_priority(base, priority);
-
-        thread_t *thread_ctx = thread_create_alloc_affinity(THD_WORKING_AREA_SIZE(stack_size),
-                                                            name,
-                                                            thread_priority,
-                                                            thread_create_trampoline_core1,
-                                                            tproc,
-                                                            &ch1);
-        if (thread_ctx == nullptr) {
-            free(tproc);
-            return false;
-        }
-        _core1_thread_ctx = thread_ctx;
-#if CH_DBG_STATISTICS == TRUE
-        _core1_last_cumulative = core1_idle_cumulative();
-        _core1_last_us = AP_HAL::micros64();
-#endif  // CH_DBG_STATISTICS == TRUE
-        return true;
-    }
-    return thread_create(proc, name, stack_size, base, priority);
-}
-
 #if CH_DBG_STATISTICS == TRUE
 /*
   ch1's idle thread is created inside chInstanceObjectInit() and is not
@@ -891,16 +844,16 @@ rttime_t Scheduler::core1_idle_cumulative(void)
 float Scheduler::get_core1_load_pct()
 {
 #if CH_DBG_STATISTICS == TRUE
-    if (_core1_thread_ctx == nullptr) {
-        // SMP active but core1 thread not yet created.  Return -2.0 as a
-        // sentinel so the caller can suppress the entire Perf print rather
-        // than emitting a bogus core0load-only or core1load:0% line.
-        return -2.0f;
-    }
     // Measure idle time on ch1 and invert: load = 100% - idle%.
     // This automatically includes all threads pinned to Core1.
     const rttime_t cur_idle = core1_idle_cumulative();
     const uint64_t cur_us = AP_HAL::micros64();
+    if (_core1_last_us == 0) {
+        // no interval yet: -2.0 tells the caller to skip this report
+        _core1_last_cumulative = cur_idle;
+        _core1_last_us = cur_us;
+        return -2.0f;
+    }
     const uint64_t elapsed = cur_us - _core1_last_us;
     if (elapsed == 0) {
         return 0.0f;

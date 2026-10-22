@@ -12,38 +12,34 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-   RP2350 SMP core assignments for the bus and driver threads.
+   RP2350 SMP core assignments for named threads.
  */
 /*
-  rp2350_core_affinity.h -- per-thread core assignment for RP2350 SMP.
+  The core each named thread runs on: 0 or 1. thread_create_alloc() looks a
+  new thread's name up here, which covers threads made with
+  hal.scheduler->thread_create(), the SPIn/I2Cn bus threads and the UART
+  threads, and the rcout thread looks up "rcout". A thread that is not listed
+  starts on the core that creates it. The timer, monitor, RCIN, IO and storage threads are created
+  statically on core0 and are not looked up, so listing them does nothing.
 
-  Change a single define to move a bus thread (and its peripheral IRQs) between
-  cores. See libraries/AP_HAL_ChibiOS/rp2350/ANY_THREAD_ANY_CORE.md.
-  Valid values: 0 (Core0) or 1 (Core1). Only threads that something actually
-  reads a define for are listed: RCOUT in Scheduler.cpp, and the SPI/I2C bus
-  threads in Device.cpp. Every other thread starts on the core that creates
-  it: the timer, monitor, RCIN, IO and storage threads through
-  chThdCreateStatic() during Core0 init, the UART threads through
-  thread_create_alloc() on whichever core first opens the port, and library
-  threads such as the LED thread through thread_create(). Only the rate and
-  OSD threads ask for a core, through thread_create_pinned_to_core(). Adding a
-  define for any of them here would silently do nothing.
-  Default: all on Core0 except the SPI0 (IMU) bus thread and rcout, which share
-  Core1 with the rate thread. The rate thread itself is pinned by the vehicle
-  through thread_create_pinned_to_core(), not from here, and there is no
-  separate EKF thread - EKF3 runs inline in the Core0 main loop.
-  IRQ routing is automatic: ChibiOS HAL routes a peripheral's IRQ to whichever
-  core calls the driver start function (spiStart, i2cStart, sdStart, etc.).
-  Threads do their own peripheral init on first wakeup, so the IRQ follows the
-  thread automatically -- no manual NVIC configuration needed.
+  A board replaces the whole table with its own in hwdef.dat, for example
+    define HAL_THREAD_CORE_TABLE { "rate", 1 }, { "rcout", 1 }, { "SPI0", 0 }
+
+  A peripheral's IRQ follows its thread: ChibiOS routes it to the core that
+  calls the driver start function (spiStart, i2cStart, sdStart, etc.), and the
+  threads do their own peripheral init on first wakeup.
+  See libraries/AP_HAL_ChibiOS/rp2350/ANY_THREAD_ANY_CORE.md.
 */
 #pragma once
 
-#if defined(RP2350) && CH_CFG_SMP_MODE == TRUE
-#define HAL_CORE_RCOUT    1   // with the rate thread: motor demands stay in SRAM
-#define HAL_CORE_SPI0     1   // IMU bus, alongside the rate thread
-#define HAL_CORE_SPI1     0
-#define HAL_CORE_I2C0     0
-#define HAL_CORE_I2C1     0
-
-#endif // RP2350 && CH_CFG_SMP_MODE
+#ifndef HAL_THREAD_CORE_TABLE
+#define HAL_THREAD_CORE_TABLE \
+    { "rate",   1 },    /* the vehicle rate thread */ \
+    { "rcout",  1 },    /* with the rate thread: motor demands stay in SRAM */ \
+    { "SPI0",   1 },    /* IMU bus, alongside the rate thread */ \
+    { "OSD_c1", 1 },    /* PIO OSD scan-out */ \
+    /* the other buses stay on core0 even when first used from core1 */ \
+    { "SPI1",   0 }, \
+    { "I2C0",   0 }, \
+    { "I2C1",   0 }
+#endif

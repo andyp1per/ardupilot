@@ -46,9 +46,8 @@ void *malloc_fastmem(size_t size);
 void *malloc_eth_safe(size_t size);
 thread_t *thread_create_alloc(size_t size, const char *name, tprio_t prio, tfunc_t pf, void *arg);
 #if CH_CFG_SMP_MODE == TRUE
-/* Pin a permanent thread to a specific ChibiOS OS instance (core). Pass &ch1 for core1. */
-thread_t *thread_create_alloc_affinity(size_t size, const char *name, tprio_t prio,
-                                       tfunc_t pf, void *arg, os_instance_t *oip);
+// the core a named thread runs on, from HAL_THREAD_CORE_TABLE; NULL for the calling core
+os_instance_t *thread_get_preferred_core(const char *name);
 #endif  // CH_CFG_SMP_MODE == TRUE
 bool mem_is_dma_safe(const void *addr, uint32_t size, bool filesystem_op);
 
