@@ -316,32 +316,20 @@
 // Scheduler rate for the GCS receive and send tasks. A board whose main loop
 // shares a core with the GCS work can lower this to leave cycles for the
 // estimators.
-#ifndef HAL_GCS_UPDATE_RATE_HZ
-#define HAL_GCS_UPDATE_RATE_HZ 400
+#ifndef AP_GCS_UPDATE_RATE_HZ
+#define AP_GCS_UPDATE_RATE_HZ 400
 #endif
 
 // Stack for the vehicle rate controller thread, where one is used. Boards that
 // run it on a second core, or with deeper call chains, can raise this.
-#ifndef HAL_RATE_THREAD_STACK_SIZE
-#define HAL_RATE_THREAD_STACK_SIZE 1536
+#ifndef AP_RATE_THREAD_STACK_SIZE
+#define AP_RATE_THREAD_STACK_SIZE 1536
 #endif
 
 // Set where the vehicle rate controller thread runs on a different core from
 // the main loop, so main loop overrun says nothing about the rate thread's load.
-#ifndef HAL_RATE_THREAD_SEPARATE_CORE
-#define HAL_RATE_THREAD_SEPARATE_CORE 0
-#endif
-
-// AP_ spellings of the three above, taking the HAL_ values until the
-// boards and vehicles have moved to them
-#ifndef AP_GCS_UPDATE_RATE_HZ
-#define AP_GCS_UPDATE_RATE_HZ HAL_GCS_UPDATE_RATE_HZ
-#endif
-#ifndef AP_RATE_THREAD_STACK_SIZE
-#define AP_RATE_THREAD_STACK_SIZE HAL_RATE_THREAD_STACK_SIZE
-#endif
 #ifndef AP_RATE_THREAD_SEPARATE_CORE
-#define AP_RATE_THREAD_SEPARATE_CORE HAL_RATE_THREAD_SEPARATE_CORE
+#define AP_RATE_THREAD_SEPARATE_CORE 0
 #endif
 
 #ifndef AP_STATS_ENABLED

@@ -5,8 +5,8 @@
 // the RP2350 thread core table puts the rate thread on core1, away from the
 // main loop; a board whose table keeps them together defines this as 0
 #if defined(RP2350) && defined(CH_CFG_SMP_MODE) && CH_CFG_SMP_MODE == TRUE
-#ifndef HAL_RATE_THREAD_SEPARATE_CORE
-#define HAL_RATE_THREAD_SEPARATE_CORE 1
+#ifndef AP_RATE_THREAD_SEPARATE_CORE
+#define AP_RATE_THREAD_SEPARATE_CORE 1
 #endif
 #endif  // defined(RP2350) && defined(CH_CFG_SMP_MODE) && CH_CFG_SMP_MODE == TRUE
 
