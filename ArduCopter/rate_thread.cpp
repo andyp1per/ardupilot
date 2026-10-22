@@ -255,9 +255,9 @@ void Copter::rate_controller_thread()
         } else if (running_slow > 0) {
             running_slow--;
         }
-        // when the rate thread has a core to itself, main loop overrun does not
-        // constrain it, so every iteration counts towards the rate
-        if (hal.scheduler->cores_are_independent() || AP::scheduler().get_extra_loop_us() == 0) {
+        // on a different core from the main loop, main loop overrun does not
+        // hold this thread up, so every iteration counts towards the rate
+        if (HAL_RATE_THREAD_SEPARATE_CORE || AP::scheduler().get_extra_loop_us() == 0) {
             rate_loop_count++;
         }
 
@@ -361,7 +361,7 @@ void Copter::rate_controller_thread()
             last_rate_check_ms = now_ms;
             const uint32_t att_rate = ins.get_raw_gyro_rate_hz()/rate_decimation;
             if (running_slow > 5
-                || (!hal.scheduler->cores_are_independent()
+                || (!HAL_RATE_THREAD_SEPARATE_CORE
                     && AP::scheduler().get_extra_loop_us() > 0)
 #if HAL_LOGGING_ENABLED
                 || AP::logger().in_log_download()
