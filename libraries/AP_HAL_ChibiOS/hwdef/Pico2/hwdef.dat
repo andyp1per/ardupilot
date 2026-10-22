@@ -217,11 +217,11 @@ define RP_QMI_RXDELAY 2
 
 # The main loop shares core0 with the estimators; the GCS tasks are polled at a
 # lower rate than the 400 Hz default to leave cycles for them.
-define HAL_GCS_UPDATE_RATE_HZ 25
+define AP_GCS_UPDATE_RATE_HZ 25
 
 # The rate controller thread runs on core1 with a deeper call chain than the
 # 1536 byte default allows.
-define HAL_RATE_THREAD_STACK_SIZE 5120
+define AP_RATE_THREAD_STACK_SIZE 5120
 
 # the rate thread runs on core1, so a deeper gyro queue rides out core0 stalls
 define AP_INERTIAL_SENSOR_RATE_LOOP_BUFFER_SIZE 32

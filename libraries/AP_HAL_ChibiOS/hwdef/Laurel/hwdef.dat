@@ -206,11 +206,11 @@ define HAL_BARO_ALLOW_INIT_NO_BARO 1
 
 # The main loop shares core0 with the estimators; the GCS tasks are polled at a
 # lower rate than the 400 Hz default to leave cycles for them.
-define HAL_GCS_UPDATE_RATE_HZ 25
+define AP_GCS_UPDATE_RATE_HZ 25
 
 # The rate controller thread runs on core1 with a deeper call chain than the
 # 1536 byte default allows.
-define HAL_RATE_THREAD_STACK_SIZE 5120
+define AP_RATE_THREAD_STACK_SIZE 5120
 
 # 32-bit timestamps in the rcout cycle. The 64-bit default puts micros64() and
 # the wrap arithmetic around it on core1's dshot path, where PC sampling found
