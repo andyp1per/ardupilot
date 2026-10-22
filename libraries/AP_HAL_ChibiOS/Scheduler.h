@@ -149,9 +149,6 @@ public:
      */
     bool thread_create(AP_HAL::MemberProc, const char *name, uint32_t stack_size, priority_base base, int8_t priority) override;
 #if CH_CFG_SMP_MODE == TRUE
-    // without SMP the AP_HAL default already says one core
-    bool cores_are_independent() const override { return true; }
-
     // core1 load in percent since the last call; -2 before there is an
     // interval to measure, -1 without CH_DBG_STATISTICS
     float core1_load_pct();

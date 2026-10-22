@@ -19,11 +19,14 @@
   new thread's name up here, which covers threads made with
   hal.scheduler->thread_create(), the SPIn/I2Cn bus threads and the UART
   threads, and the rcout thread looks up "rcout". A thread that is not listed
-  starts on the core that creates it. The timer, monitor, RCIN, IO and storage threads are created
-  statically on core0 and are not looked up, so listing them does nothing.
+  starts on the core that creates it. The timer, monitor, RCIN, IO and storage
+  threads are created statically on core0 and are not looked up, so listing
+  them does nothing.
 
   A board replaces the whole table with its own in hwdef.dat, for example
     define HAL_THREAD_CORE_TABLE { "rate", 1 }, { "rcout", 1 }, { "SPI0", 0 }
+  A board that puts "rate" on core0 with the main loop also needs
+    define HAL_RATE_THREAD_SEPARATE_CORE 0
 
   A peripheral's IRQ follows its thread: ChibiOS routes it to the core that
   calls the driver start function (spiStart, i2cStart, sdStart, etc.), and the

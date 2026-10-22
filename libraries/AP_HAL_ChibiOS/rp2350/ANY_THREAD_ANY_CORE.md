@@ -61,7 +61,9 @@ from `chThdCreateStatic()` during Core0 init and are not looked up, so an
 entry for any of them would look like a knob and do nothing.
 
 The vehicle creates the rate thread with a plain `thread_create()`, so HALs
-without SMP need nothing. The EKF has no thread of its own here and runs
+without SMP need nothing. Copter does read `HAL_RATE_THREAD_SEPARATE_CORE`,
+1 here, so that core0 main loop overrun does not slow a rate thread on core1;
+a board whose table puts `"rate"` on core0 sets it to 0. The EKF has no thread of its own here and runs
 inline in the Core0 main loop; the Core1 EKF thread described further down was
 bring-up work on the earlier dual-core branch and is not in the port as
 submitted.
