@@ -332,12 +332,6 @@
 #define HAL_RATE_THREAD_STACK_SIZE 1536
 #endif
 
-// Core the vehicle rate controller thread asks for, where the HAL can pin
-// threads to cores (HAL_SCHEDULER_SMP_ENABLED)
-#ifndef HAL_RATE_THREAD_CORE
-#define HAL_RATE_THREAD_CORE 1
-#endif
-
 #ifndef AP_STATS_ENABLED
 #define AP_STATS_ENABLED 1
 #endif
