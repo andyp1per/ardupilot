@@ -115,6 +115,19 @@ bool sysStopLoadMeasure(void) {
 }
 
 /**
+ * @brief Clear every core's peak load, so that the next peak read covers only
+ *        the time since this call.
+ *
+ * @api
+ */
+void sysResetLoadPeak(void) {
+
+  for (unsigned i = 0; i < PORT_CORES_NUMBER; i++) {
+    _loads[i].peak = (sys_cpu_load_t)0;
+  }
+}
+
+/**
  * @brief Get the peak CPU load measured.
  *
  * @return Peak CPU load  reached as percentage * 100
