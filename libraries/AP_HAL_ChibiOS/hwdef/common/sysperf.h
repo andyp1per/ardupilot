@@ -87,8 +87,8 @@ extern "C" {
   void            sysInitLoadMeasure(void);
   bool            sysStartLoadMeasure(void);
   bool            sysStopLoadMeasure(void);
-  void            sysResetLoadPeak(void);
   sys_cpu_load_t  sysGetCPUPeakLoad(void);
+  void            sysClearCPUPeakLoad(void);
   sys_cpu_load_t  sysGetCPUAverageLoad(void);
   sys_cpu_load_t  sysGetCoreCPUPeakLoad(unsigned core);
   sys_cpu_load_t  sysGetCoreCPUAverageLoad(unsigned core);

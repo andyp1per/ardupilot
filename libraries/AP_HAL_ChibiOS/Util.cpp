@@ -582,7 +582,7 @@ __RAMFUNC__ void Util::thread_info(ExpandingString &str)
     if (AP_BoardConfig::use_idle_stats()) {
         // keep measuring, and start a new peak for the next read
         sysStartLoadMeasure();
-        sysResetLoadPeak();
+        sysClearCPUPeakLoad();
     }
 #endif
 #if defined(RP2350) && AP_XIP_PROFILER_ENABLED
