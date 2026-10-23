@@ -579,12 +579,13 @@ ISR that can fire on core1 and the context-switch path.
   hooks, starting the first time `threads.txt` is read: the start in
   `main_loop()` checks the parameter before parameters are loaded, so it never
   runs. Until that first read, `Util::get_system_load()` reports 0% load.
-  ArduPilot/ardupilot#33366 moves the start after parameter load.
-  `threads.txt` then starts with
-  `ThreadsV3 C0 LOAD=.. PEAK=.. C1 LOAD=.. PEAK=..`, and
-  `Util::get_system_load()` reports the busier core. Both cores time against
-  the shared 1 MHz TIMER0, and LOAD is a decaying average, halved each time
-  a second of run or idle time builds up.
+  ArduPilot/ardupilot#33366 moves the start after parameter load. From that
+  read the measurement runs on, and `threads.txt` starts with
+  `ThreadsV3 C0 LOAD=.. PEAK=.. C1 LOAD=.. PEAK=..`, where PEAK is the
+  highest since the previous read, and `Util::get_system_load()` reports the
+  busier core. Both cores time against the shared 1 MHz TIMER0, and LOAD is
+  a decaying average, halved each time a second of run or idle time builds
+  up.
 - `HAL_ENABLE_THREAD_STATISTICS TRUE` (`CH_DBG_STATISTICS`) adds a per-thread
   LOAD, as a share of the thread's own core, and an `ISR` line per core. It
   also enables `ChibiOS::Scheduler::core1_load_pct()`, which is 100 minus the
