@@ -2,7 +2,59 @@
 
 *Audience: project sponsor / non-engineering stakeholders. Updated as the work progresses.*
 
-**Last updated:** 2026-10-21
+**Last updated:** 2026-10-31
+
+---
+
+## Update: 31 October 2026 (~31 weeks elapsed)
+
+This update sits above the 21 October update, which is kept below it as it was.
+
+### Headline
+
+**Anyone can now download ArduPilot for Raspberry Pi's flight controller.** A public release repository went live on 25 October, and the first prebuilt release followed on 27 October, so flying the board no longer needs a build environment. Eleven release-test flights over 29-31 October found no fault in the port itself. The one weak spot they showed is the board's current sensor, whose reading ends up in the compass.
+
+### Since the 21 October update
+
+- **25-27 October: a release repository for users.** Until the port is accepted upstream, ArduPilot's own download server cannot build RP2350 boards, so the new repository ([fossuav/ardupilot-rp2350](https://github.com/fossuav/ardupilot-rp2350)) fills the gap. In it:
+  - ArduPilot with the RP2350 port, plus 13 fixes found during testing. Every fix is also submitted to the ArduPilot project, so nothing in it is private to the fork.
+  - Ready-to-flash firmware for the Raspberry Pi flight controller, and for a stock Pico 2, which runs the flight code against a simulated aircraft with nothing attached but USB.
+  - Instructions for installing, building and recovering a board, and the known limitations. Installing takes two steps over USB, and a board can always be recovered through the chip's built-in USB loader.
+  - Every change is built automatically, and rebuilding the release from scratch gives byte-for-byte the same files. Users report problems there rather than to the ArduPilot project; none have been reported yet.
+
+- **23-28 October: upstream review.** The submission was brought up to date with the latest ArduPilot and answered several more rounds of automated review. It now stands at 55 commits, and the first 51 leave the firmware for existing flight controllers exactly as it was. The human reviewers' comments have all been answered apart from two threads. Two fixes came out of this round:
+  - The bootloader now erases flash more carefully during an update. It could leave behind a page written by the chip's own USB loader, which made a check after an update fail on a Pico 2.
+  - The serial-port mode used to control video transmitters could lose the transmitter's replies. This is fixed and bench-tested, but not yet flown.
+
+- **29 October: the boards are not yet the final revision.** Raspberry Pi confirmed that the boards being flown are R3s modified towards R4, with one current-sensor part still the original. True R4 boards are due shortly. The same day, a GPS that would not lock was chased as a possible firmware fault, and turned out to be the receiver itself.
+
+- **29-31 October: release-testing flights.** Eleven flights over three days, on the build planned for the next release, in stabilised flight, altitude hold, GPS position hold and acrobatic mode with flips. The port was clean in every one: the flight-control loop held its full rate of 1600 times a second on the second core, and no log data was lost. The pre-flight check problem from September has not come back.
+  - On 30 October, motor current swamped the compass during hard acrobatic flying, and the navigation failsafe tripped four times. After the current sensor was rescaled and the compass recalibrated from a dedicated calibration flight, acrobatic flight was clean.
+  - On 31 October nothing tripped, and the navigation system's heading stayed within 6 degrees of true. The compass's correction had stopped matching the aircraft overnight, for a reason on the airframe that is still being traced, and the navigation system rode through it.
+
+- **30 October: the current sensor measured.** The board's current reading depends heavily on the motor controller (ESC) it is paired with. With the ESC in the test aircraft it reads six to eight times lower than the board's default setting expects. Its zero point also drifts with board temperature, by more than half an amp per degree with this ESC. The flight controller uses that reading to cancel the motors' magnetic interference at the compass, so the error ends up in the compass. The findings went to Raspberry Pi's designers in a separate note, and the release's instructions tell users how to work around them.
+
+### Where we are against the original plan
+
+- ✅ **Users can get it.** Prebuilt firmware is published with instructions, so the board can be flown without building anything.
+- ✅ **The port holds up in release testing.** Eleven flights, including acrobatics, found no fault in the port. The September pre-flight check problem is confirmed fixed in flight.
+- 🔵 **Upstream review is in progress.** This is unchanged. The ChibiOS change has been waiting for review since September and is now the main gate.
+- ⚠️ **Some safety modes have not yet been flown.** Return-to-home, autonomous missions and the GPS-loss failsafe still need deliberate testing, and automatic tuning has not yet been run.
+- ⚠️ **The current sensor limits compass accuracy.** The release documents a compass setting that does not use the sensor. R4 boards should show how much of the problem their changed parts remove.
+- ⚠️ **There are still open hardware questions for Raspberry Pi.** They cover running the chip above its datasheet speed, the current sensor (now measured), and the 9 V power switch.
+
+### What's left
+
+- **Cut the second release** from the build flown on 29-31 October, with the bootloader fix.
+- **Flight-test the remaining modes and failsafes,** and run automatic tuning.
+- **Test on R4 boards when they arrive:** measure the current sensor again, then recalibrate the compass.
+- **Get the upstream submission accepted.** The ChibiOS change comes first.
+- **Hardware answers from Raspberry Pi** on the clock speed, current sensing and power switching. For current sensing, the question is what ESC output the input is designed for, and whether R4 suits ESCs like the one in the test aircraft.
+- **Later:** other vehicle types (fixed-wing and others) and CAN-bus peripherals.
+
+### Posture
+
+At about 31 weeks, against the plan's estimate of about 32 weeks to a production-quality port, the work has moved from engineering to release and testing. The firmware is now in users' hands through the release repository, and release testing has found no fault in the port. What remains is flight-testing the safety modes, a current-sensor question that the R4 boards should help answer, and upstream review, whose pace is not in our hands.
 
 ---
 
