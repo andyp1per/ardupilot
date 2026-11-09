@@ -1220,9 +1220,10 @@ bool NavEKF2::using_gps(void) const
 // msecFlowMeas is the scheduler time in msec when the optical flow data was received from the sensor.
 // posOffset is the XYZ flow sensor position in the body frame in m
 // heightOverride is the fixed height of the sensor above ground in m, when on rover vehicles. 0 if not used
-void NavEKF2::writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f &rawFlowRates, const Vector2f &rawGyroRates, const uint32_t msecFlowMeas, const Vector3f &posOffset, float heightOverride)
+// heightMin is the height below which the sensor cannot focus in m. It is not used by EKF2, but is passed to the DAL so that both EKFs write the same record
+void NavEKF2::writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f &rawFlowRates, const Vector2f &rawGyroRates, const uint32_t msecFlowMeas, const Vector3f &posOffset, float heightOverride, float heightMin)
 {
-    AP::dal().writeOptFlowMeas(rawFlowQuality, rawFlowRates, rawGyroRates, msecFlowMeas, posOffset, heightOverride);
+    AP::dal().writeOptFlowMeas(rawFlowQuality, rawFlowRates, rawGyroRates, msecFlowMeas, posOffset, heightOverride, heightMin);
 
     if (core) {
         for (uint8_t i=0; i<num_cores; i++) {
