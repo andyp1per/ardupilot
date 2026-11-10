@@ -4988,6 +4988,94 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_parameter("SIM_FLOW_OFS_X", 0)
         self.disarm_vehicle(force=True)
 
+    def OpticalFlowFocusHeightLanding(self):
+        '''with FLOW_HGT_MIN set, a vehicle left armed on the ground after landing keeps flow aiding'''
+        # On the ground the range finder reads below any useful FLOW_HGT_MIN, so the flow there
+        # must be fused as zero rather than discarded, or aiding times out before DISARM_DELAY
+        # and a mode that needs a position fails the EKF on the ground.
+        self.set_parameters({
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+
+        def drift_m(t0_us, t1_us):
+            dfreader = self.dfreader_for_current_onboard_log()
+            start_ne = None
+            end_ne = None
+            while True:
+                m = dfreader.recv_match(type='XKF1')
+                if m is None:
+                    break
+                if m.C != 0 or not (t0_us <= m.TimeUS <= t1_us):
+                    continue
+                if start_ne is None:
+                    start_ne = (m.PN, m.PE)
+                end_ne = (m.PN, m.PE)
+            if start_ne is None:
+                raise NotAchievedException("no XKF1 between %u and %u" % (t0_us, t1_us))
+            return math.hypot(end_ne[0] - start_ne[0], end_ne[1] - start_ne[1])
+
+        # FLOW_HGT_MIN 0 is the control: master's behaviour
+        for hgt_min in 0.3, 0:
+            self.start_subtest("LOITER landing with FLOW_HGT_MIN %.1f, left armed on the ground" % hgt_min)
+            self.set_parameters({"FLOW_HGT_MIN": hgt_min, "SIM_FLOW_OFS_X": 0, "RNGFND1_MIN": 0})
+            self.reboot_sitl()
+            self.set_origin(self.sitl_start_location())
+            self.wait_ready_to_arm(require_absolute=False, timeout=120)
+            self.takeoff(altitude_min=5, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
+            self.change_mode('LOITER')
+            self.set_rc(3, 1500)
+            self.delay_sim_time(5, reason="settle in LOITER")
+            self.context_collect('STATUSTEXT')
+            self.set_rc(3, 1000)
+            self.wait_altitude(-1, 0.05, relative=True, timeout=60)
+            touchdown_s = self.get_sim_time()
+            self.wait_disarmed(timeout=60)
+            armed_s = self.get_sim_time() - touchdown_s
+            stopped = self.statustext_in_collections("stopped aiding")
+            failsafe = self.statustext_in_collections("EKF Failsafe")
+            self.context_stop_collecting('STATUSTEXT')
+            self.set_rc(3, 1500)
+            self.progress("armed %.1fs on the ground after landing" % armed_s)
+            if stopped or failsafe:
+                raise NotAchievedException("aiding lost on the ground after landing (%s, %s)" % (stopped, failsafe))
+
+        # a bad flow sensor on the ground must not reach the EKF: fused, its 2 rad/s walks the
+        # position by metres.  RNGFND1_MIN 0.2 puts the range finder out of range low before
+        # touchdown; it is raised only once airborne, as SITL's range finder reads 0 on the ground
+        for rng_min_m in 0.2, 0:
+            self.start_subtest("ALT_HOLD landing with RNGFND1_MIN %.1f and bad flow on the ground" % rng_min_m)
+            self.set_parameters({"FLOW_HGT_MIN": 0.3, "SIM_FLOW_OFS_X": 0, "PILOT_SPD_DN": 0.5, "RNGFND1_MIN": 0})
+            self.reboot_sitl()
+            self.wait_ready_to_arm(require_absolute=False, timeout=120)
+            self.takeoff(altitude_min=5, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
+            self.set_parameter("RNGFND1_MIN", rng_min_m)
+            self.set_rc(3, 1000)
+            self.wait_altitude(-1, 0.05, relative=True, timeout=60)
+            self.context_collect('STATUSTEXT')
+            self.set_parameter("SIM_FLOW_OFS_X", 2.0)
+            offset_us = self.get_sim_time() * 1e6
+            self.wait_disarmed(timeout=120)
+            disarm_us = self.get_sim_time() * 1e6
+            stopped = self.statustext_in_collections("stopped aiding")
+            self.context_stop_collecting('STATUSTEXT')
+            self.set_rc(3, 1500)
+            self.set_parameters({"RNGFND1_MIN": 0, "SIM_FLOW_OFS_X": 0})
+            self.delay_sim_time(2, reason="flush the log")
+            drift = drift_m(offset_us, disarm_us)
+            self.progress("armed %.1fs on the ground with bad flow, position drift %.2f m" %
+                          ((disarm_us - offset_us) * 1e-6, drift))
+            if stopped:
+                raise NotAchievedException("aiding lost on the ground after landing (%s)" % stopped)
+            if drift > 0.5:
+                raise NotAchievedException("bad flow fused on the ground (position drift %.2f m)" % drift)
+
+        self.reboot_sitl()
+
     def OpticalFlowCalibration(self):
         '''test optical flow calibration'''
         ex = None
@@ -20353,6 +20441,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.OpticalFlow,
             self.OpticalFlowLimits,
             self.OpticalFlowFocusHeight,
+            self.OpticalFlowFocusHeightLanding,
             self.BodyFrameOdom,
             self.RTLSpeed,
             self.MountYawVehicleForMountROI,
