@@ -562,7 +562,7 @@ bool NavEKF3_core::readyToUseOptFlow(void) const
 
     // flow that is not fused because the sensor is below its focus height cannot aid. Without this a vehicle
     // held below that height leaves relative aiding on the flow timeout and re-enters it on the next sample
-    if (flowRngBelowHeightMin) {
+    if (flowRngBelowHeightMin && !flowRngRestingBelowHeightMin) {
         return false;
     }
 

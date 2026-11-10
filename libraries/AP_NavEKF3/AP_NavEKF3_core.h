@@ -952,6 +952,9 @@ private:
     // fuse optical flow measurements into the main filter
     // really_fuse should be true to actually fuse into the main filter, false to only calculate variances
     void FuseOptFlow(const of_elements &ofDataDelayed, bool really_fuse);
+
+    // true if the downward range finder reads the vehicle as on the ground
+    bool rangeFinderOnGround() const;
 #endif
 
     // Control filter mode changes
@@ -1324,6 +1327,7 @@ private:
     EKF_obs_buffer_t<of_elements> storedOF;    // OF data buffer
     bool flowDataValid;             // true while optical flow data is still fresh
     bool flowRngBelowHeightMin;     // true if the range used for fusing optical flow is below the height minimum
+    bool flowRngRestingBelowHeightMin; // below the height minimum with the range finder reading the ground, so zero flow is fused
     Vector2F auxFlowObsInnov;       // optical flow rate innovation from 1-state terrain offset estimator
     uint32_t flowValidMeaTime_ms;   // time stamp from latest valid flow measurement (msec)
     uint32_t rngValidMeaTime_ms;    // time stamp from latest valid range measurement (msec)

@@ -288,8 +288,10 @@ void NavEKF3_core::EstimateTerrainOffset(const of_elements &ofDataDelayed)
  *
  * really_fuse should be true to actually fuse into the main filter, false to only calculate variances
 */
-void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fuse)
+void NavEKF3_core::FuseOptFlow(const of_elements &ofDataIn, bool really_fuse)
 {
+    // a copy, so that a sample taken at rest on the ground below the focus height can be fused as zero
+    of_elements ofDataDelayed = ofDataIn;
     Vector24 H_LOS;
     Vector2 losPred;
 
@@ -352,7 +354,13 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
     // On the ground before takeoff the flow is fused as zero instead, see SelectFlowFusion(),
     // so that relative aiding is not lost. Skipped if the height is a user specified override
     flowRngBelowHeightMin = takeOffDetected && rangeIsEstimated && (range < ofDataDelayed.heightMin);
-    if (flowRngBelowHeightMin) {
+    // where the range finder says the vehicle is on the ground it is not moving, so fuse zero flow
+    // rather than none, or an armed vehicle left on the ground loses relative aiding
+    flowRngRestingBelowHeightMin = flowRngBelowHeightMin && rangeFinderOnGround();
+    if (flowRngRestingBelowHeightMin) {
+        ofDataDelayed.flowRadXYcomp.zero();
+        ofDataDelayed.flowRadXY.zero();
+    } else if (flowRngBelowHeightMin) {
         really_fuse = false;
     }
 
@@ -953,5 +961,17 @@ void NavEKF3_core::UpdateAglKf()
 }
 
 #endif  // EK3_FEATURE_OPTFLOW_AGL_KF
+
+// true if the downward range finder whose sample is at the fusion horizon reads the vehicle as on the ground
+bool NavEKF3_core::rangeFinderOnGround() const
+{
+#if EK3_FEATURE_RANGEFINDER_MEASUREMENTS
+    const auto *rng = dal.rangefinder();
+    const auto *sensor = (rng != nullptr) ? rng->get_backend(rangeDataDelayed.sensor_idx) : nullptr;
+    return (sensor != nullptr) && (sensor->orientation() == ROTATION_PITCH_270) && sensor->on_ground();
+#else
+    return false;
+#endif
+}
 
 #endif  //  EK3_FEATURE_OPTFLOW_FUSION
