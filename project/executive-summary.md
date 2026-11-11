@@ -2,7 +2,56 @@
 
 *Audience: project sponsor / non-engineering stakeholders. Updated as the work progresses.*
 
-**Last updated:** 2026-10-31
+**Last updated:** 2026-11-11
+
+---
+
+## Phase 2 plan: 11 November 2026 (~33 weeks elapsed)
+
+This plan sits above the 31 October update, which is kept below it as it was. The detailed plan, with every item and the reasoning behind it, is in [follow-on-plan.md](follow-on-plan.md).
+
+### Headline
+
+**Phase 2 turns a working Copter port into a product that can hold the whole market: H7-class capability at a sub-F4 price.** The release has moved to after Christmas. The extra weeks go first to fixed-wing aircraft, which Copter alone leaves out, and to the measurements that decide how to close the gap to the more expensive H7 flight controllers. Getting the port accepted into ArduPilot carries on alongside, as a standing job with no promised date. The release does not wait for it.
+
+### Priorities, in order
+
+1. **Keep the upstream merge moving.** Acceptance puts RP2350 boards on ArduPilot's own download server and in every ground station. It is a cycle of review, changes and retesting that has already run for six months, so it gets a share of every week rather than a date.
+2. **Validate fixed-wing (Plane).** Fixed-wing is a large part of the low-cost market, and it is where ArduPilot is strongest: autonomous missions, automatic takeoff and landing, and QuadPlane. Plane builds for these boards today but has never run on one. Validating it is mostly bench and flight time rather than new code, so it can be in the release.
+3. **Make the Copter release solid.** Fly the safety modes not yet flown, and test on the R4 boards.
+4. **Measure before building.** Several of the ideas (Lua scripting, compiler settings, more serial ports, CAN) turn on numbers nobody has taken yet.
+5. **Then close the H7 gap,** starting with what the next board revision needs.
+
+### Before Christmas (to about 19 December)
+
+- **Plane:** run it first on a Pico 2 against a simulated aircraft, then on the bench, then fly a flying wing or a simple four-channel plane through the basic modes, automatic tuning, an autonomous mission with automatic takeoff and landing, and the failsafes. Plane goes into the release once that passes. The current board has four outputs: enough for those aircraft, but not for planes with flaps or for QuadPlane.
+- **Copter:** fly the GPS-loss failsafe, a return-to-home landing, automatic tuning and the analog on-screen display. Test on R4 boards, and test installing from Mission Planner and QGroundControl. Cut a second test release.
+- **Measurements:** which code runs from the chip's fast internal memory, compiler settings, free memory, Lua scripting switched on in flight, and an audit of which connectors are free for more serial ports, outputs and CAN.
+- **A hardware wish list** for the next board revision, to reach Raspberry Pi early: eight or more outputs, a second IMU, a CAN transceiver, more serial pads, and the current-sensor input.
+- **Merge:** bring the submission up to date and answer the latest review, find a reviewer for the ChibiOS change, agree in writing with tridge what the Renode chip simulation must cover, and ask the maintainers for a written list of what merging requires.
+- **Support:** agree the retainer, and start Matthew Selby's onboarding.
+
+### After Christmas
+
+- **Public release** of Copter and Plane.
+- **More vehicles:** QuadPlane, on a board with eight or more outputs, then ground vehicles (Rover).
+- **Closing the H7 gap:** more serial ports using the chip's programmable I/O, CAN in software on that I/O with an external transceiver, multiple IMUs, the gyro noise filtering (FFT) that H7 boards run, and a fixed benchmark against an H7 board, so that progress is measured rather than claimed.
+- **Scripting:** Lua with more of it held in flash to save memory, and Rust modules, following tridge's work.
+- **Reach:** CAN peripherals (AP_Periph) on RP2350, a kit for third-party board makers, a look at light-show drones, and early work on the next Raspberry Pi microcontroller.
+- **Merge:** the review cycle continues, with ArduPilot's automated tests running on a Renode simulation of the chip. Once merged, RP2350 boards appear on ArduPilot's download server, in ground stations and on the ArduPilot website.
+
+### Why the merge has no date
+
+The submission has been open since 6 May. It is 71 commits and about 24,000 lines, and three maintainers have change requests standing on it. The ChibiOS change it depends on has waited since September without a review. tridge has made a full-fidelity Renode simulation of the chip, including its performance, a condition of merging; that is ours to deliver, building on an early demonstrator. Each review round means bringing the submission up to date with ArduPilot, which moves every week, and re-verifying all of it, so the rounds do not get cheaper as it matures. A written list of what merging requires is the best way to make them converge.
+
+### What is needed, and what is open
+
+- **From Raspberry Pi:** confirmation that the flash chip is rated for 100 MHz, which the faster 200 MHz build depends on (James Adams); R4 boards; Matthew Selby's time; and chip detail for the Renode simulation where it needs it.
+- **Open:** the release date, the retainer terms, which items beyond the release Raspberry Pi wants to fund, and a fixed-wing aircraft and pilot for Plane's flight tests.
+
+### Posture
+
+The first phase did what it set out to do: ArduPilot flies on Raspberry Pi's flight controller, and users can download it from the release repository. Phase 2 is about breadth and market position: fixed-wing, the remaining safety testing, and the numbers that decide where the engineering after Christmas goes. The one part not in our hands is the pace of upstream review, which is why the plan budgets for it every week rather than promising a date.
 
 ---
 
