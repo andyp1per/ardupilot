@@ -4884,15 +4884,17 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # past it while it measures and held at it once the return goes, so it stays in reach.
         # Centring the stick past the reach leaves it there: AC_Avoid only limits a climb, so
         # nothing brings it back into reach, and below the 28 m fallback it loses relative
-        # position.  That is accepted for a range finder that falls short of RNGFND1_MAX; the
-        # leg pins it, holding height with relative position lost, so a change that brings the
-        # vehicle back into reach has to update the leg. With range finder height the full-stick
-        # climb has to keep relative position too, which needs the ground offset to stay valid
-        # once the range finder stops being the height source, as it does under baro height
+        # position.  That is accepted for a range finder that falls short of RNGFND1_MAX, under
+        # either height source; the centred legs pin it, holding height with relative position
+        # lost, so a change that brings the vehicle back into reach has to update them. With
+        # range finder height the full-stick climb has to keep relative position too, which
+        # needs the ground offset to stay valid once the range finder stops being the height
+        # source, as it does under baro height
         for reach, floor, ceiling, keeps_rel, centre, posz in ((25, 0, 29, False, False, 1),
                                                                (27.5, 27.6, 30.5, True, False, 1),
                                                                (27.5, 27.6, 29.5, False, True, 1),
-                                                               (27.5, 27.6, 30.5, True, False, 2)):
+                                                               (27.5, 27.6, 30.5, True, False, 2),
+                                                               (27.5, 27.6, 29.5, False, True, 2)):
             self.start_subtest("return lost at %.1f m%s%s" % (reach, ", stick centred past it" if centre else "",
                                                               ", range finder height" if posz == 2 else ""))
             self.set_parameter("EK3_SRC1_POSZ", posz)
