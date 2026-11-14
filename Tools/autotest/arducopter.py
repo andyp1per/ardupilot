@@ -2532,10 +2532,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.wait_ekf_flags(0, mavutil.mavlink.EKF_POS_VERT_AGL, timeout=timeout,
                                 minimum_duration=2)
 
-        def assert_rangefinder_between(dist_min, dist_max):
-            if not self.rangefinder_between(dist_min, dist_max):
-                raise NotAchievedException("range finder outside %.2f to %.2f m" % (dist_min, dist_max))
-
         def kill_rangefinder():
             # full scale on every sample, so the range finder stays pointed down and reports
             # out of range high, as a lidar that has lost its return does
@@ -2840,13 +2836,19 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # a 4 m range finder has a 1.8 m height limit, so at 2.5 m only the last good reading
         # being short of 0.7 x 4 m tells a failure from a climb out of range
         self.set_parameter("RNGFND1_MAX", 4)
-        self.reboot_sitl()
-        # the takeoff settles about 0.6 m above where it stops climbing
-        self.takeoff(2.8, mode="ALT_HOLD", require_absolute=False, altitude_max=3.2)
-        assert_offset_measured()
-        self.wait_climbrate(-0.1, 0.1, minimum_duration=2)
-        # below 1.8 m the height limit would refuse it instead, and the leg prove nothing
-        assert_rangefinder_between(2.0, 2.75)
+        # a takeoff that settles outside the band proves nothing and is flown again
+        for attempt in range(1, 4):
+            self.reboot_sitl()
+            # the takeoff settles about 0.6 m above where it stops climbing
+            self.takeoff(2.8, mode="ALT_HOLD", require_absolute=False, altitude_max=3.2)
+            assert_offset_measured()
+            self.wait_climbrate(-0.1, 0.1, minimum_duration=2)
+            # below 1.8 m the height limit would refuse it instead, and the leg prove nothing
+            if self.rangefinder_between(2.0, 2.75):
+                break
+            self.disarm_vehicle(force=True)
+        else:
+            raise NotAchievedException("the takeoff missed 2.0 to 2.75 m on 3 attempts, so the leg proves nothing")
         kill_rangefinder()
         wait_terrain_offset_stale()
         flags = self.ekf_status_flags()
