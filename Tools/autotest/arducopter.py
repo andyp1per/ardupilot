@@ -3205,11 +3205,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 raise NotAchievedException("no XKF1 around the return")
             baseline = sum(before) / len(before)
             worst = max(through, key=lambda e: abs(e - baseline)) - baseline
-            # over the return's last 0.6 s, so a switch part way through it is seen too
+            # once the range finder has the height the innovation stands still at one value. It also
+            # pauses for up to 0.4 s while it has not, so over the return's last 0.6 s this sees a
+            # switch made before about the last 0.5 s, but not one later than that
             late = set(ri for (t, ri) in innovations if return_us[-1] - 0.6e6 < t <= return_us[-1])
             self.progress("%u readings of the return, %u range innovations in its last 0.6 s; EKF height less true "
                           "height moved at most %.2f m" % (good, len(late), worst))
-            if check_height_source and len(late) < 3:
+            if check_height_source and len(late) < 2:
                 raise NotAchievedException("the range finder took the height on %s" % what)
             if abs(worst) > 1:
                 raise NotAchievedException("%s moved the height %.1f m" % (what, worst))
