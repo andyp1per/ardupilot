@@ -402,6 +402,7 @@ AP_HW_SpeedyBeeF405AIO               5271
 AP_HW_Dynamix_PIXEL                  5280
 AP_HW_Dynamix_PYRO                   5281
 AP_HW_Dynamix_PIXELMB                5282
+AP_HW_Dynamix_PRO                    5283
 
 #IDs 5301-5399 reserved for Sierra Aerospace
 AP_HW_Sierra-TrueNavPro-G4           5301
