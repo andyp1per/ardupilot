@@ -1,0 +1,184 @@
+# hw definition file for processing by chibios_hwdef.py
+# for LightDynamix Pixel Pro FC V2 hardware
+
+# drive unused pins low so the pyro trigger outputs cannot float
+DEFAULTGPIO OUTPUT LOW PULLDOWN
+
+# ---------------- MCU & System ----------------
+MCU STM32H7xx STM32H743xx
+
+APJ_BOARD_ID AP_HW_Dynamix_PRO
+
+# SG-210STF active oscillator into PH0, PH1 not connected
+OSCILLATOR_HZ 16000000
+define STM32_HSE_BYPASS
+PH0 HSE_IN INPUT FLOATING
+
+FLASH_SIZE_KB 2048
+env OPTIMIZE -Os
+
+# bootloader takes first sector
+FLASH_RESERVE_START_KB 128
+
+define HAL_STORAGE_SIZE 32768
+
+# use last 2 pages for flash storage
+STORAGE_FLASH_PAGE 14
+
+# USB
+PA11 OTG_FS_DM OTG1
+PA12 OTG_FS_DP OTG1
+
+PA13 JTMS-SWDIO SWD
+PA14 JTCK-SWCLK SWD
+
+# ----------------- SPI Bus --------------------
+# SPI1 - IMU1 ICM-42688-P
+PA5 SPI1_SCK SPI1
+PA6 SPI1_MISO SPI1
+PA7 SPI1_MOSI SPI1
+PA4 IMU1_CS CS
+PA1 IMU1_INT INPUT
+
+# SPI4 - IMU2 ICM-42688-P
+PE2 SPI4_SCK SPI4
+PE5 SPI4_MISO SPI4
+PE6 SPI4_MOSI SPI4
+PE4 IMU2_CS CS
+PE3 IMU2_INT INPUT
+
+SPIDEV imu1 SPI1 DEVID1 IMU1_CS MODE3 2*MHZ 16*MHZ
+SPIDEV imu2 SPI4 DEVID1 IMU2_CS MODE3 2*MHZ 16*MHZ
+
+# SPI2 - W25Q128 flash, unused as logging is on microSD; hold it deselected
+PB12 FLASH_CS CS
+
+# ----------------- I2C Bus --------------------
+# I2C1 internal (baro), I2C2 compass connector, I2C4 spare connector
+I2C_ORDER I2C1 I2C2 I2C4
+
+PB6 I2C1_SCL I2C1
+PB7 I2C1_SDA I2C1
+
+PB10 I2C2_SCL I2C2
+PB11 I2C2_SDA I2C2
+
+PB8 I2C4_SCL I2C4
+PB9 I2C4_SDA I2C4
+
+# ----------------- UARTs ----------------------
+# ordered by function to match the Pixel SERIALn roles: telem1 (WiFi),
+# telem2 (radio), GPS
+SERIAL_ORDER OTG1 UART4 USART3 UART7 USART6 UART8 USART2 EMPTY OTG2
+
+# UART4 - WiFi connector
+PD1 UART4_TX UART4
+PD0 UART4_RX UART4
+
+# USART3 - HM-TRP telemetry radio and Telemetry connector
+PD8  USART3_TX USART3
+PD9  USART3_RX USART3
+PD11 USART3_CTS USART3
+PD12 USART3_RTS USART3
+
+# UART7 - onboard ZED-F9P GPS
+PE8 UART7_TX UART7
+PE7 UART7_RX UART7
+
+# USART6 - Spare UART 2 connector
+PC6 USART6_TX USART6
+PC7 USART6_RX USART6
+
+# UART8 - Spare UART 3 connector
+PE1 UART8_TX UART8
+PE0 UART8_RX UART8
+
+# USART2 - XIAO ESP32-C6 footprint
+PD5 USART2_TX USART2
+PD6 USART2_RX USART2
+PD3 USART2_CTS USART2
+PD4 USART2_RTS USART2
+
+# ----------------- PWM & GPIO -----------------
+# Motors
+PA0  TIM2_CH1 TIM2 PWM(1) GPIO(50) BIDIR
+PA2  TIM2_CH3 TIM2 PWM(2) GPIO(51) BIDIR
+PE13 TIM1_CH3 TIM1 PWM(3) GPIO(52) BIDIR
+PE14 TIM1_CH4 TIM1 PWM(4) GPIO(53)
+
+# NeoPixel, schematic TIM1 labels are wrong for PB0/PB1
+# JP3/JP4 default to PWM6 driving both trigger board LED outputs
+PB0 TIM3_CH3 TIM3 PWM(5) GPIO(54)
+PB1 TIM3_CH4 TIM3 PWM(6) GPIO(55)
+
+# Pyro trigger outputs
+PD10 GPIO_Relay_1 OUTPUT LOW GPIO(64)
+PA8  GPIO_Relay_2 OUTPUT LOW GPIO(62)
+PD7  GPIO_Relay_3 OUTPUT LOW GPIO(63)
+PC13 GPIO_Relay_4 OUTPUT LOW GPIO(65)
+PC4  GPIO_Relay_5 OUTPUT LOW GPIO(66)
+PC5  GPIO_Relay_6 OUTPUT LOW GPIO(67)
+PE12 GPIO_Relay_7 OUTPUT LOW GPIO(68)
+PE15 GPIO_Relay_8 OUTPUT LOW GPIO(69)
+
+# trigger board shift register and latch
+PB2 LS_RD1 OUTPUT LOW GPIO(70) # Parallel Load
+PA3 LS_RD2 OUTPUT LOW GPIO(71) # Clock Pulse
+PC2 LS_RD3 INPUT GPIO(72)      # Data Serial1
+PC3 LATCH_RESET OUTPUT LOW GPIO(73)
+
+# RGB LED, active high
+PD13 LED_BLUE OUTPUT HIGH GPIO(90)
+PD14 LED_GREEN OUTPUT HIGH GPIO(91)
+PD15 LED_RED OUTPUT HIGH GPIO(92)
+
+define AP_NOTIFY_GPIO_LED_RGB_ENABLED 1
+define AP_NOTIFY_GPIO_LED_RGB_RED_PIN 92
+define AP_NOTIFY_GPIO_LED_RGB_GREEN_PIN 91
+define AP_NOTIFY_GPIO_LED_RGB_BLUE_PIN 90
+define HAL_GPIO_LED_ON 1
+
+# ----------------- ADC ------------------------
+PC0 BATT_VOLTAGE_SENS ADC1 SCALE(1)
+PC1 BATT_CURRENT_SENS ADC1 SCALE(1)
+
+define HAL_BATT_MONITOR_DEFAULT 4
+define HAL_BATT_VOLT_PIN 10
+define HAL_BATT_CURR_PIN 11
+# 200k/22k divider
+define HAL_BATT_VOLT_SCALE 10.09
+# INA139, 0.5mOhm shunt, 53.6k load
+define HAL_BATT_CURR_SCALE 37.3
+
+# ----------------- microSD --------------------
+PC8  SDMMC1_D0 SDMMC1
+PC9  SDMMC1_D1 SDMMC1
+PC10 SDMMC1_D2 SDMMC1
+PC11 SDMMC1_D3 SDMMC1
+PC12 SDMMC1_CK SDMMC1
+PD2  SDMMC1_CMD SDMMC1
+
+define HAL_OS_FATFS_IO 1
+
+# ----------------- DMA ------------------------
+DMA_PRIORITY TIM1* TIM2* TIM3* SPI1* SPI4*
+DMA_NOSHARE TIM1* TIM2* TIM3* SPI1* SPI4*
+
+# ----------------- Sensors --------------------
+IMU Invensensev3 SPI:imu1 ROTATION_PITCH_180
+IMU Invensensev3 SPI:imu2 ROTATION_PITCH_180
+define HAL_DEFAULT_INS_FAST_SAMPLE 3
+define HAL_INS_HIGHRES_SAMPLE 3
+
+# DPS368, SDO pulled low
+BARO DPS310 I2C:0:0x76
+
+# no built-in compass
+define ALLOW_ARM_NO_COMPASS
+define HAL_PROBE_EXTERNAL_I2C_COMPASSES
+define HAL_COMPASS_AUTO_ROT_DEFAULT 2
+
+define AP_COPTER_ADVANCED_FAILSAFE_ENABLED 1
+
+# build ABIN for flash-from-bootloader support
+env BUILD_ABIN True

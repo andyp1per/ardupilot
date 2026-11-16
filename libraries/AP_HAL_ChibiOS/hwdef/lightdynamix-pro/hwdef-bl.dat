@@ -1,0 +1,62 @@
+# hw definition file for processing by chibios_hwdef.py
+# for LightDynamix Pixel Pro FC V2 bootloader
+
+# hold the pyro trigger outputs low while in the bootloader
+DEFAULTGPIO OUTPUT LOW PULLDOWN
+
+MCU STM32H7xx STM32H743xx
+
+APJ_BOARD_ID AP_HW_Dynamix_PRO
+
+# SG-210STF active oscillator into PH0, PH1 not connected
+OSCILLATOR_HZ 16000000
+define STM32_HSE_BYPASS
+PH0 HSE_IN INPUT FLOATING
+
+FLASH_SIZE_KB 2048
+
+# bootloader starts at zero offset
+FLASH_RESERVE_START_KB 0
+
+# the location where the bootloader will put the firmware
+FLASH_BOOTLOADER_LOAD_KB 128
+
+# allow bootloading on USB and the WiFi UART
+SERIAL_ORDER OTG1 UART4
+
+PD0 UART4_RX UART4 NODMA
+PD1 UART4_TX UART4 NODMA
+
+PA11 OTG_FS_DM OTG1
+PA12 OTG_FS_DP OTG1
+
+PA13 JTMS-SWDIO SWD
+PA14 JTCK-SWCLK SWD
+
+PD13 LED_BOOTLOADER OUTPUT LOW
+define HAL_LED_ON 1
+
+# keep the SPI chip selects high
+PA4  IMU1_CS CS
+PE4  IMU2_CS CS
+PB12 FLASH_CS CS
+
+# support flashing from SD card
+define CH_CFG_USE_MEMCORE 1
+define CH_CFG_USE_HEAP 1
+define CH_CFG_USE_SEMAPHORES 0
+define CH_CFG_USE_MUTEXES 1
+define CH_CFG_USE_DYNAMIC 1
+define CH_CFG_USE_WAITEXIT 1
+define CH_CFG_USE_REGISTRY 1
+
+PC8  SDMMC1_D0 SDMMC1
+PC9  SDMMC1_D1 SDMMC1
+PC10 SDMMC1_D2 SDMMC1
+PC11 SDMMC1_D3 SDMMC1
+PC12 SDMMC1_CK SDMMC1
+PD2  SDMMC1_CMD SDMMC1
+
+define HAL_OS_FATFS_IO 1
+
+define AP_BOOTLOADER_FLASH_FROM_SD_ENABLED 1
