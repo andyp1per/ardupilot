@@ -121,6 +121,9 @@ PC5  GPIO_Relay_6 OUTPUT LOW GPIO(67)
 PE12 GPIO_Relay_7 OUTPUT LOW GPIO(68)
 PE15 GPIO_Relay_8 OUTPUT LOW GPIO(69)
 
+# one relay per pyro trigger output, pins set in defaults.parm
+define AP_RELAY_NUM_RELAYS 8
+
 # trigger board shift register and latch
 PB2 LS_RD1 OUTPUT LOW GPIO(70) # Parallel Load
 PA3 LS_RD2 OUTPUT LOW GPIO(71) # Clock Pulse
