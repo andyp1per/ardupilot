@@ -757,6 +757,9 @@ public:
     // get failsafe timeout in milliseconds
     uint32_t get_fs_timeout_ms() const { return MAX(_fs_timeout * 1000, 100); }
 
+    // get the most CRSF RC frames a second to process, 0 for every frame
+    uint16_t get_crsf_rate_max_hz() const { return MAX(_crsf_rate_max_hz.get(), 0); }
+
     // methods which return RC input channels used for various axes.
     const RC_Channel &get_roll_channel() const;
     const RC_Channel &get_pitch_channel() const;
@@ -805,6 +808,7 @@ private:
     AP_UInt32 _options;
     AP_UInt32 _protocols;
     AP_Float _fs_timeout;
+    AP_Int16 _crsf_rate_max_hz;
 
     // set to true if we see overrides or other RC input
     bool _has_ever_seen_rc_input;

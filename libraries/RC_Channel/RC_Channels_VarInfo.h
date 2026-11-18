@@ -112,6 +112,14 @@ const AP_Param::GroupInfo RC_Channels::var_info[] = {
     // @Units: s
     AP_GROUPINFO("_FS_TIMEOUT", 35, RC_CHANNELS_SUBCLASS, _fs_timeout, 1.0),
 
+    // @Param: _CRSF_RATE_MAX
+    // @DisplayName: CRSF RC frame rate maximum
+    // @Description: The most CRSF RC frames a second the flight controller processes. Frames that arrive sooner after the last one processed are dropped before they are decoded, which saves the CPU a receiver sending RC faster than the flight controller needs would otherwise take. Telemetry is sent after each frame processed, so it is offered at this rate too. 0 processes every frame; values from 1 to 49 are taken as 50.
+    // @User: Advanced
+    // @Range: 0 1000
+    // @Units: Hz
+    AP_GROUPINFO("_CRSF_RATE_MAX", 36, RC_CHANNELS_SUBCLASS, _crsf_rate_max_hz, 0),
+
     AP_GROUPEND
 };
 
