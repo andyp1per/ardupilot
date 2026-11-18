@@ -1289,6 +1289,22 @@ class LTM(Telem):
 
 
 class CRSF(Telem):
+    # frame types, addresses and custom telemetry sub-types
+    FRAMETYPE_LINK_STATISTICS = 0x14
+    FRAMETYPE_RC_CHANNELS_PACKED = 0x16
+    FRAMETYPE_LINK_STATISTICS_TX = 0x1D
+    FRAMETYPE_DEVICE_PING = 0x28
+    FRAMETYPE_DEVICE_INFO = 0x29
+    FRAMETYPE_AP_CUSTOM_TELEM = 0x80
+    CUSTOM_TELEM_SINGLE_PACKET_PASSTHROUGH = 0xF0
+    CUSTOM_TELEM_MULTI_PACKET_PASSTHROUGH = 0xF2
+    # frames sent to the flight controller start with its address
+    ADDRESS_FLIGHT_CONTROLLER = 0xC8
+    ADDRESS_RECEIVER = 0xEC
+    # a frame is at most 64 bytes, and its length byte counts all but the
+    # sync and length bytes
+    MAX_FRAME_LENGTH = 62
+
     def __init__(self, destination_address):
         super(CRSF, self).__init__(destination_address)
 
@@ -1304,6 +1320,51 @@ class CRSF(Telem):
 
     def write_data_id(self, dataid):
         self.do_write(self.data_id_map[dataid])
+
+    @staticmethod
+    def crc8_dvb_s2(data):
+        crc = 0
+        for b in data:
+            crc ^= b
+            for _ in range(8):
+                crc = ((crc << 1) ^ 0xD5) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+        return crc
+
+    def write_frame(self, frame_type, payload):
+        '''send a frame to the flight controller'''
+        body = bytearray([frame_type]) + bytearray(payload)
+        self.do_write(bytearray([self.ADDRESS_FLIGHT_CONTROLLER, len(body) + 1]) + body +
+                      bytearray([self.crc8_dvb_s2(body)]))
+
+    def write_extended_frame(self, frame_type, destination, origin, payload):
+        '''send a frame carrying a destination and origin address'''
+        self.write_frame(frame_type, bytearray([destination, origin]) + bytearray(payload))
+
+    def write_rc_frame(self, value=992):
+        '''send 16 channels of packed 11-bit RC values'''
+        bits = 0
+        for i in range(16):
+            bits |= value << (11 * i)
+        self.write_frame(self.FRAMETYPE_RC_CHANNELS_PACKED, bits.to_bytes(22, 'little'))
+
+    def read_frames(self):
+        '''return a list of (type, payload) for the complete frames received'''
+        self.buffer += self.do_read()
+        frames = []
+        while len(self.buffer) >= 2:
+            length = self.buffer[1]
+            if length < 2 or length > self.MAX_FRAME_LENGTH:
+                self.buffer = self.buffer[1:]
+                continue
+            if len(self.buffer) < length + 2:
+                break
+            frame = self.buffer[2:length+2]
+            if self.crc8_dvb_s2(frame[:-1]) != frame[-1]:
+                self.buffer = self.buffer[1:]
+                continue
+            frames.append((frame[0], frame[1:-1]))
+            self.buffer = self.buffer[length+2:]
+        return frames
 
     def progress_tag(self):
         return "CRSF"
@@ -16598,6 +16659,69 @@ switch value'''
         self.reboot_sitl()
         if ex is not None:
             raise ex
+
+    def CRSFRateMax(self):
+        '''Test RC_CRSF_RATE_MAX caps the CRSF RC frames processed'''
+        self.set_parameters({
+            "SERIAL5_PROTOCOL": 23, # serial5 is RCIN input
+            "RC_PROTOCOLS": 512,    # CRSF only, so SITL's own RC input doesn't take over
+        })
+        port = self.spare_network_port()
+        self.customise_SITL_commandline([
+            "--serial5=tcp:%u" % port # serial5 is a localhost port the receiver connects to
+        ])
+        self.context_collect('STATUSTEXT')
+        # frames have to arrive at distinct times well over the 50Hz limit, so
+        # they are paced by the wall clock with the test run at speedup 1
+        frame_period_s = 1.0 / 400
+        crsf = CRSF(("127.0.0.1", port))
+        tstart = self.get_sim_time_cached()
+        while not crsf.connect():
+            if self.get_sim_time_cached() - tstart > 10:
+                raise NotAchievedException("Could not connect to the CRSF port")
+            self.drain_mav()
+
+        def telemetry_rates():
+            # the CRSF report's "Telemetry rate" counts the frames processed a second
+            rates = []
+            for m in self.context_collection('STATUSTEXT'):
+                match = re.search(r"Telemetry rate (\d+)Hz", m.text)
+                if match is not None:
+                    rates.append(int(match.group(1)))
+            return rates
+
+        def send_rc_until(done, what, timeout=60):
+            '''send RC frames every frame_period_s until done() is true.
+            This is not wait_statustext because the receiver would be taken
+            as lost without RC frames meanwhile'''
+            last_frame_time = 0
+            tstart = self.get_sim_time_cached()
+            while not done():
+                if self.get_sim_time_cached() - tstart > timeout:
+                    raise NotAchievedException("No %s, telemetry rates %s" % (what, telemetry_rates()))
+                now = time.time()
+                if now - last_frame_time >= frame_period_s:
+                    crsf.write_rc_frame()
+                    last_frame_time = now
+                crsf.read_frames()
+                self.drain_mav()
+
+        def processed_rate_reaches(set_to, low, high):
+            self.set_parameter("RC_CRSF_RATE_MAX", set_to)
+            self.context_clear_collection('STATUSTEXT')
+            what = "processed rate in %u-%uHz with RC_CRSF_RATE_MAX %u" % (low, high, set_to)
+            self.progress("Waiting for a %s" % what)
+            send_rc_until(lambda: any(low <= rate <= high for rate in telemetry_rates()), what)
+
+        # the report comes only when the rate has moved more than 25Hz since
+        # the last one, so each limit starts from no limit, and the last report
+        # on the way down is within 25Hz of the rate it settles at
+        processed_rate_reaches(0, 150, 1000)
+        processed_rate_reaches(50, 40, 75)
+        processed_rate_reaches(0, 150, 1000)
+        # the limit is not taken below the 50Hz of the slowest CRSF link: 10Hz
+        # would be reported at about 26 on the way down
+        processed_rate_reaches(10, 40, 75)
 
     def CompassPrearms(self):
         '''test compass prearm checks'''
