@@ -383,6 +383,36 @@ void AP_RCProtocol_CRSF::write_frame(Frame* frame)
 #endif // defined(CRSF_DEBUG) || defined(CRSF_DEBUG_PARAMS)
 }
 
+/*
+  return true if an RC frame arriving now is to be processed: always if
+  RC_CRSF_RATE_MAX is 0, else the first frame in each 1/RC_CRSF_RATE_MAX
+  slot. Slots follow on from each other rather than from the frame
+  accepted, so that frames arriving faster than the limit are processed at
+  the limit's rate and not at a fraction of it set by how their times fall
+  against the slot. The limit is never taken below the rate of the slowest
+  CRSF link, so RC is never processed less often than the link sends it
+ */
+bool AP_RCProtocol_CRSF::accept_rc_frame()
+{
+#if AP_RC_CHANNEL_ENABLED
+    const uint16_t rate_max_hz = rc().get_crsf_rate_max_hz();
+    if (rate_max_hz == 0) {
+        return true;
+    }
+    const uint32_t interval_us = 1000000U / MAX(rate_max_hz, RF_MODE_RATES[RFMode::CRSF_RF_MODE_50HZ]);
+    const uint32_t now_us = AP_HAL::micros();
+    if (!AP_HAL::timeout_expired(_rc_frame_slot_start_us, now_us, interval_us)) {
+        return false;
+    }
+    _rc_frame_slot_start_us += interval_us;
+    // after a gap in the frames, start the slots again from now
+    if (AP_HAL::timeout_expired(_rc_frame_slot_start_us, now_us, interval_us)) {
+        _rc_frame_slot_start_us = now_us;
+    }
+#endif
+    return true;
+}
+
 bool AP_RCProtocol_CRSF::decode_crsf_packet()
 {
 #ifdef CRSF_DEBUG
@@ -401,6 +431,12 @@ bool AP_RCProtocol_CRSF::decode_crsf_packet()
     }
     hal.console->printf("\n");
 #endif
+
+    // an RC frame beyond RC_CRSF_RATE_MAX is dropped before any work is spent on it
+    if ((_frame.type == AP_CRSF_Protocol::CRSF_FRAMETYPE_RC_CHANNELS_PACKED ||
+         _frame.type == AP_CRSF_Protocol::CRSF_FRAMETYPE_SUBSET_RC_CHANNELS_PACKED) && !accept_rc_frame()) {
+        return false;
+    }
 
     bool rc_active = false;
 
