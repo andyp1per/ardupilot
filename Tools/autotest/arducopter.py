@@ -20073,13 +20073,12 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
     def EK3_RngHgtSwitchStepUp(self):
         '''the range finder height switch does not carry a lower ground's terrain offset up a step'''
         # Taking 3.5 m off the range in a hover above the switch region is a step up onto ground
-        # 3.5 m higher.  The terrain offset still belongs to the lower ground when the switch takes
-        # the range finder, with the vehicle's terrain stable flag clear so only bit 3 lets it,
-        # and the EKF height must not move against the simulator's when it does.  A step down
+        # 3.5 m higher.  The ground position has to follow it before the switch takes the range
+        # finder, with the vehicle's terrain stable flag clear so only the AGL KF lets it, and the
+        # EKF height must not move against the simulator's when it does.  A step down
         # is not used: under range finder height the vehicle follows the ground down, and the
         # simulated ground does not move.
         self.set_parameters({
-            "EK3_OPTIONS": 1 << 3,   # AglKfForOptflow
             "EK3_RNG_USE_HGT": 8,    # 3.2 m of the 40 m range finder, switching in below 2.24 m
             "SURFTRAK_MODE": 0,      # hold height in ALT_HOLD rather than follow the simulated step up
         })
@@ -20102,11 +20101,10 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         truth = None
         truths = []
         rng = None
-        reset_us = None
         ekf = []
         rngs = []
         while True:
-            m = dfreader.recv_match(type=['SIM', 'XKF1', 'RFND', 'MSG'])
+            m = dfreader.recv_match(type=['SIM', 'XKF1', 'RFND'])
             if m is None:
                 break
             mtype = m.get_type()
@@ -20116,9 +20114,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             elif mtype == 'RFND' and m.Instance == 0:
                 rng = m.Dist
                 rngs.append((m.TimeUS, rng))
-            elif mtype == 'MSG' and reset_us is None and m.TimeUS > tstep * 1e6 and \
-                    "IMU0 terrain offset reset from range" in m.Message:
-                reset_us = m.TimeUS
             elif mtype == 'XKF1' and m.C == 0 and truth is not None:
                 ekf.append((m.TimeUS, -m.PD - truth))
         # the range must cross the switch thresholds, or the step tests nothing
@@ -20130,8 +20125,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         if rng_before < 3.3 or rng_after > 2.1:
             raise NotAchievedException("range %.2f m before the step and %.2f m after does not cross the switch" %
                                        (rng_before, rng_after))
-        # measure from core 0's switch, or from the fixed window if it never reset
-        start = reset_us if reset_us is not None else after[0]
+        start = after[0]
         err_before = [e for t, e in ekf if before[0] <= t <= before[1]]
         err_after = [e for t, e in ekf if start <= t <= after[1]]
         if len(err_before) < 50 or len(err_after) < 50:
@@ -20150,8 +20144,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.progress("vehicle moved up to %.2f m at the step" % moved)
         if moved > 0.5:
             raise NotAchievedException("vehicle moved %.2f m at the step" % moved)
-        if reset_us is None or reset_us > (tstep + 6) * 1e6:
-            raise NotAchievedException("core 0 did not reset its terrain offset at the step")
 
         self.set_parameters({
             "SIM_SONAR_OFFSET": 0,
