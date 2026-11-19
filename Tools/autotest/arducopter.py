@@ -2515,8 +2515,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             sim_gndspd = None
             fusion_seen = False
             fused_after = False
-            held_times = []
-            held_after = False
             hgt_ref = None
             hgt_err = []
             ekf_err = []
@@ -2540,10 +2538,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 if getattr(m, "C", 0) != 0 or sim_vd is None:
                     continue
                 if mtype == "XKFA":
-                    if m.VHold:
-                        held_times.append(t)
-                        if t_fused_after is not None and t > t_fused_after:
-                            held_after = True
                     if m.VFuse:
                         fusion_seen = True
                         if t_fused_after is not None and t > t_fused_after:
@@ -2570,9 +2564,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 "n_agl": len(agl_err),
                 "fused": fusion_seen,
                 "fused_after": fused_after,
-                "held": len(held_times) > 0,
-                "hold_s": held_times[-1] - held_times[0] if held_times else 0.0,
-                "held_after": held_after,
                 "max_fused_gndspd": max(fused_gndspd) if fused_gndspd else 0.0,
                 "max_gndspd": max(gndspd) if gndspd else 0.0,
             }
@@ -2692,12 +2683,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         for step, name in (1.0, "drops"), (-1.0, "rises"):
             self.start_subtest("Fusion on: ground that %s 1 m does not drive the height" % name)
             r = fly_leg(agl_kf_veld, step=step, alt_noise=1.0)
-            self.progress("ground %s 1 m: max velD error %.2f m/s, max height drift %.2f m, XKFA.VHold for %.1f s"
-                          % (name, r["max_velD_err"], r["max_hgt_err"], r["hold_s"]))
-            if not r["held"]:
-                raise NotAchievedException("XKFA.VHold never showed the step hold")
-            if r["held_after"]:
-                raise NotAchievedException("XKFA.VHold still set after the step hold")
+            self.progress("ground %s 1 m: max velD error %.2f m/s, max height drift %.2f m"
+                          % (name, r["max_velD_err"], r["max_hgt_err"]))
             if not r["fused_after"]:
                 raise NotAchievedException("AGL KF velocity fusion did not resume after the step")
             # 0.23-0.24 m measured; 0.94 m with the AGL KF velocity fused through the step
@@ -2712,21 +2699,10 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_parameter("SIM_SONAR_RND", 0.1)
         r = fly_leg(agl_kf_veld, bias_z=0.4, alt_noise=1.0)
         self.set_parameter("SIM_SONAR_RND", 0)
-        self.progress("runaway on a noisy range: max velD error %.2f m/s, XKFA.VHold samples span %.1f s"
-                      % (r["max_velD_err"], r["hold_s"]))
-        # one hold, from a jump just after the offset while the innovation was settled, and velD
-        # 1.3-1.6 m/s: its samples span 2.5 s here. Counting a jump from any innovation starts a
-        # second hold 8.9-12.5 s into the runaway, which the span catches only when enough of it
-        # is in the window (6 of 20 such runs failed, on spans of 7.6-9.6 s); velD reached 3.6 m/s
-        # in another. The span is the measure because the failure is a second hold, not a longer
-        # one. A whole hold spans the EKF's 5 s give or take one 10 Hz XKFA sample, so two log
-        # periods are allowed over it; this one spans less only because it starts before the
-        # window opens.
-        step_hold_s = 5.0     # aglKfStepHold_ms
-        xkfa_period_s = 0.1   # XKFA is logged at 10 Hz
-        if r["hold_s"] > step_hold_s + 2 * xkfa_period_s:
-            raise NotAchievedException(
-                "The step hold held the velocity out again during a velD runaway (%.2f s)" % r["hold_s"])
+        self.progress("runaway on a noisy range: max velD error %.2f m/s" % r["max_velD_err"])
+        # velD 1.3-1.6 m/s; counting a jump from any innovation reached 3.6 m/s in one run. Stacked
+        # on #33507, XKFA has no VHold beside the AGL KF bias fields, so the hold itself, held a second
+        # time 12 s into the runaway without the settled-start rule, is checked on #33478 only
         if r["max_velD_err"] > 2.5:
             raise NotAchievedException(
                 "AGL KF velocity fusion failed to bound the velD runaway on a noisy range (%.2f m/s)"
