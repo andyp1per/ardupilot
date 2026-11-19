@@ -107,6 +107,10 @@ public:
     // get latest altitude estimate above ground level in meters and validity flag
     bool get_hagl(float &hagl) const WARN_IF_UNUSED { return active_estimates->get_hagl(hagl); }
 
+    // height above the ground the downward range finder measures, in meters, from the active
+    // estimator's filter of it (EKF3's AGL KF); false without one, never a terrain estimate
+    bool get_hagl_rangefinder(float &hagl) const WARN_IF_UNUSED { return active_estimates->get_hagl_rangefinder(hagl); }
+
     // status reporting of estimated error
     float           get_error_rp() const;
     float           get_error_yaw() const;

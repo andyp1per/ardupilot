@@ -167,6 +167,7 @@ void AP_AHRS_NavEKF3::get_results(AP_AHRS_Backend::Estimates &results)
     results.position_D_reset_count = position_D_reset_tracker.count();
 
     results.hagl_valid = EKF3.getHAGL(results.hagl);
+    results.hagl_rangefinder_valid = EKF3.getRangeFinderHAGL(results.hagl_rangefinder);
 
     /*
      * air data estimates

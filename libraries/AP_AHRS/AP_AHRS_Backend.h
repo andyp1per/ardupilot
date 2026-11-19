@@ -202,6 +202,13 @@ public:
             return hagl_valid;
         }
 
+        // height above the ground the downward range finder measures, from the estimator's own
+        // filter of it; false where the estimator has none or it has no range
+        bool get_hagl_rangefinder(float &height) const WARN_IF_UNUSED {
+            height = hagl_rangefinder;
+            return hagl_rangefinder_valid;
+        }
+
         /*
          * air data estimates
          */
@@ -287,6 +294,8 @@ public:
     private:
         bool hagl_valid;
         float hagl;
+        bool hagl_rangefinder_valid;
+        float hagl_rangefinder;
     };
 
     // Methods
