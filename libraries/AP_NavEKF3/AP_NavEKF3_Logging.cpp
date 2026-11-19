@@ -232,10 +232,11 @@ void NavEKF3_core::Log_Write_XKF5(uint64_t time_us) const
             vAgl    : (float)aglKf.vel,                // AGL velocity estimate (m/s, +ve = climbing)
             hAglStd : (float)sqrtF(aglKf.cov[0][0]),   // std-dev of h_agl (m)
             vAglStd : (float)sqrtF(aglKf.cov[1][1]),   // std-dev of v_agl (m/s)
+            bias    : (float)aglKf.bias,                // accel-Z bias estimate (m/s/s)
+            biasStd : (float)sqrtF(aglKf.cov[2][2]),   // std-dev of accel-Z bias (m/s/s)
             valid   : (uint8_t)aglKf.valid,           // 1 when RF fused within last 5 s
             velFused : (uint8_t)(lastAglKfVelFuseTime_ms != 0 && (imuSampleTime_ms - lastAglKfVelFuseTime_ms) < 250),
-            velTestRatio : (float)aglKfVelTestRatio,
-            velHeld : (uint8_t)(aglKfVelHoldTime_ms != 0 && (imuSampleTime_ms - aglKfVelHoldTime_ms) < 250)
+            velTestRatio : (float)aglKfVelTestRatio
         };
         AP::logger().WriteBlock(&pktfA, sizeof(pktfA));
     }
