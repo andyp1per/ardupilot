@@ -829,15 +829,15 @@ void  NavEKF3_core::updateFilterStatus(void)
     status.flags.vert_vel = someVertRefData && filterHealthy;        // vertical velocity estimate valid
 
 #if EK3_FEATURE_OPTFLOW_SRTM
-    const bool optflow_gnd_offset = gndOffsetValid || terrain_srtm_alt_valid;
+    const bool optflow_gnd_offset = gndPosValid || terrain_srtm_alt_valid;
 #else
-    const bool optflow_gnd_offset = gndOffsetValid;
+    const bool optflow_gnd_offset = gndPosValid;
 #endif
     status.flags.horiz_pos_rel = ((doingFlowNav && optflow_gnd_offset) || doingWindRelNav || doingNormalGpsNav || doingBodyVelNav) && filterHealthy;   // relative horizontal position estimate valid
 
     status.flags.horiz_pos_abs = doingNormalGpsNav && filterHealthy; // absolute horizontal position estimate valid
     status.flags.vert_pos = !hgtTimeout && filterHealthy && !hgtNotAccurate; // vertical position estimate valid
-    status.flags.terrain_alt = gndOffsetValid && filterHealthy;		// terrain height estimate valid
+    status.flags.terrain_alt = gndPosValid && filterHealthy;		// terrain height estimate valid
     status.flags.const_pos_mode = (PV_AidingMode == AID_NONE) && filterHealthy;     // constant position mode
     status.flags.pred_horiz_pos_rel = status.flags.horiz_pos_rel; // EKF3 enters the required mode before flight
     status.flags.pred_horiz_pos_abs = status.flags.horiz_pos_abs; // EKF3 enters the required mode before flight
@@ -852,7 +852,7 @@ void  NavEKF3_core::updateFilterStatus(void)
                                             (imuSampleTime_ms - tas.lastFailTime_ms) < 1000 &&
                                             (imuSampleTime_ms - tas.lastPassTime_ms) > 3000;
     status.flags.initalized = status.flags.initalized || healthy();
-    status.flags.dead_reckoning = (PV_AidingMode != AID_NONE) && doingWindRelNav && !((doingFlowNav && gndOffsetValid) || doingNormalGpsNav || doingBodyVelNav);
+    status.flags.dead_reckoning = (PV_AidingMode != AID_NONE) && doingWindRelNav && !((doingFlowNav && gndPosValid) || doingNormalGpsNav || doingBodyVelNav);
 
     filterStatus.value = status.value;
 }

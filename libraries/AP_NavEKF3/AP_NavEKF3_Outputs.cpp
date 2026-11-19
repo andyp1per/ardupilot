@@ -115,7 +115,7 @@ bool NavEKF3_core::getHeightControlLimit(float &height) const
 #endif
         // If we are are not using the range finder as the height reference, then compensate for the difference between terrain and EKF origin
         if (frontend->sources.getPosZSource(core_index) != AP_NavEKF_Source::SourceZ::RANGEFINDER) {
-            height -= terrainState;
+            height -= gndPosD;
         }
         return true;
     } else {
@@ -286,9 +286,9 @@ bool NavEKF3_core::getHAGL(float &HAGL) const
         return false;
     }
 #endif
-    HAGL = terrainState - outputDataNew.position.z - posOffsetNED.z;
+    HAGL = gndPosD - outputDataNew.position.z - posOffsetNED.z;
     // If we know the terrain offset and altitude, then we have a valid height above ground estimate
-    return !hgtTimeout && gndOffsetValid && healthy();
+    return !hgtTimeout && gndPosValid && healthy();
 }
 
 // Height of the body frame origin above the ground the downward range finder measures, from the
@@ -389,10 +389,10 @@ void NavEKF3_core::getEkfControlLimits(float &ekfGndSpdLimit, float &ekfNavVelGa
     // nav gains to prevent body rate feedback into flow rates destabilising the control loop
     if (PV_AidingMode == AID_RELATIVE && relyingOnFlowData) {
         // allow 1.0 rad/sec margin for angular motion
-        ekfGndSpdLimit = MAX((frontend->_maxFlowRate - 1.0f), 0.0f) * MAX((terrainState - stateStruct.position[2]), rngOnGnd);
+        ekfGndSpdLimit = MAX((frontend->_maxFlowRate - 1.0f), 0.0f) * MAX((gndPosD - stateStruct.position[2]), rngOnGnd);
         // reduce the nav gain above _flowNavGainHgt to allow for flow velocity noise that grows with height
         const ftype gainHgt = MAX(frontend->_flowNavGainHgt.get(), 1.0f);
-        ekfNavVelGainScaler = gainHgt / MAX((terrainState - stateStruct.position[2]), gainHgt);
+        ekfNavVelGainScaler = gainHgt / MAX((gndPosD - stateStruct.position[2]), gainHgt);
     } else {
         ekfGndSpdLimit = 400.0f; //return 80% of max filter speed
         ekfNavVelGainScaler = 1.0f;

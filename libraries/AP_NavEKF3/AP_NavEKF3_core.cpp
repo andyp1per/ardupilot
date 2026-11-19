@@ -220,7 +220,7 @@ void NavEKF3_core::InitialiseVariables()
 #endif
     flowMeaTime_ms = 0;
     prevFlowFuseTime_ms = 0;
-    gndHgtValidTime_ms = 0;
+    gndPosMeasTime_ms = 0;
     ekfStartTime_ms = imuSampleTime_ms;
     lastGpsVelFail_ms = 0;
     lastGpsAidBadTime_ms = 0;
@@ -256,7 +256,7 @@ void NavEKF3_core::InitialiseVariables()
 #if EK3_FEATURE_OPTFLOW_FUSION
     Popt = 0.0f;
 #endif
-    terrainState = 0.0f;
+    gndPosD = 0.0f;
     prevPosN = stateStruct.position.x;
     prevPosE = stateStruct.position.y;
     inhibitGndState = false;
@@ -287,7 +287,7 @@ void NavEKF3_core::InitialiseVariables()
     windStatesAligned = false;
     inhibitDelVelBiasStates = true;
     inhibitDelAngBiasStates = true;
-    gndOffsetValid =  false;
+    gndPosValid =  false;
     validOrigin = false;
     gpsSpdAccuracy = 0.0f;
     gpsPosAccuracy = 0.0f;
@@ -2104,7 +2104,7 @@ void NavEKF3_core::ConstrainStates()
     for (uint8_t i=22; i<=23; i++) statesArray[i] = constrain_ftype(statesArray[i],-100.0f,100.0f);
     // constrain the terrain state to be below the vehicle height unless we are using terrain as the height datum
     if (!inhibitGndState) {
-        terrainState = MAX(terrainState, stateStruct.position.z + rngOnGnd);
+        gndPosD = MAX(gndPosD, stateStruct.position.z + rngOnGnd);
     }
 }
 

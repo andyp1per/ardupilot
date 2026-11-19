@@ -283,10 +283,10 @@ void NavEKF3_core::ResetHeight(void)
     // reset the terrain state height
     if (onGround) {
         // assume vehicle is sitting on the ground
-        terrainState = stateStruct.position.z + rngOnGnd;
+        gndPosD = stateStruct.position.z + rngOnGnd;
     } else {
         // can make no assumption other than vehicle is not below ground level
-        terrainState = MAX(stateStruct.position.z + rngOnGnd , terrainState);
+        gndPosD = MAX(stateStruct.position.z + rngOnGnd , gndPosD);
     }
     for (uint8_t i=0; i<imu_buffer_length; i++) {
         storedOutput[i].position.z = stateStruct.position.z;
@@ -402,7 +402,7 @@ bool NavEKF3_core::resetHeightDatum(void)
 
     // set the terrain state to zero (on ground). The adjustment for
     // frame height will get added in the later constraints
-    terrainState = 0;
+    gndPosD = 0;
 
     return true;
 }
@@ -1411,7 +1411,7 @@ void NavEKF3_core::selectHeightForFusion()
         const ftype rangeMaxUse = 1e-2 * (ftype)_rng->max_distance_orient(ROTATION_PITCH_270) * (ftype)frontend->_useRngSwHgt;
 
         // Use the AGL KF height estimate when available. The default
-        // (terrainState - position.z) rides on the main filter's vertical
+        // (gndPosD - position.z) rides on the main filter's vertical
         // position, which baro ground effect corrupts. The AGL KF fuses IMU
         // and rangefinder, so it does not carry that error directly - baro
         // reaches it only through the accel bias the main filter learns.
@@ -1420,7 +1420,7 @@ void NavEKF3_core::selectHeightForFusion()
         // timestamp goes stale and vetoes the switch. Gate on the AGL KF's own
         // last-fusion time when it is the height authority, only while it would
         // stand in as the height observation, so a stale one cannot hold the switch.
-        uint32_t hgtValidTime_ms = gndHgtValidTime_ms;
+        uint32_t hgtValidTime_ms = gndPosMeasTime_ms;
 #if EK3_FEATURE_AGL_KF
         if (aglKf.valid &&
             (prevTnb.c.z >= frontend->DCM33FlowMin) && (imuSampleTime_ms - aglKf.lastRngFuseTime_ms < 200)) {
@@ -1429,7 +1429,7 @@ void NavEKF3_core::selectHeightForFusion()
         } else
 #endif
         {
-            heightAboveGnd = terrainState - stateStruct.position.z;
+            heightAboveGnd = gndPosD - stateStruct.position.z;
         }
 
         bool aboveUpperSwHgt = heightAboveGnd > rangeMaxUse;
@@ -1499,8 +1499,8 @@ void NavEKF3_core::selectHeightForFusion()
             // Take it from the range when they disagree by more than baro drift did at a switch in flight
             // tests (under 0.25 m, against 0.66 m on a step).
             if ((activeHgtSource != AP_NavEKF_Source::SourceZ::RANGEFINDER) && aglOnlyStable) {
-                if (fabsF((terrainState - stateStruct.position.z) - rngHgt) > 0.3f) {
-                    terrainState = stateStruct.position.z + rngHgt;
+                if (fabsF((gndPosD - stateStruct.position.z) - rngHgt) > 0.3f) {
+                    gndPosD = stateStruct.position.z + rngHgt;
                     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "EKF3 IMU%u terrain offset reset from range", (unsigned)imu_index);
                 }
             }
@@ -1609,7 +1609,7 @@ void NavEKF3_core::selectHeightForFusion()
             // model either: its terrain term grows only with horizontal movement
             posDownObsNoise += sq(rangeDataDelayed.rng * frontend->_terrGradMax) * MAX(0.0f , (1.0f - sq(prevTnb.c.z)));
             // correct for terrain position relative to datum
-            hgtMea -= terrainState;
+            hgtMea -= gndPosD;
             // correct sensor so that local position height adjusts to match GPS
             if (frontend->_originHgtMode & (1 << 1) && frontend->_originHgtMode & (1 << 2)) {
                 // offset has to be applied to the measurement, not the NED origin

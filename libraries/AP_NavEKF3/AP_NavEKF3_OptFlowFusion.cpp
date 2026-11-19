@@ -41,13 +41,13 @@ void NavEKF3_core::SelectFlowFusion()
     // Check if the optical flow data is still valid
     flowDataValid = ((imuSampleTime_ms - flowValidMeaTime_ms) < 1000);
     // check is the terrain offset estimate is still valid - if we are using range finder as the main height reference, the ground is assumed to be at 0
-    gndOffsetValid = ((imuSampleTime_ms - gndHgtValidTime_ms) < 5000) || (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER);
+    gndPosValid = ((imuSampleTime_ms - gndPosMeasTime_ms) < 5000) || (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER);
     // Perform tilt check
     bool tiltOK = (prevTnb.c.z > frontend->DCM33FlowMin);
     // Constrain measurements to zero if takeoff is not detected and the height above ground
     // is insufficient to achieve acceptable focus. This allows the vehicle to be picked up
     // and carried to test optical flow operation
-    if (!takeOffDetected && ((terrainState - stateStruct.position.z) < 0.5f)) {
+    if (!takeOffDetected && ((gndPosD - stateStruct.position.z) < 0.5f)) {
         ofDataDelayed.flowRadXYcomp.zero();
         ofDataDelayed.flowRadXY.zero();
         flowDataValid = true;
@@ -110,12 +110,12 @@ void NavEKF3_core::EstimateTerrainOffset(const of_elements &ofDataDelayed)
         // fuse range finder data
         if (rangeDataToFuse) {
             // reset terrain state if rangefinder data not fused for 5 seconds
-            if (imuSampleTime_ms - gndHgtValidTime_ms > 5000) {
-                terrainState = MAX(rangeDataDelayed.rng * prevTnb.c.z, rngOnGnd) + stateStruct.position.z;
+            if (imuSampleTime_ms - gndPosMeasTime_ms > 5000) {
+                gndPosD = MAX(rangeDataDelayed.rng * prevTnb.c.z, rngOnGnd) + stateStruct.position.z;
             }
 
             // predict range
-            ftype predRngMeas = MAX((terrainState - stateStruct.position[2]),rngOnGnd) / prevTnb.c.z;
+            ftype predRngMeas = MAX((gndPosD - stateStruct.position[2]),rngOnGnd) / prevTnb.c.z;
             // Copy required states to local variable names
             ftype q0 = stateStruct.quat[0]; // quaternion at optical flow measurement time
             ftype q1 = stateStruct.quat[1]; // quaternion at optical flow measurement time
@@ -133,7 +133,7 @@ void NavEKF3_core::EstimateTerrainOffset(const of_elements &ofDataDelayed)
             varInnovRng = (R_RNG + Popt/sq(SK_RNG));
 
             // constrain terrain height to be below the vehicle
-            terrainState = MAX(terrainState, stateStruct.position[2] + rngOnGnd);
+            gndPosD = MAX(gndPosD, stateStruct.position[2] + rngOnGnd);
 
             // Calculate the measurement innovation
             innovRng = predRngMeas - rangeDataDelayed.rng;
@@ -144,10 +144,10 @@ void NavEKF3_core::EstimateTerrainOffset(const of_elements &ofDataDelayed)
             // Check the innovation test ratio and don't fuse if too large
             if (auxRngTestRatio < 1.0f) {
                 // correct the state
-                terrainState -= K_RNG * innovRng;
+                gndPosD -= K_RNG * innovRng;
 
                 // constrain the state
-                terrainState = MAX(terrainState, stateStruct.position[2] + rngOnGnd);
+                gndPosD = MAX(gndPosD, stateStruct.position[2] + rngOnGnd);
 
                 // correct the covariance
                 Popt = Popt - sq(Popt)/(SK_RNG*(R_RNG + Popt/sq(SK_RNG))*(sq(q0) - sq(q1) - sq(q2) + sq(q3)));
@@ -156,7 +156,7 @@ void NavEKF3_core::EstimateTerrainOffset(const of_elements &ofDataDelayed)
                 Popt = MAX(Popt,0.0f);
 
                 // record the time we last updated the terrain offset state
-                gndHgtValidTime_ms = imuSampleTime_ms;
+                gndPosMeasTime_ms = imuSampleTime_ms;
             }
         }
 
@@ -173,10 +173,10 @@ void NavEKF3_core::EstimateTerrainOffset(const of_elements &ofDataDelayed)
             Vector2F auxFlowObsInnovVar;
 
             // predict range to centre of image
-            ftype flowRngPred = MAX((terrainState - stateStruct.position.z),rngOnGnd) / prevTnb.c.z;
+            ftype flowRngPred = MAX((gndPosD - stateStruct.position.z),rngOnGnd) / prevTnb.c.z;
 
             // constrain terrain height to be below the vehicle
-            terrainState = MAX(terrainState, stateStruct.position.z + rngOnGnd);
+            gndPosD = MAX(gndPosD, stateStruct.position.z + rngOnGnd);
 
             // calculate relative velocity in sensor frame
             relVelSensor = prevTnb*stateStruct.velocity;
@@ -194,7 +194,7 @@ void NavEKF3_core::EstimateTerrainOffset(const of_elements &ofDataDelayed)
             ftype t3 = q1*q1;
             ftype t4 = q2*q2;
             ftype t5 = q3*q3;
-            ftype t6 = stateStruct.position.z - terrainState;
+            ftype t6 = stateStruct.position.z - gndPosD;
             ftype t7 = 1.0f / (t6*t6);
             ftype t8 = q0*q3*2.0f;
             ftype t9 = t2-t3-t4+t5;
@@ -223,13 +223,13 @@ void NavEKF3_core::EstimateTerrainOffset(const of_elements &ofDataDelayed)
             if (auxFlowTestRatio.y < 1.0f) {
 
                 // correct the state
-                terrainState -= K_OPT * auxFlowObsInnov.y;
+                gndPosD -= K_OPT * auxFlowObsInnov.y;
 
                 // constrain the state
-                terrainState = MAX(terrainState, stateStruct.position.z + rngOnGnd);
+                gndPosD = MAX(gndPosD, stateStruct.position.z + rngOnGnd);
 
                 // update intermediate variables used when fusing the X axis
-                t6 = stateStruct.position.z - terrainState;
+                t6 = stateStruct.position.z - gndPosD;
                 t7 = 1.0f / (t6*t6);
 
                 // correct the covariance
@@ -239,7 +239,7 @@ void NavEKF3_core::EstimateTerrainOffset(const of_elements &ofDataDelayed)
                 Popt = MAX(Popt,1E-6f);
 
                 // record the time we last updated the terrain offset state
-                gndHgtValidTime_ms = imuSampleTime_ms;
+                gndPosMeasTime_ms = imuSampleTime_ms;
             }
 
             // fuse X axis data
@@ -258,10 +258,10 @@ void NavEKF3_core::EstimateTerrainOffset(const of_elements &ofDataDelayed)
             if (auxFlowTestRatio.x < 1.0f) {
 
                 // correct the state
-                terrainState -= K_OPT * auxFlowObsInnov.x;
+                gndPosD -= K_OPT * auxFlowObsInnov.x;
 
                 // constrain the state
-                terrainState = MAX(terrainState, stateStruct.position.z + rngOnGnd);
+                gndPosD = MAX(gndPosD, stateStruct.position.z + rngOnGnd);
 
                 // correct the covariance
                 Popt = Popt - K_OPT * H_OPT * Popt;
@@ -296,23 +296,23 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
     ftype vd = stateStruct.velocity.z;
     ftype pd = stateStruct.position.z;
 
-    // Default is the terrain estimator AGL (terrainState - pd, where pd is the main filter's vertical position)
+    // Default is the terrain estimator AGL (gndPosD - pd, where pd is the main filter's vertical position)
     // constrain height above ground to be above range measured on ground
-    ftype heightAboveGndEst = MAX((terrainState - pd), rngOnGnd);
+    ftype heightAboveGndEst = MAX((gndPosD - pd), rngOnGnd);
 
 #if EK3_FEATURE_OPTFLOW_SRTM
-    // if ground offset (aka terrainState) is not valid, use SRTM altitude. terrain_srtm_alt
-    // is positive up from the origin where pd and terrainState above are positive down
+    // if ground offset (aka gndPosD) is not valid, use SRTM altitude. terrain_srtm_alt
+    // is positive up from the origin where pd and gndPosD above are positive down
     terrain_srtm_alt_valid = (terrain_srtm_alt_ms != 0) &&
                              ((imuSampleTime_ms - terrain_srtm_alt_ms) < TERRAIN_SRTM_ALT_TIMEOUT_MS);
-    if (!gndOffsetValid && terrain_srtm_alt_valid) {
+    if (!gndPosValid && terrain_srtm_alt_valid) {
         heightAboveGndEst = MAX((-pd) - terrain_srtm_alt, rngOnGnd);
     }
 #endif
 
 #if EK3_FEATURE_AGL_KF
     // AGL KF override: use the IMU-aided AGL KF estimate when enabled and valid,
-    // instead of terrainState-pd which can drift when the main filter's vertical position
+    // instead of gndPosD-pd which can drift when the main filter's vertical position
     // state is unreliable (e.g. poor altitude source, sensor outage, or ground effect).
     if (aglKf.valid) {
         heightAboveGndEst = MAX(aglKf.hgt, rngOnGnd);

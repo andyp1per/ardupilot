@@ -1382,7 +1382,7 @@ private:
     uint32_t rngOutOfRangeLowTime_ms[DOWNWARD_RANGEFINDER_MAX_INSTANCES]; // time stamps of the latest out of range low report from each downward range finder (msec)
 #endif
     uint32_t flowMeaTime_ms;        // time stamp from latest flow measurement (msec)
-    uint32_t gndHgtValidTime_ms;    // time stamp from last terrain offset state update (msec)
+    uint32_t gndPosMeasTime_ms;     // time the ground position was last measured (msec)
     Vector2 flowVarInnov;           // optical flow innovations variances (rad/sec)^2
     Vector2 flowInnov;              // optical flow LOS innovations (rad/sec)
     uint32_t flowInnovTime_ms;      // system time that optical flow innovations and variances were recorded (to detect timeouts)
@@ -1439,7 +1439,7 @@ private:
     ftype aglKfLastRngHgt;          // tilt-corrected range of the last range sample fused (m)
     bool aglKfHeldOnFloor;          // AGL KF held on its floor until the range finder reads again
 #endif
-    ftype terrainState;             // terrain position state (m)
+    ftype gndPosD;                  // NED down position of the ground under the vehicle in the EKF frame (m)
     ftype prevPosN;                 // north position at last measurement
     ftype prevPosE;                 // east position at last measurement
     ftype varInnovRng;              // range finder observation innovation variance (m^2)
@@ -1477,7 +1477,7 @@ private:
     };
     AidingMode PV_AidingMode;       // Defines the preferred mode for aiding of velocity and position estimates from the INS
     AidingMode PV_AidingModePrev;   // Value of PV_AidingMode from the previous frame - used to detect transitions
-    bool gndOffsetValid;            // true when the ground offset state can still be considered valid
+    bool gndPosValid;               // true while the ground position can still be considered valid
     Vector3F delAngBodyOF;          // bias corrected delta angle of the vehicle IMU measured summed across the time since the last OF measurement
     ftype delTimeOF;                // time that delAngBodyOF is summed across
     bool flowFusionActive;          // true when optical flow fusion is active
