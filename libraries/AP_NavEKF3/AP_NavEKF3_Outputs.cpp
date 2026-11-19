@@ -388,11 +388,18 @@ void NavEKF3_core::getEkfControlLimits(float &ekfGndSpdLimit, float &ekfNavVelGa
     // If relying on optical flow, limit speed to prevent sensor limit being exceeded and adjust
     // nav gains to prevent body rate feedback into flow rates destabilising the control loop
     if (PV_AidingMode == AID_RELATIVE && relyingOnFlowData) {
+        // the height that scales the flow, as FuseOptFlow() takes it
+        ftype hgtAboveGnd = gndPosD - stateStruct.position.z;
+#if EK3_FEATURE_AGL_KF
+        if (aglKf.valid) {
+            hgtAboveGnd = aglKf.hgt;
+        }
+#endif
         // allow 1.0 rad/sec margin for angular motion
-        ekfGndSpdLimit = MAX((frontend->_maxFlowRate - 1.0f), 0.0f) * MAX((gndPosD - stateStruct.position[2]), rngOnGnd);
+        ekfGndSpdLimit = MAX((frontend->_maxFlowRate - 1.0f), 0.0f) * MAX(hgtAboveGnd, rngOnGnd);
         // reduce the nav gain above _flowNavGainHgt to allow for flow velocity noise that grows with height
         const ftype gainHgt = MAX(frontend->_flowNavGainHgt.get(), 1.0f);
-        ekfNavVelGainScaler = gainHgt / MAX((gndPosD - stateStruct.position[2]), gainHgt);
+        ekfNavVelGainScaler = gainHgt / MAX(hgtAboveGnd, gainHgt);
     } else {
         ekfGndSpdLimit = 400.0f; //return 80% of max filter speed
         ekfNavVelGainScaler = 1.0f;
@@ -596,7 +603,11 @@ bool NavEKF3_core::getTerrainAltVariance(float &temp) const
     // height estimation or optical flow operation. This prevents false alarms at the GCS if a
     // range finder is fitted for other applications
     if (((frontend->_useRngSwHgt > 0) && activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER) || (PV_AidingMode == AID_RELATIVE && flowDataValid)) {
-        temp = sqrtF(auxRngTestRatio);
+#if EK3_FEATURE_AGL_KF
+        temp = sqrtF(aglKfHgtTestRatio);
+#else
+        temp = 0;
+#endif
     } else {
         temp = 0;
     }

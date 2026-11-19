@@ -948,11 +948,14 @@ private:
     void SelectBodyOdomFusion();
 
     // Estimate terrain offset using a single state EKF
-    void EstimateTerrainOffset(const of_elements &ofDataDelayed);
+    void EstimateGndPosFromFlow(const of_elements &ofDataDelayed);
 
 #if EK3_FEATURE_AGL_KF
     // Update the IMU-aided AGL Kalman filter (height, vertical velocity, accel-Z bias)
     void UpdateAglKf();
+
+    // measure the ground position from the AGL KF on a step it took a range sample
+    void UpdateGndPos();
 
     // true when the range finder library has a downward facing sensor, so the AGL KF runs
     bool haveDownwardRangeFinder() const;
@@ -1382,7 +1385,7 @@ private:
     uint32_t rngOutOfRangeLowTime_ms[DOWNWARD_RANGEFINDER_MAX_INSTANCES]; // time stamps of the latest out of range low report from each downward range finder (msec)
 #endif
     uint32_t flowMeaTime_ms;        // time stamp from latest flow measurement (msec)
-    uint32_t gndPosMeasTime_ms;     // time the ground position was last measured (msec)
+    uint32_t gndPosMeasTime_ms;     // time the ground position was last measured, by the AGL KF or the flow (msec)
     Vector2 flowVarInnov;           // optical flow innovations variances (rad/sec)^2
     Vector2 flowInnov;              // optical flow LOS innovations (rad/sec)
     uint32_t flowInnovTime_ms;      // system time that optical flow innovations and variances were recorded (to detect timeouts)
@@ -1418,6 +1421,7 @@ private:
     static constexpr ftype aglKfStepFromMax = 0.25f;     // m, largest prior innovation a step is counted from
     static constexpr ftype aglKfStepHgtNoiseMax = 5.0f;  // m, height noise beyond which there is no hold
     ftype aglKfLastHgtInnov;        // range innovation of the last AGL KF fusion
+    ftype aglKfHgtTestRatio;        // innovation test ratio of the last range sample offered to the AGL KF, fused or not
     uint32_t aglKfStepTime_ms;      // time of the last step in the ground under the range finder
     uint32_t aglKfVelHoldTime_ms;   // time the AGL KF velocity was last held out of velD after a step
     uint32_t lastAglKfVelFuseTime_ms; // timestamp of last AGL KF velocity fused as a velD observation
@@ -1442,8 +1446,6 @@ private:
     ftype gndPosD;                  // NED down position of the ground under the vehicle in the EKF frame (m)
     ftype prevPosN;                 // north position at last measurement
     ftype prevPosE;                 // east position at last measurement
-    ftype varInnovRng;              // range finder observation innovation variance (m^2)
-    ftype innovRng;                 // range finder observation innovation (m)
     struct {
         uint32_t timestamp_ms;      // system timestamp of last correct optical flow sample (used for calibration)
         Vector2f flowRate;          // latest corrected optical flow flow rate (used for calibration)
@@ -1459,12 +1461,10 @@ private:
 #endif
 
     ftype hgtMea;                   // height measurement derived from either baro, gps or range finder data (m)
-    bool inhibitGndState;           // true when the terrain position state is to remain constant
     uint32_t prevFlowFuseTime_ms;   // time both flow measurement components passed their innovation consistency checks
     Vector2 flowTestRatio;          // square of optical flow innovations divided by fail threshold used by main filter where >1.0 is a fail
     Vector2F auxFlowTestRatio;      // sum of squares of optical flow innovation divided by fail threshold used by 1-state terrain offset estimator
     ftype R_LOS;                    // variance of optical flow rate measurements (rad/sec)^2
-    ftype auxRngTestRatio;          // square of range finder innovations divided by fail threshold used by main filter where >1.0 is a fail
     Vector2F flowGyroBias;          // bias error of optical flow sensor gyro output
     bool rangeDataToFuse;           // true when valid range finder height data has arrived at the fusion time horizon.
     bool baroDataToFuse;            // true when valid baro height finder data has arrived at the fusion time horizon.
@@ -1477,7 +1477,7 @@ private:
     };
     AidingMode PV_AidingMode;       // Defines the preferred mode for aiding of velocity and position estimates from the INS
     AidingMode PV_AidingModePrev;   // Value of PV_AidingMode from the previous frame - used to detect transitions
-    bool gndPosValid;               // true while the ground position can still be considered valid
+    bool gndPosValid;               // true while the ground position was measured within 5 s, or is the height datum
     Vector3F delAngBodyOF;          // bias corrected delta angle of the vehicle IMU measured summed across the time since the last OF measurement
     ftype delTimeOF;                // time that delAngBodyOF is summed across
     bool flowFusionActive;          // true when optical flow fusion is active

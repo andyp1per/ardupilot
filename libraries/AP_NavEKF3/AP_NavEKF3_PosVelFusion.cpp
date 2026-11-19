@@ -1495,14 +1495,11 @@ void NavEKF3_core::selectHeightForFusion()
             }
         } else if (belowLowerSwHgt && trustTerrain && aglSettled && (prevTnb.c.z >= 0.7f)) {
 #if EK3_FEATURE_AGL_KF
-            // Switching in freezes the terrain offset, which after a step up can still be the lower ground's.
-            // Take it from the range when they disagree by more than baro drift did at a switch in flight
-            // tests (under 0.25 m, against 0.66 m on a step).
+            // After a step in the ground the AGL KF still lags the range when the switch takes it,
+            // within the 0.15 m aglSettled allows, and the ground position measured through it carries
+            // that lag into the range finder height. Take it from the range sample being fused instead
             if ((activeHgtSource != AP_NavEKF_Source::SourceZ::RANGEFINDER) && aglOnlyStable) {
-                if (fabsF((gndPosD - stateStruct.position.z) - rngHgt) > 0.3f) {
-                    gndPosD = stateStruct.position.z + rngHgt;
-                    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "EKF3 IMU%u terrain offset reset from range", (unsigned)imu_index);
-                }
+                gndPosD = stateStruct.position.z + rngHgt;
             }
 #endif
             // reliable terrain and range finder so start using range finder height

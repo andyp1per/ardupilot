@@ -269,7 +269,8 @@ void NavEKF3_core::UpdateAglKf()
     // reject outliers (RF glitches, specular reflections, etc.)
     // gate is expressed as a multiplier on the 1-sigma bound.
     const ftype innovGate = MAX(0.01f * (ftype)frontend->_rngInnovGate, 1.0f);
-    if (sq(hgtInnov) > sq(innovGate) * innovVar) {
+    aglKfHgtTestRatio = sq(hgtInnov) / (sq(innovGate) * innovVar);
+    if (aglKfHgtTestRatio > 1.0f) {
         // Innovation too large, likely a glitch.  Inflate the state uncertainties so the
         // next valid reading can correct them more aggressively.  Only the diagonals:
         // leaving the off-diagonals alone weakens the correlations, which is what keeps
@@ -306,6 +307,25 @@ void NavEKF3_core::UpdateAglKf()
     aglKfLastHgtInnov = hgtInnov;
     aglKfLastRngHgt = hgtMeas;
     aglKf.valid = true;
+}
+
+// The range finder measures where the ground is, through the AGL KF: on each step it took a range
+// sample, fused or restarted from, the ground is the filter height plus the AGL KF height, which
+// the range finder height is later fused as, so the two agree. Not the raw sample, which a range
+// finder that alternates between the ground and something nearer moves by metres. Not while the
+// range finder is the height source: its height is fused against this position, which then stays
+// where it was when the source switched
+void NavEKF3_core::UpdateGndPos()
+{
+    if ((aglKf.lastRngFuseTime_ms != imuSampleTime_ms) || (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER)) {
+        return;
+    }
+    gndPosD = stateStruct.position.z + MAX(aglKf.hgt, rngOnGnd);
+    gndPosMeasTime_ms = imuSampleTime_ms;
+#if EK3_FEATURE_OPTFLOW_FUSION
+    // a flow estimate of the ground position starts from this uncertainty
+    Popt = aglKf.cov[0][0];
+#endif
 }
 
 // FuseAglKfHeight - fuse one height observation into the AGL KF, given its innovation (observed

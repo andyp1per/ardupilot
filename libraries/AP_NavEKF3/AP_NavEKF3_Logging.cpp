@@ -206,12 +206,16 @@ void NavEKF3_core::Log_Write_XKF5(uint64_t time_us) const
         AFI : (int16_t)(1000 * auxFlowObsInnov.length()),  // optical flow LOS rate innovation from terrain offset estimator
         HAGL : float_to_int16(100*(gndPosD - stateStruct.position.z)),    // height above ground level
         terrOffset : (int16_t)(100*gndPosD),       // filter ground offset state error
-        RI : (int16_t)(100*innovRng),                   // range finder innovations
-        meaRng : (uint16_t)(100*rangeDataDelayed.rng),  // measured range
-#if EK3_FEATURE_OPTFLOW_FUSION
-        errHAGL : (uint16_t)(100*sqrtF(Popt)),          // note Popt is constrained to be non-negative in EstimateTerrainOffset()
+#if EK3_FEATURE_AGL_KF
+        RI : (int16_t)(100*aglKfLastHgtInnov),          // range finder innovation of the last AGL KF fusion
 #else
-        errHAGL : 0,          // note Popt is constrained to be non-negative in EstimateTerrainOffset()
+        RI : 0,
+#endif
+        meaRng : (uint16_t)(100*rangeDataDelayed.rng),  // measured range
+#if EK3_FEATURE_AGL_KF
+        errHAGL : (uint16_t)(100*sqrtF(aglKf.cov[0][0])), // AGL KF height std-dev
+#else
+        errHAGL : 0,
 #endif
         angErr : (float)outputTrackError.x,             // output predictor angle error
         velErr : (float)outputTrackError.y,             // output predictor velocity error

@@ -259,7 +259,6 @@ void NavEKF3_core::InitialiseVariables()
     gndPosD = 0.0f;
     prevPosN = stateStruct.position.x;
     prevPosE = stateStruct.position.y;
-    inhibitGndState = false;
     flowGyroBias.x = 0;
     flowGyroBias.y = 0;
     PV_AidingMode = AID_NONE;
@@ -298,6 +297,7 @@ void NavEKF3_core::InitialiseVariables()
     aglKf.InitialiseVariables(rngOnGnd);
     lastAglKfVelFuseTime_ms = 0;
     aglKfLastHgtInnov = 0;
+    aglKfHgtTestRatio = 0;
     aglKfStepTime_ms = 0;
     aglKfVelHoldTime_ms = 0;
     aglKfVelTestRatio = 0;
@@ -697,8 +697,12 @@ void NavEKF3_core::UpdateFilter(bool predict)
         // each step's IMU data, so it runs ahead of the flow fusion's load levelling, which skips a step
         if (haveDownwardRangeFinder()) {
             UpdateAglKf();
+            UpdateGndPos();
         }
 #endif
+        // the ground position is valid for 5 s after it was last measured, and while the range
+        // finder height is fused against it
+        gndPosValid = ((imuSampleTime_ms - gndPosMeasTime_ms) < 5000) || (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER);
 
 #if EK3_FEATURE_OPTFLOW_FUSION
         // Update states using optical flow data
@@ -2102,8 +2106,8 @@ void NavEKF3_core::ConstrainStates()
     for (uint8_t i=19; i<=21; i++) statesArray[i] = constrain_ftype(statesArray[i],-0.5f,0.5f);
     // wind velocity limit 100 m/s (could be based on some multiple of max airspeed * EAS2TAS) - TODO apply circular limit
     for (uint8_t i=22; i<=23; i++) statesArray[i] = constrain_ftype(statesArray[i],-100.0f,100.0f);
-    // constrain the terrain state to be below the vehicle height unless we are using terrain as the height datum
-    if (!inhibitGndState) {
+    // constrain the ground position to be below the vehicle unless the range finder height is fused against it
+    if (activeHgtSource != AP_NavEKF_Source::SourceZ::RANGEFINDER) {
         gndPosD = MAX(gndPosD, stateStruct.position.z + rngOnGnd);
     }
 }
