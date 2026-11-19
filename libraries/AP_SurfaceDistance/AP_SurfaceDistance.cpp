@@ -57,12 +57,22 @@ void AP_SurfaceDistance::update()
     // update health
     alt_healthy = (rangefinder->status_orient(rotation) == RangeFinder::Status::Good) &&
                             (rangefinder->range_valid_count_orient(rotation) >= RANGEFINDER_HEALTH_MIN);
-    if (!alt_healthy) {
-        status |= (uint8_t)Surface_Distance_Status::Unhealthy;
-    }
 
     // tilt corrected but unfiltered, not glitch protected alt
     alt_m = tilt_correction * rangefinder->distance_orient(rotation);
+
+    // Through a dropout of the downward range finder, carry the height on the AHRS's own filter of
+    // it (EKF3's AGL KF), which the IMU keeps going for up to 5 s, rather than hold the EKF height,
+    // which moves with the baro, and reset the target once the range returns. The reading itself
+    // stays the measurement while it is healthy, so a step in it is still a glitch to the checks below
+    float hagl_m;
+    if (!alt_healthy && (rotation == ROTATION_PITCH_270) && AP::ahrs().get_hagl_rangefinder(hagl_m)) {
+        alt_m = hagl_m;
+        alt_healthy = true;
+    }
+    if (!alt_healthy) {
+        status |= (uint8_t)Surface_Distance_Status::Unhealthy;
+    }
 
     // Glitch Handling. Rangefinder readings more than glitch_alt_m from the last good reading
     // are considered a glitch and glitch_count becomes non-zero
