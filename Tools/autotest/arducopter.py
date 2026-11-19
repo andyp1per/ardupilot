@@ -8416,6 +8416,38 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_waypoint(num_wp-1, num_wp-1)
         self.wait_disarmed()
 
+    def SurfaceTrackingRangeDropout(self):
+        '''surface tracking keeps the height above ground through a range finder dropout'''
+        # a 3 s dropout with a 1 m baro step inside it: holding the EKF height through the dropout
+        # kept 0.76 m of the step on master, carrying it on the range finder filter 0.02 m
+        dropout_s = 3
+        baro_step_m = 1.0
+        height_kept_max_m = 0.5
+        self.context_push()
+        self.set_analog_rangefinder_parameters()
+        self.set_parameters({
+            "RNGFND1_MAX": 10,
+            "SIM_TERRAIN": 0,
+            "SURFTRAK_MODE": 1,
+        })
+        self.reboot_sitl()
+        self.takeoff(3, mode="ALT_HOLD", altitude_max=4.5)
+        self.delay_sim_time(10, "settle")
+        start = self.get_altitude(altitude_source='SIM_STATE.alt')
+        self.set_parameters({"SIM_SONAR_GLITCH": 1, "SIM_BARO_GLITCH": baro_step_m})
+        self.delay_sim_time(dropout_s, "range finder dropout, baro stepped")
+        self.set_parameter("SIM_SONAR_GLITCH", 0)
+        self.delay_sim_time(10, "range finder back")
+        kept = self.get_altitude(altitude_source='SIM_STATE.alt') - start
+        self.progress("true height kept after the dropout: %.2f m" % kept)
+        self.set_parameter("SIM_BARO_GLITCH", 0)
+        self.change_mode("LAND")
+        self.wait_disarmed(timeout=60)
+        self.context_pop()
+        self.reboot_sitl()
+        if abs(kept) > height_kept_max_m:
+            raise NotAchievedException("dropout moved the height above ground %.2f m" % kept)
+
     def SurfaceTracking(self):
         '''Test Surface Tracking'''
         ex = None
@@ -22442,6 +22474,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.BeaconPosition,
             self.MAV_CMD_DO_SET_ROI_WPNEXT_OFFSET,
             self.SurfaceTracking,
+            self.SurfaceTrackingRangeDropout,
             self.SurfaceTracking2,
             self.FlyRangeFinderMAVlink,
             self.FlyRangeFinderSITL,
