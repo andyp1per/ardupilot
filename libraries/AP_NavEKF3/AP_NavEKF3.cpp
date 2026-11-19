@@ -1531,6 +1531,16 @@ bool NavEKF3::getHAGL(float &HAGL) const
     return core[primary].getHAGL(HAGL);
 }
 
+// height above the ground the downward range finder measures, from the primary core's AGL KF
+// carried to the output time. False while it is not valid, never a terrain estimate
+bool NavEKF3::getRangeFinderHAGL(float &HAGL) const
+{
+    if (!core) {
+        return false;
+    }
+    return core[primary].getRangeFinderHAGL(HAGL);
+}
+
 // return the quaternions defining the rotation from XYZ (body) to NED axes
 void NavEKF3::getQuaternionBodyToNED(int8_t instance, Quaternion &quat) const
 {

@@ -277,16 +277,37 @@ bool NavEKF3_core::getPosD(postype_t &posD) const
 // return the estimated height of body frame origin above ground level
 bool NavEKF3_core::getHAGL(float &HAGL) const
 {
+    if (getRangeFinderHAGL(HAGL)) {
+        return true;
+    }
 #if EK3_FEATURE_AGL_KF
     if (aglKf.valid) {
-        // the state can sit just below its floor, which is fused rather than clamped
-        HAGL = MAX(aglKf.hgt, rngOnGnd);
-        return healthy();
+        // valid but the filter is not healthy
+        return false;
     }
 #endif
     HAGL = terrainState - outputDataNew.position.z - posOffsetNED.z;
     // If we know the terrain offset and altitude, then we have a valid height above ground estimate
     return !hgtTimeout && gndOffsetValid && healthy();
+}
+
+// Height of the body frame origin above the ground the downward range finder measures, from the
+// AGL KF. False while the AGL KF is not valid, so the height is never from the terrain estimate.
+// The AGL KF runs at the fusion time horizon, so it is carried to the output time by the main
+// filter's vertical movement between the two, as the other outputs are
+bool NavEKF3_core::getRangeFinderHAGL(float &HAGL) const
+{
+#if EK3_FEATURE_AGL_KF
+    if (!aglKf.valid) {
+        return false;
+    }
+    // the state can sit just below its floor, which is fused rather than clamped
+    const ftype hgtNow = aglKf.hgt - (outputDataNew.position.z - stateStruct.position.z);
+    HAGL = MAX(hgtNow, rngOnGnd) - posOffsetNED.z;
+    return healthy();
+#else
+    return false;
+#endif
 }
 
 // Return the last calculated latitude, longitude and height in WGS-84

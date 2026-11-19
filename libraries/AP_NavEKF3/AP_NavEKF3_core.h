@@ -251,6 +251,9 @@ public:
     // return false if ground height is not being estimated.
     bool getHAGL(float &HAGL) const;
 
+    // height above the ground the downward range finder measures, from the AGL KF at the output time (m)
+    bool getRangeFinderHAGL(float &HAGL) const;
+
     // return the quaternions defining the rotation from NED to XYZ (body) axes
     void getQuaternion(Quaternion &quat) const;
 
