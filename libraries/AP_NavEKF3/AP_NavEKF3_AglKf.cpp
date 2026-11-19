@@ -25,6 +25,14 @@
 
 #include <AP_DAL/AP_DAL.h>
 
+// true when the range finder library has a downward facing sensor. Read through the DAL, so
+// Replay runs the AGL KF exactly where the flight did
+bool NavEKF3_core::haveDownwardRangeFinder() const
+{
+    const auto *rng = dal.rangefinder();
+    return (rng != nullptr) && rng->has_orientation(ROTATION_PITCH_270);
+}
+
 // 3-state AGL KF initialisation
 // Start with generous uncertainty; the first valid RF measurement will hard-reset the state
 void NavEKF3_core::AglKalmanFilter::InitialiseVariables(ftype initialHgt)

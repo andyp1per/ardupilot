@@ -1422,7 +1422,7 @@ void NavEKF3_core::selectHeightForFusion()
         // stand in as the height observation, so a stale one cannot hold the switch.
         uint32_t hgtValidTime_ms = gndHgtValidTime_ms;
 #if EK3_FEATURE_AGL_KF
-        if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKf.valid &&
+        if (aglKf.valid &&
             (prevTnb.c.z >= frontend->DCM33FlowMin) && (imuSampleTime_ms - aglKf.lastRngFuseTime_ms < 200)) {
             heightAboveGnd = aglKf.hgt;
             hgtValidTime_ms = aglKf.lastRngFuseTime_ms;
@@ -1449,7 +1449,7 @@ void NavEKF3_core::selectHeightForFusion()
         const bool relVelFused = (imuSampleTime_ms - allAxesFusedTime_ms) < ALL_AXES_FUSED_HOLD_MS;
         const bool horizVelMeasured = filterStatus.flags.horiz_vel &&
                                       ((PV_AidingMode == AID_ABSOLUTE) || ((PV_AidingMode == AID_RELATIVE) && relVelFused));
-        if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKf.valid && (onGround || horizVelMeasured)) {
+        if (aglKf.valid && (onGround || horizVelMeasured)) {
             terrainStable = true;
         }
 #endif
@@ -1595,7 +1595,7 @@ void NavEKF3_core::selectHeightForFusion()
             // up to the previous sample; it stays valid for 5 s without fusing, as when it rejects
             // samples or is tilted past its own limit, so it stands in only within that limit and
             // while its last fusion is recent
-            if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKf.valid &&
+            if (aglKf.valid &&
                 (prevTnb.c.z >= frontend->DCM33FlowMin) && (imuSampleTime_ms - aglKf.lastRngFuseTime_ms < 200)) {
                 hgtMea = MAX(aglKf.hgt, rngOnGnd);
                 posDownObsNoise = MAX(aglKf.cov[0][0], sq(constrain_ftype(frontend->_rngNoise, 0.1f, 10.0f)));

@@ -693,11 +693,9 @@ void NavEKF3_core::UpdateFilter(bool predict)
 #endif
 
 #if EK3_FEATURE_AGL_KF
-        // Update the IMU-aided AGL KF when either consumer is enabled: optflow scaling
-        // or fusing its velocity as a velD observation. It integrates each step's IMU
-        // data, so it runs ahead of the flow fusion's load levelling, which skips a step
-        if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) ||
-            frontend->option_is_enabled(NavEKF3::Option::AglKfVelForVelD)) {
+        // Update the IMU-aided AGL KF wherever there is a downward range finder. It integrates
+        // each step's IMU data, so it runs ahead of the flow fusion's load levelling, which skips a step
+        if (haveDownwardRangeFinder()) {
             UpdateAglKf();
         }
 #endif

@@ -278,7 +278,7 @@ bool NavEKF3_core::getPosD(postype_t &posD) const
 bool NavEKF3_core::getHAGL(float &HAGL) const
 {
 #if EK3_FEATURE_AGL_KF
-    if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKf.valid) {
+    if (aglKf.valid) {
         // the state can sit just below its floor, which is fused rather than clamped
         HAGL = MAX(aglKf.hgt, rngOnGnd);
         return healthy();

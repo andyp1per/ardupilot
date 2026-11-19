@@ -314,7 +314,7 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
     // AGL KF override: use the IMU-aided AGL KF estimate when enabled and valid,
     // instead of terrainState-pd which can drift when the main filter's vertical position
     // state is unreliable (e.g. poor altitude source, sensor outage, or ground effect).
-    if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKf.valid) {
+    if (aglKf.valid) {
         heightAboveGndEst = MAX(aglKf.hgt, rngOnGnd);
     }
 #endif
