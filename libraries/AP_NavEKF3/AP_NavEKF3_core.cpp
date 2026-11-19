@@ -276,7 +276,7 @@ void NavEKF3_core::InitialiseVariables()
     prevInFlight = false;
     manoeuvring = false;
     fusingStationaryZeroVel = false;
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
     fusingAglKfVel = false;
     aglKfVelGateOpen = false;
 #endif
@@ -294,7 +294,7 @@ void NavEKF3_core::InitialiseVariables()
     gpsHgtAccuracy = 0.0f;
     baroHgtOffset = 0.0f;
     rngOnGnd = 0.05f;
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
     aglKf.InitialiseVariables(rngOnGnd);
     lastAglKfVelFuseTime_ms = 0;
     aglKfLastHgtInnov = 0;
@@ -690,6 +690,16 @@ void NavEKF3_core::UpdateFilter(bool predict)
 #if EK3_FEATURE_BEACON_FUSION
         // Update states using range beacon data
         SelectRngBcnFusion();
+#endif
+
+#if EK3_FEATURE_AGL_KF
+        // Update the IMU-aided AGL KF when either consumer is enabled: optflow scaling
+        // or fusing its velocity as a velD observation. It integrates each step's IMU
+        // data, so it runs ahead of the flow fusion's load levelling, which skips a step
+        if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) ||
+            frontend->option_is_enabled(NavEKF3::Option::AglKfVelForVelD)) {
+            UpdateAglKf();
+        }
 #endif
 
 #if EK3_FEATURE_OPTFLOW_FUSION

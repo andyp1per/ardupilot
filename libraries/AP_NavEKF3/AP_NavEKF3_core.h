@@ -947,7 +947,7 @@ private:
     // Estimate terrain offset using a single state EKF
     void EstimateTerrainOffset(const of_elements &ofDataDelayed);
 
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
     // Update the IMU-aided AGL Kalman filter (height, vertical velocity, accel-Z bias)
     void UpdateAglKf();
     // fuse one height observation into the AGL Kalman filter
@@ -1172,7 +1172,7 @@ private:
     Vector6 velPosObs;              // observations for combined velocity and positon group of measurements (3x1 m , 3x1 m/s)
     bool fuseVelData;               // this boolean causes the velNE measurements to be fused
     bool fuseVelVertData;           // this boolean causes the velD measurement to be fused
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
     bool fusingAglKfVel;            // when true, the velD observation this step is the AGL KF velocity (uses its own R)
     bool aglKfVelGateOpen;          // true when the horizontal-speed gate allows AGL KF vertical-velocity fusion
 #endif
@@ -1384,7 +1384,7 @@ private:
     ftype Popt;                     // Optical flow terrain height state covariance (m^2)
 #endif
 
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
     // ---- AGL Kalman Filter ----
     // Uses bias-corrected IMU delta-velocity for prediction and downward rangefinder
     // as measurement, decoupled from the main filter's vertical position state.

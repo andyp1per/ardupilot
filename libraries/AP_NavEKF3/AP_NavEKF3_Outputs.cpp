@@ -277,7 +277,7 @@ bool NavEKF3_core::getPosD(postype_t &posD) const
 // return the estimated height of body frame origin above ground level
 bool NavEKF3_core::getHAGL(float &HAGL) const
 {
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
     if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKf.valid) {
         // the state can sit just below its floor, which is fused rather than clamped
         HAGL = MAX(aglKf.hgt, rngOnGnd);

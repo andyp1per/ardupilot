@@ -735,7 +735,7 @@ void NavEKF3_core::SelectVelPosFusion()
         }
     }
 
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
     // Fuse the range finder aided AGL KF vertical velocity as a velD observation to
     // anchor the vertical velocity without making the range finder a height source.
     // A velZ source that is actually delivering data is always preferred, so the test
@@ -822,7 +822,7 @@ void NavEKF3_core::SelectVelPosFusion()
         fuseVelVertData = false;
         fuseHgtData = false;
         fusePosData = false;
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
         fusingAglKfVel = false;
         if (aglKfClaimedVelD) {
             velPosObs[2] = velDObsBeforeAglKf;
@@ -944,7 +944,7 @@ void NavEKF3_core::FuseVelPosNED()
         R_OBS[5] = posDownObsNoise;
         for (uint8_t i=3; i<=5; i++) R_OBS_DATA_CHECKS[i] = R_OBS[i];
 
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
         if (fusingAglKfVel) {
             // Error budget for using a terrain relative velocity as an inertial velD
             // observation: the AGL KF's own velocity variance, plus the apparent
@@ -961,7 +961,7 @@ void NavEKF3_core::FuseVelPosNED()
         // innovations have the same sign and are outside limits. If so, then it is likely aliasing is affecting
         // the accelerometers and we should disable the GPS and barometer innovation consistency checks.
         const bool fuse_gps_vz = frontend->sources.useVelZSource(AP_NavEKF_Source::SourceZ::GPS, core_index) && gpsDataDelayed.have_vz;
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
         // gpsDataDelayed.have_vz keeps its last recalled value, so it can still be set after
         // the GPS outage that let the AGL KF claim the velocity-down observation this step
         const bool velDIsAglKfVel = fusingAglKfVel;
@@ -1122,7 +1122,7 @@ void NavEKF3_core::FuseVelPosNED()
             }
         }
 
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
         // The AGL KF supplies a vertical velocity only observation, so it is not
         // covered by the fuseVelData test above and needs its own consistency check.
         // velTestRatio and lastVelPassTime_ms are deliberately left alone: they drive
@@ -1204,7 +1204,7 @@ void NavEKF3_core::FuseVelPosNED()
                 fuseData[2] = true;
             }
         }
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
         // AGL KF supplies a vertical-velocity-only observation (no horizontal
         // velocity), so enable velD fusion independently of fuseVelData.
         if (fusingAglKfVel) {
@@ -1228,7 +1228,7 @@ void NavEKF3_core::FuseVelPosNED()
                 if (obsIndex <= 2) {
                     innovVelPos[obsIndex] = stateStruct.velocity[obsIndex] - velPosObs[obsIndex];
                     bool applyGpsScaler = frontend->sources.useVelXYSource(AP_NavEKF_Source::SourceXY::GPS, core_index);
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
                     // the AGL KF velD observation carries its own variance, not GPS-scaled
                     if (fusingAglKfVel && obsIndex == 2) {
                         applyGpsScaler = false;
@@ -1421,7 +1421,7 @@ void NavEKF3_core::selectHeightForFusion()
         // last-fusion time when it is the height authority, only while it would
         // stand in as the height observation, so a stale one cannot hold the switch.
         uint32_t hgtValidTime_ms = gndHgtValidTime_ms;
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
         if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKf.valid &&
             (prevTnb.c.z >= frontend->DCM33FlowMin) && (imuSampleTime_ms - aglKf.lastRngFuseTime_ms < 200)) {
             heightAboveGnd = aglKf.hgt;
@@ -1445,7 +1445,7 @@ void NavEKF3_core::selectHeightForFusion()
         // within ALL_AXES_FUSED_HOLD_MS. One axis is not enough: across the direction of flight it
         // passes at any speed, and an axis that passed before a turn can be failing after it.
         bool terrainStable = terrainHgtStable;
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
         const bool relVelFused = (imuSampleTime_ms - allAxesFusedTime_ms) < ALL_AXES_FUSED_HOLD_MS;
         const bool horizVelMeasured = filterStatus.flags.horiz_vel &&
                                       ((PV_AidingMode == AID_ABSOLUTE) || ((PV_AidingMode == AID_RELATIVE) && relVelFused));
@@ -1457,7 +1457,7 @@ void NavEKF3_core::selectHeightForFusion()
         // Where only the AGL KF makes terrain stable, switching in resets the height to the AGL KF, so wait
         // until it has caught up with the range sample being fused, or the reset carries its lag into the height
         bool aglSettled = true;
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
         const ftype rngHgt = MAX(rangeDataDelayed.rng * prevTnb.c.z, rngOnGnd);
         const bool aglOnlyStable = terrainStable && !terrainHgtStable;
         if (aglOnlyStable) {
@@ -1494,7 +1494,7 @@ void NavEKF3_core::selectHeightForFusion()
                 activeHgtSource = AP_NavEKF_Source::SourceZ::GPS;
             }
         } else if (belowLowerSwHgt && trustTerrain && aglSettled && (prevTnb.c.z >= 0.7f)) {
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
             // Switching in freezes the terrain offset, which after a step up can still be the lower ground's.
             // Take it from the range when they disagree by more than baro drift did at a switch in flight
             // tests (under 0.25 m, against 0.66 m on a step).
@@ -1589,7 +1589,7 @@ void NavEKF3_core::selectHeightForFusion()
         // correct for tilt using a flat earth model
         if (prevTnb.c.z >= 0.7) {
             // calculate height above ground and its observation noise
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
             // Fuse the IMU-aided AGL KF height in place of the raw rangefinder: it is the same
             // tilt-compensated range, de-glitched. It runs later in the step, so it holds the range
             // up to the previous sample; it stays valid for 5 s without fusing, as when it rejects

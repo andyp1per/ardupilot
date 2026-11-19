@@ -53,13 +53,14 @@
 #define EK3_FEATURE_OPTFLOW_SRTM EK3_FEATURE_OPTFLOW_FUSION
 #endif
 
-// IMU-aided AGL Kalman filter decoupled from the main filter's vertical position state
-#ifndef EK3_FEATURE_OPTFLOW_AGL_KF
-#define EK3_FEATURE_OPTFLOW_AGL_KF EK3_FEATURE_OPTFLOW_FUSION
+// IMU-aided AGL Kalman filter decoupled from the main filter's vertical position state. It needs
+// only the downward range finder, so it follows that, not optical flow
+#ifndef EK3_FEATURE_AGL_KF
+#define EK3_FEATURE_AGL_KF EK3_FEATURE_RANGEFINDER_MEASUREMENTS
 #endif
 
-#if (EK3_FEATURE_OPTFLOW_AGL_KF) && !(EK3_FEATURE_OPTFLOW_FUSION)
-#error "EK3_FEATURE_OPTFLOW_AGL_KF requires EK3_FEATURE_OPTFLOW_FUSION"
+#if (EK3_FEATURE_AGL_KF) && !(EK3_FEATURE_RANGEFINDER_MEASUREMENTS)
+#error "EK3_FEATURE_AGL_KF requires EK3_FEATURE_RANGEFINDER_MEASUREMENTS"
 #endif
 
 // moving baseline GPS yaw corrected for vehicle attitude. The correction consumes

@@ -220,7 +220,7 @@ void NavEKF3_core::Log_Write_XKF5(uint64_t time_us) const
     };
     AP::logger().WriteBlock(&pkt5, sizeof(pkt5));
 
-#if EK3_FEATURE_OPTFLOW_AGL_KF
+#if EK3_FEATURE_AGL_KF
     // log the optional "special" KF for HAGL estimation directly via RangeFinder + IMU
     if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) ||
         frontend->option_is_enabled(NavEKF3::Option::AglKfVelForVelD)) {
