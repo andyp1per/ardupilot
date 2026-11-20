@@ -67,9 +67,13 @@ PB8 I2C4_SCL I2C4
 PB9 I2C4_SDA I2C4
 
 # ----------------- UARTs ----------------------
-# ordered by function to match the Pixel SERIALn roles: telem1 (WiFi),
-# telem2 (radio), GPS
-SERIAL_ORDER OTG1 UART4 USART3 UART7 USART6 UART8 USART2 EMPTY OTG2
+# temporary: ordered as the vendor firmware on the 16MHz board, so a drone
+# moved from it keeps its serial settings (radio SERIAL3, GPS SERIAL6)
+SERIAL_ORDER OTG1 USART1 USART2 USART3 UART4 USART6 UART7 UART8
+
+# USART1 - used by the vendor firmware
+PA9  USART1_TX USART1
+PA10 USART1_RX USART1
 
 # UART4 - WiFi connector
 PD1 UART4_TX UART4
