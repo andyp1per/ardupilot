@@ -154,8 +154,9 @@ define HAL_BATT_VOLT_PIN 10
 define HAL_BATT_CURR_PIN 11
 # 200k/22k divider
 define HAL_BATT_VOLT_SCALE 10.09
-# INA139, 0.5mOhm shunt, 53.6k load
-define HAL_BATT_CURR_SCALE 37.3
+# temporary: the vendor's value for the 16MHz board; 37.3 for the INA139,
+# 0.5mOhm shunt and 53.6k load on the new board
+define HAL_BATT_CURR_SCALE 20.4
 
 # ----------------- microSD --------------------
 PC8  SDMMC1_D0 SDMMC1
