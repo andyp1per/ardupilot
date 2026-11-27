@@ -2,7 +2,68 @@
 
 *Audience: project sponsor / non-engineering stakeholders. Updated as the work progresses.*
 
-**Last updated:** 2026-11-11
+**Last updated:** 2026-11-27
+
+---
+
+## Update: 27 November 2026 (~35 weeks elapsed)
+
+This update sits above the 11 November Phase 2 plan, which is kept below it as it was. It reports against that plan's priorities.
+
+### Headline
+
+**Fixed-wing has gone from never run to a wired aircraft ready for its first flight, and the port now answers two of the questions that stood between it and an upstream merge: it supports more than Copter, and it no longer breaks when ArduPilot's code is reorganised.** Plane, QuadPlane and Rover all run on the board, which now drives up to ten outputs instead of four. Copter's release testing is still clean. The second test release is not cut yet: its build changed after it flew, so it needs one more Copter flight first. The merge gates that are not ours have not moved: no maintainer has reviewed the submission since the plan, and the ChibiOS change still has no reviewer. Of the gates that are ours, the Renode simulation is still to do.
+
+### Against the Phase 2 priorities
+
+1. **The upstream merge.**
+   - **More vehicles make a stronger case.** ArduPilot supports a board for every vehicle, not for one, so a port that runs only Copter is a harder thing to accept. The submission now carries Plane, Rover and QuadPlane support as well, which is most of its growth from 71 to 116 commits since the plan.
+   - **The fast-memory relocator.** The port gets its speed from a list of about a thousand functions that are copied into the chip's fast on-chip memory. ArduPilot's code is reorganised every week. Until now, each time a function on that list was renamed, split or removed, the build stopped and the list had to be repaired by hand. That made every upstream refactor a problem for the port, and that maintenance burden was one of the reviewers' main objections. Now a single build option repairs the list. It finds the change in ArduPilot's history that moved the code, puts what replaced it into fast memory, and then checks that everything listed really runs from there. The tool behind it repaired the five entries that ArduPilot's changes broke at the 18 November update, and it covers Copter, Plane and Rover.
+   - **Kept current.** The submission was brought up to date with ArduPilot on 11 and 18 November, the 10 November review's fixes went in, and it has had 12 more rounds of automated review. Today it conflicts with ArduPilot again, so ArduPilot's automated tests are not running on it. The automated review's two blocking items are that conflict and the unmerged ChibiOS change, and there is one smaller fix it wants.
+   - **Not in our hands.** The three maintainers' change requests still stand, and the ChibiOS change has waited eleven weeks for a review. Its continuous-read flash part has since been merged upstream, but the change as a whole still needs a review.
+   - **Renode is still outstanding.** What tridge asked for is essentially a performance simulation: one that models how fast the chip runs ArduPilot, not only whether it runs it.
+   - **Separate submissions.** Four changes that came out of this work have gone to ArduPilot on their own. One of them fixes a slowdown of Copter's fast control loop that also affects ordinary STM32 flight controllers. None has merged yet.
+2. **Fixed-wing (Plane).**
+   - 25 November: Plane ran on the board for the first time, on a flying wing on the bench. Moving its busiest code into the chip's fast memory took the main core from 58% to 46% busy at 200 updates a second. At Plane's own default of 50 a second, now the board's default, it was 36% busy even before that move. Copter's firmware is unchanged by this.
+   - 27 November: OneShot now works, so the control surfaces can be updated on every loop rather than 50 times a second. The complete wing was also powered up on the bench. The GPS, motor, both control surfaces and the battery reading all work. The faults found on the way were in the wiring and settings, not the firmware.
+   - Not yet: the simulated flight on a Pico 2, and the first flight.
+3. **A solid Copter release.**
+   - 23 November: four flights on the release build, including the hard-flying leg the card asks for: acrobatic flips at 37 A and 30 m/s. No fault in the port and no lost log data. A Lua script ran in flight; it cost about 6% of the main core.
+   - New since the plan: ESCs can be configured and reflashed through the flight controller (done with AM32 ESCs), and the slower DShot rates that some ESCs need are supported.
+   - Not yet flown: the GPS-loss failsafe, the return-to-home landing again, automatic tuning and the analog on-screen display. Not yet tested: installing from Mission Planner and QGroundControl. Raspberry Pi is sending samples of the R4 boards, due next week.
+4. **Measure before building.**
+   - Lua: measured on the bench and in flight. Its memory was resized, which leaves 110 KB free when armed with scripting on. A demanding Lua flight mode running 50 times a second costs about 12% of the main core.
+   - Memory: tridge's stack analysis tool freed 2.7 KB.
+   - The gyro noise filter's maths now runs without the slow library calls, taking the second core from 67% to 60% busy on the bench. It has not flown yet.
+   - The flash chip is confirmed fine at 100 MHz, so the 200 MHz build stands.
+   - Not yet: compiler settings (-O2, gcc17), and the audit of free pins for more serial ports and CAN. The audit's outputs half is done (below).
+5. **Closing the H7 gap.** Started early where the board allowed:
+   - Outputs: three spare pads are now outputs 5-7 and the LED connector output 8, and an alternative setting makes two more pins outputs 9 and 10. That is enough for planes with flaps and for QuadPlane, on the current board. Bench-tested, not flown.
+   - QuadPlane: its hover control loop can now run at 1,600 updates a second instead of 300. On the bench that took the main core from 52% to 41% busy. This is also an upstream submission; not flown.
+   - Rover: runs on the bench, and fast-memory placement takes its main core from 74-89% to 50-64% busy at its highest rate.
+   - Hardware: with the outputs found on the current board, the wish list for Raspberry Pi comes down to two development boards: one with CAN wired, and one for wings.
+
+### Before Christmas: where each item stands
+
+- 🔵 **Plane:** ready to fly; not flown. Plane goes into the release only once the flight ladder in the plan passes, and three weeks is tight for that.
+- 🔵 **Copter:** clean in release testing. The unflown modes above remain.
+- ⚠️ **Second test release:** waiting on one Copter flight of the current build. Its release notes must tell users that the LED output has moved from output 5 to output 8.
+- ✅ **Lua, memory, fast-memory placement and the flash chip:** measured or confirmed. The relocator keeps the placement working across upstream changes.
+- ⚠️ **Compiler settings and the pin audit for serial ports and CAN:** not started.
+- 🔵 **Merge:** kept current, and broader. The gates that are not ours have not moved.
+- ⚠️ **Renode:** outstanding; it has to model performance.
+- 🔵 **Hardware wish list:** settled as two development boards, one with CAN wired and one for wings.
+- ⚠️ **ChibiOS change:** still waiting for a review, though its continuous-read flash part is merged upstream.
+- ⚠️ **Retainer and Matthew Selby's onboarding:** still to be decided.
+
+### What is needed, and what is open
+
+- **From Raspberry Pi:** the R4 samples, due next week; the two development boards; Matthew Selby's time; and chip detail for Renode, particularly its timing.
+- **Open:** the release date, the retainer terms and Matthew Selby's onboarding, a written list from the maintainers of what merging requires, which items beyond the release Raspberry Pi wants to fund, and a pilot for the wing's flight tests.
+
+### Posture
+
+The first two weeks of Phase 2 went mostly to fixed-wing and the board's outputs, and both moved faster than planned. Plane went from never run to a wired aircraft, and the current board can now carry QuadPlane. That breadth, together with the relocator, answers two of the things that stood against the merge, so on our side the submission is in a stronger position than at the plan. The largest piece of merge work left on our side is the Renode performance simulation. Copter's release testing remains clean, and the second test release is one flight away. Not in our hands is review itself: no maintainer has reviewed the submission since the plan, and the ChibiOS change has no reviewer. With three weeks to Christmas, Plane's flight tests are the item most likely to move into January.
 
 ---
 
